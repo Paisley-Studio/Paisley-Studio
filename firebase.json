@@ -42,6 +42,14 @@
         "destination": "/student/index.html"
       },
       {
+        "source": "/tutors",
+        "destination": "/tutor/login.html"
+      },
+      {
+        "source": "/tutor",
+        "destination": "/tutor/login.html"
+      },
+      {
         "source": "/tutor/:slug",
         "destination": "/tutor/login.html"
       }
