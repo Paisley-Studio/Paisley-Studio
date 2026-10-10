@@ -1,0 +1,2241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teach With Paisley Studio — Tutor Application</title>
+  <meta name="description" content="Apply to teach with Paisley Studio. Complete your tutor application, subject quiz, and upload your credentials." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://paisleystudio.online/teach-with-us.html" />
+
+  <meta property="og:title" content="Teach With Paisley Studio — Tutor Application" />
+  <meta property="og:description" content="Apply to teach with Paisley Studio. Complete your tutor application and subject quiz." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://paisleystudio.online/teach-with-us.html" />
+  <meta name="theme-color" content="#245F5A" />
+<link rel="manifest" href="/manifest.json" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Teach With Paisley Studio — Tutor Application" />
+  <meta name="twitter:description" content="Apply to teach with Paisley Studio." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+  <style>
+    /* ===== BRAND COLORS ===== */
+    :root {
+      --brand: #55BFB3;
+      --brand-deep: #245F5A;
+      --brand-soft: #7BCBC2;
+      --paper: #F1F9F7;
+      --surface: #FFFFFF;
+      --sage: #E5F2EF;
+      --ink: #263331;
+      --muted: #5A6E6A;
+      --line: rgba(38,51,49,.10);
+      --line-soft: rgba(38,51,49,.06);
+      --dark: #0F1A14;
+      --dark-line: rgba(255,255,255,.10);
+      --dark-muted: #8FA8A2;
+      --gold: #F5C842;
+      --font: 'Quicksand', sans-serif;
+      --container: 1160px;
+      --pad: 7rem;
+      --pad-sm: 3.4rem;
+      --success: #2EB872;
+      --error: #E74C3C;
+      --warning: #F39C12;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(40px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-40px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(40px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes floatY {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .animate-float { animation: floatY 3s ease-in-out infinite; }
+    .anim-fade-up { opacity: 0; animation: fadeInUp 0.7s cubic-bezier(.16,1,.3,1) forwards; }
+    .anim-slide-left { animation: slideInLeft 0.6s cubic-bezier(.16,1,.3,1) forwards; }
+    .anim-slide-right { animation: slideInRight 0.6s cubic-bezier(.16,1,.3,1) forwards; }
+    .anim-scale { animation: scaleIn 0.6s cubic-bezier(.16,1,.3,1) forwards; }
+
+    .stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+    .stagger-children > *:nth-child(2) { animation-delay: 0.15s; }
+    .stagger-children > *:nth-child(3) { animation-delay: 0.25s; }
+    .stagger-children > *:nth-child(4) { animation-delay: 0.35s; }
+    .stagger-children > *:nth-child(5) { animation-delay: 0.45s; }
+    .stagger-children > *:nth-child(6) { animation-delay: 0.55s; }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: all 0.7s cubic-bezier(.16,1,.3,1);
+      will-change: transform, opacity;
+    }
+    .reveal.in {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media(prefers-reduced-motion:reduce){
+      .reveal { opacity:1; transform:none; transition:none; }
+      .anim-fade-up, .anim-slide-left, .anim-slide-right, .anim-scale { opacity:1; animation:none; }
+    }
+
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; }
+    body {
+      font-family: 'Quicksand', sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    img { max-width:100%; display:block; }
+    a { color:inherit; text-decoration:none; }
+    ul { list-style:none; }
+    button { font-family:'Quicksand', sans-serif; cursor:pointer; }
+
+    h1,h2,h3,h4 { font-family:'Quicksand', sans-serif; font-weight:800; letter-spacing:-.02em; color:var(--ink); }
+
+    .container { max-width:var(--container); margin:0 auto; padding:0 1.75rem; }
+    .section { padding:var(--pad) 0; position:relative; overflow:hidden; }
+    @media(max-width:900px){ .section { padding:var(--pad-sm) 0; } }
+
+    .section-label {
+      display:inline-flex;
+      align-items:center;
+      gap:0.5rem;
+      font-size:.78rem;
+      font-weight:700;
+      color:var(--brand-deep);
+      margin-bottom:.85rem;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .section-label i { color:var(--brand); font-size:0.7rem; }
+    .section-heading {
+      font-size:clamp(1.6rem,2.7vw,2.3rem);
+      line-height:1.15;
+      max-width:34rem;
+      font-weight:800;
+      color:var(--ink);
+    }
+    .section-sub {
+      color:var(--muted);
+      font-size:1.02rem;
+      max-width:34rem;
+      margin-top:.9rem;
+    }
+
+    .skip-link {
+      position:absolute; left:-999px; top:0;
+      background:var(--brand); color:#fff;
+      padding:.7rem 1.1rem; z-index:2000; font-weight:600;
+    }
+    .skip-link:focus { left:1rem; top:1rem; border-radius:4px; }
+
+    .btn {
+      display:inline-flex; align-items:center; gap:.6rem;
+      font-weight:700; font-size:.85rem;
+      padding:.85rem 1.8rem;
+      border-radius:50px;
+      border:1px solid transparent;
+      transition:all .4s cubic-bezier(.4,0,.2,1);
+      cursor:pointer;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+    }
+    .btn-primary { background:var(--brand); color:#fff; }
+    .btn-primary:hover { background:var(--brand-deep); transform:translateY(-3px) scale(1.02); box-shadow:0 10px 30px rgba(85,191,179,.3); }
+    .btn-ghost { background:transparent; border-color:var(--line); color:var(--ink); }
+    .btn-ghost:hover { border-color:var(--brand); color:var(--brand); transform:translateY(-3px); }
+    .btn-success { background:var(--success); color:#fff; }
+    .btn-success:hover { background:#239B5E; transform:translateY(-3px); box-shadow:0 10px 30px rgba(46,184,114,.3); }
+    .btn-outline { background:transparent; border:2px solid var(--brand); color:var(--brand); }
+    .btn-outline:hover { background:var(--brand); color:#fff; }
+
+    .link-underline {
+      position:relative; font-weight:700; font-size:.85rem; color:var(--brand-deep);
+      padding-bottom:2px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      transition:all .3s ease;
+      display:inline-flex;
+      align-items:center;
+      gap:0.3rem;
+    }
+    .link-underline::after {
+      content:""; position:absolute; left:0; bottom:0; width:100%; height:2px;
+      background:var(--brand); transform:scaleX(1); transform-origin:left; transition:all .3s ease;
+    }
+    .link-underline:hover::after { transform:scaleX(0); }
+    .link-underline:hover { color:var(--brand); }
+
+    /* ===== HEADER ===== */
+    .site-header {
+      position:fixed; top:0; left:0; right:0; z-index:1000;
+      background:rgba(241,249,247,.92);
+      backdrop-filter:blur(12px);
+      border-bottom:1px solid transparent;
+      transition:all .4s ease;
+    }
+    .site-header.scrolled { border-bottom-color:var(--line); box-shadow:0 4px 20px rgba(0,0,0,.04); }
+    .header-inner {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:1.15rem 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      flex-shrink: 0;
+    }
+    .logo-img {
+      width: 100px;
+      height: 55px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+      transition: all .3s ease;
+    }
+    .logo:hover .logo-img {
+      transform: scale(1.05) rotate(-4deg);
+    }
+    .logo-word {
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: -.01em;
+      color: var(--ink);
+    }
+    .logo-word span {
+      display: block;
+      font-size: .58rem;
+      font-weight: 600;
+      letter-spacing: .1em;
+      color: var(--muted);
+      margin-top: -2px;
+      text-transform: uppercase;
+    }
+
+    .main-nav { display:flex; align-items:center; gap:1.2rem; flex-wrap:wrap; }
+    .main-nav a {
+      font-weight:700; font-size:.72rem; color:var(--ink); position:relative; padding:.3rem 0;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      transition:all .3s ease;
+      white-space:nowrap;
+    }
+    .main-nav a::after {
+      content:""; position:absolute; left:0; bottom:-2px; width:0; height:2px;
+      background:var(--brand); transition:all .3s ease;
+    }
+    .main-nav a:hover::after { width:100%; }
+    .main-nav a:hover { color:var(--brand); }
+    .header-cta { display:flex; align-items:center; gap:0.8rem; flex-shrink:0; }
+    .header-cta .link-underline { font-size:.75rem; }
+    .header-cta .btn { padding:.6rem 1.4rem; font-size:.75rem; }
+    .nav-toggle { display:none; background:none; border:none; font-size:1.4rem; color:var(--ink); cursor:pointer; }
+
+    .mobile-nav {
+      position:fixed; inset:0; background:var(--paper); z-index:1100;
+      display:flex; flex-direction:column; padding:1.8rem 1.75rem;
+      transform:translateX(100%); transition:transform .32s cubic-bezier(.4,0,.2,1);
+      overflow-y:auto;
+    }
+    .mobile-nav.open { transform:translateX(0); }
+    .mobile-nav .close-btn {
+      align-self:flex-end; background:none; border:none; font-size:1.8rem; color:var(--ink); cursor:pointer; padding:0.5rem;
+    }
+    .mobile-nav a {
+      font-size:1.1rem; font-weight:600; padding:.8rem 0; border-bottom:1px solid var(--line); color:var(--ink);
+    }
+    .mobile-nav .mobile-cta-group {
+      margin-top:1.8rem;
+      padding-top:1.2rem;
+      border-top:1px solid var(--line);
+      display:flex;
+      flex-direction:column;
+      gap:0.8rem;
+    }
+    .mobile-nav .mobile-cta-group .btn {
+      justify-content:center;
+      width:100%;
+      padding:.9rem;
+      font-size:.85rem;
+    }
+    .mobile-nav .mobile-cta-group .link-underline {
+      text-align:center;
+      justify-content:center;
+      font-size:.9rem;
+    }
+
+    @media(max-width:960px){
+      .main-nav, .header-cta { display:none; }
+      .nav-toggle { display:block; }
+    }
+
+    /* ===== PAGE HERO ===== */
+    .page-hero {
+      padding-top: 8rem;
+      padding-bottom: 4rem;
+      background: linear-gradient(180deg, var(--paper) 0%, var(--sage) 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .page-hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(85,191,179,0.06), transparent);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .page-hero-content {
+      position: relative;
+      z-index: 1;
+    }
+    .page-hero h1 {
+      font-size: clamp(2.4rem, 4.5vw, 3.6rem);
+      line-height: 1.08;
+      letter-spacing: -.02em;
+      font-weight: 800;
+      color: var(--ink);
+    }
+    .page-hero h1 .highlight {
+      color: var(--brand);
+      position: relative;
+    }
+    .page-hero h1 .highlight::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      left: 0;
+      right: 0;
+      height: 8px;
+      background: rgba(85,191,179,.2);
+      border-radius: 4px;
+      z-index: -1;
+    }
+    .page-hero p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 34rem;
+      margin-top: 1rem;
+      line-height: 1.7;
+    }
+    .page-hero .hero-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+      flex-wrap: wrap;
+    }
+
+    /* ===== APPLICATION STEPS ===== */
+    .application-container {
+      background: var(--surface);
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      padding: 2.5rem;
+      margin-top: 2rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,.04);
+    }
+
+    .step-indicators {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2.5rem;
+      position: relative;
+      padding: 0 0.5rem;
+    }
+    .step-indicators::before {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 30px;
+      right: 30px;
+      height: 2px;
+      background: var(--line);
+      z-index: 0;
+    }
+    .step-dot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      position: relative;
+      z-index: 1;
+      flex: 1;
+    }
+    .step-dot .circle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--paper);
+      border: 2px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: .85rem;
+      color: var(--muted);
+      transition: all .4s ease;
+    }
+    .step-dot.active .circle {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(85,191,179,.3);
+    }
+    .step-dot.completed .circle {
+      background: var(--success);
+      border-color: var(--success);
+      color: #fff;
+    }
+    .step-dot .label {
+      font-size: .6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      text-align: center;
+    }
+    .step-dot.active .label { color: var(--brand); }
+    .step-dot.completed .label { color: var(--success); }
+
+    .step-content {
+      display: none;
+      animation: fadeInUp 0.5s cubic-bezier(.16,1,.3,1) forwards;
+    }
+    .step-content.active { display: block; }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    .form-group label {
+      display: block;
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    .form-group label .required {
+      color: var(--error);
+      margin-left: 0.2rem;
+    }
+    .form-control {
+      width: 100%;
+      padding: .85rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-family: 'Quicksand', sans-serif;
+      font-size: .95rem;
+      background: var(--paper);
+      color: var(--ink);
+      transition: all .3s ease;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(85,191,179,0.12);
+      background: var(--surface);
+    }
+    .form-control::placeholder {
+      color: var(--muted);
+      opacity: 0.5;
+    }
+    .form-control.error {
+      border-color: var(--error);
+      box-shadow: 0 0 0 3px rgba(231,76,60,0.1);
+    }
+    textarea.form-control { resize: vertical; min-height: 80px; }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media(max-width: 600px){ .form-row { grid-template-columns: 1fr; } }
+
+    select.form-control {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235A6E6A' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+      padding-right: 2.5rem;
+    }
+
+    .checkbox-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .checkbox-group label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 500;
+      text-transform: none;
+      font-size: .85rem;
+      color: var(--ink);
+      letter-spacing: 0;
+      cursor: pointer;
+      padding: 0.4rem 0.6rem;
+      border-radius: 8px;
+      background: var(--paper);
+      border: 1px solid var(--line-soft);
+      transition: all .3s ease;
+    }
+    .checkbox-group label:hover {
+      border-color: var(--brand);
+      background: rgba(85,191,179,0.05);
+    }
+    .checkbox-group input[type="checkbox"],
+    .checkbox-group input[type="radio"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--brand);
+      flex-shrink: 0;
+    }
+
+    /* ===== QUIZ STYLES ===== */
+    .quiz-question {
+      background: var(--paper);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--line-soft);
+      transition: all .3s ease;
+    }
+    .quiz-question:hover {
+      border-color: var(--brand-soft);
+    }
+    .quiz-question .q-number {
+      display: inline-block;
+      font-size: .7rem;
+      font-weight: 700;
+      color: #fff;
+      background: var(--brand);
+      padding: .15rem .7rem;
+      border-radius: 20px;
+      margin-bottom: .5rem;
+    }
+    .quiz-question .q-text {
+      font-weight: 600;
+      font-size: .95rem;
+      margin-bottom: .8rem;
+    }
+    .quiz-question .options {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .quiz-question .options label {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 500;
+      font-size: .9rem;
+      padding: 0.5rem 0.8rem;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      cursor: pointer;
+      transition: all .3s ease;
+    }
+    .quiz-question .options label:hover {
+      border-color: var(--brand);
+      background: rgba(85,191,179,0.05);
+    }
+    .quiz-question .options input[type="radio"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--brand);
+      flex-shrink: 0;
+    }
+    .quiz-question .options label.selected {
+      border-color: var(--brand);
+      background: rgba(85,191,179,0.08);
+    }
+    .quiz-question .options label.correct {
+      border-color: var(--success);
+      background: rgba(46,184,114,0.1);
+    }
+    .quiz-question .options label.incorrect {
+      border-color: var(--error);
+      background: rgba(231,76,60,0.08);
+    }
+    .quiz-question .feedback {
+      margin-top: .6rem;
+      padding: .6rem .8rem;
+      border-radius: 8px;
+      font-size: .85rem;
+      display: none;
+    }
+    .quiz-question .feedback.show { display: block; }
+    .quiz-question .feedback.correct {
+      background: rgba(46,184,114,0.1);
+      color: var(--success);
+      border: 1px solid rgba(46,184,114,0.2);
+    }
+    .quiz-question .feedback.incorrect {
+      background: rgba(231,76,60,0.08);
+      color: var(--error);
+      border: 1px solid rgba(231,76,60,0.15);
+    }
+
+    .step-nav {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line);
+    }
+
+    /* ===== PROGRESS BAR ===== */
+    .progress-bar-wrap {
+      width: 100%;
+      height: 6px;
+      background: var(--line);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    .progress-bar-wrap .progress-fill {
+      height: 100%;
+      background: var(--brand);
+      border-radius: 4px;
+      transition: width .5s ease;
+      width: 0%;
+    }
+
+    /* ===== SCORE DISPLAY ===== */
+    .score-display {
+      background: var(--brand-deep);
+      color: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .score-display .score-num {
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .score-display .score-label {
+      font-size: .85rem;
+      opacity: 0.7;
+      margin-top: .3rem;
+    }
+    .score-display .score-result {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-top: .5rem;
+    }
+    .score-display .score-result.pass { color: var(--gold); }
+    .score-display .score-result.fail { color: #FF6B6B; }
+
+    /* ===== DOCUMENT UPLOAD ===== */
+    .upload-area {
+      border: 2px dashed var(--line);
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      transition: all .3s ease;
+      cursor: pointer;
+      background: var(--paper);
+    }
+    .upload-area:hover {
+      border-color: var(--brand);
+      background: rgba(85,191,179,0.03);
+    }
+    .upload-area.dragover {
+      border-color: var(--brand);
+      background: rgba(85,191,179,0.08);
+    }
+    .upload-area .icon {
+      font-size: 2.5rem;
+      color: var(--brand-soft);
+      margin-bottom: .5rem;
+      display: block;
+    }
+    .upload-area p {
+      color: var(--muted);
+      font-size: .9rem;
+    }
+    .upload-area .file-types {
+      font-size: .7rem;
+      color: var(--muted);
+      opacity: 0.6;
+      margin-top: .3rem;
+    }
+    .file-list {
+      margin-top: 1rem;
+    }
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .6rem .8rem;
+      background: var(--paper);
+      border-radius: 8px;
+      border: 1px solid var(--line-soft);
+      margin-bottom: .4rem;
+    }
+    .file-item .name {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .85rem;
+    }
+    .file-item .name i { color: var(--brand); }
+    .file-item .remove {
+      background: none;
+      border: none;
+      color: var(--error);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0.2rem;
+    }
+
+    /* ===== FOOTER ===== */
+    .site-footer {
+      background:#0A1410;
+      color:var(--dark-muted);
+      padding:3.6rem 0 1.6rem;
+      margin-top:0;
+      border-top:3px solid var(--brand);
+    }
+    .footer-top {
+      display:grid;
+      grid-template-columns:2fr 1fr 1fr 1.5fr;
+      gap:2.5rem;
+      padding-bottom:2.6rem;
+      border-bottom:1px solid var(--dark-line);
+    }
+    @media(max-width:900px){ .footer-top { grid-template-columns:1fr 1fr; } }
+    @media(max-width:560px){ .footer-top { grid-template-columns:1fr; } }
+    .footer-brand .logo-word { color:#fff; }
+    .footer-brand .logo-word span { color:var(--dark-muted); }
+    .footer-brand p { margin-top:1rem; max-width:22rem; font-size:.9rem; color:var(--dark-muted); }
+    .footer-brand .contact-info {
+      margin-top:1.2rem;
+      display:flex;
+      flex-direction:column;
+      gap:0.5rem;
+    }
+    .footer-brand .contact-info a {
+      color:var(--dark-muted);
+      font-size:.88rem;
+      display:flex;
+      align-items:center;
+      gap:0.6rem;
+      transition:all .3s ease;
+    }
+    .footer-brand .contact-info a:hover { color:var(--brand-soft); }
+    .footer-brand .contact-info a i { color:var(--brand); width:20px; }
+    .footer-col h6 {
+      color:#fff;
+      font-size:.78rem;
+      font-weight:700;
+      margin-bottom:1rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+    .footer-col a {
+      display:block;
+      color:var(--dark-muted);
+      font-size:.9rem;
+      padding:.32rem 0;
+      transition:all .3s ease;
+    }
+    .footer-col a:hover { color:var(--brand-soft); padding-left:.25rem; }
+    .footer-newsletter {
+      margin-top:1rem;
+    }
+    .footer-newsletter p {
+      font-size:.85rem;
+      color:var(--dark-muted);
+      margin-bottom:0.6rem;
+    }
+    .footer-newsletter .newsletter-box {
+      display:flex;
+      gap:0.5rem;
+    }
+    .footer-newsletter .newsletter-box input {
+      flex:1;
+      padding:.6rem .8rem;
+      border:1px solid var(--dark-line);
+      border-radius:8px;
+      background:rgba(255,255,255,0.04);
+      color:#fff;
+      font-family:'Quicksand', sans-serif;
+      font-size:.85rem;
+      transition:all .3s ease;
+    }
+    .footer-newsletter .newsletter-box input::placeholder {
+      color:var(--dark-muted);
+      opacity:0.5;
+    }
+    .footer-newsletter .newsletter-box input:focus {
+      outline:none;
+      border-color:var(--brand);
+      background:rgba(255,255,255,0.06);
+    }
+    .footer-newsletter .newsletter-box .btn {
+      padding:.6rem 1.2rem;
+      font-size:.7rem;
+      white-space:nowrap;
+    }
+    .footer-bottom {
+      display:flex;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:.6rem;
+      padding-top:1.6rem;
+      font-size:.82rem;
+      color:var(--dark-muted);
+    }
+
+    .scroll-top-btn {
+      position:fixed;
+      bottom:24px;
+      right:24px;
+      z-index:999;
+      width:48px;
+      height:48px;
+      border-radius:50%;
+      background:var(--brand);
+      color:#fff;
+      border:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:1.2rem;
+      box-shadow:0 10px 30px rgba(85,191,179,.3);
+      opacity:0;
+      visibility:hidden;
+      transform:translateY(14px);
+      transition:all .4s ease;
+      cursor:pointer;
+    }
+    .scroll-top-btn.visible {
+      opacity:1;
+      visibility:visible;
+      transform:translateY(0);
+    }
+    .scroll-top-btn:hover {
+      background:var(--brand-deep);
+      transform:translateY(-3px) scale(1.05);
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media(max-width:768px){
+      .application-container { padding: 1.5rem; }
+      .step-indicators { flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+      .step-indicators::before { display: none; }
+      .step-dot { flex: none; }
+      .step-dot .label { font-size: .5rem; }
+      .step-dot .circle { width: 32px; height: 32px; font-size: .7rem; }
+    }
+    @media(max-width:600px){
+      .page-hero { padding-top: 6rem; }
+      .page-hero h1 { font-size: clamp(1.8rem, 6vw, 2.4rem); }
+      .application-container { padding: 1rem; }
+    }
+    @media(max-width:480px){
+      .step-nav { flex-direction: column; }
+      .step-nav .btn { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<!-- ===== HEADER ===== -->
+<header class="site-header" id="siteHeader">
+  <div class="container header-inner">
+    <a href="index.html" class="logo" aria-label="Paisley Studio home">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" 
+           alt="Paisley Studio Logo" 
+           class="logo-img"
+           width="38" 
+           height="38">
+      <span class="logo-word">Paisley Studio<span>Online Homeschooling Solution</span></span>
+    </a>
+    <nav class="main-nav" aria-label="Primary">
+       <a href="subjects.html">Subjects</a>
+      <a href="how-it-works.html">How It Works</a>
+      <a href="teach-with-us.html">Teach With Us</a>
+      <a href="enrolment.html">Enrolment</a>
+      <a href="academic-calendar.html">Academic Calendar</a>
+      <a href="subjects.html">Subjects</a>
+      
+    </nav>
+    <div class="header-cta">
+      <a href="index.html#contact" class="link-underline">Contact</a>
+      <a href="enrolment.html" class="btn btn-primary">Enrol Now</a>
+    </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav">
+      <i class="fas fa-bars"></i>
+    </button>
+  </div>
+</header>
+
+<!-- ===== MOBILE NAV ===== -->
+<div class="mobile-nav" id="mobileNav">
+  <button class="close-btn" id="navClose" aria-label="Close menu"><i class="fas fa-times"></i></button>
+  <a href="subjects.html">Subjects</a>
+  <a href="index.html#key-stages">Key Stages</a>
+  <a href="key-stage-5.html">Key Stage 5</a>
+  <a href="how-it-works.html">How It Works</a>
+  <a href="teach-with-us.html">Teach With Us</a>
+  <a href="enrolment.html">Enrolment</a>
+  <a href="academic-calendar.html">Academic Calendar</a>
+  <a href="subjects.html">Subjects</a>
+  <a href="why-paisley.html">Why Paisley</a>
+  <a href="index.html#faq">FAQs</a>
+  <div class="mobile-cta-group">
+    <a href="index.html#contact" class="link-underline">Contact</a>
+    <a href="enrolment.html" class="btn btn-primary">Enrol Now</a>
+  </div>
+</div>
+
+<main id="main-content">
+
+  <!-- ===== PAGE HERO ===== -->
+  <section class="page-hero">
+    <div class="container page-hero-content">
+      <span class="section-label"><i class="fas fa-chalkboard-teacher"></i> Teach With Paisley Studio</span>
+      <h1>Teach. Inspire. <span class="highlight">Make an Impact.</span></h1>
+      <p>Join Paisley Studio as a qualified British Curriculum tutor. Complete your application, subject quiz, and upload your credentials. We'll review your application and get back to you within 48 hours.</p>
+      <div class="hero-actions">
+        <a href="#application" class="btn btn-primary"><i class="fas fa-arrow-down"></i> Start Application</a>
+        <a href="#requirements" class="btn btn-ghost"><i class="fas fa-list-check"></i> View Requirements</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== REQUIREMENTS ===== -->
+  <section class="section" id="requirements" style="padding-bottom:0;">
+    <div class="container">
+      <div class="reveal">
+        <span class="section-label"><i class="fas fa-clipboard-list"></i> Requirements</span>
+        <h2 class="section-heading">What we're looking for.</h2>
+        <p class="section-sub">Before you apply, make sure you meet our requirements.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:2rem;">
+        <div class="reveal" style="transition-delay:0.1s;">
+          <div style="background:var(--surface);border-radius:12px;padding:1.5rem;border:1px solid var(--line-soft);height:100%;">
+            <i class="fas fa-user-graduate" style="font-size:1.8rem;color:var(--brand);margin-bottom:.5rem;display:block;"></i>
+            <h4>Qualified Teacher</h4>
+            <p style="color:var(--muted);font-size:.9rem;line-height:1.6;">Qualified teacher with experience in the British Curriculum. TSC certification or equivalent required.</p>
+          </div>
+        </div>
+        <div class="reveal" style="transition-delay:0.2s;">
+          <div style="background:var(--surface);border-radius:12px;padding:1.5rem;border:1px solid var(--line-soft);height:100%;">
+            <i class="fas fa-certificate" style="font-size:1.8rem;color:var(--brand);margin-bottom:.5rem;display:block;"></i>
+            <h4>Cambridge Experience</h4>
+            <p style="color:var(--muted);font-size:.9rem;line-height:1.6;">Experience with Cambridge curriculum and IGCSE/A-Level examinations.</p>
+          </div>
+        </div>
+        <div class="reveal" style="transition-delay:0.3s;">
+          <div style="background:var(--surface);border-radius:12px;padding:1.5rem;border:1px solid var(--line-soft);height:100%;">
+            <i class="fas fa-laptop" style="font-size:1.8rem;color:var(--brand);margin-bottom:.5rem;display:block;"></i>
+            <h4>Tech-Ready</h4>
+            <p style="color:var(--muted);font-size:.9rem;line-height:1.6;">Reliable internet, computer with camera, headphones, and a quiet teaching space.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== APPLICATION FORM ===== -->
+  <section class="section" id="application">
+    <div class="container">
+      <div class="reveal">
+        <span class="section-label"><i class="fas fa-pen"></i> Application</span>
+        <h2 class="section-heading">Complete your tutor application.</h2>
+        <p class="section-sub">Fill in your details, complete the subject quiz, and upload your credentials.</p>
+      </div>
+
+      <div class="application-container">
+        <!-- Progress Bar -->
+        <div class="progress-bar-wrap">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <!-- Step Indicators -->
+        <div class="step-indicators">
+          <div class="step-dot active" data-step="1">
+            <div class="circle">1</div>
+            <span class="label">Profile</span>
+          </div>
+          <div class="step-dot" data-step="2">
+            <div class="circle">2</div>
+            <span class="label">Subjects</span>
+          </div>
+          <div class="step-dot" data-step="3">
+            <div class="circle">3</div>
+            <span class="label">Quiz</span>
+          </div>
+          <div class="step-dot" data-step="4">
+            <div class="circle">4</div>
+            <span class="label">Psychology</span>
+          </div>
+          <div class="step-dot" data-step="5">
+            <div class="circle">5</div>
+            <span class="label">Documents</span>
+          </div>
+          <div class="step-dot" data-step="6">
+            <div class="circle">6</div>
+            <span class="label">Review</span>
+          </div>
+        </div>
+
+        <!-- ===== STEP 1: PROFILE ===== -->
+        <div class="step-content active" data-step="1">
+          <h3 style="margin-bottom:.5rem;">Personal Information</h3>
+          <p style="color:var(--muted);margin-bottom:1.5rem;">Tell us about yourself and your teaching experience.</p>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Full Name <span class="required">*</span></label>
+              <input type="text" class="form-control" id="fullName" placeholder="Enter your full name" required>
+            </div>
+            <div class="form-group">
+              <label>Email Address <span class="required">*</span></label>
+              <input type="email" class="form-control" id="email" placeholder="you@example.com" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Phone Number <span class="required">*</span></label>
+              <input type="tel" class="form-control" id="phone" placeholder="+254 729 981 933" required>
+            </div>
+            <div class="form-group">
+              <label>Location</label>
+              <input type="text" class="form-control" id="location" placeholder="City, Country">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Teaching Experience <span class="required">*</span></label>
+            <select class="form-control" id="experience" required>
+              <option value="">Select years of experience</option>
+              <option value="0-1">0-1 years</option>
+              <option value="1-3">1-3 years</option>
+              <option value="3-5">3-5 years</option>
+              <option value="5-10">5-10 years</option>
+              <option value="10+">10+ years</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Qualifications <span class="required">*</span></label>
+            <textarea class="form-control" id="qualifications" placeholder="List your qualifications (e.g., B.Ed, PGCE, TSC certification...)" required></textarea>
+          </div>
+          <div class="form-group">
+            <label>Brief Bio <span class="required">*</span></label>
+            <textarea class="form-control" id="bio" placeholder="Tell us about yourself, your teaching philosophy, and why you want to teach with Paisley Studio..." required></textarea>
+          </div>
+
+          <div class="step-nav">
+            <span></span>
+            <button class="btn btn-primary" onclick="goToStep(2)">Next Step <i class="fas fa-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- ===== STEP 2: SUBJECTS & KEY STAGES ===== -->
+        <div class="step-content" data-step="2">
+          <h3 style="margin-bottom:.5rem;">Subjects &amp; Key Stages</h3>
+          <p style="color:var(--muted);margin-bottom:1.5rem;">Select the Key Stages and subjects you can teach.</p>
+
+          <div class="form-group">
+            <label>Key Stages You Can Teach <span class="required">*</span></label>
+            <div class="checkbox-group" id="keyStages">
+              <label><input type="checkbox" value="ks2"> Key Stage 2 (Years 3-6)</label>
+              <label><input type="checkbox" value="ks3"> Key Stage 3 (Years 7-9)</label>
+              <label><input type="checkbox" value="ks4"> Key Stage 4 (Years 10-11) — IGCSE</label>
+              <label><input type="checkbox" value="ks5"> Key Stage 5 (Years 12-13) — A-Level</label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Subjects You Can Teach <span class="required">*</span></label>
+            <div class="checkbox-group" id="subjects">
+              <label><input type="checkbox" value="english"> English</label>
+              <label><input type="checkbox" value="english-lit"> English Literature</label>
+              <label><input type="checkbox" value="maths"> Mathematics</label>
+              <label><input type="checkbox" value="further-maths"> Further Mathematics</label>
+              <label><input type="checkbox" value="physics"> Physics</label>
+              <label><input type="checkbox" value="chemistry"> Chemistry</label>
+              <label><input type="checkbox" value="biology"> Biology</label>
+              <label><input type="checkbox" value="history"> History</label>
+              <label><input type="checkbox" value="geography"> Geography</label>
+              <label><input type="checkbox" value="economics"> Economics</label>
+              <label><input type="checkbox" value="business"> Business Studies</label>
+              <label><input type="checkbox" value="psychology"> Psychology</label>
+              <label><input type="checkbox" value="languages"> Modern Languages</label>
+              <label><input type="checkbox" value="art"> Art & Design</label>
+              <label><input type="checkbox" value="computing"> Computing</label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Primary Subject Specialism <span class="required">*</span></label>
+            <select class="form-control" id="primarySubject" required>
+              <option value="">Select your primary subject</option>
+              <option value="english">English</option>
+              <option value="english-lit">English Literature</option>
+              <option value="maths">Mathematics</option>
+              <option value="further-maths">Further Mathematics</option>
+              <option value="physics">Physics</option>
+              <option value="chemistry">Chemistry</option>
+              <option value="biology">Biology</option>
+              <option value="history">History</option>
+              <option value="geography">Geography</option>
+              <option value="economics">Economics</option>
+              <option value="business">Business Studies</option>
+              <option value="psychology">Psychology</option>
+              <option value="languages">Modern Languages</option>
+              <option value="art">Art & Design</option>
+              <option value="computing">Computing</option>
+            </select>
+          </div>
+
+          <div class="step-nav">
+            <button class="btn btn-ghost" onclick="goToStep(1)"><i class="fas fa-arrow-left"></i> Previous</button>
+            <button class="btn btn-primary" onclick="goToStep(3)">Next Step <i class="fas fa-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- ===== STEP 3: SUBJECT QUIZ ===== -->
+        <div class="step-content" data-step="3">
+          <h3 style="margin-bottom:.5rem;">Subject Knowledge Quiz</h3>
+          <p style="color:var(--muted);margin-bottom:1.5rem;">Answer these questions based on your primary subject specialism. This helps us assess your subject knowledge.</p>
+
+          <div id="quizContainer">
+            <!-- Questions will be rendered by JavaScript -->
+          </div>
+
+          <div class="step-nav">
+            <button class="btn btn-ghost" onclick="goToStep(2)"><i class="fas fa-arrow-left"></i> Previous</button>
+            <button class="btn btn-primary" onclick="goToStep(4)">Next Step <i class="fas fa-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- ===== STEP 4: PSYCHOLOGY / SCENARIO QUIZ ===== -->
+        <div class="step-content" data-step="4">
+          <h3 style="margin-bottom:.5rem;">Classroom Management &amp; Psychology</h3>
+          <p style="color:var(--muted);margin-bottom:1.5rem;">These scenarios help us understand your approach to teaching, student support, and classroom management.</p>
+
+          <div id="psychologyQuiz">
+            <!-- Psychology questions rendered by JavaScript -->
+          </div>
+
+          <div class="step-nav">
+            <button class="btn btn-ghost" onclick="goToStep(3)"><i class="fas fa-arrow-left"></i> Previous</button>
+            <button class="btn btn-primary" onclick="goToStep(5)">Next Step <i class="fas fa-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- ===== STEP 5: DOCUMENTS ===== -->
+        <div class="step-content" data-step="5">
+          <h3 style="margin-bottom:.5rem;">Upload Documents</h3>
+          <p style="color:var(--muted);margin-bottom:1.5rem;">Upload your credentials and supporting documents.</p>
+
+          <div class="form-group">
+            <label>Professional Photo <span class="required">*</span></label>
+            <div class="upload-area" id="photoUpload">
+              <span class="icon"><i class="fas fa-camera"></i></span>
+              <p>Upload a professional photo</p>
+              <span class="file-types">JPG, PNG (max 5MB)</span>
+              <input type="file" accept="image/*" style="display:none;" id="photoInput">
+            </div>
+            <div class="file-list" id="photoList"></div>
+          </div>
+
+          <div class="form-group">
+            <label>CV / Resume <span class="required">*</span></label>
+            <div class="upload-area" id="cvUpload">
+              <span class="icon"><i class="fas fa-file-alt"></i></span>
+              <p>Upload your CV or resume</p>
+              <span class="file-types">PDF, DOC, DOCX (max 10MB)</span>
+              <input type="file" accept=".pdf,.doc,.docx" style="display:none;" id="cvInput">
+            </div>
+            <div class="file-list" id="cvList"></div>
+          </div>
+
+          <div class="form-group">
+            <label>TSC Certificate / Teaching License <span class="required">*</span></label>
+            <div class="upload-area" id="tscUpload">
+              <span class="icon"><i class="fas fa-certificate"></i></span>
+              <p>Upload your TSC certificate or teaching license</p>
+              <span class="file-types">PDF, JPG, PNG (max 5MB)</span>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" id="tscInput">
+            </div>
+            <div class="file-list" id="tscList"></div>
+          </div>
+
+          <div class="form-group">
+            <label>National ID / Passport <span class="required">*</span></label>
+            <div class="upload-area" id="idUpload">
+              <span class="icon"><i class="fas fa-id-card"></i></span>
+              <p>Upload your national ID or passport</p>
+              <span class="file-types">PDF, JPG, PNG (max 5MB)</span>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" id="idInput">
+            </div>
+            <div class="file-list" id="idList"></div>
+          </div>
+
+          <div class="form-group">
+            <label>Additional Documents (Optional)</label>
+            <div class="upload-area" id="extraUpload">
+              <span class="icon"><i class="fas fa-plus-circle"></i></span>
+              <p>Upload additional supporting documents</p>
+              <span class="file-types">PDF, JPG, PNG (max 10MB)</span>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none;" id="extraInput" multiple>
+            </div>
+            <div class="file-list" id="extraList"></div>
+          </div>
+
+          <div class="step-nav">
+            <button class="btn btn-ghost" onclick="goToStep(4)"><i class="fas fa-arrow-left"></i> Previous</button>
+            <button class="btn btn-primary" onclick="goToStep(6)">Next Step <i class="fas fa-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- ===== STEP 6: REVIEW & SUBMIT ===== -->
+        <div class="step-content" data-step="6">
+          <h3 style="margin-bottom:.5rem;">Review &amp; Submit</h3>
+          <p style="color:var(--muted);margin-bottom:1.5rem;">Review your application before submitting. You can go back to edit any section.</p>
+
+          <div id="reviewContainer" style="background:var(--paper);border-radius:12px;padding:1.5rem;border:1px solid var(--line-soft);margin-bottom:1.5rem;">
+            <!-- Review content rendered by JavaScript -->
+          </div>
+
+          <div class="score-display" id="finalScore">
+            <div class="score-num" id="finalScoreNum">0%</div>
+            <div class="score-label">Overall Score</div>
+            <div class="score-result" id="finalScoreResult">—</div>
+          </div>
+
+          <div class="step-nav">
+            <button class="btn btn-ghost" onclick="goToStep(5)"><i class="fas fa-arrow-left"></i> Previous</button>
+            <button class="btn btn-success" id="submitBtn" onclick="submitApplication()"><i class="fas fa-paper-plane"></i> Submit Application</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <span class="logo-word">Paisley Studio<span>British Curriculum Online</span></span>
+        <p>An online homeschooling solution delivering the National Curriculum for England from Key Stage 2 through Key Stage 5, with IGCSE and A-Level preparation.</p>
+        <div class="contact-info">
+          <a href="mailto:info@paisleystudio.online"><i class="fas fa-envelope"></i> info@paisleystudio.online</a>
+          <a href="tel:+254 729 981 933"><i class="fas fa-phone"></i> +254 729 981 933</a>
+          <a href="#"><i class="fas fa-map-marker-alt"></i> Nairobi, Kenya</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h6>Key Stages</h6>
+        <a href="key-stage-2.html">Key Stage 2</a>
+        <a href="key-stage-3.html">Key Stage 3</a>
+        <a href="key-stage-4.html">Key Stage 4</a>
+        <a href="key-stage-5.html">Key Stage 5</a>
+      </div>
+      <div class="footer-col">
+        <h6>Site</h6>
+        <a href="how-it-works.html">How It Works</a>
+        <a href="teach-with-us.html">Teach With Us</a>
+        <a href="enrolment.html">Enrolment</a>
+        <a href="academic-calendar.html">Academic Calendar</a>
+        <a href="subjects.html">Subjects</a>
+      </div>
+      <div class="footer-col">
+        <h6>Connect</h6>
+        <a href="index.html#contact">Contact Us</a>
+        <a href="teach-with-us.html">Teach With Us</a>
+        <a href="enrolment.html">Student Enrolment</a>
+        <div class="footer-newsletter">
+          <p><i class="fas fa-envelope" style="color:var(--brand);margin-right:0.4rem;"></i> Subscribe to our newsletter</p>
+          <div class="newsletter-box">
+            <input type="email" placeholder="Your email address">
+            <button class="btn btn-primary" style="padding:0.6rem 1.2rem;font-size:.7rem;">Subscribe</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© <span id="yearNow"></span> Paisley Studio. All rights reserved.</span>
+      <span>British Curriculum Online, Homeschooling Reimagined</span>
+    </div>
+  </div>
+</footer>
+
+<button class="scroll-top-btn" id="scrollTopBtn" aria-label="Scroll to top">
+  <i class="fas fa-arrow-up"></i>
+</button>
+
+<script>
+// ============================================================
+// YEAR
+// ============================================================
+document.getElementById('yearNow').textContent = new Date().getFullYear();
+
+// ============================================================
+// HEADER SCROLL
+// ============================================================
+const header = document.getElementById('siteHeader');
+window.addEventListener('scroll', () => {
+  header.classList.toggle('scrolled', window.scrollY > 20);
+  const scrollBtn = document.getElementById('scrollTopBtn');
+  scrollBtn.classList.toggle('visible', window.scrollY > 400);
+});
+document.getElementById('scrollTopBtn').addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// ============================================================
+// MOBILE NAV
+// ============================================================
+const navToggle = document.getElementById('navToggle');
+const navClose = document.getElementById('navClose');
+const mobileNav = document.getElementById('mobileNav');
+
+function openNav() {
+  mobileNav.classList.add('open');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+function closeNav() {
+  mobileNav.classList.remove('open');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+navToggle.addEventListener('click', openNav);
+navClose.addEventListener('click', closeNav);
+mobileNav.querySelectorAll('a').forEach(a => a.addEventListener('click', closeNav));
+
+// ============================================================
+// SCROLL REVEAL
+// ============================================================
+const revealElements = document.querySelectorAll('.reveal');
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) entry.target.classList.add('in');
+  });
+}, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+revealElements.forEach(el => revealObserver.observe(el));
+
+// ============================================================
+// APPLICATION STATE
+// ============================================================
+let currentStep = 1;
+const totalSteps = 6;
+let quizAnswers = {};
+let psychAnswers = {};
+let uploadedFiles = {
+  photo: null,
+  cv: null,
+  tsc: null,
+  id: null,
+  extra: []
+};
+let quizScore = 0;
+let psychScore = 0;
+
+// ============================================================
+// STEP NAVIGATION
+// ============================================================
+function goToStep(step) {
+  // Validate current step before moving forward
+  if (step > currentStep) {
+    if (!validateStep(currentStep)) return;
+  }
+
+  // Hide all steps
+  document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+  // Show target step
+  const targetEl = document.querySelector(`.step-content[data-step="${step}"]`);
+  if (targetEl) targetEl.classList.add('active');
+
+  // Update step indicators
+  document.querySelectorAll('.step-dot').forEach((dot, index) => {
+    const num = index + 1;
+    dot.classList.remove('active', 'completed');
+    if (num === step) dot.classList.add('active');
+    else if (num < step) dot.classList.add('completed');
+  });
+
+  currentStep = step;
+  updateProgress();
+
+  // Render content for specific steps
+  if (step === 3) renderQuiz();
+  if (step === 4) renderPsychologyQuiz();
+  if (step === 6) renderReview();
+
+  // Scroll to top of application
+  document.querySelector('.application-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateProgress() {
+  const percent = ((currentStep - 1) / (totalSteps - 1)) * 100;
+  document.getElementById('progressFill').style.width = percent + '%';
+}
+
+function validateStep(step) {
+  // Simple validation for each step
+  if (step === 1) {
+    const name = document.getElementById('fullName').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const exp = document.getElementById('experience').value;
+    const qual = document.getElementById('qualifications').value.trim();
+    const bio = document.getElementById('bio').value.trim();
+    if (!name || !email || !phone || !exp || !qual || !bio) {
+      alert('Please fill in all required fields.');
+      return false;
+    }
+    if (!email.includes('@')) {
+      alert('Please enter a valid email address.');
+      return false;
+    }
+  }
+  if (step === 2) {
+    const ksChecked = document.querySelectorAll('#keyStages input:checked').length;
+    const subChecked = document.querySelectorAll('#subjects input:checked').length;
+    const primary = document.getElementById('primarySubject').value;
+    if (ksChecked === 0 || subChecked === 0 || !primary) {
+      alert('Please select at least one Key Stage, one subject, and your primary subject.');
+      return false;
+    }
+  }
+  if (step === 3) {
+    // Check if all quiz questions are answered
+    const questions = document.querySelectorAll('#quizContainer .quiz-question');
+    let allAnswered = true;
+    questions.forEach(q => {
+      const selected = q.querySelector('input[type="radio"]:checked');
+      if (!selected) allAnswered = false;
+    });
+    if (!allAnswered) {
+      alert('Please answer all quiz questions before proceeding.');
+      return false;
+    }
+  }
+  if (step === 4) {
+    const questions = document.querySelectorAll('#psychologyQuiz .quiz-question');
+    let allAnswered = true;
+    questions.forEach(q => {
+      const selected = q.querySelector('input[type="radio"]:checked');
+      if (!selected) allAnswered = false;
+    });
+    if (!allAnswered) {
+      alert('Please answer all psychology questions before proceeding.');
+      return false;
+    }
+  }
+  if (step === 5) {
+    if (!uploadedFiles.photo || !uploadedFiles.cv || !uploadedFiles.tsc || !uploadedFiles.id) {
+      alert('Please upload your photo, CV, TSC certificate, and ID before proceeding.');
+      return false;
+    }
+  }
+  return true;
+}
+
+// ============================================================
+// FILE UPLOAD HANDLERS
+// ============================================================
+function setupUpload(areaId, inputId, listId, key) {
+  const area = document.getElementById(areaId);
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+
+  area.addEventListener('click', () => input.click());
+
+  area.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    area.classList.add('dragover');
+  });
+  area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+  area.addEventListener('drop', (e) => {
+    e.preventDefault();
+    area.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      handleFile(input, list, key);
+    }
+  });
+
+  input.addEventListener('change', () => {
+    if (input.files.length) {
+      handleFile(input, list, key);
+    }
+  });
+}
+
+function handleFile(input, list, key) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const maxSize = key === 'cv' || key === 'extra' ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    alert(`File too large. Maximum size is ${maxSize / 1024 / 1024}MB.`);
+    input.value = '';
+    return;
+  }
+
+  const fileItem = document.createElement('div');
+  fileItem.className = 'file-item';
+  fileItem.innerHTML = `
+    <span class="name"><i class="fas fa-file"></i> ${file.name} (${(file.size / 1024).toFixed(1)}KB)</span>
+    <button class="remove" onclick="removeFile('${key}')"><i class="fas fa-times"></i></button>
+  `;
+  list.innerHTML = '';
+  list.appendChild(fileItem);
+
+  if (key === 'extra') {
+    if (!uploadedFiles.extra) uploadedFiles.extra = [];
+    uploadedFiles.extra.push(file);
+  } else {
+    uploadedFiles[key] = file;
+  }
+}
+
+function removeFile(key) {
+  if (key === 'extra') {
+    uploadedFiles.extra = [];
+    document.getElementById('extraList').innerHTML = '';
+    document.getElementById('extraInput').value = '';
+    return;
+  }
+  uploadedFiles[key] = null;
+  const listId = key + 'List';
+  document.getElementById(listId).innerHTML = '';
+  const inputId = key + 'Input';
+  document.getElementById(inputId).value = '';
+}
+
+// Setup all upload areas
+setupUpload('photoUpload', 'photoInput', 'photoList', 'photo');
+setupUpload('cvUpload', 'cvInput', 'cvList', 'cv');
+setupUpload('tscUpload', 'tscInput', 'tscList', 'tsc');
+setupUpload('idUpload', 'idInput', 'idList', 'id');
+setupUpload('extraUpload', 'extraInput', 'extraList', 'extra');
+
+// ============================================================
+// SUBJECT QUIZ - REAL IGCSE/A-LEVEL QUESTIONS
+// ============================================================
+const subjectQuestions = {
+  maths: [
+    {
+      question: 'Solve for x: 2x + 5 = 13',
+      options: ['x = 3', 'x = 4', 'x = 5', 'x = 6'],
+      correct: 1,
+      explanation: '2x + 5 = 13 → 2x = 8 → x = 4'
+    },
+    {
+      question: 'What is the gradient of the line y = 3x - 7?',
+      options: ['-7', '3', '7', '-3'],
+      correct: 1,
+      explanation: 'In y = mx + c, m is the gradient. Here m = 3.'
+    },
+    {
+      question: 'Simplify: (x³ × x⁴) / x²',
+      options: ['x⁵', 'x⁶', 'x⁷', 'x⁹'],
+      correct: 0,
+      explanation: 'x³ × x⁴ = x⁷, then x⁷ / x² = x⁵'
+    },
+    {
+      question: 'What is the area of a circle with radius 5cm? (Use π = 3.14)',
+      options: ['78.5 cm²', '31.4 cm²', '157 cm²', '25 cm²'],
+      correct: 0,
+      explanation: 'Area = πr² = 3.14 × 25 = 78.5 cm²'
+    },
+    {
+      question: 'Solve: 3(x - 2) = 5x - 10',
+      options: ['x = 2', 'x = 4', 'x = 6', 'x = 8'],
+      correct: 1,
+      explanation: '3x - 6 = 5x - 10 → 4 = 2x → x = 2'
+    }
+  ],
+  english: [
+    {
+      question: 'Which of the following is a complex sentence?',
+      options: [
+        'She ran to the shop.',
+        'She ran to the shop because she needed milk.',
+        'She ran to the shop and bought milk.',
+        'Running to the shop, she bought milk.'
+      ],
+      correct: 1,
+      explanation: 'A complex sentence has one independent clause and one dependent clause. "because she needed milk" is the dependent clause.'
+    },
+    {
+      question: 'What is the correct spelling?',
+      options: ['Necessary', 'Neccessary', 'Necesary', 'Necassary'],
+      correct: 0,
+      explanation: '"Necessary" has one c and two s\'s.'
+    },
+    {
+      question: 'Identify the simile: "Her eyes were like stars."',
+      options: ['Her eyes', 'like stars', 'were like', 'stars'],
+      correct: 1,
+      explanation: 'A simile uses "like" or "as" to compare two things.'
+    },
+    {
+      question: 'What does "benevolent" mean?',
+      options: ['Kind and generous', 'Cruel and harsh', 'Indifferent', 'Confused'],
+      correct: 0,
+      explanation: '"Benevolent" means kind, generous, and well-meaning.'
+    },
+    {
+      question: 'Which is the correct past tense of "lie" (meaning to recline)?',
+      options: ['Layed', 'Lied', 'Laid', 'Lay'],
+      correct: 3,
+      explanation: 'The past tense of "lie" (recline) is "lay".'
+    }
+  ],
+  physics: [
+    {
+      question: 'What is the SI unit of force?',
+      options: ['Joule', 'Newton', 'Watt', 'Pascal'],
+      correct: 1,
+      explanation: 'The Newton (N) is the SI unit of force.'
+    },
+    {
+      question: 'What is the speed of light in a vacuum? (approximately)',
+      options: ['3 × 10⁶ m/s', '3 × 10⁸ m/s', '3 × 10¹⁰ m/s', '3 × 10⁴ m/s'],
+      correct: 1,
+      explanation: 'The speed of light is approximately 3 × 10⁸ m/s.'
+    },
+    {
+      question: 'Which law states that energy cannot be created or destroyed?',
+      options: [
+        'Newton\'s First Law',
+        'Law of Conservation of Energy',
+        'Ohm\'s Law',
+        'Hooke\'s Law'
+      ],
+      correct: 1,
+      explanation: 'The Law of Conservation of Energy states that energy can be transformed but not created or destroyed.'
+    },
+    {
+      question: 'What is the formula for kinetic energy?',
+      options: ['E = mc²', 'E = ½mv²', 'E = mgh', 'E = Fd'],
+      correct: 1,
+      explanation: 'Kinetic energy = ½ × mass × velocity²'
+    },
+    {
+      question: 'What is the unit of electrical resistance?',
+      options: ['Ohm', 'Volt', 'Ampere', 'Watt'],
+      correct: 0,
+      explanation: 'The Ohm (Ω) is the SI unit of electrical resistance.'
+    }
+  ],
+  chemistry: [
+    {
+      question: 'What is the chemical symbol for gold?',
+      options: ['Au', 'Ag', 'Go', 'Gd'],
+      correct: 0,
+      explanation: 'Gold\'s chemical symbol is Au, from the Latin "aurum".'
+    },
+    {
+      question: 'What is the pH of a neutral solution?',
+      options: ['0', '7', '14', '1'],
+      correct: 1,
+      explanation: 'A neutral solution has a pH of 7.'
+    },
+    {
+      question: 'What is the formula for sodium chloride?',
+      options: ['NaCl', 'Na₂Cl', 'NaCl₂', 'Na₂Cl₂'],
+      correct: 0,
+      explanation: 'Sodium chloride is NaCl (one sodium atom, one chlorine atom).'
+    },
+    {
+      question: 'What type of bond exists between two non-metals?',
+      options: ['Ionic bond', 'Covalent bond', 'Metallic bond', 'Hydrogen bond'],
+      correct: 1,
+      explanation: 'Covalent bonds form between non-metals by sharing electrons.'
+    },
+    {
+      question: 'What is the molar mass of water (H₂O)? (H=1, O=16)',
+      options: ['16 g/mol', '18 g/mol', '20 g/mol', '22 g/mol'],
+      correct: 1,
+      explanation: 'H₂O: (2 × 1) + 16 = 18 g/mol'
+    }
+  ],
+  biology: [
+    {
+      question: 'What is the powerhouse of the cell?',
+      options: ['Nucleus', 'Mitochondria', 'Ribosome', 'Golgi body'],
+      correct: 1,
+      explanation: 'Mitochondria are known as the powerhouse of the cell because they produce ATP energy.'
+    },
+    {
+      question: 'What is the function of the human heart?',
+      options: [
+        'Filter blood',
+        'Pump blood around the body',
+        'Produce hormones',
+        'Store nutrients'
+      ],
+      correct: 1,
+      explanation: 'The heart pumps blood around the body, delivering oxygen and nutrients.'
+    },
+    {
+      question: 'What is photosynthesis?',
+      options: [
+        'The process of cell division',
+        'The process by which plants make food using sunlight',
+        'The process of respiration',
+        'The process of digestion'
+      ],
+      correct: 1,
+      explanation: 'Photosynthesis is the process by which plants convert sunlight into chemical energy (food).'
+    },
+    {
+      question: 'What is the largest organ in the human body?',
+      options: ['Liver', 'Skin', 'Brain', 'Heart'],
+      correct: 1,
+      explanation: 'The skin is the largest organ in the human body.'
+    },
+    {
+      question: 'What is the function of red blood cells?',
+      options: [
+        'Fight infection',
+        'Carry oxygen',
+        'Produce antibodies',
+        'Carry hormones'
+      ],
+      correct: 1,
+      explanation: 'Red blood cells contain haemoglobin and carry oxygen around the body.'
+    }
+  ],
+  history: [
+    {
+      question: 'In which year did World War II end?',
+      options: ['1944', '1945', '1946', '1947'],
+      correct: 1,
+      explanation: 'World War II ended in 1945.'
+    },
+    {
+      question: 'Who was the first President of the United States?',
+      options: ['Thomas Jefferson', 'George Washington', 'Abraham Lincoln', 'John Adams'],
+      correct: 1,
+      explanation: 'George Washington was the first President of the United States.'
+    },
+    {
+      question: 'What was the Industrial Revolution?',
+      options: [
+        'A political revolution',
+        'A period of industrialisation and technological change',
+        'A religious movement',
+        'A military conflict'
+      ],
+      correct: 1,
+      explanation: 'The Industrial Revolution was a period of industrialisation and technological change from the 18th to 19th centuries.'
+    },
+    {
+      question: 'When was the Magna Carta signed?',
+      options: ['1066', '1215', '1500', '1600'],
+      correct: 1,
+      explanation: 'The Magna Carta was signed in 1215.'
+    },
+    {
+      question: 'What was the Cold War?',
+      options: [
+        'A physical war between the US and USSR',
+        'A period of geopolitical tension between the US and USSR',
+        'A war in Antarctica',
+        'A trade war'
+      ],
+      correct: 1,
+      explanation: 'The Cold War was a period of geopolitical tension between the US and USSR from 1947 to 1991.'
+    }
+  ],
+  geography: [
+    {
+      question: 'What is the longest river in the world?',
+      options: ['Amazon', 'Nile', 'Mississippi', 'Yangtze'],
+      correct: 1,
+      explanation: 'The Nile River is the longest river in the world (approximately 6,650 km).'
+    },
+    {
+      question: 'What is the largest continent by land area?',
+      options: ['Africa', 'Asia', 'North America', 'Europe'],
+      correct: 1,
+      explanation: 'Asia is the largest continent by land area.'
+    },
+    {
+      question: 'What is a biome?',
+      options: [
+        'A small ecosystem',
+        'A large geographical area with distinct climate and life',
+        'A type of weather',
+        'A population of animals'
+      ],
+      correct: 1,
+      explanation: 'A biome is a large geographical area with distinct climate, flora, and fauna.'
+    },
+    {
+      question: 'What is the capital of Australia?',
+      options: ['Sydney', 'Melbourne', 'Canberra', 'Brisbane'],
+      correct: 2,
+      explanation: 'Canberra is the capital of Australia.'
+    },
+    {
+      question: 'What is the greenhouse effect?',
+      options: [
+        'The trapping of heat in the Earth\'s atmosphere',
+        'The cooling of the Earth',
+        'The effect of plants on the atmosphere',
+        'The movement of tectonic plates'
+      ],
+      correct: 0,
+      explanation: 'The greenhouse effect is the trapping of heat in the Earth\'s atmosphere by greenhouse gases.'
+    }
+  ]
+};
+
+// Default questions if subject not found
+const defaultQuestions = [
+  {
+    question: 'What is 2 + 2?',
+    options: ['3', '4', '5', '6'],
+    correct: 1,
+    explanation: '2 + 2 = 4'
+  },
+  {
+    question: 'What is the capital of Kenya?',
+    options: ['Mombasa', 'Nairobi', 'Kisumu', 'Nakuru'],
+    correct: 1,
+    explanation: 'Nairobi is the capital of Kenya.'
+  }
+];
+
+// ============================================================
+// PSYCHOLOGY / SCENARIO QUESTIONS
+// ============================================================
+const psychologyQuestions = [
+  {
+    question: 'A student in your online class is clearly struggling to set up their camera and microphone. They seem frustrated and are falling behind. What do you do?',
+    options: [
+      'Wait for them to figure it out and move on',
+      'Take a moment to guide them through the setup step by step',
+      'Tell them to fix it before the next class',
+      'Ignore it and continue with the lesson'
+    ],
+    correct: 1,
+    explanation: 'Taking a moment to guide the student builds trust and ensures they can participate fully. Patience and support are key.'
+  },
+  {
+    question: 'One of your students keeps muting themselves and turning off their camera during class. You suspect they are distracted or not paying attention. How do you handle this?',
+    options: [
+      'Call them out publicly and ask them to turn the camera on',
+      'Privately message them to check if everything is okay',
+      'Ignore it and continue teaching',
+      'Mark them absent for the session'
+    ],
+    correct: 1,
+    explanation: 'Privately checking in shows you care without embarrassing the student. There may be a valid reason for their behaviour.'
+  },
+  {
+    question: 'A student is being disruptive in the online class, making inappropriate comments and distracting others. What is your approach?',
+    options: [
+      'Ignore the behaviour and hope it stops',
+      'Address the student privately after class to discuss their behaviour',
+      'Kick them out of the class immediately',
+      'Shame them publicly to discourage others'
+    ],
+    correct: 1,
+    explanation: 'Addressing the student privately is the most respectful and effective way to correct behaviour. It maintains dignity and gives the student a chance to improve.'
+  },
+  {
+    question: 'A student tells you they are feeling overwhelmed with the workload and are considering dropping out. How do you respond?',
+    options: [
+      'Tell them to work harder and manage their time better',
+      'Listen to their concerns, offer support, and suggest manageable steps',
+      'Tell them that dropping out is their choice',
+      'Refer them to another tutor and stop teaching them'
+    ],
+    correct: 1,
+    explanation: 'Showing empathy and offering practical support can help the student feel heard and motivated to continue. Mental health matters.'
+  },
+  {
+    question: 'During a lesson, you notice a student is consistently getting answers wrong and seems to be struggling with the concept. What do you do?',
+    options: [
+      'Move on to the next topic to keep the pace',
+      'Pause and re-explain the concept in a different way',
+      'Tell the student to review the material on their own',
+      'Ignore it and hope they catch up later'
+    ],
+    correct: 1,
+    explanation: 'Pausing and re-explaining ensures the student understands before moving on. Every student learns at a different pace.'
+  },
+  {
+    question: 'One of your students is showing signs of distress—they are withdrawn, not participating, and seem down. How do you approach this?',
+    options: [
+      'Do nothing and let them sort it out',
+      'Privately ask if everything is okay and offer a listening ear',
+      'Publicly ask them what is wrong in front of the class',
+      'Contact their parents immediately without speaking to the student'
+    ],
+    correct: 1,
+    explanation: 'A private, compassionate check-in can make a huge difference. It shows you care without putting the student on the spot.'
+  },
+  {
+    question: 'A student argues with you about a grade they received on an assignment. They are persistent and confrontational. How do you handle this?',
+    options: [
+      'Apologise and change their grade to avoid conflict',
+      'Listen to their concerns, explain your marking clearly, and stand by your professional judgement',
+      'Argue back and tell them they are wrong',
+      'Refuse to discuss it and end the conversation'
+    ],
+    correct: 1,
+    explanation: 'Listening and explaining your marking shows professionalism and respect. Standing by your judgement when appropriate is important.'
+  },
+  {
+    question: 'A student in your class has special educational needs and requires additional support. What is your approach?',
+    options: [
+      'Teach them the same way as all other students',
+      'Adapt your teaching approach to meet their specific needs',
+      'Refer them to another tutor who can handle it',
+      'Ignore their needs and focus on the rest of the class'
+    ],
+    correct: 1,
+    explanation: 'Adapting your teaching for students with SEN shows inclusivity and professionalism. Every student deserves support tailored to their needs.'
+  }
+];
+
+// ============================================================
+// RENDER QUIZ
+// ============================================================
+function renderQuiz() {
+  const container = document.getElementById('quizContainer');
+  const primarySubject = document.getElementById('primarySubject').value;
+  let questions = defaultQuestions;
+
+  if (primarySubject && subjectQuestions[primarySubject]) {
+    questions = subjectQuestions[primarySubject];
+  }
+
+  // Shuffle questions and take 5
+  const shuffled = [...questions].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, 5);
+
+  let html = '';
+  selected.forEach((q, index) => {
+    html += `
+      <div class="quiz-question" data-q="${index}">
+        <div class="q-number">Question ${index + 1}</div>
+        <div class="q-text">${q.question}</div>
+        <div class="options">
+          ${q.options.map((opt, optIndex) => `
+            <label>
+              <input type="radio" name="quiz_q${index}" value="${optIndex}" onchange="selectQuizAnswer(${index}, ${optIndex}, '${q.correct}')">
+              ${opt}
+            </label>
+          `).join('')}
+        </div>
+        <div class="feedback" id="quizFeedback${index}"></div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+  quizAnswers = {};
+  quizScore = 0;
+}
+
+function selectQuizAnswer(qIndex, selected, correct) {
+  const questionEl = document.querySelector(`.quiz-question[data-q="${qIndex}"]`);
+  const labels = questionEl.querySelectorAll('.options label');
+  const feedback = document.getElementById(`quizFeedback${qIndex}`);
+
+  // Remove previous selections
+  labels.forEach(label => {
+    label.classList.remove('selected', 'correct', 'incorrect');
+  });
+
+  // Mark selected
+  labels[selected].classList.add('selected');
+
+  // Check if correct
+  const isCorrect = parseInt(selected) === parseInt(correct);
+  if (isCorrect) {
+    labels[selected].classList.add('correct');
+    feedback.className = 'feedback show correct';
+    feedback.textContent = '✓ Correct! ' + questionEl.querySelector('.q-text').textContent.split('?')[0] + '? ' + (questionEl.querySelector('.q-text').textContent.includes('?') ? '' : '');
+    // Get explanation from stored data
+    const questions = subjectQuestions[document.getElementById('primarySubject').value] || defaultQuestions;
+    // Find the question
+    const qText = questionEl.querySelector('.q-text').textContent;
+    const foundQ = questions.find(q => q.question === qText);
+    if (foundQ) feedback.textContent += ' ' + foundQ.explanation;
+  } else {
+    labels[selected].classList.add('incorrect');
+    feedback.className = 'feedback show incorrect';
+    const questions = subjectQuestions[document.getElementById('primarySubject').value] || defaultQuestions;
+    const qText = questionEl.querySelector('.q-text').textContent;
+    const foundQ = questions.find(q => q.question === qText);
+    if (foundQ) {
+      feedback.textContent = '✗ Incorrect. The correct answer was: ' + foundQ.options[foundQ.correct] + '. ' + foundQ.explanation;
+    } else {
+      feedback.textContent = '✗ Incorrect. Please review the question.';
+    }
+  }
+
+  quizAnswers[qIndex] = selected;
+  
+  // Calculate score
+  const total = document.querySelectorAll('#quizContainer .quiz-question').length;
+  let correctCount = 0;
+  document.querySelectorAll('#quizContainer .quiz-question').forEach((q, idx) => {
+    const selectedRadio = q.querySelector('input[type="radio"]:checked');
+    if (selectedRadio) {
+      const val = parseInt(selectedRadio.value);
+      // We need to check against stored correct answers
+      const questions = subjectQuestions[document.getElementById('primarySubject').value] || defaultQuestions;
+      const qText = q.querySelector('.q-text').textContent;
+      const foundQ = questions.find(qq => qq.question === qText);
+      if (foundQ && val === foundQ.correct) correctCount++;
+    }
+  });
+  quizScore = Math.round((correctCount / total) * 100);
+}
+
+// ============================================================
+// RENDER PSYCHOLOGY QUIZ
+// ============================================================
+function renderPsychologyQuiz() {
+  const container = document.getElementById('psychologyQuiz');
+  const shuffled = [...psychologyQuestions].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, 6);
+
+  let html = '';
+  selected.forEach((q, index) => {
+    html += `
+      <div class="quiz-question" data-psych="${index}">
+        <div class="q-number">Scenario ${index + 1}</div>
+        <div class="q-text">${q.question}</div>
+        <div class="options">
+          ${q.options.map((opt, optIndex) => `
+            <label>
+              <input type="radio" name="psych_q${index}" value="${optIndex}" onchange="selectPsychAnswer(${index}, ${optIndex}, '${q.correct}')">
+              ${opt}
+            </label>
+          `).join('')}
+        </div>
+        <div class="feedback" id="psychFeedback${index}"></div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+  psychAnswers = {};
+  psychScore = 0;
+}
+
+function selectPsychAnswer(qIndex, selected, correct) {
+  const questionEl = document.querySelector(`.quiz-question[data-psych="${qIndex}"]`);
+  const labels = questionEl.querySelectorAll('.options label');
+  const feedback = document.getElementById(`psychFeedback${qIndex}`);
+
+  labels.forEach(label => {
+    label.classList.remove('selected', 'correct', 'incorrect');
+  });
+
+  labels[selected].classList.add('selected');
+
+  const isCorrect = parseInt(selected) === parseInt(correct);
+  if (isCorrect) {
+    labels[selected].classList.add('correct');
+    feedback.className = 'feedback show correct';
+    feedback.textContent = '✓ Good judgement! ' + (psychologyQuestions[qIndex]?.explanation || '');
+  } else {
+    labels[selected].classList.add('incorrect');
+    feedback.className = 'feedback show incorrect';
+    feedback.textContent = '✗ Consider this approach: ' + (psychologyQuestions[qIndex]?.explanation || '');
+  }
+
+  psychAnswers[qIndex] = selected;
+
+  // Calculate score
+  const total = document.querySelectorAll('#psychologyQuiz .quiz-question').length;
+  let correctCount = 0;
+  document.querySelectorAll('#psychologyQuiz .quiz-question').forEach((q, idx) => {
+    const selectedRadio = q.querySelector('input[type="radio"]:checked');
+    if (selectedRadio) {
+      const val = parseInt(selectedRadio.value);
+      const qText = q.querySelector('.q-text').textContent;
+      const foundQ = psychologyQuestions.find(qq => qq.question === qText);
+      if (foundQ && val === foundQ.correct) correctCount++;
+    }
+  });
+  psychScore = Math.round((correctCount / total) * 100);
+}
+
+// ============================================================
+// RENDER REVIEW
+// ============================================================
+function renderReview() {
+  const container = document.getElementById('reviewContainer');
+  const name = document.getElementById('fullName').value || 'Not provided';
+  const email = document.getElementById('email').value || 'Not provided';
+  const phone = document.getElementById('phone').value || 'Not provided';
+  const experience = document.getElementById('experience').value || 'Not provided';
+  const qualifications = document.getElementById('qualifications').value || 'Not provided';
+  const bio = document.getElementById('bio').value || 'Not provided';
+  const primarySubject = document.getElementById('primarySubject').value || 'Not selected';
+
+  const ksSelected = [];
+  document.querySelectorAll('#keyStages input:checked').forEach(cb => ksSelected.push(cb.value));
+  const subjectsSelected = [];
+  document.querySelectorAll('#subjects input:checked').forEach(cb => subjectsSelected.push(cb.value));
+
+  const totalQuiz = document.querySelectorAll('#quizContainer .quiz-question').length || 1;
+  const totalPsych = document.querySelectorAll('#psychologyQuiz .quiz-question').length || 1;
+
+  // Calculate final score
+  const finalScore = Math.round((quizScore + psychScore) / 2);
+
+  document.getElementById('finalScoreNum').textContent = finalScore + '%';
+  const resultEl = document.getElementById('finalScoreResult');
+  if (finalScore >= 70) {
+    resultEl.textContent = '✅ Pass — Strong candidate';
+    resultEl.className = 'score-result pass';
+  } else if (finalScore >= 50) {
+    resultEl.textContent = '⚠️ Review — Needs improvement in some areas';
+    resultEl.className = 'score-result';
+    resultEl.style.color = '#F39C12';
+  } else {
+    resultEl.textContent = '❌ Needs significant improvement';
+    resultEl.className = 'score-result fail';
+  }
+
+  let html = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div><strong>Full Name:</strong> ${name}</div>
+      <div><strong>Email:</strong> ${email}</div>
+      <div><strong>Phone:</strong> ${phone}</div>
+      <div><strong>Experience:</strong> ${experience} years</div>
+      <div style="grid-column:1/-1;"><strong>Qualifications:</strong> ${qualifications}</div>
+      <div style="grid-column:1/-1;"><strong>Bio:</strong> ${bio}</div>
+      <div><strong>Primary Subject:</strong> ${primarySubject}</div>
+      <div><strong>Key Stages:</strong> ${ksSelected.join(', ') || 'None selected'}</div>
+      <div style="grid-column:1/-1;"><strong>Subjects:</strong> ${subjectsSelected.join(', ') || 'None selected'}</div>
+      <div><strong>Quiz Score:</strong> ${quizScore}%</div>
+      <div><strong>Psychology Score:</strong> ${psychScore}%</div>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+// ============================================================
+// SUBMIT APPLICATION
+// ============================================================
+function submitApplication() {
+  const btn = document.getElementById('submitBtn');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+  btn.disabled = true;
+
+  // Simulate submission
+  setTimeout(() => {
+    btn.innerHTML = '<i class="fas fa-check"></i> Application Submitted!';
+    btn.style.background = '#2EB872';
+    btn.disabled = false;
+
+    // Show success message
+    const reviewContainer = document.getElementById('reviewContainer');
+    reviewContainer.innerHTML = `
+      <div style="text-align:center;padding:2rem;">
+        <i class="fas fa-check-circle" style="font-size:4rem;color:var(--success);margin-bottom:1rem;"></i>
+        <h3>Application Submitted Successfully!</h3>
+        <p style="color:var(--muted);">Thank you for applying to teach with Paisley Studio. We'll review your application and get back to you within 48 hours.</p>
+        <p style="color:var(--muted);margin-top:.5rem;">Check your email for a confirmation message.</p>
+        <a href="index.html" class="btn btn-primary" style="margin-top:1.5rem;"><i class="fas fa-home"></i> Return to Home</a>
+      </div>
+    `;
+    document.getElementById('finalScore').style.display = 'none';
+    document.querySelector('.step-nav').style.display = 'none';
+  }, 2500);
+}
+
+// ============================================================
+// NEWSLETTER SUBSCRIBE
+// ============================================================
+document.querySelector('.footer-newsletter .btn')?.addEventListener('click', function(e) {
+  e.preventDefault();
+  const input = this.closest('.newsletter-box').querySelector('input');
+  const email = input.value.trim();
+  if (!email) {
+    input.style.borderColor = '#e74c3c';
+    input.placeholder = 'Please enter your email';
+    setTimeout(() => {
+      input.style.borderColor = '';
+      input.placeholder = 'Your email address';
+    }, 2000);
+    return;
+  }
+  const originalText = this.innerHTML;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  this.disabled = true;
+  setTimeout(() => {
+    this.innerHTML = '<i class="fas fa-check"></i> Subscribed!';
+    this.style.background = '#2EB872';
+    input.value = '';
+    setTimeout(() => {
+      this.innerHTML = originalText;
+      this.style.background = '';
+      this.disabled = false;
+    }, 3000);
+  }, 1200);
+});
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+updateProgress();
+</script>
+
+</body>
+</html>

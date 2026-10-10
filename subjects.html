@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subjects | Paisley Studio British Curriculum</title>
+  <meta name="description" content="Explore British Curriculum subjects at Paisley Studio. Filter by Key Stage and subject category. English, Maths, Science, Humanities, Languages and more." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://paisleystudio.online/subjects.html" />
+  
+  <meta property="og:title" content="Subjects | Paisley Studio British Curriculum" />
+  <meta property="og:description" content="Explore British Curriculum subjects at Paisley Studio. Filter by Key Stage and subject category." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://paisleystudio.online/subjects.html" />
+  <meta name="theme-color" content="#245F5A" />
+<link rel="manifest" href="/manifest.json" />
+  
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Subjects | Paisley Studio British Curriculum" />
+  <meta name="twitter:description" content="Explore British Curriculum subjects at Paisley Studio." />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+  <style>
+    :root {
+      --brand: #55BFB3;
+      --brand-deep: #245F5A;
+      --brand-soft: #7BCBC2;
+      --paper: #F1F9F7;
+      --surface: #FFFFFF;
+      --sage: #E5F2EF;
+      --ink: #263331;
+      --muted: #5A6E6A;
+      --line: rgba(38,51,49,.10);
+      --line-soft: rgba(38,51,49,.06);
+      --dark: #0F1A14;
+      --dark-line: rgba(255,255,255,.10);
+      --dark-muted: #8FA8A2;
+      --gold: #F5C842;
+      --font: 'Quicksand', sans-serif;
+      --container: 1160px;
+      --pad: 7rem;
+      --pad-sm: 3.4rem;
+      --subject-english: #4A90D9;
+      --subject-maths: #E67E22;
+      --subject-science: #27AE60;
+      --subject-humanities: #9B59B6;
+      --subject-languages: #E74C3C;
+      --subject-arts: #F39C12;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(50px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideInUp {
+      from { opacity: 0; transform: translateY(50px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-60px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(60px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.85); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes floatY {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-12px); }
+    }
+
+    .animate-slide-up { animation: slideInUp 0.7s cubic-bezier(.16,1,.3,1) forwards; }
+    .animate-slide-left { animation: slideInLeft 0.7s cubic-bezier(.16,1,.3,1) forwards; }
+    .animate-slide-right { animation: slideInRight 0.7s cubic-bezier(.16,1,.3,1) forwards; }
+    .animate-scale { animation: scaleIn 0.7s cubic-bezier(.16,1,.3,1) forwards; }
+    .animate-float { animation: floatY 3s ease-in-out infinite; }
+
+    .stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+    .stagger-children > *:nth-child(2) { animation-delay: 0.10s; }
+    .stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+    .stagger-children > *:nth-child(4) { animation-delay: 0.20s; }
+    .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+    .stagger-children > *:nth-child(6) { animation-delay: 0.30s; }
+    .stagger-children > *:nth-child(7) { animation-delay: 0.35s; }
+    .stagger-children > *:nth-child(8) { animation-delay: 0.40s; }
+    .stagger-children > *:nth-child(9) { animation-delay: 0.45s; }
+    .stagger-children > *:nth-child(10) { animation-delay: 0.50s; }
+    .stagger-children > *:nth-child(11) { animation-delay: 0.55s; }
+    .stagger-children > *:nth-child(12) { animation-delay: 0.60s; }
+    .stagger-children > *:nth-child(13) { animation-delay: 0.65s; }
+    .stagger-children > *:nth-child(14) { animation-delay: 0.70s; }
+    .stagger-children > *:nth-child(15) { animation-delay: 0.75s; }
+    .stagger-children > *:nth-child(16) { animation-delay: 0.80s; }
+    .stagger-children > *:nth-child(17) { animation-delay: 0.85s; }
+    .stagger-children > *:nth-child(18) { animation-delay: 0.90s; }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(50px);
+      transition: all 0.8s cubic-bezier(.16,1,.3,1);
+      will-change: transform, opacity;
+    }
+    .reveal.in {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-left {
+      opacity: 0;
+      transform: translateX(-70px);
+      transition: all 0.8s cubic-bezier(.16,1,.3,1);
+      will-change: transform, opacity;
+    }
+    .reveal-left.in {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .reveal-right {
+      opacity: 0;
+      transform: translateX(70px);
+      transition: all 0.8s cubic-bezier(.16,1,.3,1);
+      will-change: transform, opacity;
+    }
+    .reveal-right.in {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .reveal-scale {
+      opacity: 0;
+      transform: scale(0.9);
+      transition: all 0.8s cubic-bezier(.16,1,.3,1);
+      will-change: transform, opacity;
+    }
+    .reveal-scale.in {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    @media(prefers-reduced-motion:reduce){
+      .reveal, .reveal-left, .reveal-right, .reveal-scale {
+        opacity:1;
+        transform:none;
+        transition:none;
+      }
+    }
+
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; }
+    body {
+      font-family: 'Quicksand', sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    img { max-width:100%; display:block; }
+    a { color:inherit; text-decoration:none; }
+    ul { list-style:none; }
+    button { font-family:'Quicksand', sans-serif; cursor:pointer; }
+
+    h1,h2,h3,h4 { font-family:'Quicksand', sans-serif; font-weight:800; letter-spacing:-.02em; color:var(--ink); }
+
+    .container { max-width:var(--container); margin:0 auto; padding:0 1.75rem; }
+    .section { padding:var(--pad) 0; position:relative; overflow:hidden; }
+    @media(max-width:900px){ .section { padding:var(--pad-sm) 0; } }
+
+    .section-label {
+      display:inline-flex;
+      align-items:center;
+      gap:0.5rem;
+      font-size:.78rem;
+      font-weight:700;
+      color:var(--brand-deep);
+      margin-bottom:.85rem;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .section-label i { color:var(--brand); font-size:0.7rem; }
+    .section-heading {
+      font-size:clamp(1.6rem,2.7vw,2.3rem);
+      line-height:1.15;
+      max-width:34rem;
+      font-weight:800;
+      color:var(--ink);
+    }
+    .section-sub {
+      color:var(--muted);
+      font-size:1.02rem;
+      max-width:34rem;
+      margin-top:.9rem;
+    }
+
+    .skip-link {
+      position:absolute; left:-999px; top:0;
+      background:var(--brand); color:#fff;
+      padding:.7rem 1.1rem; z-index:2000; font-weight:600;
+    }
+    .skip-link:focus { left:1rem; top:1rem; border-radius:4px; }
+
+    .btn {
+      display:inline-flex; align-items:center; gap:.6rem;
+      font-weight:700; font-size:.85rem;
+      padding:.85rem 1.8rem;
+      border-radius:50px;
+      border:1px solid transparent;
+      transition:all .4s cubic-bezier(.4,0,.2,1);
+      cursor:pointer;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+    }
+    .btn-primary { background:var(--brand); color:#fff; }
+    .btn-primary:hover { background:var(--brand-deep); transform:translateY(-3px) scale(1.02); box-shadow:0 10px 30px rgba(85,191,179,.3); }
+    .btn-ghost { background:transparent; border-color:var(--line); color:var(--ink); }
+    .btn-ghost:hover { border-color:var(--brand); color:var(--brand); transform:translateY(-3px); }
+
+    .link-underline {
+      position:relative; font-weight:700; font-size:.85rem; color:var(--brand-deep);
+      padding-bottom:2px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      transition:all .3s ease;
+      display:inline-flex;
+      align-items:center;
+      gap:0.3rem;
+    }
+    .link-underline::after {
+      content:""; position:absolute; left:0; bottom:0; width:100%; height:2px;
+      background:var(--brand); transform:scaleX(1); transform-origin:left; transition:all .3s ease;
+    }
+    .link-underline:hover::after { transform:scaleX(0); }
+    .link-underline:hover { color:var(--brand); }
+
+    .site-header {
+      position:fixed; top:0; left:0; right:0; z-index:1000;
+      background:rgba(241,249,247,.92);
+      backdrop-filter:blur(12px);
+      border-bottom:1px solid transparent;
+      transition:all .4s ease;
+    }
+    .site-header.scrolled { border-bottom-color:var(--line); box-shadow:0 4px 20px rgba(0,0,0,.04); }
+    .header-inner {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:.85rem 0;
+      min-height:68px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    .logo-img {
+      width: 90px;
+      height: 50px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+      transition: all .3s ease;
+    }
+    .logo:hover .logo-img {
+      transform: scale(1.05) rotate(-4deg);
+    }
+    .logo-word {
+      font-weight: 800;
+      font-size: 1.05rem;
+      letter-spacing: -.01em;
+      color: var(--ink);
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .logo-word span {
+      display: block;
+      font-size: .5rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-top: -1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    @media(max-width: 768px) {
+      .logo-img { width: clamp(56px, 16vw, 78px); height: clamp(34px, 9vw, 44px); }
+      .logo-word { font-size: clamp(.85rem, 3.6vw, .98rem); }
+      .logo-word span { font-size: clamp(.46rem, 2vw, .5rem); }
+      .logo { gap: .5rem; }
+    }
+    @media(max-width: 420px) {
+      .logo-img { width: clamp(50px, 17vw, 62px); height: clamp(30px, 10vw, 38px); }
+      .logo-word { font-size: clamp(.74rem, 4vw, .86rem); }
+      .logo-word span { font-size: clamp(.4rem, 2.2vw, .46rem); letter-spacing:.05em; }
+      .logo { gap: .4rem; }
+    }
+    @media(max-width: 340px) { .logo-word span { display:none; } }
+
+    .main-nav { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+    .main-nav a {
+      font-weight:700; font-size:.7rem; color:var(--ink); position:relative; padding:.3rem 0;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      transition:all .3s ease;
+      white-space:nowrap;
+    }
+    .main-nav a::after {
+      content:""; position:absolute; left:0; bottom:-2px; width:0; height:2px;
+      background:var(--brand); transition:all .3s ease;
+    }
+    .main-nav a:hover::after { width:100%; }
+    .main-nav a:hover { color:var(--brand); }
+    .header-cta { display:flex; align-items:center; gap:0.6rem; flex-shrink:0; }
+    .header-cta .link-underline { font-size:.7rem; }
+    .header-cta .btn { padding:.5rem 1.2rem; font-size:.7rem; }
+    .nav-toggle {
+      display:none;
+      background:none;
+      border:none;
+      font-size:1.4rem;
+      color:var(--ink);
+      cursor:pointer;
+      flex-shrink:0;
+      width:44px;
+      height:44px;
+      align-items:center;
+      justify-content:center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .mobile-nav {
+      position:fixed;
+      top:0; left:0; right:0; bottom:0;
+      width:100%;
+      height:100%;
+      background:var(--paper);
+      z-index:1100;
+      display:flex; flex-direction:column; padding:1.4rem 1.5rem;
+      padding-top: calc(1.4rem + env(safe-area-inset-top, 0px));
+      padding-bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px));
+      transform:translateX(100%);
+      transition:transform .32s cubic-bezier(.4,0,.2,1);
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+      visibility:hidden;
+    }
+    .mobile-nav.open { transform:translateX(0); visibility:visible; }
+    .mobile-nav .close-btn {
+      align-self:flex-end; background:none; border:none; font-size:1.8rem; color:var(--ink); cursor:pointer; padding:0.5rem;
+      flex-shrink:0;
+    }
+    .mobile-nav a {
+      font-size:1.1rem; font-weight:600; padding:.8rem 0; border-bottom:1px solid var(--line); color:var(--ink);
+    }
+    .mobile-nav .mobile-cta-group {
+      margin-top:1.8rem;
+      padding-top:1.2rem;
+      border-top:1px solid var(--line);
+      display:flex;
+      flex-direction:column;
+      gap:0.8rem;
+    }
+    .mobile-nav .mobile-cta-group .btn {
+      justify-content:center;
+      width:100%;
+      padding:.9rem;
+      font-size:.85rem;
+    }
+    .mobile-nav .mobile-cta-group .link-underline {
+      text-align:center;
+      justify-content:center;
+      font-size:.9rem;
+    }
+
+    body.nav-open { overflow:hidden; height:100%; }
+
+    @media(max-width:960px){
+      .main-nav, .header-cta { display:none; }
+      .nav-toggle { display:flex; }
+    }
+
+    .page-hero {
+      padding-top: 8rem;
+      padding-bottom: 4rem;
+      background: linear-gradient(180deg, var(--paper) 0%, var(--sage) 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .page-hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(85,191,179,0.06), transparent);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .page-hero-content {
+      position: relative;
+      z-index: 1;
+    }
+    .page-hero h1 {
+      font-size: clamp(2.4rem, 4.5vw, 3.6rem);
+      line-height: 1.08;
+      letter-spacing: -.02em;
+      font-weight: 800;
+      color: var(--ink);
+    }
+    .page-hero h1 .highlight {
+      color: var(--brand);
+      position: relative;
+    }
+    .page-hero h1 .highlight::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      left: 0;
+      right: 0;
+      height: 8px;
+      background: rgba(85,191,179,.2);
+      border-radius: 4px;
+      z-index: -1;
+    }
+    .page-hero p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 34rem;
+      margin-top: 1rem;
+      line-height: 1.7;
+    }
+    .page-hero .hero-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: .6rem;
+      flex-wrap: wrap;
+      margin-top: 2rem;
+    }
+    .filter-btn {
+      padding: .45rem 1.1rem;
+      border-radius: 30px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      font-family: 'Quicksand', sans-serif;
+      font-weight: 600;
+      font-size: .72rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .3s ease;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .filter-btn:hover {
+      border-color: var(--brand);
+      color: var(--brand);
+    }
+    .filter-btn.active {
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+    }
+
+    .subject-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.5rem;
+      margin-top: 2.5rem;
+    }
+    @media(max-width: 1100px){ .subject-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media(max-width: 850px){ .subject-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media(max-width: 550px){ .subject-grid { grid-template-columns: 1fr; } }
+
+    .subject-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid var(--line-soft);
+      transition: all .4s ease;
+      position: relative;
+      display: block;
+    }
+    .subject-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(85,191,179,.1);
+      border-color: var(--brand);
+    }
+    .subject-card .icon {
+      font-size: 1.6rem;
+      margin-bottom: .4rem;
+      display: block;
+    }
+    .subject-card .category-tag {
+      display: inline-block;
+      font-size: .6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      background: var(--paper);
+      padding: .15rem .6rem;
+      border-radius: 10px;
+      border: 1px solid var(--line-soft);
+      margin-bottom: .3rem;
+    }
+    .subject-card h4 {
+      font-size: 1rem;
+      margin-bottom: .15rem;
+    }
+    .subject-card .desc {
+      font-size: .82rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .subject-card .stages {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .3rem;
+      margin-top: .6rem;
+    }
+    .subject-card .stages span {
+      font-size: .6rem;
+      font-weight: 700;
+      color: var(--brand-deep);
+      background: var(--paper);
+      padding: .2rem .6rem;
+      border-radius: 12px;
+      border: 1px solid var(--line-soft);
+    }
+    .subject-card .exam-badge {
+      display: inline-block;
+      margin-top: .5rem;
+      font-size: .65rem;
+      font-weight: 700;
+      color: var(--brand-deep);
+      background: var(--sage);
+      padding: .15rem .7rem;
+      border-radius: 12px;
+      border: 1px solid var(--brand-soft);
+    }
+
+    .site-footer {
+      background:#0A1410;
+      color:var(--dark-muted);
+      padding:3.6rem 0 1.6rem;
+      margin-top:0;
+      border-top:3px solid var(--brand);
+    }
+    .footer-top {
+      display:grid;
+      grid-template-columns:2fr 1fr 1fr 1.5fr;
+      gap:2.5rem;
+      padding-bottom:2.6rem;
+      border-bottom:1px solid var(--dark-line);
+    }
+    @media(max-width:900px){ .footer-top { grid-template-columns:1fr 1fr; } }
+    @media(max-width:560px){ .footer-top { grid-template-columns:1fr; } }
+    .footer-brand .logo-word { color:#fff; }
+    .footer-brand .logo-word span { color:var(--dark-muted); }
+    .footer-brand p { margin-top:1rem; max-width:22rem; font-size:.9rem; color:var(--dark-muted); }
+    .footer-brand .contact-info {
+      margin-top:1.2rem;
+      display:flex;
+      flex-direction:column;
+      gap:0.5rem;
+    }
+    .footer-brand .contact-info a {
+      color:var(--dark-muted);
+      font-size:.88rem;
+      display:flex;
+      align-items:center;
+      gap:0.6rem;
+      transition:all .3s ease;
+    }
+    .footer-brand .contact-info a:hover { color:var(--brand-soft); }
+    .footer-brand .contact-info a i { color:var(--brand); width:20px; }
+    .footer-col h6 {
+      color:#fff;
+      font-size:.78rem;
+      font-weight:700;
+      margin-bottom:1rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+    .footer-col a {
+      display:block;
+      color:var(--dark-muted);
+      font-size:.9rem;
+      padding:.32rem 0;
+      transition:all .3s ease;
+    }
+    .footer-col a:hover { color:var(--brand-soft); padding-left:.25rem; }
+    .footer-newsletter {
+      margin-top:1rem;
+    }
+    .footer-newsletter p {
+      font-size:.85rem;
+      color:var(--dark-muted);
+      margin-bottom:0.6rem;
+    }
+    .footer-newsletter .newsletter-box {
+      display:flex;
+      gap:0.5rem;
+      flex-wrap:wrap;
+    }
+    .footer-newsletter .newsletter-box input {
+      flex:1 1 140px;
+      min-width:0;
+      padding:.6rem .8rem;
+      border:1px solid var(--dark-line);
+      border-radius:8px;
+      background:rgba(255,255,255,0.04);
+      color:#fff;
+      font-family:'Quicksand', sans-serif;
+      font-size:.85rem;
+      transition:all .3s ease;
+    }
+    .footer-newsletter .newsletter-box input::placeholder {
+      color:var(--dark-muted);
+      opacity:0.5;
+    }
+    .footer-newsletter .newsletter-box input:focus {
+      outline:none;
+      border-color:var(--brand);
+      background:rgba(255,255,255,0.06);
+    }
+    .footer-newsletter .newsletter-box .btn {
+      padding:.6rem 1.2rem;
+      font-size:.7rem;
+      white-space:nowrap;
+      flex-shrink:0;
+    }
+    .footer-bottom {
+      display:flex;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:.6rem;
+      padding-top:1.6rem;
+      font-size:.82rem;
+      color:var(--dark-muted);
+    }
+
+    .scroll-top-btn {
+      position:fixed;
+      bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+      right: calc(24px + env(safe-area-inset-right, 0px));
+      z-index:999;
+      width:48px;
+      height:48px;
+      border-radius:50%;
+      background:var(--brand);
+      color:#fff;
+      border:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:1.2rem;
+      box-shadow:0 10px 30px rgba(85,191,179,.3);
+      opacity:0;
+      visibility:hidden;
+      transform:translateY(14px);
+      transition:all .4s ease;
+      cursor:pointer;
+    }
+    .scroll-top-btn.visible {
+      opacity:1;
+      visibility:visible;
+      transform:translateY(0);
+    }
+    .scroll-top-btn:hover {
+      background:var(--brand-deep);
+      transform:translateY(-3px) scale(1.05);
+    }
+
+    @media(max-width:600px){
+      :root { --pad-sm: 2.4rem; }
+      .page-hero { padding-top: 6rem; }
+      .page-hero h1 { font-size: clamp(1.8rem, 6vw, 2.4rem); }
+      .subject-grid { grid-template-columns: 1fr; }
+      .filter-bar { gap: .4rem; }
+      .filter-btn { padding: .3rem .7rem; font-size: .65rem; }
+      .scroll-top-btn { width:44px; height:44px; font-size:1.05rem; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); right: calc(18px + env(safe-area-inset-right, 0px)); }
+    }
+    @media(max-width:480px){
+      .scroll-top-btn { width:40px; height:40px; font-size:.95rem; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); }
+    }
+
+    .final-cta {
+      background:var(--brand-deep);
+      color:#fff;
+      border-radius:14px;
+      padding:3.4rem 2.5rem;
+      margin:0 auto;
+      max-width:var(--container);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:2rem;
+      flex-wrap:wrap;
+      border:1px solid rgba(85,191,179,.2);
+      position:relative;
+      overflow:hidden;
+    }
+    .final-cta::before {
+      content:'';
+      position:absolute;
+      top:-50%;
+      right:-20%;
+      width:400px;
+      height:400px;
+      background:radial-gradient(circle,rgba(85,191,179,0.06),transparent);
+      border-radius:50%;
+      pointer-events:none;
+    }
+    .final-cta h2 { color:#fff; font-size:clamp(1.5rem,2.6vw,2rem); max-width:26rem; position:relative; z-index:1; }
+    .final-cta p { color:rgba(255,255,255,.78); margin-top:.6rem; max-width:26rem; font-size:.96rem; position:relative; z-index:1; }
+    .final-cta .btn-primary { background:var(--brand); color:#fff; position:relative; z-index:1; }
+    .final-cta .btn-primary:hover { background:var(--brand-soft); transform:translateY(-3px); box-shadow:0 10px 30px rgba(85,191,179,.3); }
+
+    .no-results {
+      display: none;
+      text-align: center;
+      padding: 2rem;
+      color: var(--muted);
+      font-size: 1.1rem;
+      width: 100%;
+    }
+    .no-results i {
+      font-size: 2.5rem;
+      color: var(--brand-soft);
+      display: block;
+      margin-bottom: .5rem;
+    }
+  </style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<!-- ===== HEADER ===== -->
+<header class="site-header" id="siteHeader">
+  <div class="container header-inner">
+    <a href="index.html" class="logo" aria-label="Paisley Studio home">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" 
+           alt="Paisley Studio Logo" 
+           class="logo-img"
+           width="38" 
+           height="38">
+      <span class="logo-word">Paisley Studio<span>Online Homeschooling Solution</span></span>
+    </a>
+    <nav class="main-nav" aria-label="Primary">
+      <a href="subjects.html">Subjects</a>
+      <a href="key-stage-2.html">Key Stage 2</a>
+      <a href="key-stage-3.html">Key Stage 3</a>
+      <a href="key-stage-4.html">Key Stage 4</a>
+      <a href="key-stage-5.html">Key Stage 5</a>
+      <a href="why-paisley.html">Why Paisley</a>
+    </nav>
+    <div class="header-cta">
+      <a href="index.html#contact" class="link-underline">Contact</a>
+      <a href="enrolment.html" class="btn btn-primary">Enrol Now</a>
+    </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav">
+      <i class="fas fa-bars"></i>
+    </button>
+  </div>
+</header>
+
+<!-- ===== MOBILE NAV ===== -->
+<div class="mobile-nav" id="mobileNav">
+  <button class="close-btn" id="navClose" aria-label="Close menu"><i class="fas fa-times"></i></button>
+  <a href="subjects.html">Subjects</a>
+  <a href="key-stage-2.html">Key Stage 2</a>
+  <a href="key-stage-3.html">Key Stage 3</a>
+  <a href="key-stage-4.html">Key Stage 4</a>
+  <a href="key-stage-5.html">Key Stage 5</a>
+  <a href="index.html#why-us">Why Paisley</a>
+  <a href="index.html#faq">FAQs</a>
+  <div class="mobile-cta-group">
+    <a href="index.html#contact" class="link-underline">Contact</a>
+    <a href="enrolment.html" class="btn btn-primary">Enrol Now</a>
+  </div>
+</div>
+
+<main id="main-content">
+
+  <!-- ===== PAGE HERO ===== -->
+  <section class="page-hero">
+    <div class="container page-hero-content">
+      <span class="section-label"><i class="fas fa-book"></i> Subjects</span>
+      <h1>Explore our <span class="highlight">British Curriculum</span> subjects.</h1>
+      <p>Browse subjects by Key Stage and category. All subjects follow the National Curriculum for England.</p>
+      <div class="hero-actions">
+        <a href="#subjects" class="btn btn-primary"><i class="fas fa-arrow-down"></i> Browse Subjects</a>
+        <a href="enrolment.html" class="btn btn-ghost"><i class="fas fa-user-plus"></i> Enrol Now</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SUBJECTS ===== -->
+  <section class="section" id="subjects">
+    <div class="container">
+      <div class="reveal">
+        <span class="section-label"><i class="fas fa-grid"></i> All Subjects</span>
+        <h2 class="section-heading">Subjects by Key Stage and category.</h2>
+        <p class="section-sub">Click a filter to explore subjects by Key Stage or category.</p>
+      </div>
+
+      <div class="filter-bar">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="ks2">KS2</button>
+        <button class="filter-btn" data-filter="ks3">KS3</button>
+        <button class="filter-btn" data-filter="ks4">KS4 (IGCSE)</button>
+        <button class="filter-btn" data-filter="ks5">KS5 (A-Level)</button>
+        <button class="filter-btn" data-filter="core">Core</button>
+        <button class="filter-btn" data-filter="humanities">Humanities</button>
+        <button class="filter-btn" data-filter="sciences">Sciences</button>
+      </div>
+
+      <div class="subject-grid stagger-children" id="subjectGrid">
+
+        <!-- ===== KEY STAGE 2 - 4 SUBJECTS ===== -->
+        <!-- English (KS2, KS3, KS4) -->
+        <div class="subject-card" data-category="core" data-stage="ks2 ks3 ks4">
+          <span class="icon" style="color:var(--subject-english);"><i class="fas fa-book-open"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>English</h4>
+          <p class="desc">Reading, writing, grammar, punctuation, spelling, speaking and listening.</p>
+          <div class="stages"><span>KS2</span><span>KS3</span><span>KS4</span></div>
+          <span class="exam-badge">IGCSE</span>
+        </div>
+
+        <!-- Mathematics (KS2, KS3, KS4, KS5) -->
+        <div class="subject-card" data-category="core" data-stage="ks2 ks3 ks4 ks5">
+          <span class="icon" style="color:var(--subject-maths);"><i class="fas fa-calculator"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Mathematics</h4>
+          <p class="desc">Number, algebra, geometry, statistics, probability. Problem-solving skills.</p>
+          <div class="stages"><span>KS2</span><span>KS3</span><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- Science (KS2, KS3 ONLY) -->
+        <div class="subject-card" data-category="sciences" data-stage="ks2 ks3">
+          <span class="icon" style="color:var(--subject-science);"><i class="fas fa-flask"></i></span>
+          <span class="category-tag">Sciences</span>
+          <h4>Science</h4>
+          <p class="desc">Plants, animals, materials, forces, light, sound, electricity, Earth and space.</p>
+          <div class="stages"><span>KS2</span><span>KS3</span></div>
+        </div>
+
+        <!-- Computing (KS2, KS3 ONLY) -->
+        <div class="subject-card" data-category="core" data-stage="ks2 ks3">
+          <span class="icon" style="color:var(--brand);"><i class="fas fa-laptop"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Computing</h4>
+          <p class="desc">Programming, digital literacy, online safety, using technology responsibly.</p>
+          <div class="stages"><span>KS2</span><span>KS3</span></div>
+        </div>
+
+        <!-- ===== KEY STAGE 4 - IGCSE (CORE 6) ===== -->
+        <!-- Physics (KS4, KS5) -->
+        <div class="subject-card" data-category="sciences" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--subject-science);"><i class="fas fa-atom"></i></span>
+          <span class="category-tag">Sciences</span>
+          <h4>Physics</h4>
+          <p class="desc">Mechanics, waves, electricity, quantum physics, astrophysics.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- Chemistry (KS4, KS5) -->
+        <div class="subject-card" data-category="sciences" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--subject-science);"><i class="fas fa-flask"></i></span>
+          <span class="category-tag">Sciences</span>
+          <h4>Chemistry</h4>
+          <p class="desc">Organic, inorganic, and physical chemistry. Practical skills.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- Biology (KS4, KS5) -->
+        <div class="subject-card" data-category="sciences" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--subject-science);"><i class="fas fa-dna"></i></span>
+          <span class="category-tag">Sciences</span>
+          <h4>Biology</h4>
+          <p class="desc">Cell biology, genetics, evolution, ecology, human biology.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- Computer Science (KS4, KS5) -->
+        <div class="subject-card" data-category="core" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--brand);"><i class="fas fa-code"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Computer Science</h4>
+          <p class="desc">Programming, algorithms, data structures, networking, cybersecurity.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- ===== KEY STAGE 4 - IGCSE (OPTIONAL 5) ===== -->
+        <!-- History (KS4, KS5 ONLY - NOT KS3) -->
+        <div class="subject-card" data-category="humanities" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--subject-humanities);"><i class="fas fa-landmark"></i></span>
+          <span class="category-tag">Humanities</span>
+          <h4>History</h4>
+          <p class="desc">Modern world history, 20th century conflicts, Cold War, international relations.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- Geography (KS4, KS5 ONLY - NOT KS3) -->
+        <div class="subject-card" data-category="humanities" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--subject-humanities);"><i class="fas fa-globe-africa"></i></span>
+          <span class="category-tag">Humanities</span>
+          <h4>Geography</h4>
+          <p class="desc">Physical and human geography. Map skills, fieldwork, global issues.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- Business Studies (KS4, KS5) -->
+        <div class="subject-card" data-category="core" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--subject-maths);"><i class="fas fa-chart-line"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Business Studies</h4>
+          <p class="desc">Business operations, marketing, finance, entrepreneurship.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- Economics (KS5 ONLY) -->
+        <div class="subject-card" data-category="core" data-stage="ks5">
+          <span class="icon" style="color:var(--subject-maths);"><i class="fas fa-chart-pie"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Economics</h4>
+          <p class="desc">Microeconomics, macroeconomics, economic analysis.</p>
+          <div class="stages"><span>KS5</span></div>
+          <span class="exam-badge">A-Level</span>
+        </div>
+
+        <!-- Accounting (KS4, KS5) -->
+        <div class="subject-card" data-category="core" data-stage="ks4 ks5">
+          <span class="icon" style="color:var(--subject-maths);"><i class="fas fa-file-invoice-dollar"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Accounting</h4>
+          <p class="desc">Accounting principles, financial statements, business finance.</p>
+          <div class="stages"><span>KS4</span><span>KS5</span></div>
+          <span class="exam-badge">IGCSE / A-Level</span>
+        </div>
+
+        <!-- ===== KEY STAGE 5 - A-LEVEL (7 SUBJECTS) ===== -->
+        <!-- English (A-Level) (KS5 ONLY) -->
+        <div class="subject-card" data-category="core" data-stage="ks5">
+          <span class="icon" style="color:var(--subject-english);"><i class="fas fa-book"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>English (A-Level)</h4>
+          <p class="desc">Study of prose, poetry and drama. Critical analysis and essay writing.</p>
+          <div class="stages"><span>KS5</span></div>
+          <span class="exam-badge">A-Level</span>
+        </div>
+
+        <!-- Psychology (KS5 ONLY) -->
+        <div class="subject-card" data-category="core" data-stage="ks5">
+          <span class="icon" style="color:var(--subject-humanities);"><i class="fas fa-brain"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Psychology</h4>
+          <p class="desc">Biological, cognitive, social, and developmental psychology.</p>
+          <div class="stages"><span>KS5</span></div>
+          <span class="exam-badge">A-Level</span>
+        </div>
+
+        <!-- Sociology (KS5 ONLY) -->
+        <div class="subject-card" data-category="humanities" data-stage="ks5">
+          <span class="icon" style="color:var(--subject-humanities);"><i class="fas fa-users"></i></span>
+          <span class="category-tag">Humanities</span>
+          <h4>Sociology</h4>
+          <p class="desc">Study of society, social structures, institutions, and social change.</p>
+          <div class="stages"><span>KS5</span></div>
+          <span class="exam-badge">A-Level</span>
+        </div>
+
+        <!-- Further Mathematics (KS5 ONLY) -->
+        <div class="subject-card" data-category="core" data-stage="ks5">
+          <span class="icon" style="color:var(--subject-maths);"><i class="fas fa-square-root-variable"></i></span>
+          <span class="category-tag">Core</span>
+          <h4>Further Mathematics</h4>
+          <p class="desc">Advanced pure mathematics, further mechanics, further statistics.</p>
+          <div class="stages"><span>KS5</span></div>
+          <span class="exam-badge">A-Level</span>
+        </div>
+
+      </div>
+
+      <!-- No Results -->
+      <div class="no-results" id="noResults">
+        <i class="fas fa-search"></i>
+        <p>No subjects found for this filter. Try selecting a different category.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CTA ===== -->
+  <section style="padding:0 0 var(--pad) 0;">
+    <div class="container">
+      <div class="final-cta reveal-scale">
+        <div>
+          <h2>Ready to explore our subjects?</h2>
+          <p>Find the right subjects for your child's Key Stage and start their learning journey today.</p>
+        </div>
+        <a href="enrolment.html" class="btn btn-primary"><i class="fas fa-arrow-right"></i> Enrol Now</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <span class="logo-word">Paisley Studio<span>British Curriculum Online</span></span>
+        <p>An online homeschooling solution delivering the National Curriculum for England from Key Stage 2 through Key Stage 5, with IGCSE and A-Level preparation.</p>
+        <div class="contact-info">
+          <a href="mailto:info@paisleystudio.online"><i class="fas fa-envelope"></i> info@paisleystudio.online</a>
+          <a href="tel:+254 729 981 933"><i class="fas fa-phone"></i> +254 729 981 933</a>
+          <a href="#"><i class="fas fa-map-marker-alt"></i> Nairobi, Kenya</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h6>Key Stages</h6>
+        <a href="key-stage-2.html">Key Stage 2</a>
+        <a href="key-stage-3.html">Key Stage 3</a>
+        <a href="key-stage-4.html">Key Stage 4</a>
+        <a href="key-stage-5.html">Key Stage 5</a>
+      </div>
+      <div class="footer-col">
+        <h6>Site</h6>
+        <a href="key-stage-2.html">Key Stage 2</a>
+        <a href="key-stage-3.html">Key Stage 3</a>
+        <a href="key-stage-4.html">Key Stage 4</a>
+        <a href="key-stage-5.html">Key Stage 5</a>
+        <a href="why-paisley.html">Why Paisley</a>
+        <a href="index.html#faq">FAQs</a>
+      </div>
+      <div class="footer-col">
+        <h6>Connect</h6>
+        <a href="index.html#contact">Contact Us</a>
+        <a href="teach-with-us.html">Teach With Us</a>
+        <a href="enrolment.html">Student Enrolment</a>
+        <div class="footer-newsletter">
+          <p><i class="fas fa-envelope" style="color:var(--brand);margin-right:0.4rem;"></i> Subscribe to our newsletter</p>
+          <div class="newsletter-box">
+            <input type="email" placeholder="Your email address">
+            <button class="btn btn-primary" style="padding:0.6rem 1.2rem;font-size:.7rem;">Subscribe</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© <span id="yearNow"></span> Paisley Studio. All rights reserved.</span>
+      <span>British Curriculum Online, Homeschooling Reimagined</span>
+    </div>
+  </div>
+</footer>
+
+<button class="scroll-top-btn" id="scrollTopBtn" aria-label="Scroll to top">
+  <i class="fas fa-arrow-up"></i>
+</button>
+
+<!-- ===== FIREBASE SDK + HELPERS ===== -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firestore-helpers.js"></script>
+
+<script>
+document.getElementById('yearNow').textContent = new Date().getFullYear();
+
+const header = document.getElementById('siteHeader');
+window.addEventListener('scroll', () => {
+  header.classList.toggle('scrolled', window.scrollY > 20);
+  const scrollBtn = document.getElementById('scrollTopBtn');
+  scrollBtn.classList.toggle('visible', window.scrollY > 400);
+});
+document.getElementById('scrollTopBtn').addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+const navToggle = document.getElementById('navToggle');
+const navClose = document.getElementById('navClose');
+const mobileNav = document.getElementById('mobileNav');
+
+function openNav() {
+  mobileNav.classList.add('open');
+  document.body.classList.add('nav-open');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+function closeNav() {
+  mobileNav.classList.remove('open');
+  document.body.classList.remove('nav-open');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openNav);
+navClose.addEventListener('click', closeNav);
+mobileNav.querySelectorAll('a:not(.mobile-cta-group a)').forEach(a => a.addEventListener('click', closeNav));
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 960 && mobileNav.classList.contains('open')) {
+    closeNav();
+  }
+});
+
+const revealElements = document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-scale');
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('in');
+    }
+  });
+}, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+revealElements.forEach(el => revealObserver.observe(el));
+
+// ============================================================
+// FILTER FUNCTIONALITY
+// ============================================================
+const filterBtns = document.querySelectorAll('.filter-btn');
+const subjectCards = document.querySelectorAll('.subject-card');
+const noResults = document.getElementById('noResults');
+
+function filterSubjects(filter) {
+  let visibleCount = 0;
+  
+  subjectCards.forEach(card => {
+    const categories = card.dataset.category.split(' ');
+    const stages = card.dataset.stage.split(' ');
+    
+    let show = false;
+    
+    if (filter === 'all') {
+      show = true;
+    } else if (categories.includes(filter) || stages.includes(filter)) {
+      show = true;
+    }
+    
+    if (show) {
+      card.style.display = 'block';
+      card.style.opacity = '1';
+      visibleCount++;
+    } else {
+      card.style.display = 'none';
+      card.style.opacity = '0';
+    }
+  });
+  
+  if (visibleCount === 0) {
+    noResults.style.display = 'block';
+  } else {
+    noResults.style.display = 'none';
+  }
+}
+
+filterBtns.forEach(btn => {
+  btn.addEventListener('click', function() {
+    filterBtns.forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    filterSubjects(this.dataset.filter);
+  });
+});
+
+// ============================================================
+// NEWSLETTER SUBSCRIBE — now saves to Firestore too
+// ============================================================
+document.querySelector('.footer-newsletter .btn')?.addEventListener('click', function(e) {
+  e.preventDefault();
+  const input = this.closest('.newsletter-box').querySelector('input');
+  const email = input.value.trim();
+  if (!email) {
+    input.style.borderColor = '#e74c3c';
+    input.placeholder = 'Please enter your email';
+    setTimeout(() => {
+      input.style.borderColor = '';
+      input.placeholder = 'Your email address';
+    }, 2000);
+    return;
+  }
+  
+  // Save to Firestore for Studio Desk
+  saveNewsletterSignup(email, window.location.pathname.replace('/', '') || 'Homepage')
+    .catch(err => console.error('Firestore save failed:', err));
+  
+  const formData = new FormData();
+  formData.append('_subject', '[NEWSLETTER] New Subscription - Paisley Studio');
+  formData.append('_captcha', 'false');
+  formData.append('Email', email);
+  
+  fetch('https://formsubmit.co/ajax/90d6bea814211aa12823b48e46f127da', {
+    method: 'POST',
+    headers: { 'Accept': 'application/json' },
+    body: formData
+  })
+  .then(response => {
+    const originalText = this.innerHTML;
+    this.innerHTML = '<i class="fas fa-check"></i> Subscribed!';
+    this.style.background = '#2EB872';
+    input.value = '';
+    this.disabled = true;
+    
+    setTimeout(() => {
+      this.innerHTML = originalText;
+      this.style.background = '';
+      this.disabled = false;
+    }, 3000);
+  })
+  .catch(error => {
+    alert('Something went wrong. Please try again.');
+  });
+});
+</script>
+
+</body>
+</html>

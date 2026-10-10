@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Import Exam — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A;
+    --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --success:#2EB872; --warn:#F39C12; --error:#E74C3C;
+    --font:'Quicksand', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font); background:var(--paper); color:var(--ink); line-height:1.5; padding:1.5rem; min-height:100vh;}
+  .container{max-width:960px; margin:0 auto;}
+  .header{display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; gap:1rem; flex-wrap:wrap;}
+  .header h1{font-size:1.5rem; font-weight:800; color:var(--brand-deep);}
+  .header p{font-size:.82rem; color:var(--muted); margin-top:.2rem;}
+  .back-link{color:var(--brand-deep); font-weight:700; font-size:.85rem; text-decoration:none; display:inline-flex; align-items:center; gap:.4rem;}
+  .back-link:hover{color:var(--brand);}
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.5rem; margin-bottom:1.2rem;}
+  .panel h2{font-size:1.05rem; font-weight:800; color:var(--brand-deep); margin-bottom:.4rem;}
+  .panel p.sub{font-size:.82rem; color:var(--muted); margin-bottom:1.2rem;}
+
+  .dropzone{
+    border:2.5px dashed var(--brand-soft);
+    border-radius:14px;
+    padding:2.4rem 1.4rem;
+    text-align:center;
+    background:var(--sage);
+    transition:all .25s ease;
+    cursor:pointer;
+    display:block;
+    position:relative;
+  }
+  .dropzone:hover,
+  .dropzone:focus,
+  .dropzone.dragover{
+    border-color:var(--brand);
+    background:rgba(85,191,179,.12);
+    outline:none;
+  }
+  .dropzone i{font-size:2.4rem; color:var(--brand-deep); margin-bottom:.8rem; display:block;}
+  .dropzone h3{font-size:1rem; color:var(--brand-deep); margin-bottom:.3rem;}
+  .dropzone p{font-size:.78rem; color:var(--muted);}
+  .dropzone input[type="file"]{
+    display:none !important;
+    position:absolute;
+    width:0; height:0; opacity:0; pointer-events:none;
+  }
+
+  .status{display:none; padding:.8rem 1rem; border-radius:10px; font-size:.85rem; margin-top:1rem; align-items:center; gap:.6rem;}
+  .status.show{display:flex;}
+  .status.info{background:rgba(85,191,179,.1); color:var(--brand-deep); border:1px solid rgba(85,191,179,.25);}
+  .status.ok{background:rgba(46,184,114,.1); color:#1d8b57; border:1px solid rgba(46,184,114,.25);}
+  .status.err{background:rgba(231,76,60,.1); color:#c0392b; border:1px solid rgba(231,76,60,.25);}
+  .status .spin{width:16px; height:16px; border:2px solid var(--brand-soft); border-top-color:var(--brand-deep); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .q-card{border:1px solid var(--line); border-radius:12px; padding:1rem 1.1rem; margin-bottom:.9rem; background:var(--paper);}
+  .q-header{display:flex; justify-content:space-between; align-items:center; gap:.6rem; margin-bottom:.6rem; flex-wrap:wrap;}
+  .q-num{font-size:.72rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; letter-spacing:.05em;}
+  .q-type-sel{font-family:var(--font); font-size:.78rem; padding:.35rem .6rem; border:1.5px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); font-weight:700;}
+  .q-input, .q-textarea{
+    width:100%; padding:.55rem .75rem; border:1.5px solid var(--line); border-radius:8px;
+    font-family:var(--font); font-size:.87rem; background:#fff; color:var(--ink); margin-bottom:.5rem;
+  }
+  .q-textarea{resize:vertical; min-height:60px;}
+  .opt-row{display:flex; align-items:center; gap:.5rem; margin-bottom:.35rem;}
+  .opt-row input[type="radio"]{accent-color:var(--brand-deep); flex-shrink:0;}
+  .opt-row input[type="text"]{flex:1; padding:.45rem .65rem; border:1.5px solid var(--line); border-radius:7px; font-family:var(--font); font-size:.83rem; background:#fff;}
+  .row-actions{display:flex; gap:.4rem; flex-wrap:wrap;}
+  .mini-btn{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center; color:var(--muted); cursor:pointer; font-size:.75rem; transition:all .2s ease;}
+  .mini-btn:hover{border-color:var(--brand); color:var(--brand-deep); background:var(--sage);}
+  .mini-btn.danger:hover{border-color:var(--error); color:var(--error);}
+
+  .btn{display:inline-flex; align-items:center; gap:.5rem; font-weight:700; font-size:.82rem; padding:.7rem 1.3rem; border-radius:10px; border:1px solid transparent; cursor:pointer; font-family:var(--font); text-transform:uppercase; letter-spacing:.04em;}
+  .btn-primary{background:var(--brand-deep); color:#fff;}
+  .btn-primary:hover{background:var(--brand);}
+  .btn-primary:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-ghost{background:#fff; border-color:var(--line); color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--brand); color:var(--brand-deep);}
+  .btn-sm{padding:.5rem .9rem; font-size:.75rem;}
+
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:.85rem; margin-bottom:1rem;}
+  .form-field label{display:block; font-size:.72rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; margin-bottom:.35rem;}
+  .form-field input, .form-field select{width:100%; padding:.6rem .8rem; border:1.5px solid var(--line); border-radius:9px; font-family:var(--font); font-size:.85rem; background:var(--paper); color:var(--ink);}
+  .form-field.full{grid-column:1/-1;}
+  @media(max-width:640px){.form-grid{grid-template-columns:1fr;}}
+
+  /* New builder components for multi-row / match / punctuate */
+  .qb-mini-table{width:100%; border-collapse:collapse; margin-bottom:.5rem; font-size:.82rem;}
+  .qb-mini-table th{background:var(--sage); font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:var(--brand-deep); padding:.4rem .5rem; text-align:left; font-weight:800;}
+  .qb-mini-table td{padding:.35rem .5rem; border-top:1px solid var(--line-soft); vertical-align:middle;}
+  .qb-mini-table input[type="text"]{width:100%; padding:.4rem .55rem; border:1.5px solid var(--line); border-radius:7px; font-family:var(--font); font-size:.82rem; background:#fff;}
+  .qb-mini-table select{padding:.4rem .55rem; border:1.5px solid var(--line); border-radius:7px; font-family:var(--font); font-size:.82rem; background:#fff;}
+  .qb-gap-sentence{display:flex; flex-wrap:wrap; gap:.25rem; align-items:center; padding:.6rem .7rem; background:#fff; border:1.5px solid var(--line); border-radius:9px; font-size:.88rem; line-height:2;}
+  .qb-gap{display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:24px; padding:0 .35rem; border:1.5px dashed var(--brand-soft); border-radius:5px; background:var(--paper); cursor:pointer; color:var(--brand-deep); font-weight:800; transition:all .15s ease; font-size:.78rem;}
+  .qb-gap:hover{background:var(--sage); border-color:var(--brand);}
+  .qb-gap.active{background:var(--brand); border-color:var(--brand); color:#fff; border-style:solid;}
+
+  .mode-bar{display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:1.1rem; border-bottom:1.5px solid var(--line); padding-bottom:.9rem;}
+  .mode-btn{padding:.55rem 1.1rem; border-radius:10px; border:none; background:none; color:var(--muted); font-family:var(--font); font-weight:700; font-size:.82rem; cursor:pointer;}
+  .mode-btn:hover{background:var(--sage); color:var(--brand-deep);}
+  .mode-btn.active{background:var(--brand-deep); color:#fff;}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1><i class="fas fa-file-import" style="color:var(--brand)"></i> Import Exam</h1>
+      <p>PDF → Gemini extracts typed questions → you review, add diagrams and tables, save</p>
+    </div>
+    <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Studio Desk</a>
+  </div>
+
+  <!-- STEP 1: Source -->
+  <div class="panel" id="uploadPanel">
+    <h2>1 · Choose the source</h2>
+    <p class="sub"><strong>PDF</strong> works for typed papers (Gemini reads text). <strong>Manual</strong> starts a blank exam — use it for papers that are mostly diagrams, tables or matching lines.</p>
+
+    <div class="mode-bar" id="modeBar">
+      <button class="mode-btn active" data-mode="pdf" type="button"><i class="fas fa-file-pdf"></i> From PDF</button>
+      <button class="mode-btn" data-mode="manual" type="button"><i class="fas fa-pen-to-square"></i> Start from scratch</button>
+    </div>
+
+    <div id="pdfPanel">
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Choose or drop a PDF file">
+        <input type="file" id="fileInput" accept="application/pdf" />
+        <i class="fas fa-cloud-upload-alt"></i>
+        <h3>Click to choose a PDF, or drag &amp; drop</h3>
+        <p>Only clean PDFs with selectable text will parse. Scanned images won't.</p>
+      </div>
+    </div>
+
+    <div id="manualPanel" style="display:none;">
+      <div class="footer-note" style="background:var(--sage); padding:.9rem 1.1rem; border-radius:12px; color:var(--brand-deep); font-size:.84rem; line-height:1.55;">
+        <i class="fas fa-circle-info"></i>
+        Manual mode jumps straight to the question builder. All six question types are available: multiple choice, written, essay, tick-one-per-row table, match-pairs, and insert-punctuation. Every type can carry an image.
+      </div>
+    </div>
+
+    <div class="status" id="statusBox"></div>
+  </div>
+
+  <!-- STEP 2: Extracted text preview (PDF only) -->
+  <div class="panel" id="extractPanel" style="display:none;">
+    <h2>2 · Extracted text preview</h2>
+    <p class="sub">This is what the AI will see. Clean it up if the PDF came out messy, then send it to Gemini.</p>
+    <textarea id="rawText" class="q-textarea" style="min-height:200px; font-size:.82rem;"></textarea>
+    <div style="margin-top:1rem; display:flex; gap:.7rem; flex-wrap:wrap;">
+      <button class="btn btn-primary" id="parseBtn" type="button"><i class="fas fa-magic"></i> Parse with Gemini</button>
+      <button class="btn btn-ghost" id="skipParseBtn" type="button"><i class="fas fa-pen-to-square"></i> Skip and build manually</button>
+      <button class="btn btn-ghost" id="resetBtn" type="button"><i class="fas fa-redo"></i> Reset</button>
+    </div>
+    <div class="status" id="parseStatus"></div>
+  </div>
+
+  <!-- STEP 3: Review questions + exam metadata -->
+  <div class="panel" id="questionsPanel" style="display:none;">
+    <h2>3 · Review questions &amp; exam details</h2>
+    <p class="sub">Fix anything the AI got wrong, attach diagrams, add table/matching/punctuation questions by hand.</p>
+
+    <div class="form-grid">
+      <div class="form-field full">
+        <label>Exam title</label>
+        <input type="text" id="examTitle" placeholder="e.g. End of Term Science Quiz" />
+      </div>
+      <div class="form-field">
+        <label>Subject</label>
+        <input type="text" id="examSubject" placeholder="Science" />
+      </div>
+      <div class="form-field">
+        <label>Key Stage</label>
+        <select id="examKeyStage">
+          <option value="Key Stage 2 (Years 3-6)">Key Stage 2 (Years 3–6)</option>
+          <option value="Key Stage 3 (Years 7-9)">Key Stage 3 (Years 7–9)</option>
+          <option value="Key Stage 4 (Years 10-11) — IGCSE">Key Stage 4 (Years 10–11) — IGCSE</option>
+          <option value="Key Stage 5 (Years 12-13) — A-Level">Key Stage 5 (Years 12–13) — A-Level</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Duration (minutes)</label>
+        <input type="number" id="examDuration" value="30" min="1" />
+      </div>
+      <div class="form-field">
+        <label>Status</label>
+        <select id="examStatus">
+          <option value="Draft">Save as Draft</option>
+          <option value="Published">Publish immediately</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="questionsWrap"></div>
+
+    <div style="margin-top:1rem; display:flex; gap:.7rem; flex-wrap:wrap;">
+      <button class="btn btn-primary" id="saveBtn" type="button"><i class="fas fa-check"></i> Save exam</button>
+      <button class="btn btn-ghost" id="addQBtn" type="button"><i class="fas fa-plus"></i> Add question</button>
+    </div>
+
+    <div class="status" id="saveStatus"></div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script src="../js/uploads/storage-helpers.js"></script>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const auth = firebase.auth();
+const ADMIN_EMAILS = ["info@paisleystudio.online"];
+
+let parsedQuestions = [];
+let importMode = 'pdf';
+
+/* =========================================================
+   Admin guard
+========================================================= */
+auth.onAuthStateChanged(async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  if (ADMIN_EMAILS.includes(user.email)) return;
+  try {
+    const doc = await db.collection('admins').doc(user.uid).get();
+    if (!doc.exists || doc.data().role !== 'admin') {
+      alert('Admins only.');
+      window.location.href = "index.html";
+    }
+  } catch (e) {
+    alert('Admins only.');
+    window.location.href = "index.html";
+  }
+});
+
+/* =========================================================
+   Status helpers
+========================================================= */
+function showStatus(id, kind, html){
+  const el = document.getElementById(id);
+  el.className = 'status show ' + kind;
+  const spin = kind === 'info' ? '<span class="spin"></span>' : '';
+  el.innerHTML = spin + '<span>' + html + '</span>';
+}
+function hideStatus(id){ document.getElementById(id).className = 'status'; }
+
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* =========================================================
+   Mode switching
+========================================================= */
+document.querySelectorAll('#modeBar .mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#modeBar .mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    importMode = btn.dataset.mode;
+    document.getElementById('pdfPanel').style.display = importMode === 'pdf' ? '' : 'none';
+    document.getElementById('manualPanel').style.display = importMode === 'manual' ? '' : 'none';
+    if (importMode === 'manual'){
+      startBlankExam();
+    }
+  });
+});
+
+function startBlankExam(){
+  hideStatus('statusBox'); hideStatus('parseStatus'); hideStatus('saveStatus');
+  parsedQuestions = [ blankQuestion('mcq') ];
+  document.getElementById('extractPanel').style.display = 'none';
+  document.getElementById('questionsPanel').style.display = 'block';
+  renderQuestions();
+  document.getElementById('questionsPanel').scrollIntoView({ behavior: 'smooth' });
+}
+
+/* =========================================================
+   PDF upload + extraction
+========================================================= */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+});
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => { dropzone.classList.remove('dragover'); });
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+async function handleFile(file){
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showStatus('statusBox', 'err', 'Please upload a PDF file.');
+    return;
+  }
+  showStatus('statusBox', 'info', 'Reading PDF…');
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+
+    for (let p = 1; p <= pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+
+      // Group items into lines by Y, preserve left-to-right order,
+      // and use column gaps to insert | separators for tables.
+      const rows = {};
+      content.items.forEach(item => {
+        const y = Math.round(item.transform[5]);
+        if (!rows[y]) rows[y] = [];
+        rows[y].push({ x: item.transform[4], text: item.str });
+      });
+      const sortedY = Object.keys(rows).map(Number).sort((a,b) => b - a);
+
+      let pageText = '';
+      for (const y of sortedY){
+        const row = rows[y].sort((a,b) => a.x - b.x);
+        let line = '';
+        let lastEnd = null;
+        row.forEach(cell => {
+          if (lastEnd !== null && cell.x - lastEnd > 18) line += '  |  ';
+          line += cell.text;
+          lastEnd = cell.x + (cell.text ? cell.text.length * 4 : 0);
+        });
+        pageText += line.trim() + '\n';
+      }
+      fullText += '\n\n--- Page ' + p + ' ---\n' + pageText;
+    }
+
+    fullText = fullText.trim();
+
+    if (fullText.length < 20) {
+      showStatus('statusBox', 'err', 'PDF contained almost no text. Is it a scanned image? Try the "Start from scratch" mode above.');
+      return;
+    }
+
+    document.getElementById('rawText').value = fullText;
+    showStatus('statusBox', 'ok', 'Extracted ' + fullText.length.toLocaleString() + ' characters from ' + pdf.numPages + ' page(s).');
+    document.getElementById('extractPanel').style.display = 'block';
+    document.getElementById('extractPanel').scrollIntoView({ behavior: 'smooth' });
+
+  } catch (err) {
+    console.error(err);
+    showStatus('statusBox', 'err', 'Could not read the PDF: ' + err.message);
+  }
+}
+
+/* =========================================================
+   Call the Cloud Function (Gemini)
+========================================================= */
+document.getElementById('parseBtn').addEventListener('click', async () => {
+  const rawText = document.getElementById('rawText').value.trim();
+  if (rawText.length < 20) {
+    showStatus('parseStatus', 'err', 'Not enough text to parse.');
+    return;
+  }
+  if (rawText.length > 60000) {
+    showStatus('parseStatus', 'err', 'Too much text (' + rawText.length.toLocaleString() + ' chars). Split the PDF into smaller files.');
+    return;
+  }
+
+  showStatus('parseStatus', 'info', 'Sending to Gemini… this takes 5–20 seconds.');
+  document.getElementById('parseBtn').disabled = true;
+
+  try {
+    const callable = firebase.functions().httpsCallable('importExamFromText');
+    const result = await callable({ rawText });
+    const questions = result.data.questions || [];
+
+    if (!questions.length) {
+      showStatus('parseStatus', 'err', 'Gemini found no questions in this text. You can edit the text and try again, or use "Skip and build manually".');
+      document.getElementById('parseBtn').disabled = false;
+      return;
+    }
+
+    parsedQuestions = questions.map(normaliseQuestion);
+    renderQuestions();
+    showStatus('parseStatus', 'ok', 'Extracted ' + questions.length + ' question(s). Scroll down to review, then attach any diagrams.');
+    document.getElementById('questionsPanel').style.display = 'block';
+    document.getElementById('questionsPanel').scrollIntoView({ behavior: 'smooth' });
+
+  } catch (err) {
+    console.error(err);
+    showStatus('parseStatus', 'err', 'Gemini call failed: ' + (err.message || err));
+  } finally {
+    document.getElementById('parseBtn').disabled = false;
+  }
+});
+
+document.getElementById('skipParseBtn').addEventListener('click', () => {
+  parsedQuestions = [ blankQuestion('mcq') ];
+  document.getElementById('questionsPanel').style.display = 'block';
+  renderQuestions();
+  document.getElementById('questionsPanel').scrollIntoView({ behavior: 'smooth' });
+});
+
+/* =========================================================
+   Question shapes
+========================================================= */
+function blankQuestion(type){
+  type = type || 'mcq';
+  const base = { type, question:'', imageUrl:'' };
+  if (type === 'mcq'){
+    base.options = ['', ''];
+    base.correctIndex = 0;
+  } else if (type === 'multi-row'){
+    base.columns = ['Option A', 'Option B'];
+    base.rows = [
+      { text:'', correctIndex:0 },
+      { text:'', correctIndex:0 }
+    ];
+  } else if (type === 'match'){
+    base.leftItems = ['', '', ''];
+    base.rightItems = ['', '', ''];
+    base.correctPairs = [0, 1, 2];
+  } else if (type === 'punctuate'){
+    base.sentence = '';
+    base.punctuation = ',';
+    base.correctSlot = 0;
+  }
+  return base;
+}
+
+function normaliseQuestion(q){
+  const type = q.type || 'mcq';
+  const base = { type, question: q.question || '', imageUrl: q.imageUrl || '' };
+  if (type === 'mcq'){
+    base.options = q.options && q.options.length ? q.options : ['', ''];
+    base.correctIndex = (typeof q.correctIndex === 'number' && q.correctIndex >= 0) ? q.correctIndex : 0;
+  } else if (type === 'written' || type === 'essay'){
+    // nothing else
+  } else if (type === 'multi-row'){
+    base.columns = q.columns || ['Option A', 'Option B'];
+    base.rows = (q.rows || []).map(r => ({ text: r.text || '', correctIndex: r.correctIndex || 0 }));
+    if (!base.rows.length) base.rows = [{ text:'', correctIndex:0 }, { text:'', correctIndex:0 }];
+  } else if (type === 'match'){
+    base.leftItems = q.leftItems || ['', '', ''];
+    base.rightItems = q.rightItems || ['', '', ''];
+    base.correctPairs = q.correctPairs || base.leftItems.map((_, i) => i);
+  } else if (type === 'punctuate'){
+    base.sentence = q.sentence || '';
+    base.punctuation = q.punctuation || ',';
+    base.correctSlot = typeof q.correctSlot === 'number' ? q.correctSlot : 0;
+  }
+  return base;
+}
+
+/* =========================================================
+   Question editor rendering
+========================================================= */
+function renderQuestions(){
+  const wrap = document.getElementById('questionsWrap');
+  wrap.innerHTML = parsedQuestions.map((q, i) => questionEditorHtml(q, i)).join('')
+    || '<p style="color:var(--muted); padding:1rem;">No questions yet — add one below.</p>';
+}
+
+function questionEditorHtml(q, i){
+  const typeSel = `
+    <select class="q-type-sel" onchange="changeType(${i}, this.value)">
+      <option value="mcq"       ${q.type==='mcq'?'selected':''}>Multiple choice</option>
+      <option value="written"   ${q.type==='written'?'selected':''}>Written answer</option>
+      <option value="essay"     ${q.type==='essay'?'selected':''}>Essay</option>
+      <option value="multi-row" ${q.type==='multi-row'?'selected':''}>Tick-one-per-row (table)</option>
+      <option value="match"     ${q.type==='match'?'selected':''}>Match (draw a line)</option>
+      <option value="punctuate" ${q.type==='punctuate'?'selected':''}>Insert punctuation</option>
+    </select>`;
+
+  const head = `
+    <div class="q-header">
+      <span class="q-num">Question ${i+1}</span>
+      <div style="display:flex; gap:.5rem; align-items:center;">
+        ${typeSel}
+        <button class="mini-btn danger" type="button" onclick="removeQuestion(${i})" title="Delete"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`;
+
+  const questionInput = `
+    <textarea class="q-textarea" placeholder="Question text" oninput="updateField(${i}, 'question', this.value)">${escapeHtml(q.question || '')}</textarea>`;
+
+  const imageBlock = `
+    <div style="display:flex; align-items:center; gap:.6rem; margin:.4rem 0;">
+      ${q.imageUrl ? `<img src="${escapeHtml(q.imageUrl)}" style="max-height:60px; border-radius:6px; border:1px solid var(--line);" />
+        <button class="mini-btn danger" type="button" onclick="removeQuestionImage(${i})" title="Remove diagram"><i class="fas fa-times"></i></button>`
+        : `<label style="font-size:.72rem; color:var(--muted); cursor:pointer;">
+            <i class="fas fa-image"></i> Attach diagram/image
+            <input type="file" accept="image/*" style="display:none;" onchange="uploadQuestionImage(${i}, this)" />
+          </label>`}
+    </div>`;
+
+  let body = '';
+  if (q.type === 'mcq'){
+    body = (q.options || []).map((o, oi) => `
+      <div class="opt-row">
+        <input type="radio" name="correct${i}" ${q.correctIndex === oi ? 'checked' : ''} onchange="updateField(${i}, 'correctIndex', ${oi})" />
+        <input type="text" value="${escapeHtml(o)}" oninput="updateOption(${i}, ${oi}, this.value)" />
+        <button class="mini-btn danger" type="button" onclick="removeOption(${i}, ${oi})"><i class="fas fa-times"></i></button>
+      </div>
+    `).join('') + `<button class="mini-btn" type="button" onclick="addOption(${i})" title="Add option"><i class="fas fa-plus"></i></button>`;
+  } else if (q.type === 'written' || q.type === 'essay'){
+    body = `<div style="font-size:.76rem; color:var(--muted);">Students will type a ${q.type==='essay'?'long':'short'} answer. You'll grade this one by hand.</div>`;
+  } else if (q.type === 'multi-row'){
+    const cols = q.columns || [];
+    const colHeaders = cols.map((c, ci) => `
+      <th style="position:relative;">
+        <input type="text" value="${escapeHtml(c)}" oninput="updateMultiRowColumn(${i}, ${ci}, this.value)" style="width:calc(100% - 26px); padding:.3rem .4rem; border:none; background:transparent; font-family:var(--font); font-size:.72rem; font-weight:800; color:var(--brand-deep);" />
+        <button class="mini-btn danger" type="button" style="width:20px; height:20px; font-size:.6rem; vertical-align:middle;" onclick="removeMultiRowColumn(${i}, ${ci})"><i class="fas fa-times"></i></button>
+      </th>`).join('');
+    body = `
+      <table class="qb-mini-table">
+        <thead><tr><th>Row text</th>${colHeaders}<th style="width:40px;"></th></tr></thead>
+        <tbody>
+          ${(q.rows || []).map((r, ri) => `
+            <tr>
+              <td><input type="text" value="${escapeHtml(r.text||'')}" oninput="updateMultiRowText(${i}, ${ri}, this.value)" placeholder="Row ${ri+1} sentence" /></td>
+              ${cols.map((c, ci) => `
+                <td style="text-align:center;">
+                  <input type="radio" name="mr_${i}_${ri}" ${r.correctIndex === ci ? 'checked' : ''} onchange="updateMultiRowCorrect(${i}, ${ri}, ${ci})" />
+                </td>`).join('')}
+              <td><button class="mini-btn danger" type="button" onclick="removeMultiRow(${i}, ${ri})"><i class="fas fa-times"></i></button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="display:flex; gap:.5rem;">
+        <button class="mini-btn" type="button" onclick="addMultiRow(${i})" title="Add row"><i class="fas fa-plus"></i> row</button>
+        <button class="mini-btn" type="button" onclick="addMultiRowColumn(${i})" title="Add column"><i class="fas fa-plus"></i> column</button>
+      </div>`;
+  } else if (q.type === 'match'){
+    body = `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:.7rem;">
+        <div>
+          <div style="font-size:.7rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; margin-bottom:.3rem;">Left column</div>
+          ${(q.leftItems||[]).map((l, li) => `
+            <div class="opt-row">
+              <input type="text" value="${escapeHtml(l)}" oninput="updateMatchLeft(${i}, ${li}, this.value)" placeholder="Left ${li+1}" />
+              <button class="mini-btn danger" type="button" onclick="removeMatchLeft(${i}, ${li})"><i class="fas fa-times"></i></button>
+            </div>`).join('')}
+          <button class="mini-btn" type="button" onclick="addMatchLeft(${i})"><i class="fas fa-plus"></i></button>
+        </div>
+        <div>
+          <div style="font-size:.7rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; margin-bottom:.3rem;">Right column</div>
+          ${(q.rightItems||[]).map((r, ri) => `
+            <div class="opt-row">
+              <input type="text" value="${escapeHtml(r)}" oninput="updateMatchRight(${i}, ${ri}, this.value)" placeholder="Right ${ri+1}" />
+              <button class="mini-btn danger" type="button" onclick="removeMatchRight(${i}, ${ri})"><i class="fas fa-times"></i></button>
+            </div>`).join('')}
+          <button class="mini-btn" type="button" onclick="addMatchRight(${i})"><i class="fas fa-plus"></i></button>
+        </div>
+      </div>
+      <div style="margin-top:.8rem; padding-top:.6rem; border-top:1px dashed var(--line);">
+        <div style="font-size:.72rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; margin-bottom:.4rem;">Correct pairing</div>
+        ${(q.leftItems||[]).map((l, li) => `
+          <div class="opt-row" style="font-size:.82rem;">
+            <span style="flex:0 0 40%; color:var(--muted);">${escapeHtml(l || ('Left '+(li+1)))}</span>
+            <span style="margin:0 .5rem; color:var(--muted);">→</span>
+            <select onchange="updateMatchCorrect(${i}, ${li}, parseInt(this.value, 10))" style="flex:1;">
+              ${(q.rightItems||[]).map((r, ri) => `
+                <option value="${ri}" ${(q.correctPairs||[])[li]===ri?'selected':''}>${escapeHtml(r || ('Right '+(ri+1)))}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>`;
+  } else if (q.type === 'punctuate'){
+    const words = (q.sentence||'').split(/\s+/).filter(Boolean);
+    const gapBtns = [];
+    gapBtns.push(`<span class="qb-gap ${q.correctSlot===0?'active':''}" onclick="setPunctuateSlot(${i},0)">${q.correctSlot===0?escapeHtml(q.punctuation||','):'·'}</span>`);
+    for (let w=0; w<words.length; w++){
+      gapBtns.push(`<span>${escapeHtml(words[w])}</span>`);
+      const slot = w+1;
+      gapBtns.push(`<span class="qb-gap ${q.correctSlot===slot?'active':''}" onclick="setPunctuateSlot(${i},${slot})">${q.correctSlot===slot?escapeHtml(q.punctuation||','):'·'}</span>`);
+    }
+    body = `
+      <div style="margin-bottom:.6rem;">
+        <label style="display:block; font-size:.72rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; margin-bottom:.35rem;">Full sentence (as it should read, without the punctuation)</label>
+        <input type="text" class="q-input" value="${escapeHtml(q.sentence||'')}" oninput="updatePunctuateSentence(${i}, this.value)" placeholder="It was raining heavily she had lost her umbrella the week before." />
+      </div>
+      <div style="margin-bottom:.6rem;">
+        <label style="display:block; font-size:.72rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; margin-bottom:.35rem;">Punctuation to insert</label>
+        <select onchange="updatePunctuateChar(${i}, this.value)" style="padding:.4rem .6rem; border:1.5px solid var(--line); border-radius:8px; font-family:var(--font);">
+          <option value="," ${q.punctuation===','?'selected':''}>Comma ( , )</option>
+          <option value=";" ${q.punctuation===';'?'selected':''}>Semi-colon ( ; )</option>
+          <option value=":" ${q.punctuation===':'?'selected':''}>Colon ( : )</option>
+          <option value="—" ${q.punctuation==='—'?'selected':''}>Dash ( — )</option>
+          <option value="(" ${q.punctuation==='('?'selected':''}>Bracket ( ( )</option>
+          <option value="-" ${q.punctuation==='-'?'selected':''}>Hyphen ( - )</option>
+        </select>
+      </div>
+      <div style="font-size:.72rem; font-weight:800; color:var(--brand-deep); text-transform:uppercase; margin-bottom:.35rem;">Correct gap (click to select)</div>
+      <div class="qb-gap-sentence">${gapBtns.join('')}</div>`;
+  }
+
+  return `<div class="q-card" data-qi="${i}">${head}${questionInput}${imageBlock}${body}</div>`;
+}
+
+/* =========================================================
+   Field handlers
+========================================================= */
+window.changeType = (i, v) => {
+  const old = parsedQuestions[i] || {};
+  const fresh = blankQuestion(v);
+  fresh.question = old.question || '';
+  fresh.imageUrl = old.imageUrl || '';
+  parsedQuestions[i] = fresh;
+  renderQuestions();
+};
+
+window.updateField = (i, key, val) => { parsedQuestions[i][key] = val; };
+window.updateOption = (i, oi, val) => { parsedQuestions[i].options[oi] = val; };
+window.addOption = (i) => {
+  if (!parsedQuestions[i].options) parsedQuestions[i].options = [];
+  parsedQuestions[i].options.push('');
+  renderQuestions();
+};
+window.removeOption = (i, oi) => {
+  parsedQuestions[i].options.splice(oi, 1);
+  if (parsedQuestions[i].correctIndex >= parsedQuestions[i].options.length) parsedQuestions[i].correctIndex = 0;
+  renderQuestions();
+};
+window.removeQuestion = (i) => { parsedQuestions.splice(i, 1); renderQuestions(); };
+
+window.uploadQuestionImage = (i, fileInput) => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const draftPath = 'draft-' + (auth.currentUser ? auth.currentUser.uid : 'import');
+  uploadFile(storagePath('exams', draftPath, 'questions', 'q' + i + '-' + Date.now()), file)
+    .then(res => { parsedQuestions[i].imageUrl = res.fileUrl; renderQuestions(); })
+    .catch(err => alert('Could not upload diagram: ' + err.message));
+};
+window.removeQuestionImage = (i) => { parsedQuestions[i].imageUrl = ''; renderQuestions(); };
+
+/* Multi-row */
+window.updateMultiRowText = (i, ri, v) => { parsedQuestions[i].rows[ri].text = v; };
+window.updateMultiRowCorrect = (i, ri, ci) => { parsedQuestions[i].rows[ri].correctIndex = ci; };
+window.addMultiRow = (i) => {
+  if (!parsedQuestions[i].rows) parsedQuestions[i].rows = [];
+  parsedQuestions[i].rows.push({ text:'', correctIndex:0 });
+  renderQuestions();
+};
+window.removeMultiRow = (i, ri) => { parsedQuestions[i].rows.splice(ri, 1); renderQuestions(); };
+window.updateMultiRowColumn = (i, ci, v) => { parsedQuestions[i].columns[ci] = v; };
+window.addMultiRowColumn = (i) => {
+  if (!parsedQuestions[i].columns) parsedQuestions[i].columns = [];
+  parsedQuestions[i].columns.push('Option ' + String.fromCharCode(65 + parsedQuestions[i].columns.length));
+  renderQuestions();
+};
+window.removeMultiRowColumn = (i, ci) => {
+  parsedQuestions[i].columns.splice(ci, 1);
+  parsedQuestions[i].rows.forEach(r => {
+    if (r.correctIndex >= parsedQuestions[i].columns.length) r.correctIndex = 0;
+  });
+  renderQuestions();
+};
+
+/* Match */
+window.updateMatchLeft = (i, li, v) => { parsedQuestions[i].leftItems[li] = v; };
+window.updateMatchRight = (i, ri, v) => { parsedQuestions[i].rightItems[ri] = v; };
+window.updateMatchCorrect = (i, li, ri) => { parsedQuestions[i].correctPairs[li] = ri; };
+window.addMatchLeft = (i) => { parsedQuestions[i].leftItems.push(''); parsedQuestions[i].correctPairs.push(0); renderQuestions(); };
+window.removeMatchLeft = (i, li) => {
+  parsedQuestions[i].leftItems.splice(li, 1);
+  parsedQuestions[i].correctPairs.splice(li, 1);
+  renderQuestions();
+};
+window.addMatchRight = (i) => { parsedQuestions[i].rightItems.push(''); renderQuestions(); };
+window.removeMatchRight = (i, ri) => {
+  parsedQuestions[i].rightItems.splice(ri, 1);
+  parsedQuestions[i].correctPairs = parsedQuestions[i].correctPairs.map(ci => {
+    if (ci === ri) return 0;
+    if (ci > ri) return ci - 1;
+    return ci;
+  });
+  renderQuestions();
+};
+
+/* Punctuate */
+window.updatePunctuateSentence = (i, v) => { parsedQuestions[i].sentence = v; renderQuestions(); };
+window.updatePunctuateChar = (i, v) => { parsedQuestions[i].punctuation = v; renderQuestions(); };
+window.setPunctuateSlot = (i, slot) => { parsedQuestions[i].correctSlot = slot; renderQuestions(); };
+
+document.getElementById('addQBtn').addEventListener('click', () => {
+  parsedQuestions.push(blankQuestion('mcq'));
+  renderQuestions();
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (!confirm('Reset the whole import? Any unsaved questions will be lost.')) return;
+  document.getElementById('extractPanel').style.display = 'none';
+  document.getElementById('questionsPanel').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('rawText').value = '';
+  hideStatus('statusBox'); hideStatus('parseStatus'); hideStatus('saveStatus');
+  parsedQuestions = [];
+});
+
+/* =========================================================
+   Validation + save
+========================================================= */
+function validateQuestions(){
+  for (let i = 0; i < parsedQuestions.length; i++){
+    const q = parsedQuestions[i];
+    if (!q.question || !q.question.trim()) return 'Question ' + (i+1) + ' has no text.';
+    if (q.type === 'mcq'){
+      if (!q.options || q.options.length < 2) return 'Question ' + (i+1) + ' needs at least 2 options.';
+      if (q.options.some(o => !o.trim())) return 'Question ' + (i+1) + ' has an empty option.';
+      if (q.correctIndex == null || q.correctIndex < 0 || q.correctIndex >= q.options.length) return 'Question ' + (i+1) + ' has no correct answer selected.';
+    } else if (q.type === 'multi-row'){
+      if (!q.columns || q.columns.length < 2) return 'Question ' + (i+1) + ' needs at least 2 columns.';
+      if (!q.rows || !q.rows.length) return 'Question ' + (i+1) + ' needs at least 1 row.';
+      if (q.rows.some(r => !r.text || !r.text.trim())) return 'Question ' + (i+1) + ' has an empty row.';
+    } else if (q.type === 'match'){
+      if (!q.leftItems || q.leftItems.length < 2) return 'Question ' + (i+1) + ' needs at least 2 left items.';
+      if (!q.rightItems || q.rightItems.length < 2) return 'Question ' + (i+1) + ' needs at least 2 right items.';
+      if (q.leftItems.some(x => !x.trim()) || q.rightItems.some(x => !x.trim())) return 'Question ' + (i+1) + ' has an empty match item.';
+    } else if (q.type === 'punctuate'){
+      if (!q.sentence || !q.sentence.trim()) return 'Question ' + (i+1) + ' has no sentence.';
+      if (typeof q.correctSlot !== 'number') return 'Question ' + (i+1) + ' has no correct gap selected.';
+    }
+  }
+  return null;
+}
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const title = document.getElementById('examTitle').value.trim();
+  const subject = document.getElementById('examSubject').value.trim();
+  const keyStage = document.getElementById('examKeyStage').value;
+  const duration = parseInt(document.getElementById('examDuration').value) || 30;
+  const status = document.getElementById('examStatus').value;
+
+  if (!title) { showStatus('saveStatus', 'err', 'Please enter an exam title.'); return; }
+  if (!parsedQuestions.length) { showStatus('saveStatus', 'err', 'No questions to save.'); return; }
+
+  const err = validateQuestions();
+  if (err) { showStatus('saveStatus', 'err', err); return; }
+
+  showStatus('saveStatus', 'info', 'Saving…');
+
+  try {
+    await addExam({
+      title, subject, keyStage, duration,
+      questions: parsedQuestions,
+      status: status,
+      source: importMode === 'pdf' ? 'pdf-import' : 'manual',
+      examMode: 'questions',
+      tutorId: '',
+      tutorName: '',
+      postedBy: (auth.currentUser && auth.currentUser.email) || 'Studio Desk',
+      authorRole: 'admin'
+    });
+    showStatus('saveStatus', 'ok', 'Exam saved! <a href="index.html" style="color:inherit; text-decoration:underline;">Back to Studio Desk</a>');
+    setTimeout(() => { document.getElementById('saveBtn').disabled = true; }, 500);
+  } catch (e) {
+    console.error(e);
+    showStatus('saveStatus', 'err', 'Save failed: ' + e.message);
+  }
+});
+</script>
+
+</body>
+</html>

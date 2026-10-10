@@ -1,0 +1,276 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =====================================================
+    // SHARED HELPERS
+    // (Storage rules can't read Firestore for free the way Firestore rules
+    // can chain get()/exists() cheaply, but firebase.storage DOES support
+    // firestore.get()/firestore.exists() as of the rules_version '2'
+    // cross-service API, so we reuse the same ownership model instead of
+    // duplicating it via custom claims.)
+    // =====================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+    function isTutor() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/tutorAccounts/$(request.auth.uid));
+    }
+    // 25MB cap on any single educational file (diagrams, PDFs, student
+    // working). Prevents someone filling the bucket with one huge upload.
+    function underSizeLimit() {
+      return request.resource.size < 25 * 1024 * 1024;
+    }
+    function isEducationalFile() {
+      return request.resource.contentType.matches('image/.*') ||
+        request.resource.contentType.matches('application/pdf') ||
+        request.resource.contentType.matches('audio/.*') ||
+        request.resource.contentType.matches('video/.*');
+    }
+
+    // =====================================================
+    // ACTIVITIES — question diagrams/media. Any signed-in user may view a
+    // published activity's media (activity player needs it); only admin or
+    // the owning tutor may upload/replace/delete it. Firestore ownership on
+    // the parent `activities/{activityId}` doc (field `ownerId`) is the
+    // source of truth, checked the same way the Firestore rules check it.
+    // =====================================================
+    match /activities/{activityId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if (isAdmin() || (isTutor() && (
+          !firestore.exists(/databases/(default)/documents/activities/$(activityId)) ||
+          firestore.get(/databases/(default)/documents/activities/$(activityId)).data.ownerId == request.auth.uid
+        )))
+        && underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // EXAMS — question diagrams. Read: admin/tutor always; a student only
+    // once the exam is Published (mirrors the Firestore `exams` read rule).
+    // Write: admin, or the authoring/granted tutor.
+    // =====================================================
+    match /exams/{examId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTutor() ||
+        (firestore.exists(/databases/(default)/documents/exams/$(examId)) &&
+          firestore.get(/databases/(default)/documents/exams/$(examId)).data.status == 'Published')
+      );
+      allow write: if (isAdmin() || (isTutor() && (
+          !firestore.exists(/databases/(default)/documents/exams/$(examId)) ||
+          firestore.get(/databases/(default)/documents/exams/$(examId)).data.tutorId == request.auth.uid
+        )))
+        && underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // HOMEWORK — attachments set by the tutor/admin when creating the
+    // homework (question diagrams, instruction sheets).
+    // =====================================================
+    match /homework/{homeworkId}/attachments/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if (isAdmin() || (isTutor() && (
+          !firestore.exists(/databases/(default)/documents/homework/$(homeworkId)) ||
+          firestore.get(/databases/(default)/documents/homework/$(homeworkId)).data.tutorId == request.auth.uid
+        )))
+        && underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // SUBMISSIONS — a student's uploaded "working" for a homework/exam
+    // question. Only the owning student may upload; the student, admin,
+    // and the relevant tutor may read (marking).
+    // =====================================================
+    match /submissions/{submissionId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTutor() ||
+        firestore.get(/databases/(default)/documents/submissions/$(submissionId)).data.studentId == request.auth.uid
+      );
+      allow write: if isSignedIn() &&
+        firestore.get(/databases/(default)/documents/submissions/$(submissionId)).data.studentId == request.auth.uid &&
+        underSizeLimit() && isEducationalFile();
+    }
+
+    // Exam-attempt "show your working" uploads (separate from homework
+    // submissions, since exam attempts live in their own collection).
+    match /examAttempts/{attemptId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTutor() ||
+        firestore.get(/databases/(default)/documents/examAttempts/$(attemptId)).data.studentId == request.auth.uid
+      );
+      allow write: if isSignedIn() &&
+        firestore.get(/databases/(default)/documents/examAttempts/$(attemptId)).data.studentId == request.auth.uid &&
+        underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // CLASSROOM FILES — lesson attachments and images embedded in notes.
+    // Path: classroom-files/{subjectId}/{classroomId}/{lessonId}/{file}
+    // The subjectId is in the path so a tutor can be checked with ONE
+    // Firestore read (their tutorAccounts.subjects) — Storage rules allow only
+    // a couple of cross-service reads per request.
+    //   write/delete : admin, or a tutor assigned that subject
+    //   get          : any signed-in user holding the file's unguessable path
+    //                  + token, which only reaches students through a Firestore
+    //                  lesson they are allowed to read (published, own subject)
+    //   list         : nobody — file names cannot be enumerated
+    // Office documents are allowed here (the shared rule above is PDF/image/
+    // audio/video only); executables, scripts and SVG are not.
+    // =====================================================
+    function classTutorFor(subjectId) {
+      return isSignedIn() &&
+        ('subjects' in firestore.get(/databases/(default)/documents/tutorAccounts/$(request.auth.uid)).data) &&
+        subjectId in firestore.get(/databases/(default)/documents/tutorAccounts/$(request.auth.uid)).data.subjects;
+    }
+    function classFileOk() {
+      return request.resource.size < 100 * 1024 * 1024 && (
+        request.resource.contentType.matches('image/(jpeg|png|gif|webp)') ||
+        request.resource.contentType.matches('application/pdf') ||
+        request.resource.contentType.matches('application/msword') ||
+        request.resource.contentType.matches('application/vnd[.]openxmlformats-officedocument[.].*') ||
+        request.resource.contentType.matches('application/vnd[.]ms-.*') ||
+        request.resource.contentType.matches('text/(plain|csv)') ||
+        request.resource.contentType.matches('audio/.*') ||
+        request.resource.contentType.matches('video/.*')
+      );
+    }
+    match /classroom-files/{subjectId}/{classroomId}/{lessonId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if (isAdmin() || classTutorFor(subjectId)) && classFileOk();
+      allow delete: if isAdmin() || classTutorFor(subjectId);
+    }
+
+
+    // =====================================================
+    // EXAM PDFs — uploaded by admin/tutor when creating an exam.
+    // Path: classroom-files/{subjectId}/{classroomId}/exams/{examId}/{fileName}
+    //   get    : any signed-in user holding the path
+    //   list   : nobody
+    //   write  : admin, or a tutor assigned that subject
+    //   delete : admin, or a tutor assigned that subject
+    //
+    // Why a separate block from the lesson rule above: Firebase Storage
+    // rules match on the segment COUNT — a 5-segment path will not match
+    // a 4-segment rule, and vice versa. The literal "exams" in position 4
+    // anchors this rule so it can't accidentally collide with other paths.
+    // =====================================================
+    match /classroom-files/{subjectId}/{classroomId}/exams/{examId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if (isAdmin() || classTutorFor(subjectId)) && classFileOk();
+      allow delete: if isAdmin() || classTutorFor(subjectId);
+    }
+
+
+    // =====================================================
+    // FLAT-EXAM SUBMISSIONS — the student's completed exam paper.
+    // Path: classroom-files/{subjectId}/{classroomId}/exams/{examId}/submissions/{studentId}/{fileName}
+    //
+    // This is a 7-segment path, so it needs its own rule — the 5-segment
+    // exam-PDF rule above won't match it.
+    //
+    //   get    : staff, the student who owns it, and their linked parents
+    //   list   : nobody
+    //   create : only the owning student, PDF or image, 25 MB cap
+    //   delete : staff, or the owning student (to replace their own)
+    // =====================================================
+    function studentWorkFileOk() {
+      return request.resource.size < 25 * 1024 * 1024 && (
+        request.resource.contentType.matches('image/(jpeg|png|webp)') ||
+        request.resource.contentType.matches('application/pdf'));
+    }
+    function isParentOfStudent(studentId) {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/parentStudentLinks/$(request.auth.uid + '_' + studentId));
+    }
+    match /classroom-files/{subjectId}/{classroomId}/exams/{examId}/submissions/{studentId}/{fileName} {
+      allow get: if isAdmin() || classTutorFor(subjectId) ||
+        (isSignedIn() && request.auth.uid == studentId) ||
+        isParentOfStudent(studentId);
+      allow list: if false;
+      allow create, update: if isSignedIn() && request.auth.uid == studentId && studentWorkFileOk();
+      allow delete: if isAdmin() || classTutorFor(subjectId) ||
+        (isSignedIn() && request.auth.uid == studentId);
+    }
+
+
+    // =====================================================
+    // STUDENT HOMEWORK / PDF-EXAM UPLOADS
+    // Path: classroom-files/{subjectId}/{classroomId}/{itemId}/submissions/{studentId}/{file}
+    // (itemId is the assignment id). A student writes only under their
+    // own uid, PDF or image only, 25 MB max; staff read; nobody lists.
+    // =====================================================
+    match /classroom-files/{subjectId}/{classroomId}/{itemId}/submissions/{studentId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update, delete: if isSignedIn() && request.auth.uid == studentId && studentWorkFileOk();
+      allow delete: if isAdmin() || classTutorFor(subjectId);
+    }
+
+    // =====================================================
+    // GRADED OUTPUT (ink burned in) — graded-submissions/{classroomId}/{itemId}/{studentId}/{file}
+    //   write/delete : admin, or a tutor assigned the classroom's subject
+    //   read         : staff, the student who owns it, and parents linked to that student
+    // =====================================================
+    function classroomSubjectTutor(classroomId) {
+      return isTutor() && classTutorFor(
+        firestore.get(/databases/(default)/documents/classrooms/$(classroomId)).data.subjectId);
+    }
+    match /graded-submissions/{classroomId}/{itemId}/{studentId}/{fileName} {
+      allow get: if isAdmin() || classroomSubjectTutor(classroomId) ||
+        request.auth.uid == studentId || isParentOfStudent(studentId);
+      allow list: if false;
+      allow create, update: if (isAdmin() || classroomSubjectTutor(classroomId)) &&
+        request.resource.size < 50 * 1024 * 1024 &&
+        request.resource.contentType.matches('application/pdf');
+      allow delete: if isAdmin() || classroomSubjectTutor(classroomId);
+    }
+
+    // =====================================================
+    // UNATTENDED WORK REPORTS — written by Cloud Functions (Admin SDK).
+    // Read: the student, their linked parents, admin.
+    // =====================================================
+    match /unattended-reports/{studentId}/{fileName} {
+      allow get: if isAdmin() || (isSignedIn() && request.auth.uid == studentId) || isParentOfStudent(studentId);
+      allow list, write: if false;
+    }
+
+    // =====================================================
+    // STUDENT PROFILE FILES — reserved for future use (e.g. a profile
+    // photo). Only the student themselves and admin may read/write.
+    // =====================================================
+    match /students/{studentId}/profile/{fileName} {
+      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == studentId);
+      allow write: if isSignedIn() && request.auth.uid == studentId &&
+        underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // STUDENT PROFILE PHOTOS — used by the Student ID card on the
+    // dashboard. Path: student-photos/{uid}/{fileName}
+    //   get    : any signed-in user (the ID card needs the image; the
+    //            path contains the uid and is not enumerable)
+    //   list   : nobody
+    //   write  : only the owning student, image only, 5 MB cap
+    //   delete : only the owning student
+    // =====================================================
+    match /student-photos/{uid}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if isSignedIn() && request.auth.uid == uid &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Default deny — anything not explicitly matched above is inaccessible.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

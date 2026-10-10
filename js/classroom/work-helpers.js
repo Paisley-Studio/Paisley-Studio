@@ -1,0 +1,1151 @@
+/* =========================================================
+   WORK UI (core + staff) — Paisley Studio
+   -----------------------------------------------------------
+   HOMEWORK (unchanged) lives under topics:
+     classrooms/{cid}/topics/{tid}/assignments/{aid}/submissions/{studentId}
+
+   LEGACY EXAMS (unchanged) also live under topics:
+     classrooms/{cid}/topics/{tid}/exams/{eid}/attempts/{studentId}
+
+   NEW FLAT EXAMS:
+     classrooms/{cid}/exams/{eid}
+     classrooms/{cid}/exams/{eid}/submissions/{studentId}
+
+   Flat exams are:
+     • Midterm OR End of Term
+     • simple: title, exam date, submission deadline, requirements, PDF
+     • not tied to a topic
+     • students never see the exam itself, only a heads-up email
+     • parents get the paper by email; students hand the paper in
+     • the submission window is open when the manual toggle is on
+       OR (examDate <= now <= submissionDeadline)
+     • graded with the SAME InkGrader used for homework.
+       InkGrader enforces mandatory score + max, and always
+       releases the marks. There is no "grade without marks"
+       and no "corrections" for exams.
+
+   Tutor restrictions (role === 'tutor'):
+     • No "New exam" button → tutors cannot create flat exams.
+     • No "Edit exam" / "Publish" / "Close" / "Open window" /
+       "Close window" / exam delete.
+     • No "Add Topic" button → tutors cannot create topics.
+     • No "Grant grading rights".
+     • The one write action tutors keep: the "Post Assignment"
+       button inside each topic, which opens WorkUI.openPostAssignment
+       for that topic.
+     • Tutors CAN still edit and delete assignments they themselves
+       posted (canEdit → it.tutorId === user.uid). They cannot touch
+       someone else's assignment.
+     • Tutors CAN still grade homework submissions and flat-exam
+       submissions via InkGrader for anything they posted or were
+       granted.
+
+   Admin behaviour is unchanged everywhere.
+
+   This file: shared helpers, the Homework Management / Exam
+   Management screens, the Post Assignment and Create Exam modals,
+   the flat-exam ink grading entry point, the admin Legacy view
+   and job triggers.
+   Student and parent screens are in work-learner.js.
+
+   Load order on a page:
+     firebase-config.js, lms-helpers.js, classroom-helpers.js,
+     work-helpers.js, work-learner.js (portal-dependent), ink-grader.js
+========================================================= */
+(function (global) {
+  'use strict';
+
+  var U = global.ClassroomUI && global.ClassroomUI.util;
+  if (!U) { console.error('work-helpers.js needs classroom-helpers.js loaded first.'); return; }
+  var esc = U.esc;
+  var FV = function () { return firebase.firestore.FieldValue; };
+  var DAY = 86400000;
+
+  /* ---------------------------------------------------------
+     Styles
+  --------------------------------------------------------- */
+  function injectStyle() {
+    U.injectStyle();
+    if (document.getElementById('wk-style')) return;
+    var st = document.createElement('style');
+    st.id = 'wk-style';
+    st.textContent = [
+      '.cr-badge.b-confirmed{background:rgba(46,184,114,.12);color:#1d8b57}',
+      '.cr-badge.b-pending{background:rgba(232,163,61,.14);color:#96690f}',
+      '.cr-badge.b-declined{background:rgba(231,76,60,.1);color:#b8362a}',
+      '.cr-badge.b-plain{background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
+      '.cr-badge.b-grant{background:rgba(155,89,182,.12);color:#7c3f96}',
+      '.wk-chips{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center}',
+      '.wk-chip{font-size:.7rem;font-weight:700;color:var(--muted,#5A6E6A);background:var(--paper,#F1F9F7);border-radius:99px;padding:.15rem .55rem;display:inline-flex;gap:.3rem;align-items:center}',
+      '.wk-ic{width:2rem;text-align:center;color:var(--brand-deep,#245F5A)}',
+      '.wk-drop{border:2px dashed var(--line,rgba(38,51,49,.25));border-radius:14px;padding:1.2rem;text-align:center;color:var(--muted,#5A6E6A);cursor:pointer;background:var(--paper,#F1F9F7);transition:border-color .15s}',
+      '.wk-drop:hover,.wk-drop.over{border-color:var(--brand,#55BFB3)}',
+      '.wk-drop b{color:var(--brand-deep,#245F5A)}',
+      '.wk-pick{max-height:200px;overflow:auto;border:1.5px solid var(--line,rgba(38,51,49,.1));border-radius:10px;padding:.3rem}',
+      '.wk-pick label{display:flex;gap:.5rem;align-items:center;padding:.3rem .4rem;font-size:.84rem;cursor:pointer;border-radius:8px}',
+      '.wk-pick label:hover{background:var(--paper,#F1F9F7)}',
+      '.wk-q{border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;padding:.7rem;margin-bottom:.6rem;background:var(--paper,#F1F9F7)}',
+      '.wk-radio{display:flex;gap:1rem;flex-wrap:wrap;font-size:.86rem}',
+      '.wk-radio label{display:inline-flex;gap:.4rem;align-items:center;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:600;color:inherit}',
+      '.wk-tbl td .cr-btn{margin-right:.25rem}',
+      '.wk-box{background:var(--sage,#E5F2EF);border-radius:12px;padding:.8rem 1rem;font-size:.84rem;margin-bottom:.9rem;white-space:pre-wrap}',
+      '.wk-mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem}',
+      '.wk-btn-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.7rem}',
+      '.wk-pill-window{display:inline-flex;align-items:center;gap:.35rem;font-size:.7rem;font-weight:800;padding:.2rem .6rem;border-radius:99px;letter-spacing:.03em}',
+      '.wk-pill-window.open{background:rgba(46,184,114,.14);color:#1d8b57}',
+      '.wk-pill-window.closed{background:rgba(90,110,106,.14);color:#4b5e5a}',
+      '.wk-pill-window.auto{background:rgba(74,144,217,.14);color:#2b6cad}'
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+
+  /* ---------------------------------------------------------
+     Small helpers
+  --------------------------------------------------------- */
+  function pill(cls, text, icon) {
+    return '<span class="cr-badge ' + cls + '">' + (icon ? '<i class="fas ' + icon + '" style="margin-right:.3rem"></i>' : '') + esc(text) + '</span>';
+  }
+  function collName(kind) { return kind === 'exam' ? 'exams' : 'assignments'; }
+  function subName(kind) { return kind === 'exam' ? 'attempts' : 'submissions'; }
+  function coll(cid, tid, kind) { return U.clsRef(cid).collection('topics').doc(tid).collection(collName(kind)); }
+  function flatExamsRef(cid) { return U.clsRef(cid).collection('exams'); }
+  function flatExamRef(cid, eid) { return flatExamsRef(cid).doc(eid); }
+  function flatExamSubmissionsRef(cid, eid) { return flatExamRef(cid, eid).collection('submissions'); }
+  function dueOf(item, kind) { return U.toDate(kind === 'exam' ? item.examDate : item.dueAt); }
+  function fmtScore(s) {
+    if (!s) return '';
+    if (s.grade != null && s.maxScore != null) return s.grade + '/' + s.maxScore;
+    return s.grade != null ? String(s.grade) : '';
+  }
+
+  // Flat-exam submission window state.
+  //   mode: 'manual-open'  (admin toggled open)
+  //         'auto-open'    (examDate <= now <= submissionDeadline)
+  //         'closed'       (manual toggle off AND outside the auto window)
+  //         'not-started'  (now < examDate and toggle off)
+  function windowState(exam) {
+    var now = Date.now();
+    var examDate = exam.examDate ? U.toDate(exam.examDate) : null;
+    var deadline = exam.submissionDeadline ? U.toDate(exam.submissionDeadline) : null;
+    if (exam.submissionsOpen === true) return { mode: 'manual-open', label: 'Submissions open', cls: 'open' };
+    if (examDate && deadline && now >= examDate.getTime() && now <= deadline.getTime()) {
+      return { mode: 'auto-open', label: 'Submissions open (auto)', cls: 'auto' };
+    }
+    if (examDate && now < examDate.getTime()) return { mode: 'not-started', label: 'Not open yet', cls: 'closed' };
+    return { mode: 'closed', label: 'Submissions closed', cls: 'closed' };
+  }
+  function isWindowOpen(exam) {
+    var w = windowState(exam);
+    return w.mode === 'manual-open' || w.mode === 'auto-open';
+  }
+
+  // One state per (item, student). `sub` is the submission / attempt doc or null.
+  function workState(item, sub, kind) {
+    var now = Date.now();
+    if (sub && sub.status === 'Graded') return { k: 'graded', cls: 'b-confirmed', icon: 'fa-circle-check', text: 'Graded: ' + (fmtScore(sub) || 'done') };
+    if (sub && sub.status === 'Suspended') return { k: 'suspended', cls: 'b-declined', icon: 'fa-ban', text: 'Suspended' };
+    if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
+    if (sub) return { k: 'submitted', cls: 'b-pending', icon: 'fa-inbox', text: 'Submitted \u2013 awaiting grading' };
+    var due = dueOf(item, kind);
+    if (due && due.getTime() < now) return { k: 'overdue', cls: 'b-declined', icon: 'fa-triangle-exclamation', text: 'Overdue' };
+    return { k: 'pending', cls: 'b-plain', icon: 'fa-circle', text: 'Not submitted' };
+  }
+
+  /* ---------------------------------------------------------
+     Data layer
+  --------------------------------------------------------- */
+  async function loadEnrolled(cls) {
+    var snap = await db.collection('students').where('keyStage', '==', cls.keyStage).get();
+    var want = lmzSubjectKey(cls.subjectId);
+    return snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (s) {
+      if (String(s.status || '').toLowerCase() === 'pending') return false;
+      var subs = lmzSubjectKeys(s.subjects);
+      if (subs.indexOf(want) === -1) return false;
+      return !(s.year != null && cls.year != null && Number(s.year) !== Number(cls.year));
+    }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+  }
+
+  // Homework only: assignments under topics + their submissions.
+  async function loadClassHomework(cid, topics) {
+    var items = [];
+    var parts = await Promise.all(topics.map(function (t) {
+      return coll(cid, t.id, 'assignment').get().then(function (snap) {
+        return snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cid }, d.data()); });
+      });
+    }));
+    parts.forEach(function (p) { items = items.concat(p); });
+    var subs = {};
+    await Promise.all(items.map(function (it) {
+      return coll(cid, it.tid, 'assignment').doc(it.id).collection('submissions').get().then(function (snap) {
+        var m = {}; snap.docs.forEach(function (d) { m[d.id] = Object.assign({ id: d.id }, d.data()); });
+        subs[it.id] = m;
+      }).catch(function () { subs[it.id] = {}; });
+    }));
+    return { items: items, subs: subs };
+  }
+
+  // Flat exams: classrooms/{cid}/exams/{eid} + their submissions subcollection.
+  async function loadFlatExams(cid) {
+    var snap = await flatExamsRef(cid).get();
+    var items = snap.docs.map(function (d) { return Object.assign({ id: d.id, cid: cid, flat: true }, d.data()); });
+    items.sort(function (a, b) {
+      var da = (a.examDate && U.toDate(a.examDate)) || (a.createdAt && U.toDate(a.createdAt)) || 0;
+      var db2 = (b.examDate && U.toDate(b.examDate)) || (b.createdAt && U.toDate(b.createdAt)) || 0;
+      return db2 - da;
+    });
+    var subs = {};
+    await Promise.all(items.map(function (it) {
+      return flatExamSubmissionsRef(cid, it.id).get().then(function (s) {
+        var m = {}; s.docs.forEach(function (d) { m[d.id] = Object.assign({ id: d.id }, d.data()); });
+        subs[it.id] = m;
+      }).catch(function () { subs[it.id] = {}; });
+    }));
+    return { items: items, subs: subs };
+  }
+
+  function audienceOf(item, enrolled) {
+    if (item.recipients && item.recipients.length) {
+      var byId = {}; enrolled.forEach(function (s) { byId[s.id] = s; });
+      return item.recipients.map(function (id) { return byId[id] || { id: id, name: 'Student' }; });
+    }
+    return enrolled;
+  }
+
+  function uploadTo(path, file, contentType, onProgress) {
+    var ref = firebase.storage().ref(path);
+    var task = ref.put(file, { contentType: contentType || file.type });
+    return new Promise(function (resolve, reject) {
+      task.on('state_changed', function (s) { if (onProgress) onProgress(Math.round(s.bytesTransferred / s.totalBytes * 100)); },
+        function (err) { reject(new Error(err.code === 'storage/unauthorized' ? 'You do not have permission to upload here.' : 'Upload failed. Check your connection and try again.')); },
+        function () { ref.getDownloadURL().then(function (url) { resolve({ url: url, path: path, name: file.name }); }).catch(reject); });
+    });
+  }
+  function cleanName(n) { return Date.now() + '_' + String(n).replace(/[^a-zA-Z0-9._-]/g, '_'); }
+
+  function pad(n) { return U.pad2(n); }
+  function dtParts(d) { return d ? { date: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), time: pad(d.getHours()) + ':' + pad(d.getMinutes()) } : { date: '', time: '17:00' }; }
+  function tsFromLocal(dateStr, timeStr) {
+    if (!dateStr || !timeStr) return null;
+    var d = new Date(dateStr + 'T' + timeStr);
+    if (isNaN(d.getTime())) return null;
+    return firebase.firestore.Timestamp.fromDate(d);
+  }
+
+  /* ---------------------------------------------------------
+     Recipient picker (whole class / select students)
+  --------------------------------------------------------- */
+  function recipientsHtml(prefix) {
+    return '<div class="cr-field"><label>Recipients</label>' +
+      '<div class="wk-radio"><label><input type="radio" name="' + prefix + 'Aud" value="class" checked> Whole class</label>' +
+      '<label><input type="radio" name="' + prefix + 'Aud" value="students"> Select students</label></div>' +
+      '<div id="' + prefix + 'Pick" style="display:none;margin-top:.5rem"><div class="wk-pick" id="' + prefix + 'List"><div class="cr-note" style="padding:.5rem">Loading students\u2026</div></div></div></div>';
+  }
+  function wireRecipients(m, prefix, cls, existing) {
+    var pick = m.body.querySelector('#' + prefix + 'Pick'), list = m.body.querySelector('#' + prefix + 'List');
+    var chosen = {}; (existing || []).forEach(function (id) { chosen[id] = true; });
+    var loaded = false;
+    function setAud(v) { pick.style.display = v === 'students' ? '' : 'none'; if (v === 'students' && !loaded) load(); }
+    Array.prototype.forEach.call(m.body.querySelectorAll('input[name="' + prefix + 'Aud"]'), function (r) {
+      r.addEventListener('change', function () { setAud(r.value); });
+    });
+    if (existing && existing.length) { m.body.querySelector('input[name="' + prefix + 'Aud"][value="students"]').checked = true; setAud('students'); }
+    async function load() {
+      loaded = true;
+      try {
+        var students = await loadEnrolled(cls);
+        list.innerHTML = students.length ? students.map(function (s) {
+          return '<label><input type="checkbox" value="' + esc(s.id) + '"' + (chosen[s.id] ? ' checked' : '') + '> ' + esc(s.name || s.email || s.id) + '</label>';
+        }).join('') : '<div class="cr-note" style="padding:.5rem">No students are enrolled in this classroom yet.</div>';
+      } catch (e) { list.innerHTML = '<div class="cr-err" style="padding:.5rem">Could not load students: ' + esc(e.message || e) + '</div>'; }
+    }
+    return function read() {
+      var aud = m.body.querySelector('input[name="' + prefix + 'Aud"]:checked').value;
+      if (aud === 'class') return { audience: 'class', recipients: [] };
+      var ids = Array.prototype.map.call(list.querySelectorAll('input[type=checkbox]:checked'), function (c) { return c.value; });
+      return { audience: 'students', recipients: ids };
+    };
+  }
+
+  /* =========================================================
+     POST ASSIGNMENT (homework) — unchanged
+     Both admin and tutor use this. Tutors only post under
+     existing topics; the topic dropdown is limited to what
+     they see in the classroom.
+  ========================================================= */
+  function openPostAssignment(o) {
+    injectStyle();
+    var cls = o.cls, topics = o.topics, user = o.user, ex = o.existing || null;
+    var aid = ex ? ex.id : U.clsRef(cls.id).collection('topics').doc().id;
+    var uploaded = null, busy = false;
+    var due = ex ? dueOf(ex, 'assignment') : null, dp = dtParts(due);
+    var topicId0 = ex ? ex.tid : (o.topicId || (topics[0] && topics[0].id) || '');
+
+    var m = U.openModal({ title: ex ? 'Edit assignment' : 'Post assignment \u2014 ' + U.displayName(cls) + ' Year ' + cls.year, wide: true,
+      beforeClose: function () { if (busy) { alert('An upload is still in progress.'); return false; } return true; } });
+    m.body.innerHTML =
+      '<div class="cr-row2"><div class="cr-field"><label>Title</label><input type="text" id="wkTitle" maxlength="200" value="' + esc(ex ? ex.title : (o.lessonTitle ? 'Homework: ' + o.lessonTitle : '')) + '"></div>' +
+      '<div class="cr-field"><label>Topic</label><select id="wkTopic"' + (ex ? ' disabled' : '') + '>' + topics.map(function (t) {
+        return '<option value="' + esc(t.id) + '"' + (t.id === topicId0 ? ' selected' : '') + '>' + esc(t.title) + '</option>'; }).join('') + '</select></div></div>' +
+      '<div class="cr-field"><label>Description / instructions</label><textarea id="wkDesc" rows="4" style="width:100%">' + esc(ex ? ex.description : '') + '</textarea></div>' +
+      '<div class="cr-field"><label>Deadline</label><div class="cr-actions"><input type="date" id="wkDate" value="' + dp.date + '"><input type="time" id="wkTime" value="' + dp.time + '"></div></div>' +
+      '<div class="cr-field"><label>Attach PDF (optional)</label><div id="wkPdfNow">' + (ex && ex.attachedPdfName ? '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(ex.attachedPdfName) + '</span></div>' : '') + '</div>' +
+      '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> ' + (ex && ex.attachedPdfName ? 'Replace PDF' : 'Choose PDF') + '</button>' +
+      '<input type="file" id="wkPdfIn" accept="application/pdf,.pdf" style="display:none"><div class="cr-prog" id="wkProg" style="display:none"><div></div></div></div>' +
+      recipientsHtml('wkR');
+    m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
+      '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Post assignment') + '</button>';
+    var errEl = m.foot.querySelector('#wkErr');
+    var readRecipients = wireRecipients(m, 'wkR', cls, ex ? ex.recipients : []);
+
+    var fileIn = m.body.querySelector('#wkPdfIn'), prog = m.body.querySelector('#wkProg');
+    m.body.querySelector('[data-a="pdf"]').onclick = function () { fileIn.click(); };
+    fileIn.onchange = async function () {
+      var f = fileIn.files[0]; fileIn.value = '';
+      if (!f) return;
+      if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { errEl.textContent = 'Please choose a PDF file.'; return; }
+      if (f.size > 25 * 1024 * 1024) { errEl.textContent = 'That PDF is larger than 25 MB.'; return; }
+      errEl.textContent = ''; busy = true; prog.style.display = '';
+      try {
+        var path = 'classroom-files/' + cls.subjectId + '/' + cls.id + '/' + aid + '/' + cleanName(f.name);
+        uploaded = await uploadTo(path, f, 'application/pdf', function (p) { prog.firstChild.style.width = p + '%'; });
+        m.body.querySelector('#wkPdfNow').innerHTML = '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(f.name) + '<small>Ready</small></span></div>';
+      } catch (e) { errEl.textContent = e.message; }
+      busy = false; prog.style.display = 'none';
+    };
+    m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
+    m.foot.querySelector('[data-a="save"]').onclick = async function () {
+      var btn = this; errEl.textContent = '';
+      if (busy) { errEl.textContent = 'Please wait for the upload to finish.'; return; }
+      var title = m.body.querySelector('#wkTitle').value.trim();
+      var tid = m.body.querySelector('#wkTopic').value;
+      var d = m.body.querySelector('#wkDate').value, t = m.body.querySelector('#wkTime').value;
+      if (!title) { errEl.textContent = 'Please enter a title.'; return; }
+      if (!tid) { errEl.textContent = 'Choose a topic.'; return; }
+      if (!d || !t) { errEl.textContent = 'Choose the deadline date and time.'; return; }
+      var when = new Date(d + 'T' + t);
+      if (isNaN(when.getTime())) { errEl.textContent = 'That deadline is not valid.'; return; }
+      if (!ex && when.getTime() <= Date.now()) { errEl.textContent = 'The deadline must be in the future.'; return; }
+      var rec = readRecipients();
+      if (rec.audience === 'students' && !rec.recipients.length) { errEl.textContent = 'Tick at least one student, or choose Whole class.'; return; }
+      var topic = topics.filter(function (x) { return x.id === tid; })[0];
+      var data = {
+        title: title, description: m.body.querySelector('#wkDesc').value.trim(),
+        subjectId: cls.subjectId, subjectName: U.displayName(cls), keyStage: cls.keyStage, year: cls.year,
+        topicId: tid, topicTitle: topic ? topic.title : '',
+        recipients: rec.recipients, audience: rec.audience,
+        dueAt: firebase.firestore.Timestamp.fromDate(when), updatedAt: FV().serverTimestamp()
+      };
+      if (uploaded) { data.attachedPdfUrl = uploaded.url; data.attachedPdfName = uploaded.name; data.attachedPdfPath = uploaded.path; }
+      if (!ex) {
+        data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
+        data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
+        data.tutorId = user.uid; data.tutorName = user.name || ''; data.createdBy = user.uid; data.createdAt = FV().serverTimestamp();
+      } else if (due && when.getTime() !== due.getTime()) {
+        data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
+      }
+      btn.disabled = true;
+      try {
+        await coll(cls.id, tid, 'assignment').doc(aid).set(data, { merge: true });
+        m.close(true);
+        if (o.afterSave) await o.afterSave();
+        else alert('Assignment posted. It now appears in Homework Management and in the students\u2019 classroom.');
+      } catch (e) {
+        console.error('post assignment:', e);
+        errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'you do not have permission to post in this subject.' : (e.message || e));
+        btn.disabled = false;
+      }
+    };
+  }
+
+  /* =========================================================
+     CREATE / EDIT FLAT EXAM (Midterm or End of Term)
+     ----------------------------------------------------------
+     Admins only. The mount code hides the "New exam" button
+     from tutors and blocks the click; this function still
+     exists so admin keeps full use.
+
+     Path:  classrooms/{cid}/exams/{eid}
+     Fields:
+       examType       'Midterm' | 'End of Term'
+       title          string
+       examDate       timestamp     (when the paper is taken)
+       submissionDeadline timestamp  (when the hand-in window closes)
+       requirements   string        (free text)
+       examPdfUrl / examPdfName / examPdfPath
+       status         'Draft' | 'Published' | 'Closed'
+       submissionsOpen boolean      (manual toggle, overrides the auto window)
+  ========================================================= */
+  function openCreateExam(o) {
+    injectStyle();
+    var cls = o.cls, user = o.user, ex = o.existing || null;
+    var eid = ex ? ex.id : flatExamsRef(cls.id).doc().id;
+    var uploaded = ex && ex.examPdfUrl
+      ? { url: ex.examPdfUrl, name: ex.examPdfName || 'exam.pdf', path: ex.examPdfPath || '' }
+      : null;
+    var busy = false;
+    var examDateParts = dtParts(ex && ex.examDate ? U.toDate(ex.examDate) : null);
+    var deadlineParts  = dtParts(ex && ex.submissionDeadline ? U.toDate(ex.submissionDeadline) : null);
+    var type0 = (ex && ex.examType) || 'Midterm';
+    var manualOpen0 = ex ? (ex.submissionsOpen === true) : false;
+
+    var m = U.openModal({
+      title: ex ? 'Edit exam' : 'Create exam \u2014 ' + U.displayName(cls) + ' Year ' + cls.year,
+      wide: true,
+      beforeClose: function () { if (busy) { alert('An upload is still in progress.'); return false; } return true; }
+    });
+
+    m.body.innerHTML =
+      '<div class="cr-field"><label>Exam type</label>' +
+        '<div class="wk-radio">' +
+          '<label><input type="radio" name="xType" value="Midterm"' + (type0 === 'Midterm' ? ' checked' : '') + '> Midterm</label>' +
+          '<label><input type="radio" name="xType" value="End of Term"' + (type0 === 'End of Term' ? ' checked' : '') + '> End of Term</label>' +
+        '</div>' +
+      '</div>' +
+      '<div class="cr-field"><label>Exam title</label><input type="text" id="xTitle" maxlength="200" value="' + esc(ex ? ex.title : '') + '" placeholder="e.g. Midterm Paper 1"></div>' +
+      '<div class="cr-row2">' +
+        '<div class="cr-field"><label>Exam date</label>' +
+          '<div class="cr-actions"><input type="date" id="xDate" value="' + examDateParts.date + '"><input type="time" id="xTime" value="' + (examDateParts.time || '09:00') + '"></div>' +
+          '<div class="cr-note" style="margin-top:.3rem">The day the student sits the paper. Parents get it emailed before this.</div>' +
+        '</div>' +
+        '<div class="cr-field"><label>Submission deadline</label>' +
+          '<div class="cr-actions"><input type="date" id="xDeadDate" value="' + deadlineParts.date + '"><input type="time" id="xDeadTime" value="' + (deadlineParts.time || '21:00') + '"></div>' +
+          '<div class="cr-note" style="margin-top:.3rem">After this, the window closes automatically.</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="cr-field"><label>Requirements / instructions (optional)</label>' +
+        '<textarea id="xReq" rows="3" style="width:100%" placeholder="e.g. Calculator allowed. Show all working. 45 minutes.">' + esc(ex ? (ex.requirements || '') : '') + '</textarea>' +
+      '</div>' +
+      '<div class="cr-field"><label>Exam paper (PDF)</label>' +
+        '<div id="xPdfNow">' +
+          (uploaded ? '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(uploaded.name) + '<small>' + (ex ? 'Current paper' : 'Ready') + '</small></span></div>' : '') +
+        '</div>' +
+        '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> ' + (uploaded ? 'Replace PDF' : 'Choose PDF') + '</button>' +
+        '<input type="file" id="xPdfIn" accept="application/pdf,.pdf" style="display:none">' +
+        '<div class="cr-prog" id="xProg" style="display:none"><div></div></div>' +
+      '</div>' +
+      '<div class="cr-field"><label>Submission window</label>' +
+        '<div class="wk-radio">' +
+          '<label><input type="checkbox" id="xManualOpen"' + (manualOpen0 ? ' checked' : '') + '> Open submissions now (manual override)</label>' +
+        '</div>' +
+        '<div class="cr-note" style="margin-top:.4rem">If not overridden, submissions open automatically at the exam date and close at the submission deadline. When published, students can only hand the paper in during the open window.</div>' +
+      '</div>';
+
+    m.foot.innerHTML =
+      '<span class="cr-err" id="xErr"></span>' +
+      '<button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
+      '<button type="button" class="cr-btn" data-s="Draft"><i class="fas fa-floppy-disk"></i> Save draft</button>' +
+      '<button type="button" class="cr-btn primary" data-s="Published"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save &amp; publish' : 'Publish') + '</button>';
+
+    var errEl = m.foot.querySelector('#xErr');
+
+    var fileIn = m.body.querySelector('#xPdfIn'), prog = m.body.querySelector('#xProg');
+    m.body.querySelector('[data-a="pdf"]').onclick = function () { fileIn.click(); };
+    fileIn.onchange = async function () {
+      var f = fileIn.files[0]; fileIn.value = ''; if (!f) return;
+      if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { errEl.textContent = 'Please choose a PDF file.'; return; }
+      if (f.size > 25 * 1024 * 1024) { errEl.textContent = 'That PDF is larger than 25 MB.'; return; }
+      errEl.textContent = ''; busy = true; prog.style.display = '';
+      try {
+        var path = 'classroom-files/' + cls.subjectId + '/' + cls.id + '/exams/' + eid + '/' + cleanName(f.name);
+        var res = await uploadTo(path, f, 'application/pdf', function (p) { prog.firstChild.style.width = p + '%'; });
+        uploaded = { url: res.url, name: f.name, path: res.path };
+        m.body.querySelector('#xPdfNow').innerHTML = '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(f.name) + '<small>Ready</small></span></div>';
+      } catch (e) { errEl.textContent = e.message; }
+      busy = false; prog.style.display = 'none';
+    };
+
+    m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
+
+    function readForm() {
+      var type = m.body.querySelector('input[name="xType"]:checked').value;
+      var title = m.body.querySelector('#xTitle').value.trim();
+      var d = m.body.querySelector('#xDate').value, t = m.body.querySelector('#xTime').value;
+      var dd = m.body.querySelector('#xDeadDate').value, dt = m.body.querySelector('#xDeadTime').value;
+      var req = m.body.querySelector('#xReq').value.trim();
+      var manualOpen = m.body.querySelector('#xManualOpen').checked;
+      return { type: type, title: title, examTs: tsFromLocal(d, t), deadlineTs: tsFromLocal(dd, dt), req: req, manualOpen: manualOpen };
+    }
+
+    Array.prototype.forEach.call(m.foot.querySelectorAll('[data-s]'), function (btn) {
+      btn.onclick = async function () {
+        errEl.textContent = '';
+        if (busy) { errEl.textContent = 'Please wait for the upload to finish.'; return; }
+        var f = readForm();
+        if (!f.title) { errEl.textContent = 'Please enter the exam title.'; return; }
+        if (!f.examTs) { errEl.textContent = 'Choose the exam date and time.'; return; }
+        if (!f.deadlineTs) { errEl.textContent = 'Choose the submission deadline.'; return; }
+        if (f.deadlineTs.toDate().getTime() < f.examTs.toDate().getTime()) {
+          errEl.textContent = 'The submission deadline must be after the exam date.'; return;
+        }
+        if (!uploaded) { errEl.textContent = 'Upload the exam paper (PDF).'; return; }
+        var status = btn.dataset.s;
+
+        var data = {
+          examType: f.type,
+          title: f.title,
+          subjectId: cls.subjectId,
+          subjectName: U.displayName(cls),
+          keyStage: cls.keyStage,
+          year: cls.year,
+          examDate: f.examTs,
+          submissionDeadline: f.deadlineTs,
+          requirements: f.req,
+          examPdfUrl: uploaded.url,
+          examPdfName: uploaded.name,
+          examPdfPath: uploaded.path,
+          submissionsOpen: f.manualOpen === true,
+          status: status,
+          updatedAt: FV().serverTimestamp()
+        };
+
+        if (!ex) {
+          data.tutorId = user.uid;
+          data.tutorName = user.name || '';
+          data.createdBy = user.uid;
+          data.createdAt = FV().serverTimestamp();
+          // The `onFlatExamPosted` trigger uses this to send one email
+          // per recipient per exam. It flips to true inside the trigger.
+          data.notificationsSentAt = null;
+        } else if (status === 'Published' && ex.status !== 'Published') {
+          // First time this exam becomes Published → let the trigger fire.
+          data.notificationsSentAt = null;
+        } else if (f.examTs.toDate().getTime() !== (ex.examDate ? U.toDate(ex.examDate).getTime() : 0)) {
+          // Exam date changed → the 48h reminder needs to run again.
+          data.parentNoticeSent = false;
+        }
+
+        btn.disabled = true;
+        try {
+          await flatExamRef(cls.id, eid).set(data, { merge: true });
+          m.close(true);
+          if (o.afterSave) await o.afterSave();
+        } catch (e) {
+          console.error('save flat exam:', e);
+          errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'you do not have permission to post in this subject.' : (e.message || e));
+          btn.disabled = false;
+        }
+      };
+    });
+  }
+
+  /* ---------------------------------------------------------
+     Flat-exam status toggles
+  --------------------------------------------------------- */
+  async function setFlatExamStatus(cid, eid, patch) {
+    await flatExamRef(cid, eid).update(Object.assign({ updatedAt: FV().serverTimestamp() }, patch));
+  }
+
+  /* ---------------------------------------------------------
+     GRADE A FLAT-EXAM SUBMISSION (via InkGrader)
+     ----------------------------------------------------------
+     Same marking workspace used for homework. InkGrader
+     enforces mandatory score + max, always releases marks on
+     completion, and writes inkData + gradedFileUrl as the
+     tutor draws.
+
+     ctx: { cid, exam, student, sub, user, onDone }
+  --------------------------------------------------------- */
+  function openGradeFlatExamInk(ctx) {
+    if (!global.InkGrader) {
+      alert('The grading workspace did not load. Refresh the page and try again.');
+      return;
+    }
+    var subRef = flatExamSubmissionsRef(ctx.cid, ctx.exam.id).doc(ctx.student.id);
+    var data = Object.assign({ studentName: ctx.student.name || (ctx.sub && ctx.sub.studentName) }, ctx.sub || {});
+    global.InkGrader.open({
+      docRef: subRef,
+      data: data,
+      item: ctx.exam,
+      cid: ctx.cid,
+      itemId: ctx.exam.id,
+      user: ctx.user,
+      kind: 'exam',
+      onDone: async function () {
+        if (ctx.onDone) await ctx.onDone();
+      }
+    });
+  }
+
+  /* =========================================================
+     STAFF MANAGEMENT SCREENS
+       WorkUI.mountManagement(root, { kind:'homework'|'exams', role, uid, name,
+                                      subjects, keyStages, onOpenAttempts })
+  ========================================================= */
+  function mountManagement(root, opts) {
+    injectStyle();
+    var kind = opts.kind === 'exams' ? 'exam' : 'assignment';
+    var isAdmin = opts.role === 'admin';
+    var title = kind === 'exam' ? 'Exam Management' : 'Homework Management';
+    var tutorSubjects = lmzSubjectKeys(opts.subjects || []);
+    var tutorKS = opts.keyStages || [];
+    var user = { uid: opts.uid, name: opts.name || (isAdmin ? 'Studio Desk' : 'Tutor') };
+    var S = { screen: 'list', tab: 'classes', classrooms: null, cls: null, topics: [], items: [], subs: {}, enrolled: [], collapsed: {}, filters: { subject: '', ks: '', year: '' }, granted: [] };
+    root.classList.add('cr-root');
+
+    /* ---------- classroom list ---------- */
+    async function loadClassrooms() {
+      root.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
+      try {
+        if (isAdmin) S.classrooms = U.snapDocs(await db.collection('classrooms').get());
+        else {
+          var parts = await Promise.all(tutorSubjects.map(function (k) { return db.collection('classrooms').where('subjectId', '==', k).get().then(U.snapDocs); }));
+          S.classrooms = [].concat.apply([], parts).filter(function (c) { return !tutorKS.length || tutorKS.indexOf(c.keyStage) !== -1; });
+          S.granted = await loadGranted();
+        }
+      } catch (e) { root.innerHTML = '<div class="cr-empty">Could not load: ' + esc(e.message || e) + '</div>'; return; }
+      renderList();
+    }
+
+    // Load items another tutor was asked to help mark.
+    //   Homework grants: classrooms/{cid}/topics/{tid}/assignments/{aid}
+    //   Flat exam grants: classrooms/{cid}/exams/{eid}
+    async function loadGranted() {
+      try {
+        var snap = await db.collection('gradingGrants').where('tutorId', '==', user.uid).get();
+        var want = kind === 'exam' ? 'exam' : 'homework';
+        var rows = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); })
+          .filter(function (g) { return g.revoked !== true && g.taskType === want && g.taskPath; });
+        var out = [];
+        for (var i = 0; i < rows.length; i++) {
+          var taskPath = rows[i].taskPath;
+          var p = taskPath.split('/');
+          var cid, tid = null, itemId, isFlat = false;
+          if (p[0] === 'classrooms' && p[2] === 'topics' && p.length === 6) {
+            cid = p[1]; tid = p[3]; itemId = p[5];
+          } else if (p[0] === 'classrooms' && p[2] === 'exams' && p.length === 4) {
+            cid = p[1]; itemId = p[3]; isFlat = true;
+          } else {
+            continue;
+          }
+          try {
+            var doc = await db.doc(taskPath).get();
+            if (doc.exists) out.push(Object.assign({ id: doc.id, cid: cid, tid: tid, flat: isFlat }, doc.data()));
+          } catch (e) { /* not readable any more */ }
+        }
+        return out;
+      } catch (e) { return []; }
+    }
+
+    function renderList() {
+      S.screen = 'list';
+      if (!isAdmin && !tutorSubjects.length) { root.innerHTML = '<div class="cr-panel"><div class="cr-empty">No subjects have been assigned to your account yet.</div></div>'; return; }
+      var subText;
+      if (kind === 'exam') {
+        subText = isAdmin
+          ? 'Subject \u2192 Exams. Pick a subject, then create Midterm or End-of-Term papers.'
+          : 'Subject \u2192 Exams. Open an exam to see every student\u2019s hand-in and grade their work.';
+      } else {
+        subText = 'Subject \u2192 Topic \u2192 Assignment. Open an assignment to see every student and grade their work.';
+      }
+      var h = '<div class="cr-bar"><div><h3>' + title + '</h3><div class="cr-sub">' + subText + '</div></div>' +
+        (isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add classroom</button>' : '') + '</div>';
+      if (isAdmin) {
+        h += '<div class="cr-tabs">' +
+          '<button type="button" class="cr-btn ' + (S.tab === 'classes' ? 'on' : '') + '" data-a="tab" data-v="classes"><i class="fas fa-chalkboard"></i> Classrooms</button>' +
+          '<button type="button" class="cr-btn ' + (S.tab === 'legacy' ? 'on' : '') + '" data-a="tab" data-v="legacy"><i class="fas fa-box-archive"></i> Legacy</button>' +
+          (kind === 'assignment' ? '<button type="button" class="cr-btn ' + (S.tab === 'jobs' ? 'on' : '') + '" data-a="tab" data-v="jobs"><i class="fas fa-bolt"></i> Automation</button>' : '') +
+        '</div>';
+        if (S.tab === 'legacy') { root.innerHTML = h + '<div id="wkLegacy"></div>'; renderLegacy(); return; }
+        if (S.tab === 'jobs') { root.innerHTML = h + '<div id="wkJobs"></div>'; renderJobs(); return; }
+      }
+      var list = (S.classrooms || []).filter(function (c) {
+        var f = S.filters;
+        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year);
+      });
+      if (isAdmin) {
+        h += '<div class="cr-filters">' + sel('f-subject', 'All subjects', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), S.filters.subject) +
+          sel('f-ks', 'All Key Stages', U.KEY_STAGES.map(function (k) { return [k, U.ksShort(k)]; }), S.filters.ks) +
+          sel('f-year', 'All Years', [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(function (y) { return [String(y), 'Year ' + y]; }), S.filters.year) + '</div>';
+      }
+      if (!isAdmin && S.granted.length) {
+        h += '<div class="cr-panel"><h4 style="margin:0 0 .5rem;color:var(--brand-deep,#245F5A)"><i class="fas fa-user-shield"></i> Granted to me</h4>' +
+          S.granted.map(function (g, i) {
+            return '<div class="cr-lesson"><span class="tt">' + esc(g.title) +
+              '<small>' + esc(g.subjectName || g.subject || '') + (g.topicTitle ? ' \u00b7 ' + esc(g.topicTitle) : '') + (g.flat ? ' \u00b7 ' + esc(g.examType || '') : '') + '</small></span>' +
+              pill('b-grant', 'Granted', 'fa-user-shield') +
+              '<button type="button" class="cr-btn sm primary" data-a="open-granted" data-i="' + i + '"><i class="fas fa-eye"></i> Open</button></div>';
+          }).join('') + '</div>';
+      }
+      if (!list.length) {
+        h += '<div class="cr-panel"><div class="cr-empty">' + ((S.classrooms || []).length
+          ? 'No classrooms match these filters.'
+          : (isAdmin ? 'No classrooms yet. Use \u201cAdd classroom\u201d to start one.' : 'No classroom exists yet for your subjects. The Studio Desk creates classrooms.')) + '</div></div>';
+      } else {
+        list.sort(function (a, b) { return U.displayName(a).localeCompare(U.displayName(b)) || (a.year || 0) - (b.year || 0); });
+        h += '<div class="cr-grid">' + list.map(function (c) {
+          return '<button type="button" class="cr-card" data-a="open" data-id="' + esc(c.id) + '"><div class="ic"><i class="fas ' + (kind === 'exam' ? 'fa-file-pen' : 'fa-book-open') + '"></i></div><h4>' + esc(U.displayName(c)) +
+            '</h4><div class="meta">Year ' + esc(c.year) + ' \u00b7 ' + esc(U.ksShort(c.keyStage)) + '</div></button>';
+        }).join('') + '</div>';
+      }
+      root.innerHTML = h;
+    }
+    function sel(id, all, pairs, cur) {
+      return '<select data-f="' + id + '" aria-label="' + esc(all) + '"><option value="">' + esc(all) + '</option>' +
+        pairs.map(function (p) { return '<option value="' + esc(p[0]) + '"' + (String(cur) === String(p[0]) ? ' selected' : '') + '>' + esc(p[1]) + '</option>'; }).join('') + '</select>';
+    }
+
+    /* ---------- one classroom ---------- */
+    async function openClass(cid, focusItemId) {
+      root.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
+      try {
+        var doc = await U.clsRef(cid).get();
+        if (!doc.exists) throw new Error('Classroom not found.');
+        S.cls = Object.assign({ id: doc.id }, doc.data());
+        await reload();
+      } catch (e) { root.innerHTML = '<div class="cr-empty">Could not open: ' + esc(e.message || e) + '</div>'; return; }
+      render();
+      if (focusItemId) { var it = S.items.filter(function (x) { return x.id === focusItemId; })[0]; if (it) openDetail(it); }
+    }
+    async function reload() {
+      S.topics = await U.loadTopics(S.cls.id);
+      var enrolledP = loadEnrolled(S.cls).catch(function () { return []; });
+      if (kind === 'exam') {
+        // Flat exams under the classroom + their submissions. No topics.
+        var res = await Promise.all([loadFlatExams(S.cls.id), enrolledP]);
+        S.items = res[0].items; S.subs = res[0].subs; S.enrolled = res[1];
+      } else {
+        var res2 = await Promise.all([loadClassHomework(S.cls.id, S.topics), enrolledP]);
+        S.items = res2[0].items; S.subs = res2[0].subs; S.enrolled = res2[1];
+      }
+    }
+    async function refresh() { await reload(); render(); }
+
+    function counts(it) {
+      var aud = audienceOf(it, S.enrolled), subs = S.subs[it.id] || {};
+      var submitted = 0, graded = 0;
+      aud.forEach(function (s) {
+        var x = subs[s.id];
+        if (!x) return;
+        if (x.status !== 'In progress' && x.status !== 'Suspended') submitted++;
+        if (x.status === 'Graded') graded++;
+      });
+      return { total: aud.length, submitted: submitted, graded: graded };
+    }
+
+    function itemPill(it) {
+      var c = counts(it);
+      if (kind === 'exam') {
+        var statusPill = it.status === 'Published'
+          ? pill('b-confirmed', 'Published')
+          : it.status === 'Closed'
+            ? pill('b-plain', 'Closed')
+            : pill('b-pending', 'Draft');
+        var typePill = pill('b-plain', it.examType || 'Exam');
+        var w = windowState(it);
+        var windowPill = '<span class="wk-pill-window ' + w.cls + '">' + (w.mode === 'auto-open' ? '<i class="fas fa-clock"></i> ' : (w.mode === 'manual-open' ? '<i class="fas fa-lock-open"></i> ' : '<i class="fas fa-lock"></i> ')) + esc(w.label) + '</span>';
+        return statusPill + ' ' + typePill + ' ' + windowPill;
+      }
+      // Homework:
+      var due = dueOf(it, 'assignment');
+      if (c.total && c.graded === c.total) return pill('b-confirmed', 'All graded', 'fa-circle-check');
+      if (due && due.getTime() < Date.now() && c.submitted < c.total) return pill('b-declined', 'Overdue', 'fa-triangle-exclamation');
+      if (c.submitted > c.graded) return pill('b-pending', (c.submitted - c.graded) + ' to grade', 'fa-inbox');
+      return pill('b-plain', 'Open');
+    }
+
+    function canEdit(it) { return isAdmin || it.tutorId === user.uid; }
+
+    /* ---------- render main list ---------- */
+    function render() {
+      S.screen = 'class';
+      var c = S.cls, name = U.displayName(c);
+      var topBtn;
+      if (kind === 'exam') {
+        // Only admins get "New exam". Tutors see the list and grade, nothing else.
+        topBtn = isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-flat-exam"><i class="fas fa-plus"></i> New exam</button>' : '';
+      } else {
+        // Homework: only admins get "Add Topic". Tutors see topics and can
+        // press "Post Assignment" inside each existing topic.
+        topBtn = isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
+      }
+      var h = '<div class="cr-crumb"><a data-a="back">' + title + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</span></div>' +
+        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div></div>' +
+        topBtn + '</div>';
+
+      if (kind === 'exam') {
+        // Flat exam list, no topic accordion.
+        if (!S.items.length) {
+          h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin
+            ? 'No exams in this subject yet. Click \u201cNew exam\u201d to create a Midterm or End-of-Term paper.'
+            : 'No exams posted for this subject yet. The Studio Desk sets exams — check back soon.') + '</div></div>';
+        } else {
+          h += '<div class="cr-panel"><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Title</th><th>Type</th><th>Exam date</th><th>Submissions by</th><th>Students</th><th></th></tr></thead><tbody>';
+          S.items.forEach(function (it) {
+            var cnt = counts(it);
+            var examDate = it.examDate ? U.fmtDateTime(U.toDate(it.examDate)) : '—';
+            var deadline = it.submissionDeadline ? U.fmtDateTime(U.toDate(it.submissionDeadline)) : '—';
+            // Admin-only controls (edit / publish / close / window toggle / delete).
+            var adminControls = isAdmin || canEdit(it)
+              ? (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i> Edit</button>' : '') +
+                (isAdmin
+                  ? (it.status === 'Published'
+                      ? '<button type="button" class="cr-btn sm" data-a="close-exam" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close</button>'
+                      : '<button type="button" class="cr-btn sm" data-a="publish-exam" data-id="' + esc(it.id) + '"><i class="fas fa-upload"></i> Publish</button>') +
+                    (it.submissionsOpen === true
+                      ? '<button type="button" class="cr-btn sm" data-a="close-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close submissions</button>'
+                      : '<button type="button" class="cr-btn sm" data-a="open-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock-open"></i> Open submissions</button>')
+                  : '') +
+                (canEdit(it) ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '')
+              : '';
+            h += '<tr>' +
+              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '</td>' +
+              '<td>' + pill('b-plain', it.examType || '—') + '</td>' +
+              '<td>' + esc(examDate) + '</td>' +
+              '<td>' + esc(deadline) + '</td>' +
+              '<td><span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span></td>' +
+              '<td><div class="cr-actions">' +
+                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
+                adminControls +
+                '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
+              '</div></td>' +
+            '</tr>';
+          });
+          h += '</tbody></table></div></div>';
+        }
+      } else {
+        // Homework: keep the topic accordion.
+        if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin
+          ? 'No topics yet. Add a topic, then add assignments inside it.'
+          : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
+        S.topics.forEach(function (t) {
+          var rows = S.items.filter(function (x) { return x.tid === t.id; }).sort(function (a, b) {
+            var da = dueOf(a, 'assignment'), db2 = dueOf(b, 'assignment');
+            return (da ? da.getTime() : 0) - (db2 ? db2.getTime() : 0);
+          });
+          var open = !S.collapsed[t.id];
+          // Both admin and tutor can press "Post Assignment" inside a topic.
+          // Only admin can create topics — that button is at the top bar.
+          var topicActions = '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Post Assignment</button></div>';
+          h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' +
+            esc(t.title) + '<small>' + rows.length + ' assignment' + (rows.length === 1 ? '' : 's') + '</small></span>' +
+            topicActions + '</div>';
+          if (open) {
+            if (!rows.length) h += '<div class="cr-empty">No assignments in this topic yet. Use \u201cPost Assignment\u201d above to add the first one.</div>';
+            rows.forEach(function (it) {
+              var cnt = counts(it), due = dueOf(it, 'assignment');
+              h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas fa-clipboard-check"></i></span>' +
+                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : 'No date') + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + '</small></span>' +
+                '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
+                itemPill(it) +
+                '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
+                (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
+                (canEdit(it) ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
+            });
+          }
+          h += '</div>';
+        });
+      }
+      root.innerHTML = h;
+    }
+
+    /* ---------- item detail ---------- */
+    async function openDetail(it) {
+      var m = U.openModal({ title: it.title, wide: true });
+      m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="close">Close</button>';
+      m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      async function paint() {
+        m.body.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
+        var subs = {};
+        try {
+          if (kind === 'exam') {
+            // Flat exams only: exams/{eid}/submissions/{sid}
+            var sn = await flatExamSubmissionsRef(it.cid, it.id).get();
+            sn.docs.forEach(function (d) { subs[d.id] = Object.assign({ id: d.id }, d.data()); });
+          } else {
+            var sn2 = await coll(it.cid, it.tid, 'assignment').doc(it.id).collection('submissions').get();
+            sn2.docs.forEach(function (d) { subs[d.id] = Object.assign({ id: d.id }, d.data()); });
+          }
+        } catch (e) { m.body.innerHTML = '<div class="cr-empty">Could not load: ' + esc(e.message || e) + '</div>'; return; }
+
+        var aud = audienceOf(it, S.enrolled);
+        var head = '<div style="margin-bottom:.8rem">' +
+          '<div class="cr-note"><b>' + esc(it.subjectName || '') + '</b>' +
+            (kind === 'exam' ? ' \u00b7 ' + esc(it.examType || '') : ' \u00b7 ' + esc(it.topicTitle || '')) + '<br>' +
+            (kind === 'exam'
+              ? 'Exam date: ' + esc(it.examDate ? U.fmtDateTime(U.toDate(it.examDate)) : '—') + '<br>' +
+                'Submissions by: ' + esc(it.submissionDeadline ? U.fmtDateTime(U.toDate(it.submissionDeadline)) : '—') + '<br>' +
+                windowState(it).label
+              : (it.dueAt ? 'Deadline: ' + esc(U.fmtDateTime(U.toDate(it.dueAt))) : 'No deadline')) +
+          '</div>' +
+          '<div class="wk-chips" style="margin-top:.5rem">' + itemPill(it) +
+            (kind === 'exam' && it.examPdfUrl ? '<a class="cr-btn sm" href="' + esc(it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> ' + esc(it.examPdfName || 'Exam PDF') + '</a>' : '') +
+            (kind === 'assignment' && it.attachedPdfUrl ? '<a class="cr-btn sm" href="' + esc(it.attachedPdfUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> ' + esc(it.attachedPdfName || 'Attached PDF') + '</a>' : '') +
+            ((isAdmin) ? '<button type="button" class="cr-btn sm" data-a="grant"><i class="fas fa-user-shield"></i> Grant grading rights</button>' : '') +
+          '</div>' +
+          (it.requirements ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.requirements) + '</div>' : '') +
+          (it.description && kind === 'assignment' ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.description) + '</div>' : '') +
+        '</div>';
+
+        var rows = aud.map(function (s) {
+          var sub = subs[s.id] || null;
+          var st = workState(it, sub, kind);
+          var canGrade = sub && sub.status !== 'In progress';
+          return '<tr>' +
+            '<td><b>' + esc(s.name || s.email || s.id) + '</b></td>' +
+            '<td>' + pill(st.cls, st.text, st.icon) + '</td>' +
+            '<td>' + (sub && (sub.submittedAt || sub.updatedAt) ? esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '—') + '</td>' +
+            '<td>' +
+              (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> File</a>' : '') +
+              (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Graded</a>' : '') +
+              (canGrade
+                ? (kind === 'exam'
+                    ? '<button type="button" class="cr-btn sm primary" data-a="grade-flat" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Review' : 'Grade') + '</button>'
+                    : (global.InkGrader
+                        ? '<button type="button" class="cr-btn sm primary" data-a="grade-ink" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Review' : 'Grade') + '</button>'
+                        : ''))
+                : '') +
+            '</td>' +
+          '</tr>';
+        }).join('');
+
+        m.body.innerHTML = head + (aud.length
+          ? '<div class="cr-table-wrap"><table class="cr-table wk-tbl" style="min-width:560px"><thead><tr><th>Student</th><th>State</th><th>Handed in</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+          : '<div class="cr-empty">No students are assigned to this item.</div>');
+
+        var gb = m.body.querySelector('[data-a="grant"]'); if (gb) gb.onclick = function () { openGrant(it); };
+
+        // Flat exam grade button → InkGrader (identical to homework)
+        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-flat"]'), function (b) {
+          b.onclick = function () {
+            var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
+            openGradeFlatExamInk({
+              cid: it.cid, exam: it, student: Object.assign({ id: sid }, stu), sub: sub, user: user,
+              onDone: async function () { await refresh(); paint(); }
+            });
+          };
+        });
+
+        // Homework grade button → InkGrader (unchanged)
+        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-ink"]'), function (b) {
+          b.onclick = function () {
+            var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
+            if (!global.InkGrader) { alert('The grading workspace did not load. Refresh the page and try again.'); return; }
+            global.InkGrader.open({
+              docRef: coll(it.cid, it.tid, 'assignment').doc(it.id).collection('submissions').doc(sid),
+              data: Object.assign({ studentName: stu.name || sub.studentName }, sub), item: it, cid: it.cid, itemId: it.id, user: user, kind: 'assignment',
+              onDone: async function () { await refresh(); paint(); }
+            });
+          };
+        });
+      }
+      paint();
+    }
+
+    function openGrant(it) {
+      var m = U.openModal({ title: 'Grant grading rights' });
+      m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.7rem">Choose a tutor who may see and mark this ' + (kind === 'exam' ? 'exam' : 'assignment') + '. It then appears in their \u201cGranted to me\u201d list.</div><div class="cr-field"><label>Tutor</label><select id="gTutor"><option value="">Loading\u2026</option></select></div>';
+      m.foot.innerHTML = '<span class="cr-err" id="gErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button><button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-user-shield"></i> Grant</button>';
+      var tsel = m.body.querySelector('#gTutor'), tut = {};
+      getAllTutorAccounts().then(function (snap) {
+        tsel.innerHTML = '<option value="">Choose a tutor</option>' + snap.docs.map(function (d) { tut[d.id] = d.data(); return '<option value="' + esc(d.id) + '">' + esc(d.data().name || d.data().email) + '</option>'; }).join('');
+      });
+      m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
+      m.foot.querySelector('[data-a="go"]').onclick = async function () {
+        var id = tsel.value; if (!id) { m.foot.querySelector('#gErr').textContent = 'Choose a tutor.'; return; }
+        try {
+          var type = kind === 'exam' ? 'exam' : 'homework';
+          await grantGradingRight(type, it.id, id, tut[id].name || '', user.uid);
+          var taskPath = (kind === 'exam' && it.flat)
+            ? 'classrooms/' + it.cid + '/exams/' + it.id
+            : 'classrooms/' + it.cid + '/topics/' + it.tid + '/' + collName(kind) + '/' + it.id;
+          await db.collection('gradingGrants').doc(gradingGrantId(type, it.id, id)).update({ taskPath: taskPath, taskTitle: it.title });
+          m.close(); alert('Grading rights granted.');
+        } catch (e) { m.foot.querySelector('#gErr').textContent = e.message || String(e); }
+      };
+    }
+
+    /* ---------- add classroom (same as Classroom tab; admin only) ---------- */
+    function openAddClassroom() {
+      if (!isAdmin) return;
+      var m = U.openModal({ title: 'Add classroom' });
+      m.body.innerHTML = '<div class="cr-field"><label>Key Stage</label><select id="nKs">' + U.KEY_STAGES.map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="cr-row2"><div class="cr-field"><label>Year</label><select id="nYear"></select></div><div class="cr-field"><label>Subject</label><select id="nSub"></select></div></div>' +
+        '<div class="cr-note">A classroom is one subject for one Year.</div>';
+      m.foot.innerHTML = '<span class="cr-err" id="nErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button><button type="button" class="cr-btn primary" data-a="create">Open classroom</button>';
+      var ks = m.body.querySelector('#nKs'), yr = m.body.querySelector('#nYear'), sb = m.body.querySelector('#nSub');
+      function fill() {
+        yr.innerHTML = lmzYearsForKeyStage(ks.value).map(function (y) { return '<option value="' + y + '">Year ' + y + '</option>'; }).join('');
+        sb.innerHTML = lmzSubjectsForKeyStage(ks.value).map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>'; }).join('');
+      }
+      ks.onchange = fill; fill();
+      m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
+      m.foot.querySelector('[data-a="create"]').onclick = async function () {
+        this.disabled = true;
+        try { var c = await U.ensureClassroom(sb.value, ks.value, yr.value, user); m.close(true); S.classrooms = null; await openClass(c.id); }
+        catch (e) { m.foot.querySelector('#nErr').textContent = 'Could not create: ' + (e.message || e); this.disabled = false; }
+      };
+    }
+
+    function openTopicModal() {
+      if (!isAdmin) return;
+      var m = U.openModal({ title: 'Add topic' });
+      m.body.innerHTML = '<div class="cr-field"><label>Topic title</label><input type="text" id="tT" maxlength="200" placeholder="e.g. Algebra"></div>';
+      m.foot.innerHTML = '<span class="cr-err" id="tE"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button><button type="button" class="cr-btn primary" data-a="save">Add topic</button>';
+      m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
+      m.foot.querySelector('[data-a="save"]').onclick = async function () {
+        var t = m.body.querySelector('#tT').value.trim(); if (!t) { m.foot.querySelector('#tE').textContent = 'Enter a title.'; return; }
+        var max = S.topics.reduce(function (a, x) { return Math.max(a, x.order || 0); }, 0);
+        try {
+          await U.clsRef(S.cls.id).collection('topics').add({ title: t, description: '', order: max + 1, createdAt: FV().serverTimestamp(), createdBy: user.uid });
+          m.close(true); await refresh();
+        } catch (e) { m.foot.querySelector('#tE').textContent = e.message || String(e); }
+      };
+    }
+
+    async function deleteItem(it) {
+      if (!canEdit(it)) { alert('Only the Studio Desk or the tutor who posted this can delete it.'); return; }
+      var cnt = Object.keys(S.subs[it.id] || {}).length;
+      if (cnt && !isAdmin) { alert('This already has handed-in work, so only the Studio Desk can delete it.'); return; }
+      if (!confirm('Delete \u201c' + it.title + '\u201d' + (cnt ? ' and its ' + cnt + ' handed-in piece(s) of work' : '') + '? This cannot be undone.')) return;
+      try {
+        if (kind === 'exam') {
+          var sn = await flatExamSubmissionsRef(it.cid, it.id).get();
+          for (var i = 0; i < sn.docs.length; i += 400) {
+            var b = db.batch();
+            sn.docs.slice(i, i + 400).forEach(function (d) { b.delete(d.ref); });
+            await b.commit();
+          }
+          await flatExamRef(it.cid, it.id).delete();
+          if (it.examPdfPath) firebase.storage().ref(it.examPdfPath).delete().catch(function () {});
+        } else {
+          var sn2 = await coll(it.cid, it.tid, 'assignment').doc(it.id).collection('submissions').get();
+          for (var j = 0; j < sn2.docs.length; j += 400) {
+            var b2 = db.batch();
+            sn2.docs.slice(j, j + 400).forEach(function (d) { b2.delete(d.ref); });
+            await b2.commit();
+          }
+          await coll(it.cid, it.tid, 'assignment').doc(it.id).delete();
+          if (it.attachedPdfPath) firebase.storage().ref(it.attachedPdfPath).delete().catch(function () {});
+        }
+        await refresh();
+      } catch (e) { alert('Could not delete: ' + (e.message || e)); }
+    }
+
+    /* ---------- legacy view + migration (admin only) ---------- */
+    async function renderLegacy() {
+      if (!isAdmin) return;
+      var host = root.querySelector('#wkLegacy');
+      host.innerHTML = '<div class="cr-panel"><h4 style="margin:0 0 .4rem;color:var(--brand-deep,#245F5A)">Move legacy ' + (kind === 'exam' ? 'exams' : 'homework') + ' into the classroom tree</h4>' +
+        '<div class="cr-note" style="margin-bottom:.7rem">The old lists below stay readable and are never deleted. The migration copies homework, exams and submissions under \u201cEarlier homework and exams\u201d. Running it again is safe: nothing already moved is touched, and no one is emailed.</div>' +
+        '<div class="cr-actions"><button type="button" class="cr-btn" data-a="mig" data-dry="1"><i class="fas fa-magnifying-glass"></i> Preview (no changes)</button>' +
+        '<button type="button" class="cr-btn primary" data-a="mig"><i class="fas fa-right-left"></i> Run migration</button></div><pre class="wk-box wk-mono" id="wkMigOut" style="display:none;margin-top:.7rem"></pre></div>' +
+        '<div class="cr-panel"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">Legacy ' + (kind === 'exam' ? 'exams' : 'homework') + ' (read-only)</h4><div id="wkLegacyTbl"><div class="cr-empty">Loading\u2026</div></div></div>';
+      try {
+        var snap = await db.collection(kind === 'exam' ? 'exams' : 'homework').get();
+        var rows = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        host.querySelector('#wkLegacyTbl').innerHTML = rows.length
+          ? '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Title</th><th>Subject</th><th>Key Stage</th><th>' + (kind === 'exam' ? 'Type' : 'Due') + '</th><th>Status</th></tr></thead><tbody>' +
+              rows.map(function (r) {
+                return '<tr><td><b>' + esc(r.title || '') + '</b></td><td>' + esc(r.subject || '') + '</td><td>' + esc(U.ksShort(r.keyStage)) + '</td><td>' +
+                  esc(kind === 'exam' ? (r.examMode === 'link' ? 'External' : 'Questions') : (r.dueDate || '')) + '</td><td>' + pill('b-plain', r.status || 'Posted') + '</td></tr>';
+              }).join('') +
+            '</tbody></table></div>'
+          : '<div class="cr-empty">Nothing in the legacy list.</div>';
+      } catch (e) {
+        host.querySelector('#wkLegacyTbl').innerHTML = '<div class="cr-empty">Could not load: ' + esc(e.message || e) + '</div>';
+      }
+    }
+    async function runMigration(dry, btn) {
+      if (!isAdmin) return;
+      var out = root.querySelector('#wkMigOut'); out.style.display = ''; out.textContent = 'Working\u2026';
+      btn.disabled = true;
+      try {
+        var res = await firebase.functions().httpsCallable('migrateLegacyHomeworkAndExams')({ dryRun: !!dry });
+        var r = res.data;
+        out.textContent = (r.dryRun ? 'PREVIEW (nothing written)\n' : 'DONE\n') +
+          'Homework:    ' + r.homework.created + ' to create, ' + r.homework.existing + ' already moved, ' + r.homework.skipped + ' skipped\n' +
+          'Exams:       ' + r.exams.created + ' to create, ' + r.exams.existing + ' already moved, ' + r.exams.skipped + ' skipped\n' +
+          'Submissions: ' + r.submissions.created + ' to create, ' + r.submissions.existing + ' already moved\n' +
+          'Classrooms created: ' + r.classroomsCreated + '\n' + (r.notes.length ? '\nNotes:\n- ' + r.notes.join('\n- ') : '');
+      } catch (e) { out.textContent = 'Failed: ' + (e.message || e); }
+      btn.disabled = false;
+    }
+
+    /* ---------- manual triggers for scheduled jobs (admin only) ---------- */
+    function renderJobs() {
+      if (!isAdmin) return;
+      var jobs = [['reminder', 'Deadline reminder (24h)', 'fa-bell'], ['grace', 'Overdue + 48h extension notice', 'fa-hourglass-half'], ['report', 'Unattended Work Report', 'fa-clipboard-list'], ['exam', 'Exam paper to parents (48h)', 'fa-file-pen']];
+      root.querySelector('#wkJobs').innerHTML = '<div class="cr-panel"><h4 style="margin:0 0 .4rem;color:var(--brand-deep,#245F5A)">Run an automation now</h4>' +
+        '<div class="cr-note" style="margin-bottom:.7rem">These jobs run every hour on their own. Use these buttons to test. Each item is only ever processed once, so pressing a button twice is harmless.</div>' +
+        '<div class="cr-actions">' + jobs.map(function (j) { return '<button type="button" class="cr-btn" data-a="job" data-j="' + j[0] + '"><i class="fas ' + j[2] + '"></i> ' + j[1] + '</button>'; }).join('') + '</div>' +
+        '<pre class="wk-box wk-mono" id="wkJobOut" style="display:none;margin-top:.7rem"></pre></div>';
+    }
+    async function runJob(j, btn) {
+      if (!isAdmin) return;
+      var out = root.querySelector('#wkJobOut'); out.style.display = ''; out.textContent = 'Running\u2026'; btn.disabled = true;
+      try { var r = await firebase.functions().httpsCallable('runDeadlineJob')({ job: j }); out.textContent = JSON.stringify(r.data, null, 2); }
+      catch (e) { out.textContent = 'Failed: ' + (e.message || e); }
+      btn.disabled = false;
+    }
+
+    /* ---------- events ---------- */
+    root.addEventListener('click', async function (e) {
+      var el = e.target.closest('[data-a]'); if (!el) return;
+      var a = el.dataset.a, id = el.dataset.id;
+      var item = id ? S.items.filter(function (x) { return x.id === id; })[0] : null;
+      try {
+        if (a === 'open') openClass(id);
+        else if (a === 'back') { S.classrooms = null; loadClassrooms(); }
+        else if (a === 'tab') { S.tab = el.dataset.v; renderList(); }
+        else if (a === 'add-class') { if (isAdmin) openAddClassroom(); }
+        else if (a === 'add-topic') { if (isAdmin) openTopicModal(); }
+        else if (a === 'toggle') { S.collapsed[id] = !S.collapsed[id]; render(); }
+        else if (a === 'detail' && item) openDetail(item);
+        else if (a === 'open-granted') {
+          var g = S.granted[Number(el.dataset.i)];
+          if (g) {
+            var c = await U.clsRef(g.cid).get();
+            S.cls = Object.assign({ id: c.id }, c.data());
+            await reload(); render();
+            var it2 = S.items.filter(function (x) { return x.id === g.id; })[0] || g;
+            openDetail(it2);
+          }
+        }
+        else if (a === 'add-assignment') {
+          // Both admin and tutor: post an assignment inside this topic.
+          openPostAssignment({ cls: S.cls, topics: S.topics, topicId: id, user: user, afterSave: refresh });
+        }
+        else if (a === 'add-flat-exam') { if (isAdmin) openCreateExam({ cls: S.cls, user: user, afterSave: refresh }); }
+        else if (a === 'edit' && item) {
+          if (!canEdit(item)) { alert('Only the Studio Desk or the tutor who posted this can edit it.'); return; }
+          if (kind === 'exam') openCreateExam({ cls: S.cls, existing: item, user: user, afterSave: refresh });
+          else openPostAssignment({ cls: S.cls, topics: S.topics, existing: item, user: user, afterSave: refresh });
+        }
+        else if (a === 'del' && item) deleteItem(item);
+        else if (a === 'publish-exam' && item) { if (isAdmin) { await setFlatExamStatus(item.cid, item.id, { status: 'Published' }); await refresh(); } }
+        else if (a === 'close-exam' && item) { if (isAdmin) { await setFlatExamStatus(item.cid, item.id, { status: 'Closed' }); await refresh(); } }
+        else if (a === 'open-window' && item) { if (isAdmin) { await setFlatExamStatus(item.cid, item.id, { submissionsOpen: true }); await refresh(); } }
+        else if (a === 'close-window' && item) { if (isAdmin) { await setFlatExamStatus(item.cid, item.id, { submissionsOpen: false }); await refresh(); } }
+        else if (a === 'mig') { if (isAdmin) runMigration(el.dataset.dry === '1', el); }
+        else if (a === 'job') { if (isAdmin) runJob(el.dataset.j, el); }
+      } catch (err) { console.error(err); alert('Something went wrong: ' + (err.message || err)); }
+    });
+    root.addEventListener('change', function (e) {
+      var f = e.target.dataset && e.target.dataset.f; if (!f) return;
+      if (f === 'f-subject') S.filters.subject = e.target.value;
+      if (f === 'f-ks') S.filters.ks = e.target.value;
+      if (f === 'f-year') S.filters.year = e.target.value;
+      renderList();
+    });
+
+    loadClassrooms();
+    return { reload: loadClassrooms };
+  }
+
+  global.WorkUI = global.WorkUI || {};
+  Object.assign(global.WorkUI, {
+    mountManagement: mountManagement,
+    openPostAssignment: openPostAssignment,
+    openCreateExam: openCreateExam,
+    openGradeFlatExamInk: openGradeFlatExamInk,
+    _h: {
+      U: U, esc: esc, pill: pill,
+      coll: coll, collName: collName, subName: subName,
+      flatExamsRef: flatExamsRef, flatExamRef: flatExamRef, flatExamSubmissionsRef: flatExamSubmissionsRef,
+      workState: workState, dueOf: dueOf, fmtScore: fmtScore,
+      windowState: windowState, isWindowOpen: isWindowOpen,
+      loadEnrolled: loadEnrolled, uploadTo: uploadTo, cleanName: cleanName,
+      injectStyle: injectStyle, audienceOf: audienceOf
+    }
+  });
+})(window);

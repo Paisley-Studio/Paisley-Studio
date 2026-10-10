@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Class — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{height:100%; width:100%;}
+  body{font-family:var(--font); background:#0f1a17; color:var(--ink); overflow:hidden;}
+
+  /* Loading gate */
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:50; flex-direction:column; gap:1rem;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #gate p{color:var(--muted); font-size:.9rem;}
+  body.ready #gate{display:none;}
+
+  /* Center-card screens */
+  .center-card{
+    max-width:460px; margin:0 auto; background:var(--surface); border-radius:20px; padding:2.4rem 2.2rem;
+    text-align:center; box-shadow:0 30px 70px rgba(0,0,0,.3);
+  }
+  .center-wrap{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1.4rem; background:linear-gradient(160deg,var(--paper) 0%, var(--sage) 100%); z-index:30;}
+  .center-card i{font-size:2.2rem; color:var(--brand-deep); margin-bottom:1rem;}
+  .center-card h1{color:var(--brand-deep); font-size:1.25rem; margin-bottom:.6rem;}
+  .center-card p{color:var(--muted); font-size:.88rem; line-height:1.6; margin-bottom:1.4rem;}
+  .center-card .btn{
+    display:inline-flex; align-items:center; gap:.5rem; padding:.8rem 1.6rem; border-radius:11px; border:none;
+    background:var(--brand-deep); color:#fff; font-family:var(--font); font-weight:800; font-size:.88rem; cursor:pointer; text-decoration:none;
+  }
+  .center-card .btn:hover{background:var(--brand);}
+  .ended-icon{color:var(--muted) !important;}
+
+  .hidden{display:none !important;}
+
+  /* The meeting container is the ONLY thing on screen when live.
+     rtk-meeting renders its own header, grid, control bar, sidebar, chat,
+     polls, screen share, hand raise, reactions — everything. */
+  #meeting-container{
+    position:fixed;
+    inset:0;
+    background:#0f1a17;
+    z-index:10;
+  }
+
+  /* Responsive tweaks for rtk-meeting on small screens */
+  @media (max-width: 640px){
+    rtk-meeting {
+      --rtk-spacing-4: 8px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate"><div class="spin"></div><p>Connecting to your class…</p></div>
+
+<!-- SCHEDULED / NOT YET LIVE -->
+<div class="center-wrap hidden" id="waitingScreen">
+  <div class="center-card">
+    <i class="fas fa-clock"></i>
+    <h1 id="waitingTitle">This class hasn't started yet</h1>
+    <p id="waitingMsg">Your tutor hasn't started this live class yet. Come back closer to the scheduled time, or check your dashboard — you'll see a Join button the moment it goes live.</p>
+    <a class="btn" id="waitingBack" href="student/dashboard.html"><i class="fas fa-arrow-left"></i> Back to dashboard</a>
+  </div>
+</div>
+
+<!-- ENDED -->
+<div class="center-wrap hidden" id="endedScreen">
+  <div class="center-card">
+    <i class="fas fa-circle-check ended-icon"></i>
+    <h1>This class has ended</h1>
+    <p>Thanks for joining. Check Notes &amp; Materials or your Timetable for what's next.</p>
+    <a class="btn" id="endedBack" href="student/dashboard.html"><i class="fas fa-arrow-left"></i> Back to dashboard</a>
+  </div>
+</div>
+
+<!-- NOT FOUND -->
+<div class="center-wrap hidden" id="blockedScreen">
+  <div class="center-card">
+    <i class="fas fa-triangle-exclamation" style="color:var(--error);"></i>
+    <h1 id="blockedTitle">Class not found</h1>
+    <p id="blockedMsg">This live class link isn't valid, or you may not have access to it.</p>
+    <a class="btn" id="blockedBack" href="student/dashboard.html"><i class="fas fa-arrow-left"></i> Back to dashboard</a>
+  </div>
+</div>
+
+<!-- LIVE — rtk-meeting owns this entirely -->
+<div id="meeting-container" class="hidden"></div>
+
+<!-- ===== Cloudflare RealtimeKit UI Kit ===== -->
+<script type="module">
+  import { defineCustomElements } from 'https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui@latest/loader/index.es2017.js';
+  defineCustomElements();
+</script>
+<script type="module">
+  import HandRaise from 'https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui-addons@latest/hand-raise/index.js';
+  import ReactionsManagerAddon from 'https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui-addons@latest/reactions-manager/index.js';
+  window.RTKAddons = { HandRaise, ReactionsManagerAddon };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit@latest/dist/browser.js"></script>
+
+<!-- ===== FIREBASE ===== -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="lms-helpers.js"></script>
+<script src="js/live-class-integrity.js"></script>
+<script>
+const auth = firebase.auth();
+const params = new URLSearchParams(location.search);
+const classId = params.get('id');
+
+const WORKER_URL = 'https://paisley-realtime-worker.manchamdevelopers.workers.dev';
+
+let currentUser = null;
+let liveClass = null;
+let meeting = null;
+let isHost = false;
+let unsub = null;
+let integrityMonitor = null;
+let integrityStarting = false;
+let meetingJoining = false;
+
+function escapeHtml(str){
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showScreen(id){
+  ['waitingScreen','endedScreen','blockedScreen','meeting-container'].forEach(s=>{
+    const el = document.getElementById(s);
+    if(el) el.classList.toggle('hidden', s !== id);
+  });
+  document.body.classList.add('ready');
+}
+
+function blocked(title, msg){
+  document.getElementById('blockedTitle').textContent = title;
+  document.getElementById('blockedMsg').textContent = msg;
+  showScreen('blockedScreen');
+}
+
+/* =========================================================
+   AUTH + CLASS WATCH
+========================================================= */
+auth.onAuthStateChanged(user=>{
+  if(!user){ window.location.href = 'student/index.html'; return; }
+  currentUser = user;
+  if(!classId){ blocked('No class selected', 'This link is missing its class ID.'); return; }
+  watchClass();
+});
+
+function watchClass(){
+  if(unsub) unsub();
+  unsub = db.collection('liveClasses').doc(classId).onSnapshot(doc=>{
+    if(!doc.exists){ blocked('Class not found', 'This live class no longer exists.'); return; }
+    liveClass = { id: doc.id, ...doc.data() };
+    isHost = (liveClass.hostId === currentUser.uid);
+    render();
+  }, err=>{
+    console.error(err);
+    blocked('Could not load this class', 'Please check your connection and try again.');
+  });
+}
+
+function render(){
+  if(liveClass.status === 'Ended'){
+    teardown();
+    showScreen('endedScreen');
+    return;
+  }
+  if(liveClass.status === 'Scheduled'){
+    teardown();
+    document.getElementById('waitingTitle').textContent = liveClass.title ? ('"' + liveClass.title + '" hasn\u2019t started yet') : 'This class hasn\u2019t started yet';
+    showScreen('waitingScreen');
+    return;
+  }
+
+  // status === 'Live'
+  showScreen('meeting-container');
+  if(!meeting && !meetingJoining) joinMeeting();
+
+  if(!isHost && !integrityMonitor && !integrityStarting){
+    integrityStarting = true;
+    LiveClassIntegrity.start(currentUser.uid, classId, liveClass.title || 'Live Class')
+      .then(monitor => { integrityMonitor = monitor; })
+      .catch(err => console.error('Could not start integrity monitoring:', err));
+  }
+}
+
+function teardown(){
+  if(meeting){ try { meeting.leave(); } catch(e){} meeting = null; }
+  if(integrityMonitor){ integrityMonitor.stop('class_ended'); integrityMonitor = null; }
+}
+
+/* =========================================================
+   JOIN — fetch token, init client, hand to rtk-meeting
+   rtk-meeting handles: join, grid, controlbar, sidebar,
+   chat, polls, screenshare, participants, active speaker,
+   hand raise, reactions — everything.
+========================================================= */
+async function joinMeeting(){
+  meetingJoining = true;
+  try {
+    if(!liveClass.meetingId){
+      blocked('Class not ready', 'This class has no meeting yet. Ask your tutor to start it again.');
+      meetingJoining = false;
+      return;
+    }
+
+    const displayName =
+      (currentUser.displayName && currentUser.displayName.trim()) ||
+      (isHost ? (liveClass.hostName || '') : '') ||
+      currentUser.email ||
+      'Guest';
+
+    const presetName = isHost ? 'group_call_host' : 'group_call_participant';
+
+    const tokenRes = await fetch(WORKER_URL + '/api/get-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        meetingId: liveClass.meetingId,
+        userName: displayName,
+        presetName: presetName,
+        customParticipantId: currentUser.uid
+      })
+    });
+
+    if(!tokenRes.ok){
+      const t = await tokenRes.text();
+      throw new Error('Token request failed (' + tokenRes.status + '): ' + t);
+    }
+
+    const tokenData = await tokenRes.json();
+    if(!tokenData.authToken){
+      throw new Error('Worker did not return an authToken.');
+    }
+
+    // RealtimeKit core client
+    // eslint-disable-next-line no-undef
+    meeting = await RealtimeKitClient.init({
+      authToken: tokenData.authToken,
+      defaults: { audio: true, video: true }
+    });
+
+    // Initialize addons BEFORE handing meeting to rtk-meeting.
+    // These register hand-raise and reactions UI into the meeting.
+    try {
+      const { HandRaise, ReactionsManagerAddon } = window.RTKAddons;
+      if (HandRaise) {
+        await HandRaise.init({
+          meeting,
+          canRaiseHand: true,
+          canManageRaisedHand: true
+        });
+      }
+      if (ReactionsManagerAddon) {
+        await ReactionsManagerAddon.init({
+          meeting,
+          reactions: [
+            { emoji: "🔥", label: "fire" },
+            { emoji: "👍", label: "thumbs up" },
+            { emoji: "❤️", label: "heart" },
+            { emoji: "😂", label: "laugh" },
+            { emoji: "👏", label: "clap" },
+            { emoji: "🎉", label: "celebrate" }
+          ],
+          canSendReactions: true
+        });
+      }
+    } catch(addonErr) {
+      console.error('Addon init failed (non-fatal):', addonErr);
+    }
+
+    // Do NOT call meeting.join() ourselves — rtk-meeting handles joining,
+    // the setup/preview screen, and the full meeting UI lifecycle.
+    const container = document.getElementById('meeting-container');
+    container.innerHTML = '<rtk-meeting></rtk-meeting>';
+    const rtkEl = container.querySelector('rtk-meeting');
+    rtkEl.meeting = meeting;
+    rtkEl.showSetupScreen = true;
+
+    // When the user leaves via rtk-meeting's own Leave button
+    meeting.self.on('roomLeft', () => {
+      if(integrityMonitor){ integrityMonitor.stop('left_call'); }
+      window.location.href = 'student/dashboard.html';
+    });
+
+    meetingJoining = false;
+  } catch(err){
+    console.error('Could not join meeting:', err);
+    meetingJoining = false;
+    blocked('Could not join the class', err.message || 'Please try again.');
+  }
+}
+
+/* =========================================================
+   CLEANUP
+========================================================= */
+window.addEventListener('beforeunload', ()=>{
+  if(meeting){ try { meeting.leave(); } catch(e){} }
+  if(integrityMonitor) integrityMonitor.stop('page_unload');
+});
+</script>
+</body>
+</html>

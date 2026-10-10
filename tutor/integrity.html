@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Exam Integrity — Tutor Portal</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C; --warn:#E8A33D;
+    --sidebar-w:240px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:1rem; z-index:50;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #gate p{color:var(--muted); font-size:.9rem;}
+  body.ready #gate{display:none;}
+
+  #shell{display:flex; min-height:100vh;}
+  .sidebar{width:var(--sidebar-w); background:var(--brand-deep); flex-shrink:0; display:flex; flex-direction:column; position:fixed; top:0; bottom:0; left:0; z-index:20; transition:transform .3s;}
+  .sidebar-brand{display:flex; align-items:center; gap:.6rem; padding:1.3rem 1.1rem; border-bottom:1px solid rgba(255,255,255,.08);}
+  .sidebar-brand img{width:38px; height:38px; border-radius:9px;}
+  .sidebar-brand .name{color:#fff; font-weight:800; font-size:.95rem; line-height:1.2;}
+  .sidebar-brand .name span{display:block; font-size:.6rem; color:var(--brand-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .sidebar-nav{padding:1rem .8rem; flex:1; overflow-y:auto;}
+  .nav-item{display:flex; align-items:center; gap:.7rem; padding:.68rem .8rem; border-radius:10px; color:rgba(255,255,255,.72); font-weight:700; font-size:.84rem; cursor:pointer; margin-bottom:.2rem; border:none; background:none; width:100%; text-align:left; font-family:var(--font); text-decoration:none;}
+  .nav-item i{width:16px; text-align:center;}
+  .nav-item:hover{background:rgba(255,255,255,.05); color:#fff;}
+  .nav-item.active{background:rgba(85,191,179,.16); color:#fff;}
+  .sidebar-foot{padding:1rem .8rem; border-top:1px solid rgba(255,255,255,.08);}
+  .tutorchip{display:flex; align-items:center; gap:.6rem; margin-bottom:.7rem;}
+  .avatar{width:34px; height:34px; border-radius:50%; background:var(--brand); color:#0f1a14; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.78rem; flex-shrink:0;}
+  .tutorchip .who{color:#fff; font-size:.8rem; font-weight:700; line-height:1.2;}
+  .tutorchip .who span{display:block; font-size:.66rem; color:var(--brand-soft); font-weight:600;}
+  .signout{width:100%; padding:.55rem 0; border-radius:9px; border:1px solid rgba(255,255,255,.14); background:none; color:rgba(255,255,255,.75); font-family:var(--font); font-weight:700; font-size:.78rem; cursor:pointer;}
+  .signout:hover{color:#fff; background:rgba(231,76,60,.18);}
+
+  .main{margin-left:var(--sidebar-w); flex:1; min-width:0;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:1.1rem 1.8rem; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10;}
+  .topbar-title{font-size:1.15rem; font-weight:800; color:var(--brand-deep);}
+  .topbar-sub{font-size:.78rem; color:var(--muted);}
+  .menu-toggle{display:none; background:none; border:none; font-size:1.1rem; color:var(--brand-deep); cursor:pointer;}
+  .content{padding:1.8rem;}
+
+  .stats-row{display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.6rem;}
+  .stat-card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.2rem 1.3rem;}
+  .stat-card .icon-wrap{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:.7rem; font-size:.95rem;}
+  .ic-1{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .ic-2{background:rgba(232,163,61,.16); color:#96690f;}
+  .ic-3{background:rgba(46,184,114,.14); color:#1d8b57;}
+  .ic-4{background:rgba(231,76,60,.1); color:#b8362a;}
+  .stat-card .num{font-size:1.6rem; font-weight:800; color:var(--brand-deep); line-height:1;}
+  .stat-card .lbl{font-size:.76rem; color:var(--muted); margin-top:.3rem;}
+
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.4rem;}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:.6rem;}
+  .panel-head h3{font-size:1.02rem; color:var(--brand-deep); margin:0;}
+  .panel-head .sub{font-size:.76rem; color:var(--muted); margin-top:.1rem;}
+  .panel-head .back-link{font-size:.78rem; color:var(--brand-deep); text-decoration:none; font-weight:700; cursor:pointer;}
+
+  .table-toolbar{display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; margin-bottom:1rem;}
+  .search-box{display:flex; align-items:center; gap:.5rem; padding:.5rem .9rem; border:1.5px solid var(--line); border-radius:10px; background:var(--paper);}
+  .search-box input{border:none; outline:none; background:none; font-family:var(--font); font-size:.85rem; min-width:220px;}
+  .filter-chips{display:flex; gap:.4rem; flex-wrap:wrap;}
+  .chip-btn{padding:.38rem .85rem; border-radius:99px; border:1.5px solid var(--line); background:var(--surface); color:var(--muted); font-family:var(--font); font-weight:700; font-size:.75rem; cursor:pointer;}
+  .chip-btn:hover{border-color:var(--brand); color:var(--brand-deep);}
+  .chip-btn.active{background:var(--brand); border-color:var(--brand); color:#fff;}
+
+  .table-wrap{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; font-size:.83rem;}
+  thead th{text-align:left; padding:.6rem .5rem; color:var(--muted); font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; border-bottom:1.5px solid var(--line); white-space:nowrap;}
+  tbody td{padding:.65rem .5rem; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  .row-click{cursor:pointer;}
+  .row-click:hover{background:var(--sage);}
+  .cell-name{font-weight:700; color:var(--ink);}
+  .cell-sub{display:block; font-size:.72rem; color:var(--muted); margin-top:.15rem;}
+  .badge{display:inline-flex; align-items:center; gap:.35rem; padding:.22rem .6rem; border-radius:99px; font-size:.7rem; font-weight:800;}
+  .b-active{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .b-warn{background:rgba(232,163,61,.14); color:#96690f;}
+  .b-final{background:rgba(231,76,60,.14); color:#b8362a;}
+  .b-suspended{background:rgba(231,76,60,.24); color:#8c1e1e;}
+  .b-plain{background:var(--sage); color:var(--brand-deep); font-weight:700;}
+  .b-progress{background:rgba(74,144,217,.12); color:#2b6cad;}
+
+  .vbar{display:flex; align-items:center; gap:.5rem; min-width:130px;}
+  .vbar-track{flex:1; height:6px; background:var(--sage); border-radius:99px; overflow:hidden;}
+  .vbar-fill{height:100%; background:var(--brand); width:0%; transition:width .3s;}
+  .vbar-fill.warn{background:var(--warn);}
+  .vbar-fill.final{background:var(--error);}
+  .vbar-num{font-size:.78rem; font-weight:800; color:var(--ink); flex-shrink:0;}
+
+  .empty{padding:2.4rem 1rem; text-align:center; color:var(--muted); font-size:.85rem;}
+  .empty i{font-size:2rem; color:var(--brand-soft); display:block; margin-bottom:.6rem;}
+
+  .violation-item{display:flex; gap:.9rem; padding:.85rem 0; border-bottom:1px solid var(--line-soft);}
+  .violation-item:last-child{border-bottom:none;}
+  .violation-icon{width:34px; height:34px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:.82rem; background:rgba(232,163,61,.14); color:#96690f;}
+  .violation-icon.suspended{background:rgba(231,76,60,.16); color:#b8362a;}
+  .violation-body{flex:1; min-width:0;}
+  .violation-type{font-weight:800; font-size:.82rem; color:var(--ink); text-transform:uppercase; letter-spacing:.03em;}
+  .violation-desc{font-size:.82rem; color:var(--muted); margin-top:.15rem; line-height:1.5;}
+  .violation-meta{font-size:.72rem; color:var(--muted); margin-top:.25rem;}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,26,20,.5); display:none; align-items:center; justify-content:center; z-index:60; padding:1rem;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface); border-radius:18px; max-width:720px; width:100%; max-height:88vh; overflow-y:auto;}
+  .modal-head{display:flex; align-items:center; justify-content:space-between; padding:1.2rem 1.4rem; border-bottom:1px solid var(--line);}
+  .modal-head h3{margin:0; font-size:1.02rem; color:var(--brand-deep);}
+  .modal-close{background:none; border:none; font-size:1rem; color:var(--muted); cursor:pointer;}
+  .modal-body{padding:1.3rem 1.4rem;}
+  .modal-foot{display:flex; justify-content:flex-end; gap:.6rem; padding:1rem 1.4rem; border-top:1px solid var(--line); flex-wrap:wrap;}
+
+  .detail-row{display:flex; gap:1rem; padding:.5rem 0; border-bottom:1px solid var(--line-soft); font-size:.84rem;}
+  .detail-row:last-child{border-bottom:none;}
+  .detail-row .k{min-width:150px; color:var(--muted); font-weight:700; font-size:.76rem;}
+  .detail-row .v{flex:1; word-break:break-word;}
+
+  .monitor-banner{background:var(--sage); border-radius:12px; padding:.9rem 1.1rem; font-size:.82rem; color:var(--muted); line-height:1.55; margin-bottom:1.4rem; display:flex; gap:.6rem;}
+  .monitor-banner i{color:var(--brand-deep); margin-top:.15rem;}
+  .monitor-banner strong{color:var(--brand-deep);}
+
+  .scope-note{background:rgba(155,89,182,.08); border:1px solid rgba(155,89,182,.25); color:#5b2c73; border-radius:12px; padding:.85rem 1.1rem; font-size:.8rem; line-height:1.55; margin-bottom:1.4rem; display:flex; gap:.6rem;}
+  .scope-note i{color:#7c3f96; margin-top:.15rem;}
+
+  .hidden{display:none !important;}
+
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%);}
+    .sidebar.open{transform:translateX(0);}
+    .main{margin-left:0;}
+    .menu-toggle{display:block;}
+    .stats-row{grid-template-columns:repeat(2,1fr);}
+  }
+</style>
+</head>
+<body>
+
+<div id="gate"><div class="spin"></div><p>Loading exam integrity…</p></div>
+
+<div id="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" />
+      <div class="name">Paisley Studio<span>Tutor Portal</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="index.html"><i class="fas fa-chart-pie"></i> Back to Dashboard</a>
+      <a class="nav-item active" href="integrity.html"><i class="fas fa-shield-halved"></i> Exam Integrity</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="tutorchip">
+        <div class="avatar" id="sideAvatar">??</div>
+        <div class="who" id="sideWho">Loading…<span id="sideRole">Tutor</span></div>
+      </div>
+      <button class="signout" id="signOutBtn" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex; align-items:center; gap:.8rem;">
+        <button class="menu-toggle" id="menuToggle" type="button"><i class="fas fa-bars"></i></button>
+        <div>
+          <div class="topbar-title" id="pageTitle">Exam Integrity</div>
+          <div class="topbar-sub" id="pageSub">Monitoring for your exams</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content" id="content">
+
+      <div class="scope-note">
+        <i class="fas fa-user-shield"></i>
+        <div>
+          You are seeing exams <strong>you posted</strong> and exams the Studio Desk has <strong>granted you grading rights</strong> on.
+          Exams by other tutors are not visible here. Nothing on this page is editable — it is a read-only record.
+        </div>
+      </div>
+
+      <div class="monitor-banner">
+        <i class="fas fa-circle-info"></i>
+        <div>
+          <strong>What this page shows.</strong> Every attempt on your exams, its violation count, and the recording of each event.
+          Violations are recorded when a student leaves the exam tab, exits fullscreen, or exceeds the upload grace period.
+          Blocked actions like right-click and Ctrl+C are disabled but do not count as violations.
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="icon-wrap ic-1"><i class="fas fa-file-pen"></i></div><div class="num" id="statExams">0</div><div class="lbl">Your exams with attempts</div></div>
+        <div class="stat-card"><div class="icon-wrap ic-3"><i class="fas fa-user-check"></i></div><div class="num" id="statClean">0</div><div class="lbl">Clean attempts</div></div>
+        <div class="stat-card"><div class="icon-wrap ic-2"><i class="fas fa-triangle-exclamation"></i></div><div class="num" id="statFlagged">0</div><div class="lbl">Flagged attempts</div></div>
+        <div class="stat-card"><div class="icon-wrap ic-4"><i class="fas fa-ban"></i></div><div class="num" id="statSuspended">0</div><div class="lbl">Suspended</div></div>
+      </div>
+
+      <div class="panel" id="panelExams">
+        <div class="panel-head">
+          <div><h3>Your exams</h3><div class="sub">Click an exam to see its students</div></div>
+          <div class="search-box"><i class="fas fa-search" style="color:var(--muted)"></i><input id="examSearch" placeholder="Search exams by title or subject…" /></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Exam</th><th>Subject</th><th>Source</th><th>Attempts</th><th>Flagged</th><th>Suspended</th><th></th></tr></thead>
+            <tbody id="examTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel hidden" id="panelStudents">
+        <div class="panel-head">
+          <div>
+            <div style="font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-weight:700; margin-bottom:.15rem;">
+              <a class="back-link" onclick="showExams()"><i class="fas fa-arrow-left"></i> All exams</a>
+            </div>
+            <h3 id="studentsPanelTitle">Exam</h3>
+            <div class="sub" id="studentsPanelSub"></div>
+          </div>
+          <div class="search-box"><i class="fas fa-search" style="color:var(--muted)"></i><input id="studentSearch" placeholder="Search students by name or email…" /></div>
+        </div>
+        <div class="filter-chips" style="margin-bottom:1rem;">
+          <button class="chip-btn active" data-sfilter="all" onclick="setStudentFilter(this,'all')">All</button>
+          <button class="chip-btn" data-sfilter="in_progress" onclick="setStudentFilter(this,'in_progress')">In progress</button>
+          <button class="chip-btn" data-sfilter="submitted" onclick="setStudentFilter(this,'submitted')">Submitted</button>
+          <button class="chip-btn" data-sfilter="flagged" onclick="setStudentFilter(this,'flagged')">Flagged</button>
+          <button class="chip-btn" data-sfilter="suspended" onclick="setStudentFilter(this,'suspended')">Suspended</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th>Key Stage</th><th>Started</th><th>Violations</th><th>Status</th><th></th></tr></thead>
+            <tbody id="studentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Attempt details</h3>
+      <button class="modal-close" id="modalClose" type="button" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script>
+const auth = firebase.auth();
+
+let tutor = null;
+let myGrantedExamIds = new Set();
+let listenersStarted = false;
+let DB = { attempts: [], exams: [], students: [] };
+let currentExamId = null;
+let studentFilter = 'all';
+let examSearchTerm = '';
+let studentSearchTerm = '';
+
+/* ---------- AUTH GATE ---------- */
+auth.onAuthStateChanged(function(user){
+  if(!user){ window.location.href = 'login.html'; return; }
+  getTutorAccount(user.uid).then(doc=>{
+    if(!doc.exists){
+      alert('This account is not a tutor account.');
+      auth.signOut().then(()=>window.location.href='login.html');
+      return;
+    }
+    tutor = { id: doc.id, ...doc.data() };
+    if(tutor.status === 'Suspended'){
+      alert('This tutor account is suspended. Please contact the Studio Desk.');
+      auth.signOut().then(()=>window.location.href='login.html');
+      return;
+    }
+    renderIdentity();
+    document.body.classList.add('ready');
+    if(!listenersStarted){ listenersStarted = true; initFirestore(); }
+  }).catch(err=>{
+    console.error(err);
+    alert('Could not load your tutor profile.');
+    auth.signOut().then(()=>window.location.href='login.html');
+  });
+});
+
+function renderIdentity(){
+  document.getElementById('sideAvatar').textContent = lmsInitials(tutor.name);
+  document.getElementById('sideWho').innerHTML = escapeHtml(tutor.name||'Tutor') + '<span>' + escapeHtml(lmzSubjectLabels(tutor.subjects).join(', ') || 'Tutor') + '</span>';
+}
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{
+  if(!confirm('Sign out of the Tutor Portal?')) return;
+  auth.signOut().then(()=>window.location.href='login.html');
+});
+document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
+
+/* ---------- UTILITIES ---------- */
+function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toDate(ts){ if(!ts) return null; if(typeof ts.toDate === 'function') return ts.toDate(); return new Date(ts); }
+function fmtDate(d){ if(!d) return '—'; return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); }
+function fmtDateTime(d){ if(!d) return '—'; return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+function fmtMs(ms){
+  if(!ms) return '—';
+  const s = Math.floor(ms / 1000);
+  if(s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + 'm ' + r + 's';
+}
+function shortKS(ks){ return (ks||'').replace(/\s*\(.*/, ''); }
+
+/* ---------- FIRESTORE ---------- */
+function initFirestore(){
+  // Active grants for this tutor (so we can include granted exams).
+  db.collection('gradingGrants').where('tutorId','==',tutor.id).onSnapshot(snap=>{
+    myGrantedExamIds = new Set(
+      snap.docs
+        .map(d=>({ id:d.id, ...d.data() }))
+        .filter(g=>!g.revoked && g.taskType === 'exam')
+        .map(g=>g.taskId)
+    );
+    renderAll();
+  }, err=>{ console.error('grants listener:', err); });
+
+  // Exams — we filter client-side to mine + granted.
+  db.collection('exams').onSnapshot(snap=>{
+    DB.exams = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    renderAll();
+  }, err=>{ console.error('exams listener:', err); });
+
+  // Attempts — filter to my exams below.
+  db.collection('examAttempts').onSnapshot(snap=>{
+    DB.attempts = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    renderAll();
+  }, err=>{ console.error('attempts listener:', err); });
+
+  // Students — used to resolve names/emails/Key Stages.
+  db.collection('students').onSnapshot(snap=>{
+    DB.students = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    renderAll();
+  }, err=>{ console.error('students listener:', err); });
+}
+
+document.getElementById('examSearch').addEventListener('input', e=>{
+  examSearchTerm = e.target.value.trim().toLowerCase();
+  renderExamsTable();
+});
+document.getElementById('studentSearch').addEventListener('input', e=>{
+  studentSearchTerm = e.target.value.trim().toLowerCase();
+  renderStudentsTable();
+});
+
+/* ---------- SCOPE ---------- */
+function myVisibleExamIds(){
+  // Exams I authored (tutorId === me) OR exams the admin has granted me.
+  const authored = DB.exams.filter(e=> e.tutorId === tutor.id).map(e=>e.id);
+  const granted = Array.from(myGrantedExamIds);
+  return new Set([...authored, ...granted]);
+}
+function isAuthoredByMe(examId){
+  const e = DB.exams.find(x=>x.id === examId);
+  return !!(e && e.tutorId === tutor.id);
+}
+
+/* ---------- RENDER ---------- */
+function renderAll(){
+  renderStats();
+  renderExamsTable();
+  if(currentExamId) renderStudentsTable();
+}
+
+function renderStats(){
+  const visible = myVisibleExamIds();
+  const attempts = DB.attempts.filter(a=> visible.has(a.examId));
+  const examsWithAttempts = new Set(attempts.map(a=>a.examId)).size;
+  const clean = attempts.filter(a=>((a.integrity && a.integrity.violationCount) || 0) === 0).length;
+  const flagged = attempts.filter(a=>((a.integrity && a.integrity.violationCount) || 0) > 0).length;
+  const suspended = attempts.filter(a=>(a.integrity && a.integrity.status === 'suspended') || a.status === 'Suspended').length;
+  document.getElementById('statExams').textContent = examsWithAttempts;
+  document.getElementById('statClean').textContent = clean;
+  document.getElementById('statFlagged').textContent = flagged;
+  document.getElementById('statSuspended').textContent = suspended;
+}
+
+function renderExamsTable(){
+  const tbody = document.getElementById('examTableBody');
+  const visible = myVisibleExamIds();
+
+  const groups = {};
+  DB.attempts.forEach(a=>{
+    if(!a.examId) return;
+    if(!visible.has(a.examId)) return;
+    if(!groups[a.examId]) groups[a.examId] = { examId: a.examId, attempts: [] };
+    groups[a.examId].attempts.push(a);
+  });
+
+  let rows = Object.values(groups).map(g=>{
+    const exam = DB.exams.find(e=>e.id === g.examId);
+    const flagged = g.attempts.filter(a=>((a.integrity && a.integrity.violationCount) || 0) > 0).length;
+    const susp = g.attempts.filter(a=>(a.integrity && a.integrity.status === 'suspended') || a.status === 'Suspended').length;
+    const authored = exam && exam.tutorId === tutor.id;
+    return {
+      examId: g.examId,
+      title: exam ? (exam.title || '(untitled)') : '(deleted exam)',
+      subject: exam ? (exam.subject || '') : '',
+      source: authored ? 'You posted' : 'Granted by Studio Desk',
+      attempts: g.attempts.length,
+      flagged: flagged,
+      suspended: susp,
+      date: toDate(exam && exam.createdAt)
+    };
+  });
+
+  rows.sort((a,b)=> (b.date||0) - (a.date||0));
+
+  if(examSearchTerm){
+    rows = rows.filter(r=>
+      (r.title || '').toLowerCase().includes(examSearchTerm) ||
+      (r.subject || '').toLowerCase().includes(examSearchTerm)
+    );
+  }
+
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><i class="fas fa-file-pen"></i>No attempts yet on your exams. They appear here the moment a student starts one.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r=>`<tr class="row-click" onclick="showExam('${r.examId}')">
+    <td><div class="cell-name">${escapeHtml(r.title)}</div><div class="cell-sub">${r.date ? fmtDate(r.date) : ''}</div></td>
+    <td>${escapeHtml(r.subject || '—')}</td>
+    <td><span class="badge ${r.source.startsWith('You') ? 'b-active' : 'b-plain'}">${escapeHtml(r.source)}</span></td>
+    <td>${r.attempts}</td>
+    <td>${r.flagged > 0 ? '<span class="badge b-warn"><i class="fas fa-triangle-exclamation"></i> ' + r.flagged + '</span>' : '<span class="badge b-plain">0</span>'}</td>
+    <td>${r.suspended > 0 ? '<span class="badge b-suspended"><i class="fas fa-ban"></i> ' + r.suspended + '</span>' : '<span class="badge b-plain">0</span>'}</td>
+    <td><button class="mini" style="background:none; border:none; color:var(--brand-deep); cursor:pointer;"><i class="fas fa-chevron-right"></i></button></td>
+  </tr>`).join('');
+}
+
+function renderStudentsTable(){
+  const tbody = document.getElementById('studentTableBody');
+  if(!currentExamId){ tbody.innerHTML = ''; return; }
+
+  const visible = myVisibleExamIds();
+  if(!visible.has(currentExamId)){
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><i class="fas fa-lock"></i>You do not have access to this exam.</div></td></tr>';
+    return;
+  }
+
+  let attempts = DB.attempts.filter(a=>a.examId === currentExamId);
+
+  if(studentFilter === 'in_progress'){
+    attempts = attempts.filter(a=>a.status === 'In progress');
+  } else if(studentFilter === 'submitted'){
+    attempts = attempts.filter(a=>a.status && a.status !== 'In progress' && a.status !== 'Suspended');
+  } else if(studentFilter === 'flagged'){
+    attempts = attempts.filter(a=>((a.integrity && a.integrity.violationCount) || 0) > 0);
+  } else if(studentFilter === 'suspended'){
+    attempts = attempts.filter(a=>(a.integrity && a.integrity.status === 'suspended') || a.status === 'Suspended');
+  }
+
+  if(studentSearchTerm){
+    attempts = attempts.filter(a=>{
+      const s = DB.students.find(x=>x.id === a.studentId);
+      const name = (a.studentName || (s && s.name) || '').toLowerCase();
+      const email = (a.studentEmail || (s && s.email) || '').toLowerCase();
+      return name.includes(studentSearchTerm) || email.includes(studentSearchTerm);
+    });
+  }
+
+  attempts.sort((a,b)=>{
+    const av = a.startedAt && a.startedAt.seconds ? a.startedAt.seconds : 0;
+    const bv = b.startedAt && b.startedAt.seconds ? b.startedAt.seconds : 0;
+    return bv - av;
+  });
+
+  if(!attempts.length){
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><i class="fas fa-inbox"></i>No attempts match this filter.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = attempts.map(a=>{
+    const s = DB.students.find(x=>x.id === a.studentId);
+    const name = a.studentName || (s && s.name) || '(unknown student)';
+    const email = a.studentEmail || (s && s.email) || '';
+    const ks = a.keyStage || (s && s.keyStage) || '';
+    const count = (a.integrity && a.integrity.violationCount) || 0;
+    const max = (a.integrity && a.integrity.maxViolations) || 5;
+    const susp = (a.integrity && a.integrity.status === 'suspended') || a.status === 'Suspended';
+
+    let statusPill;
+    if(susp) statusPill = '<span class="badge b-suspended"><i class="fas fa-ban"></i> Suspended</span>';
+    else if(a.status === 'In progress') statusPill = '<span class="badge b-progress">In progress</span>';
+    else if(a.status === 'Awaiting grading') statusPill = '<span class="badge b-warn">Awaiting grading</span>';
+    else if(a.status === 'Graded') statusPill = '<span class="badge b-active">Graded</span>';
+    else statusPill = '<span class="badge b-plain">' + escapeHtml(a.status || '—') + '</span>';
+
+    let barCls = 'vbar-fill';
+    if(count >= max - 1) barCls += ' final';
+    else if(count > 0) barCls += ' warn';
+
+    const startedAt = toDate(a.startedAt);
+
+    return `<tr class="row-click" onclick="openAttempt('${a.id}')">
+      <td><div class="cell-name">${escapeHtml(name)}</div><div class="cell-sub">${escapeHtml(email)}</div></td>
+      <td>${escapeHtml(shortKS(ks))}</td>
+      <td>${startedAt ? fmtDateTime(startedAt) : '—'}</td>
+      <td>
+        <div class="vbar">
+          <div class="vbar-track"><div class="${barCls}" style="width:${Math.min(100, (count/max)*100)}%"></div></div>
+          <span class="vbar-num">${count}/${max}</span>
+        </div>
+      </td>
+      <td>${statusPill}</td>
+      <td><button class="mini" style="background:none; border:none; color:var(--brand-deep); cursor:pointer;"><i class="fas fa-chevron-right"></i></button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------- NAVIGATION ---------- */
+window.showExam = function(examId){
+  if(!myVisibleExamIds().has(examId)){
+    alert('You do not have access to this exam.');
+    return;
+  }
+  currentExamId = examId;
+  const exam = DB.exams.find(e=>e.id === examId);
+  document.getElementById('studentsPanelTitle').textContent = exam ? (exam.title || '(untitled)') : '(deleted exam)';
+  const attempts = DB.attempts.filter(a=>a.examId === examId);
+  document.getElementById('studentsPanelSub').textContent = attempts.length + ' attempt' + (attempts.length===1?'':'s');
+  document.getElementById('panelExams').classList.add('hidden');
+  document.getElementById('panelStudents').classList.remove('hidden');
+  document.getElementById('pageTitle').textContent = exam ? (exam.title || 'Exam') : 'Exam';
+  document.getElementById('pageSub').textContent = 'Student attempts and their monitoring records';
+  studentFilter = 'all';
+  document.querySelectorAll('[data-sfilter]').forEach(b=>b.classList.toggle('active', b.dataset.sfilter === 'all'));
+  renderStudentsTable();
+};
+
+window.showExams = function(){
+  currentExamId = null;
+  document.getElementById('panelExams').classList.remove('hidden');
+  document.getElementById('panelStudents').classList.add('hidden');
+  document.getElementById('pageTitle').textContent = 'Exam Integrity';
+  document.getElementById('pageSub').textContent = 'Monitoring for your exams';
+};
+
+window.setStudentFilter = function(btn, filter){
+  studentFilter = filter;
+  document.querySelectorAll('[data-sfilter]').forEach(b=>b.classList.toggle('active', b === btn));
+  renderStudentsTable();
+};
+
+/* ---------- ATTEMPT MODAL ---------- */
+window.openAttempt = function(attemptId){
+  const a = DB.attempts.find(x=>x.id === attemptId);
+  if(!a) return;
+  if(!myVisibleExamIds().has(a.examId)){
+    alert('You do not have access to this attempt.');
+    return;
+  }
+  const s = DB.students.find(x=>x.id === a.studentId);
+  const exam = DB.exams.find(e=>e.id === a.examId);
+  const name = a.studentName || (s && s.name) || '(unknown)';
+  const email = a.studentEmail || (s && s.email) || '';
+  const count = (a.integrity && a.integrity.violationCount) || 0;
+  const max = (a.integrity && a.integrity.maxViolations) || 5;
+  const violations = (a.integrity && a.integrity.violations) || [];
+  const status = a.integrity && a.integrity.status === 'suspended' ? 'Suspended' : (a.status || '—');
+  const startedAt = toDate(a.startedAt);
+  const submittedAt = toDate(a.submittedAt);
+  const authored = isAuthoredByMe(a.examId);
+
+  const violationHtml = violations.length
+    ? violations.slice().reverse().map(v=>{
+        const d = new Date(v.at || 0);
+        const isSusp = v.type === 'suspended';
+        return `<div class="violation-item">
+          <div class="violation-icon ${isSusp?'suspended':''}"><i class="fas ${iconForViolation(v.type)}"></i></div>
+          <div class="violation-body">
+            <div class="violation-type">${escapeHtml((v.type || 'violation').replace(/_/g,' ').toUpperCase())}</div>
+            <div class="violation-desc">${escapeHtml(v.description || '')}</div>
+            <div class="violation-meta">${fmtDateTime(d)}${v.durationMs ? ' · away ' + fmtMs(v.durationMs) : ''}</div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div class="empty" style="padding:1.4rem;"><i class="fas fa-circle-check" style="color:var(--success);"></i>No violations recorded for this attempt.</div>';
+
+  const bodyHtml = `
+    <div class="detail-row"><span class="k">Student</span><span class="v">${escapeHtml(name)}</span></div>
+    <div class="detail-row"><span class="k">Email</span><span class="v">${escapeHtml(email || '—')}</span></div>
+    <div class="detail-row"><span class="k">Exam</span><span class="v">${escapeHtml(exam ? (exam.title||'') : '(deleted exam)')}</span></div>
+    <div class="detail-row"><span class="k">Source</span><span class="v">${authored ? 'You posted this exam' : 'Granted to you by the Studio Desk'}</span></div>
+    <div class="detail-row"><span class="k">Status</span><span class="v">${escapeHtml(status)}</span></div>
+    <div class="detail-row"><span class="k">Started</span><span class="v">${startedAt ? fmtDateTime(startedAt) : '—'}</span></div>
+    <div class="detail-row"><span class="k">Submitted</span><span class="v">${submittedAt ? fmtDateTime(submittedAt) : '—'}</span></div>
+    <div class="detail-row"><span class="k">Violations</span><span class="v"><strong>${count} / ${max}</strong></span></div>
+    <div style="margin-top:1.2rem;">
+      <div style="font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-weight:800; margin-bottom:.5rem;">Violation history</div>
+      ${violationHtml}
+    </div>
+  `;
+
+  document.getElementById('modalTitle').textContent = 'Attempt — ' + name;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalFoot').innerHTML = '<button style="padding:.6rem 1.1rem; border-radius:10px; border:1.5px solid var(--line); background:var(--surface); font-family:var(--font); font-weight:800; font-size:.82rem; cursor:pointer;" onclick="closeModal()">Close</button>';
+  document.getElementById('modalOverlay').classList.add('open');
+};
+
+function iconForViolation(type){
+  switch(type){
+    case 'tab_switch': return 'fa-window-restore';
+    case 'fullscreen_exit': return 'fa-expand';
+    case 'upload_grace_exceeded': return 'fa-file-arrow-up';
+    default: return 'fa-triangle-exclamation';
+  }
+}
+
+window.closeModal = function(){
+  document.getElementById('modalOverlay').classList.remove('open');
+};
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', e=>{
+  if(e.target === document.getElementById('modalOverlay')) closeModal();
+});
+</script>
+</body>
+</html>

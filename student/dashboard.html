@@ -1,0 +1,1753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Dashboard — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C; --warn:#E8A33D;
+    --sidebar-w:240px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:50; flex-direction:column; gap:1rem;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #gate p{color:var(--muted); font-size:.9rem;}
+  body.ready #gate{display:none;}
+
+  #pendingScreen{position:fixed; inset:0; background:var(--paper); display:none; align-items:center; justify-content:center; z-index:40; padding:2rem;}
+  body.pending #pendingScreen{display:flex;}
+  body.pending #shell{display:none;}
+  .pending-card{max-width:420px; background:var(--surface); border-radius:20px; padding:2.4rem 2rem; text-align:center; box-shadow:0 20px 60px rgba(36,95,90,.12); border:1px solid var(--line);}
+  .pending-card i{font-size:2.2rem; color:var(--gold); margin-bottom:1rem;}
+  .pending-card h2{color:var(--brand-deep); margin-bottom:.6rem;}
+  .pending-card p{color:var(--muted); font-size:.9rem; line-height:1.6; margin-bottom:1.4rem;}
+
+  #shell{display:flex; min-height:100vh;}
+  .sidebar{width:var(--sidebar-w); background:var(--brand-deep); flex-shrink:0; display:flex; flex-direction:column; position:fixed; top:0; bottom:0; left:0; z-index:20; transition:transform .3s;}
+  .sidebar-brand{display:flex; align-items:center; gap:.6rem; padding:1.3rem 1.1rem; border-bottom:1px solid rgba(255,255,255,.08); flex-shrink:0;}
+  .sidebar-brand img{width:38px; height:38px; border-radius:9px;}
+  .sidebar-brand .name{color:#fff; font-weight:800; font-size:.95rem; line-height:1.2;}
+  .sidebar-brand .name span{display:block; font-size:.6rem; color:var(--brand-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .sidebar-nav{padding:1rem .8rem; flex:1; overflow-y:auto; min-height:0;}
+  .nav-item{display:flex; align-items:center; gap:.7rem; padding:.68rem .8rem; border-radius:10px; color:rgba(255,255,255,.72); font-weight:700; font-size:.84rem; cursor:pointer; margin-bottom:.2rem; border:none; background:none; width:100%; text-align:left; font-family:var(--font);}
+  .nav-item i{width:16px; text-align:center;}
+  .nav-item:hover{background:rgba(255,255,255,.05); color:#fff;}
+  .nav-item.active{background:rgba(85,191,179,.16); color:#fff;}
+  .nav-badge{margin-left:auto; background:var(--brand); color:#04231f; font-size:.6rem; font-weight:800; padding:.1rem .4rem; border-radius:20px;}
+  .sidebar-foot{padding:1rem .8rem; border-top:1px solid rgba(255,255,255,.08); flex-shrink:0;}
+  .studentchip{display:flex; align-items:center; gap:.6rem; margin-bottom:.7rem;}
+  .avatar{width:34px; height:34px; border-radius:50%; background:var(--brand); color:#0f1a14; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.78rem; flex-shrink:0;}
+  .studentchip .who{color:#fff; font-size:.8rem; font-weight:700; line-height:1.2;}
+  .studentchip .who span{display:block; font-size:.66rem; color:var(--brand-soft); font-weight:600;}
+  .signout{width:100%; padding:.55rem 0; border-radius:9px; border:1px solid rgba(255,255,255,.14); background:none; color:rgba(255,255,255,.75); font-family:var(--font); font-weight:700; font-size:.78rem; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:.4rem;}
+  .signout:hover{color:#fff; background:rgba(231,76,60,.18);}
+
+  .main{margin-left:var(--sidebar-w); flex:1; min-width:0;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:1.1rem 1.8rem; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; gap:.8rem;}
+  .topbar-title{font-size:1.15rem; font-weight:800; color:var(--brand-deep);}
+  .topbar-sub{font-size:.78rem; color:var(--muted);}
+  .topbar-right{display:flex; align-items:center; gap:.8rem; flex-shrink:0;}
+  .menu-toggle{display:none; background:none; border:none; font-size:1.1rem; color:var(--brand-deep); cursor:pointer;}
+  .content{padding:1.8rem;}
+  .view{display:none;}
+  .view.active{display:block; animation:fadeIn .3s;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  .stats-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+    gap:1rem;
+    margin-bottom:1.6rem;
+  }
+  @media(min-width:1200px){
+    .stats-row{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  }
+  .stat-card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.2rem 1.3rem;}
+  .stat-card .icon-wrap{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:.7rem; font-size:.95rem;}
+  .ic-1{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .ic-2{background:rgba(245,200,66,.16); color:#9c7912;}
+  .ic-3{background:rgba(46,184,114,.14); color:#1d8b57;}
+  .ic-4{background:rgba(231,76,60,.1); color:#b8362a;}
+  .stat-card .num{font-size:1.6rem; font-weight:800; color:var(--brand-deep); line-height:1;}
+  .stat-card .lbl{font-size:.76rem; color:var(--muted); margin-top:.3rem;}
+  .stat-card .trend{font-size:.72rem; font-weight:700; margin-top:.4rem; display:flex; align-items:center; gap:.3rem;}
+  .trend.up{color:var(--success);} .trend.down{color:var(--error);} .trend.flat{color:var(--muted);}
+
+  .grid-2{display:grid; grid-template-columns:1.4fr 1fr; gap:1.2rem; margin-bottom:1.2rem;}
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.4rem;}
+  .panel + .panel{margin-top:1.2rem;}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; gap:1rem; flex-wrap:wrap;}
+  .panel-head h3{font-size:1rem; color:var(--brand-deep); margin:0;}
+  .panel-head .sub{font-size:.76rem; color:var(--muted); margin-top:.1rem;}
+  .chart-wrap{height:260px; position:relative;}
+  select.subject-filter{border:1.5px solid var(--line); border-radius:9px; padding:.4rem .7rem; font-family:var(--font); font-size:.78rem; color:var(--ink); background:var(--paper);}
+
+  .table-wrap{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; font-size:.83rem;}
+  thead th{text-align:left; padding:.6rem .5rem; color:var(--muted); font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; border-bottom:1.5px solid var(--line); white-space:nowrap;}
+  tbody td{padding:.65rem .5rem; border-bottom:1px solid var(--line-soft);}
+  tbody tr:last-child td{border-bottom:none;}
+  .pill{display:inline-flex; align-items:center; gap:.3rem; padding:.22rem .6rem; border-radius:99px; font-size:.7rem; font-weight:800;}
+  .pill.up{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .pill.down{background:rgba(231,76,60,.1); color:#b8362a;}
+  .pill.flat{background:var(--sage); color:var(--muted);}
+  .pill.pending{background:rgba(232,163,61,.14); color:#96690f;}
+  .pill.graded{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .pill.open{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .pill.answered{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .pill.exam{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .pill.homework{background:rgba(232,163,61,.14); color:#96690f;}
+  .empty-row{text-align:center; color:var(--muted); padding:1.6rem 0; font-size:.85rem;}
+
+  .item-list{display:flex; flex-direction:column; gap:.8rem;}
+  @media(min-width:1200px){
+    .item-list.grid-wide{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.9rem; }
+  }
+  .item-card{border:1px solid var(--line); border-radius:14px; padding:1rem 1.1rem; display:flex; align-items:flex-start; gap:.9rem;}
+  .item-card .ic{width:38px; height:38px; border-radius:10px; background:var(--sage); color:var(--brand-deep); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .item-card .body{flex:1; min-width:0;}
+  .item-card .title{font-weight:700; font-size:.9rem; color:var(--ink);}
+  .item-card .meta{font-size:.74rem; color:var(--muted); margin-top:.2rem;}
+  .item-card .actions{display:flex; gap:.5rem; margin-top:.7rem; flex-wrap:wrap;}
+  .btn-sm{padding:.42rem .85rem; border-radius:9px; font-size:.76rem; font-weight:700; border:1.5px solid var(--line); background:var(--surface); color:var(--brand-deep); cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:.35rem; font-family:var(--font);}
+  .btn-sm.primary{background:var(--brand-deep); color:#fff; border-color:var(--brand-deep);}
+  .btn-sm.primary:hover{background:var(--brand);}
+  .btn-sm:hover{border-color:var(--brand);}
+  .btn-sm.download-btn {
+    background: var(--brand-deep) !important;
+    color: #fff !important;
+    border-color: var(--brand-deep) !important;
+  }
+  .btn-sm.download-btn i { color: #fff !important; }
+  .btn-sm.download-btn:hover {
+    background: var(--brand) !important;
+    border-color: var(--brand) !important;
+  }
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,26,20,.5); display:none; align-items:center; justify-content:center; z-index:60; padding:1rem;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--surface); border-radius:18px; max-width:520px; width:100%; max-height:88vh; overflow-y:auto; padding:1.6rem;}
+  .modal h3{color:var(--brand-deep); margin-bottom:1rem;}
+  .field{margin-bottom:1rem;}
+  .field label{display:block; font-size:.76rem; font-weight:700; color:var(--brand-deep); margin-bottom:.35rem;}
+  .field input, .field textarea, .field select{width:100%; padding:.65rem .8rem; border:1.5px solid var(--line); border-radius:10px; font-family:var(--font); font-size:.85rem; background:var(--paper); color:var(--ink);}
+  .field textarea{resize:vertical; min-height:80px;}
+  .modal-close{float:right; background:none; border:none; font-size:1rem; color:var(--muted); cursor:pointer;}
+  .field-readonly{background:var(--sage); padding:.6rem .8rem; border-radius:10px; font-size:.84rem; font-weight:700; color:var(--brand-deep); display:flex; align-items:center; gap:.5rem;}
+
+  .tutor-bar{font-size:.78rem; color:var(--muted); display:flex; align-items:center; gap:.4rem;}
+  .tutor-bar strong{color:var(--brand-deep);}
+  .tutor-bar i{color:var(--brand);}
+
+  .topbar-signout{
+    display:inline-flex; align-items:center; gap:.4rem;
+    padding:.5rem .9rem; border-radius:9px; border:1.5px solid var(--line);
+    background:var(--surface); color:var(--brand-deep);
+    font-family:var(--font); font-weight:800; font-size:.76rem;
+    cursor:pointer; text-decoration:none; white-space:nowrap;
+  }
+  .topbar-signout:hover{border-color:var(--error); color:var(--error); background:rgba(231,76,60,.05);}
+  .topbar-signout i{font-size:.72rem;}
+
+  .release-notice{background:rgba(232,163,61,.1); border:1px solid rgba(232,163,61,.3); color:#96690f; padding:.7rem 1rem; border-radius:10px; font-size:.82rem; margin-bottom:1rem; display:flex; align-items:center; gap:.6rem;}
+  .release-notice i{color:var(--warn);}
+
+  .item-card .meta a, .item-card .title a {
+    word-break: break-all;
+    overflow-wrap: break-word;
+  }
+  .file-link {
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    overflow: hidden;
+  }
+  .file-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* My Tutors panel */
+  .tutor-grid{display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin-top:.4rem;}
+  .tutor-chip{display:flex; align-items:center; gap:.55rem; padding:.55rem .75rem; background:var(--sage); border-radius:10px;}
+  .tutor-chip .t-ic{width:28px; height:28px; border-radius:50%; background:var(--brand); color:#04231f; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.72rem; flex-shrink:0;}
+  .tutor-chip .t-body{min-width:0; flex:1;}
+  .tutor-chip .t-name{font-size:.82rem; font-weight:700; color:var(--brand-deep);}
+  .tutor-chip .t-subj{font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-weight:700;}
+
+  @media(max-width:1100px){ .grid-2{grid-template-columns:1fr;} }
+
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%);} .sidebar.open{transform:translateX(0);}
+    .main{margin-left:0;} .menu-toggle{display:block;}
+    .stats-row{grid-template-columns:repeat(2,1fr);}
+    .grid-2{grid-template-columns:1fr;}
+    .topbar{padding:.9rem 1.1rem;}
+    .content{padding:1.1rem;}
+    .tutor-bar{display:none;}
+    .topbar-signout span{display:none;}
+    .topbar-signout{padding:.5rem .6rem;}
+    .tutor-grid{grid-template-columns:1fr;}
+  }
+
+    /* ====== PROFILE TAB LAYOUT ====== */
+  .profile-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:1.2rem;}
+  @media(min-width:1100px){
+    .profile-grid{grid-template-columns:minmax(0,400px) minmax(0,1fr); align-items:start;}
+  }
+
+  /* ====== STUDENT ID CARD — horizontal, matches brand inspo ====== */
+  .id-card-wrap{display:flex; flex-direction:column; gap:1rem;}
+
+  .id-card{
+    position:relative;
+    width:100%;
+    max-width:560px;
+    aspect-ratio:1.62 / 1;
+    border-radius:20px;
+    overflow:hidden;
+    color:#fff;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(85,191,179,.35), transparent 55%),
+      radial-gradient(circle at 90% 100%, rgba(85,191,179,.20), transparent 55%),
+      linear-gradient(135deg, #17433f 0%, #1d5a54 45%, #245F5A 100%);
+    box-shadow:
+      0 22px 55px rgba(15,26,20,.38),
+      0 0 0 1px rgba(85,191,179,.30),
+      inset 0 1px 0 rgba(255,255,255,.08);
+    display:grid;
+    grid-template-columns: 1.15fr 1fr;
+  }
+  .id-card::before{
+    content:'';
+    position:absolute; inset:0;
+    background-image:radial-gradient(rgba(85,191,179,.10) 1px, transparent 1px);
+    background-size:13px 13px;
+    opacity:.5;
+    pointer-events:none;
+  }
+  .id-card::after{
+    content:'';
+    position:absolute;
+    top:-120px; left:-80px;
+    width:340px; height:340px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(85,191,179,.28), transparent 62%);
+    pointer-events:none;
+  }
+  .id-card-left{
+    position:relative; z-index:2;
+    padding:22px 20px 20px 24px;
+    display:flex; flex-direction:column; justify-content:space-between;
+    border-right:1px solid rgba(85,191,179,.18);
+  }
+  .id-card-right{
+    position:relative; z-index:2;
+    padding:22px 24px 20px 20px;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+
+  .id-brand{display:flex; align-items:center; gap:11px;}
+  .id-brand-logo{
+    width:38px; height:38px; border-radius:50%;
+    background:rgba(85,191,179,.22);
+    box-shadow:inset 0 0 0 1.5px rgba(85,191,179,.55);
+    overflow:hidden; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+    .id-brand-logo img{width:100%; height:100%; object-fit:contain; display:block; padding:5px;}
+  .id-brand-divider{width:1px; height:32px; background:rgba(255,255,255,.18);}
+  .id-brand-text{line-height:1.05;}
+  .id-brand-name{font-weight:800; font-size:15px; letter-spacing:-.01em; color:#fff;}
+    .id-brand-role{
+    display:block; font-size:8.5px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.10em;
+    color:#7BCBC2; margin-top:4px;
+  }
+
+  .id-avatar-wrap{display:flex; justify-content:center; padding:6px 0 0;}
+  .id-avatar{
+    width:96px; height:96px; border-radius:50%;
+    background:linear-gradient(135deg, #7BCBC2, #55BFB3 55%, #245F5A);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:30px; letter-spacing:.02em; color:#04231f;
+    overflow:hidden;
+    box-shadow:
+      0 0 0 3px rgba(85,191,179,.45),
+      0 0 0 8px rgba(85,191,179,.12),
+      0 0 22px rgba(85,191,179,.55),
+      0 14px 28px rgba(0,0,0,.35);
+  }
+  .id-avatar img{width:100%; height:100%; object-fit:cover; display:block;}
+
+  .id-name-block{padding-top:6px;}
+  .id-name{
+    font-size:20px; font-weight:800; letter-spacing:-.01em; line-height:1.12;
+    color:#fff; word-break:break-word;
+  }
+  .id-meta{
+    font-size:10.5px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.14em;
+    color:#7BCBC2; margin-top:7px;
+  }
+
+  .id-details{display:flex; flex-direction:column; gap:9px; padding-top:4px;}
+  .id-row{display:flex; align-items:baseline; gap:10px;}
+    .id-row .k{
+    font-size:9px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.16em;
+    color:rgba(255,255,255,.72); min-width:78px; flex-shrink:0;
+  }
+  .id-row .v{
+    font-size:12.5px; font-weight:700; color:#fff;
+    word-break:break-word; flex:1; min-width:0;
+  }
+  .id-row .v.mono{
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    letter-spacing:.05em; font-size:12px;
+  }
+
+  .id-verify{
+    display:flex; align-items:center; gap:12px;
+    padding-top:8px;
+    border-top:1px solid rgba(85,191,179,.20);
+  }
+  .id-qr{
+    width:64px; height:64px; border-radius:10px;
+    background:#fff; padding:5px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+    box-shadow:0 6px 16px rgba(0,0,0,.32);
+  }
+  .id-qr img{width:100%; height:100%; display:block; border-radius:4px;}
+  .id-verify-text{flex:1; min-width:0;}
+    .id-verify-text .lbl{
+    font-size:9px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.16em;
+    color:rgba(255,255,255,.72);
+  }
+  .id-verify-text .val{
+    font-size:11.5px; font-weight:700; color:#fff;
+    margin-top:3px; word-break:break-all;
+  }
+  .id-verify-text .site{font-size:9px; color:#7BCBC2; margin-top:3px;}
+
+  .id-stripe{
+    position:absolute; left:0; right:0; bottom:0; height:5px;
+    background:linear-gradient(90deg, #55BFB3, #7BCBC2, #55BFB3);
+    z-index:3;
+  }
+
+  .id-controls{
+    display:flex; gap:.5rem; flex-wrap:wrap;
+    justify-content:center;
+    padding-top:.2rem;
+  }
+  .id-note{
+    text-align:center; font-size:.78rem; color:var(--muted);
+    line-height:1.55; margin-top:.4rem;
+  }
+  .id-note strong{color:var(--brand-deep);}
+
+  @media print {
+    @page { size: A4 landscape; margin: 0; }
+    body * { visibility: hidden !important; }
+    #profileIdCard, #profileIdCard * { visibility: visible !important; }
+    #profileIdCard{
+      position:absolute;
+      top:50%; left:50%;
+      transform:translate(-50%, -50%);
+      width:140mm;
+      height:auto;
+      aspect-ratio:1.62 / 1;
+      border-radius:4mm;
+      box-shadow:none;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate"><div class="spin"></div><p>Loading your portal…</p></div>
+
+<div id="pendingScreen">
+  <div class="pending-card">
+    <i class="fas fa-hourglass-half"></i>
+    <h2>Almost there</h2>
+    <p>Your account is being reviewed by the Studio Desk. Once your Key Stage and subjects are confirmed you'll get full access to results, homework and exams here.</p>
+    <button class="btn-sm primary" id="pendingSignOut" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
+  </div>
+</div>
+
+<div id="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" />
+      <div class="name">Paisley Studio<span>Student Portal</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-view="overview" type="button"><i class="fas fa-chart-pie"></i> Overview</button>
+      <button class="nav-item" data-view="results" type="button"><i class="fas fa-square-poll-vertical"></i> My Results</button>
+      <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard"></i> Classroom <span class="nav-badge" id="navClassroomCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="homework" type="button"><i class="fas fa-book-open"></i> Homework <span class="nav-badge" id="navHwCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="exams" type="button"><i class="fas fa-file-pen"></i> Exams <span class="nav-badge" id="navExamCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="notices" type="button"><i class="fas fa-bullhorn"></i> Notices <span class="nav-badge" id="navNoticeCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="timetable" type="button"><i class="fas fa-calendar-days"></i> Timetable</button>
+      <button class="nav-item" data-view="tickets" type="button"><i class="fas fa-headset"></i> Contact Tutor <span class="nav-badge" id="navTicketCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="profile" type="button"><i class="fas fa-id-card"></i> My Profile</button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="studentchip">
+        <div class="avatar" id="sideAvatar">??</div>
+        <div class="who" id="sideWho">Loading…<span id="sideKeyStage"></span></div>
+      </div>
+      <button class="signout" id="signOutBtn" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex; align-items:center; gap:.8rem;">
+        <button class="menu-toggle" id="menuToggle" type="button"><i class="fas fa-bars"></i></button>
+        <div>
+          <div class="topbar-title" id="pageTitle">Overview</div>
+          <div class="topbar-sub" id="pageSub">Your learning snapshot</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div id="bellHost"></div>
+        <div class="tutor-bar" id="tutorBar"></div>
+        <button class="topbar-signout" id="topSignOutBtn" type="button" title="Sign out"><i class="fas fa-right-from-bracket"></i> <span>Sign out</span></button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- OVERVIEW -->
+      <section class="view active" id="view-overview">
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="icon-wrap ic-1"><i class="fas fa-bullseye"></i></div>
+            <div class="num" id="statAverage">—</div>
+            <div class="lbl">Overall average</div>
+            <div class="trend" id="statTrend"></div>
+          </div>
+          <div class="stat-card">
+            <div class="icon-wrap ic-2"><i class="fas fa-book"></i></div>
+            <div class="num" id="statHwPending">0</div>
+            <div class="lbl">Homework pending</div>
+          </div>
+          <div class="stat-card">
+            <div class="icon-wrap ic-3"><i class="fas fa-file-pen"></i></div>
+            <div class="num" id="statExamsOpen">0</div>
+            <div class="lbl">Exams available</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head">
+              <div><h3>Progress over time</h3><div class="sub">Every graded exam and homework, in order</div></div>
+              <select class="subject-filter" id="progressSubjectFilter"><option value="__all">All subjects</option></select>
+            </div>
+            <div class="chart-wrap"><canvas id="progressChart"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><h3>Average by subject</h3><div class="sub">Exams and homework combined</div></div></div>
+            <div class="chart-wrap"><canvas id="subjectChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h3>Recent results</h3><div class="sub">Latest 5 graded items — exams and homework</div></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Type</th><th>Subject</th><th>Exam</th><th>Score</th><th>Trend</th><th>Date</th></tr></thead>
+            <tbody id="recentResultsBody"></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- RESULTS -->
+      <section class="view" id="view-results">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>All results</h3><div class="sub">Exams and homework, most recent first</div></div>
+            <select class="subject-filter" id="resultsSubjectFilter"><option value="__all">All subjects</option></select>
+          </div>
+          <div id="resultsReleaseNotice"></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Type</th><th>Subject</th><th>Exam</th><th>Score</th><th>Percentage</th><th>Trend vs previous</th><th>Date</th></tr></thead>
+            <tbody id="allResultsBody"></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- HOMEWORK -->
+      <section class="view" id="view-homework">
+        <div id="workHwHost"></div>
+        <details class="panel" style="margin-top:1rem;">
+          <summary style="cursor:pointer;font-weight:800;color:var(--brand-deep);">Earlier homework (old list)</summary>
+          <div class="item-list grid-wide" id="homeworkList" style="margin-top:.8rem;"></div>
+        </details>
+      </section>
+
+      <!-- EXAMS -->
+      <section class="view" id="view-exams">
+        <div id="workExHost"></div>
+        <details class="panel" style="margin-top:1rem;">
+          <summary style="cursor:pointer;font-weight:800;color:var(--brand-deep);">Earlier exams (old list)</summary>
+          <div class="item-list grid-wide" id="examsList" style="margin-top:.8rem;"></div>
+        </details>
+      </section>
+
+      <!-- NOTICES -->
+      <section class="view" id="view-notices">
+        <div class="panel">
+          <div class="panel-head"><div><h3>Notices</h3><div class="sub">Announcements from your tutor and the Studio Desk</div></div></div>
+          <div class="item-list grid-wide" id="workNoticesList"></div>
+          <div class="item-list grid-wide" id="noticesList"></div>
+        </div>
+      </section>
+
+      <!-- CLASSROOM -->
+      <section class="view" id="view-classroom"><div id="classroomHost"></div></section>
+
+      <!-- TIMETABLE -->
+      <section class="view" id="view-timetable">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>Your weekly timetable</h3><div class="sub">Sessions for the subjects you take, grouped by day</div></div>
+            <button class="btn-sm primary" id="downloadTimetableBtn" type="button"><i class="fas fa-file-pdf"></i> Download timetable (PDF)</button>
+          </div>
+          <div id="timetableEntriesGrid"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div><h3>Timetable notices</h3><div class="sub">Older/uploaded timetable documents</div></div></div>
+          <div class="item-list" id="timetableList"></div>
+        </div>
+      </section>
+
+      <!-- CONTACT TUTOR / TICKETS -->
+      <section class="view" id="view-tickets">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>My tutors</h3><div class="sub">Who teaches you, by subject</div></div>
+          </div>
+          <div id="myTutorsPanel"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>Contact a tutor</h3><div class="sub">Raise a question — pick the subject and we route it to the right tutor</div></div>
+            <button class="btn-sm primary" id="newTicketBtn" type="button"><i class="fas fa-plus"></i> New Ticket</button>
+          </div>
+          <div class="item-list" id="ticketsList"></div>
+        </div>
+      </section>
+
+                 <!-- PROFILE -->
+      <section class="view" id="view-profile">
+        <div class="profile-grid">
+          <div class="panel">
+            <div class="panel-head"><div><h3>My Profile</h3><div class="sub">Contact the Studio Desk to change these details</div></div></div>
+            <div id="profileBody"></div>
+          </div>
+          <div class="panel">
+            <div id="profileIdCardHost"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- NEW TICKET MODAL — two-step: subject → tutor -->
+<div class="modal-overlay" id="ticketModal">
+  <div class="modal">
+    <button class="modal-close" id="ticketModalClose" type="button"><i class="fas fa-times"></i></button>
+    <h3>Raise a ticket</h3>
+
+    <div class="field">
+      <label>Subject</label>
+      <select id="ticketSubjectPick"><option value="">Loading…</option></select>
+    </div>
+
+    <div class="field">
+      <label>Tutor</label>
+      <div id="ticketTutorDisplay" class="field-readonly">
+        <i class="fas fa-chalkboard-user"></i> <span>Pick a subject above</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Ticket title</label>
+      <input type="text" id="ticketSubject" placeholder="e.g. Help with algebra homework" />
+    </div>
+
+    <div class="field">
+      <label>Related homework / exam (optional)</label>
+      <input type="text" id="ticketRef" placeholder="e.g. Algebra worksheet 4" />
+    </div>
+
+    <div class="field">
+      <label>Message</label>
+      <textarea id="ticketMessage" placeholder="Describe your question…"></textarea>
+    </div>
+
+    <button class="btn-sm primary" id="ticketConfirm" type="button" style="width:100%; justify-content:center; padding:.7rem 0;"><i class="fas fa-paper-plane"></i> Send to Tutor</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script src="../js/classroom/classroom-helpers.js"></script>
+<script src="../js/classroom/work-helpers.js"></script>
+<script src="../js/classroom/work-learner.js"></script>
+<script>
+const auth = firebase.auth();
+let currentUser = null;
+let profile = null;
+let allResults = [];
+let allExamResults = [];
+let allHomework = [];
+let allSubmissions = [];
+let allExams = [];
+let allAttempts = [];
+let allTickets = [];
+let progressChart, subjectChart;
+
+/* ============================================================
+   MULTI-TUTOR HELPERS
+   ------------------------------------------------------------
+   A student can have several tutors — one per subject.
+   The student doc carries:
+     tutorIds:       ["tutorA", "tutorB", ...]
+     subjectTutors:  { "mathematics": { tutorId, tutorName, tutorSlug }, ... }
+     tutorId, tutorName, tutorSlug:  legacy single-tutor fields
+   These helpers read the map with a legacy fallback so old
+   accounts still work.
+============================================================ */
+function tutorEntriesForStudent(p){
+  if(!p) return [];
+  const map = p.subjectTutors || {};
+  const keys = Object.keys(map);
+  const out = [];
+  keys.forEach(subjectId=>{
+    const entry = map[subjectId] || {};
+    if(!entry.tutorId) return;
+    out.push({
+      subjectId:   subjectId,
+      subjectName: lmzSubjectLabel(subjectId),
+      tutorId:     entry.tutorId,
+      tutorName:   entry.tutorName || 'Tutor',
+      tutorSlug:   entry.tutorSlug || ''
+    });
+  });
+  if(out.length) return out;
+  // Legacy fallback: single tutor with no subject map.
+  if(p.tutorId){
+    return [{
+      subjectId:   '',
+      subjectName: 'General',
+      tutorId:     p.tutorId,
+      tutorName:   p.tutorName || 'Tutor',
+      tutorSlug:   p.tutorSlug || ''
+    }];
+  }
+  return [];
+}
+
+function eligibleTicketSubjects(p){
+  return tutorEntriesForStudent(p).filter(x=> x.subjectId);
+}
+
+function initialsOf(name){
+  return String(name||'?').split(/\s+/).map(w=>w[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
+}
+
+function renderMyTutorsPanel(){
+  const host = document.getElementById('myTutorsPanel');
+  if(!host) return;
+  const entries = tutorEntriesForStudent(profile);
+  if(!entries.length){
+    host.innerHTML = '<div class="empty-row">No tutor is assigned to you yet. The Studio Desk will set this up shortly.</div>';
+    return;
+  }
+  host.innerHTML = '<div class="tutor-grid">' + entries.map(e=>`
+    <div class="tutor-chip">
+      <div class="t-ic">${escapeHtml(initialsOf(e.tutorName))}</div>
+      <div class="t-body">
+        <div class="t-name">${escapeHtml(e.tutorName)}</div>
+        <div class="t-subj">${escapeHtml(e.subjectName)}</div>
+      </div>
+    </div>
+  `).join('') + '</div>';
+}
+
+function fillTicketSubjectPicker(){
+  const sel = document.getElementById('ticketSubjectPick');
+  if(!sel) return;
+  const entries = eligibleTicketSubjects(profile);
+  if(!entries.length){
+    sel.innerHTML = '<option value="">No tutor assigned yet</option>';
+    updateTicketTutorDisplay();
+    return;
+  }
+  sel.innerHTML = entries.map(e=>
+    `<option value="${escapeHtml(e.subjectId)}">${escapeHtml(e.subjectName)}</option>`
+  ).join('');
+  updateTicketTutorDisplay();
+}
+
+function updateTicketTutorDisplay(){
+  const sel = document.getElementById('ticketSubjectPick');
+  const disp = document.getElementById('ticketTutorDisplay');
+  if(!sel || !disp) return;
+  const subjectId = sel.value;
+  if(!subjectId){
+    disp.innerHTML = '<i class="fas fa-chalkboard-user"></i> <span>No tutor assigned yet</span>';
+    return;
+  }
+  const entries = eligibleTicketSubjects(profile);
+  const hit = entries.filter(e=>e.subjectId === subjectId)[0];
+  if(hit){
+    disp.innerHTML = '<i class="fas fa-chalkboard-user"></i> <span>' + escapeHtml(hit.tutorName) + ' &middot; ' + escapeHtml(hit.subjectName) + '</span>';
+  } else {
+    disp.innerHTML = '<i class="fas fa-chalkboard-user"></i> <span>No tutor assigned for that subject</span>';
+  }
+}
+
+/* ============================================================
+   INLINE LOADER — appears inside the main content area
+============================================================ */
+function showInlineLoader(msg){
+  const content = document.querySelector('.content');
+  if(!content) return;
+  let el = document.getElementById('dashLoader');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'dashLoader';
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:3rem 1rem;';
+    el.innerHTML = '<div style="width:42px;height:42px;border:4px solid rgba(38,51,49,.1);border-top-color:#55BFB3;border-radius:50%;animation:spin .8s linear infinite"></div>' +
+      '<div id="dashLoaderMsg" style="color:#245F5A;font-weight:700;font-size:.9rem">' + (msg || 'Loading…') + '</div>';
+    content.insertBefore(el, content.firstChild);
+  } else {
+    document.getElementById('dashLoaderMsg').textContent = msg || 'Loading…';
+    el.style.display = 'flex';
+  }
+}
+function hideInlineLoader(){
+  const el = document.getElementById('dashLoader');
+  if(el) el.style.display = 'none';
+}
+
+auth.onAuthStateChanged(user=>{
+  if(!user){ window.location.href = 'index.html'; return; }
+  currentUser = user;
+  getStudentProfile(user.uid).then(doc=>{
+    if(!doc.exists){ window.location.href = 'index.html'; return; }
+    profile = doc.data();
+    if(profile.status !== 'Active'){
+      document.body.classList.add('pending');
+      document.body.classList.add('ready');
+      return;
+    }
+        document.body.classList.add('ready');
+    renderProfile();
+    ensureStudentIdNumber().then(() => renderProfileIdCard());
+    loadAllData();
+    startWorkFeatures();
+  });
+});
+
+let workNotices = [];
+function startWorkFeatures(){
+  mountNotificationBell(document.getElementById('bellHost'), currentUser.uid, 'student', {
+    navBadges: { classroom:'#navClassroomCount', homework:'#navHwCount', exams:'#navExamCount' },
+    navigate: (cat)=>{
+      const view = { homework:'homework', exams:'exams', classroom:'classroom', notices:'notices', tickets:'tickets' }[cat];
+      const btn = view && document.querySelector('.nav-item[data-view="'+view+'"]'); if(btn) btn.click();
+    }
+  });
+  watchMyStudentNotices(currentUser.uid, rows=>{ workNotices = rows; renderWorkNotices(); });
+}
+function renderWorkNotices(){
+  const list = document.getElementById('workNoticesList'); if(!list) return;
+  list.innerHTML = workNotices.map(n=>{
+    const bad = n.type === 'unattended_report' || n.type === 'homework_overdue';
+    const when = n.createdAt && n.createdAt.toDate ? lmsFmtDate(n.createdAt.toDate()) : '';
+    return `<div class="item-card"><div class="ic"><i class="fas ${bad?'fa-clipboard-list':(n.type==='graded'?'fa-circle-check':'fa-bell')}"></i></div><div class="body">
+      <div class="title">${escapeHtml(n.title||'Notice')}</div>
+      <div class="meta">${when}${bad?' <span class="pill down">Action needed</span>':''}</div>
+      ${n.message?`<div class="meta" style="margin-top:.4rem; white-space:pre-wrap;">${escapeHtml(n.message)}</div>`:''}
+      ${n.fileUrl?`<div class="actions"><a class="btn-sm download-btn file-link" href="${escapeHtml(n.fileUrl)}" target="_blank" rel="noopener"><i class="fas fa-download"></i> <span class="file-name-text">${escapeHtml(n.fileName||'Download')}</span></a></div>`:''}
+    </div></div>`;
+  }).join('');
+  const badge = document.getElementById('navNoticeCount');
+  if(badge){
+    const total = (allNotices ? allNotices.length : 0) + workNotices.length;
+    if(total){ badge.textContent = total; badge.style.display = ''; } else { badge.style.display = 'none'; }
+  }
+}
+function mountStudentWork(kind){
+  const host = document.getElementById(kind === 'exams' ? 'workExHost' : 'workHwHost');
+  host.innerHTML = '';
+  const box = document.createElement('div'); host.appendChild(box);
+  WorkUI.mountStudentHome(box, { kind, uid: currentUser.uid, profile });
+}
+document.querySelector('.nav-item[data-view="homework"]').addEventListener('click', ()=>{ if(currentUser && profile) mountStudentWork('homework'); });
+document.querySelector('.nav-item[data-view="exams"]').addEventListener('click', ()=>{ if(currentUser && profile) mountStudentWork('exams'); });
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut().then(()=>window.location.href='index.html'); });
+document.getElementById('topSignOutBtn').addEventListener('click', ()=>{ if(!confirm('Sign out of your student portal?')) return; auth.signOut().then(()=>window.location.href='index.html'); });
+document.getElementById('pendingSignOut').addEventListener('click', ()=>{ auth.signOut().then(()=>window.location.href='index.html'); });
+
+function renderProfile(){
+  const initials = lmsInitials(profile.name);
+  document.getElementById('sideAvatar').textContent = initials;
+  document.getElementById('sideWho').innerHTML = profile.name + '<span>' + (profile.keyStage||'').replace(/\s*\(.*/, '') + (profile.year ? ' · Year ' + profile.year : '') + '</span>';
+
+  // Topbar tutor chip — show all tutors, or legacy single tutor.
+  const tutorBar = document.getElementById('tutorBar');
+  if(tutorBar){
+    const entries = tutorEntriesForStudent(profile);
+    if(!entries.length){
+      tutorBar.innerHTML = '<i class="fas fa-chalkboard-user"></i> Your Tutor: <strong>Not assigned yet</strong>';
+    } else if(entries.length === 1){
+      tutorBar.innerHTML = '<i class="fas fa-chalkboard-user"></i> Your Tutor: <strong>' + escapeHtml(entries[0].tutorName) + '</strong>';
+    } else {
+      const names = entries.slice(0,2).map(e=>e.tutorName).join(', ');
+      const more = entries.length > 2 ? ' +' + (entries.length - 2) : '';
+      tutorBar.innerHTML = '<i class="fas fa-chalkboard-user"></i> Your Tutors: <strong>' + escapeHtml(names + more) + '</strong>';
+    }
+  }
+
+  // Profile tab
+  const entries = tutorEntriesForStudent(profile);
+  const tutorLine = entries.length
+    ? entries.map(e=>`${escapeHtml(e.tutorName)} — ${escapeHtml(e.subjectName)}`).join('<br>')
+    : 'Not assigned yet';
+
+  document.getElementById('profileBody').innerHTML = `
+    <div class="field"><label>Name</label><div>${escapeHtml(profile.name||'—')}</div></div>
+    <div class="field"><label>Email</label><div>${escapeHtml(profile.email||'—')}</div></div>
+    <div class="field"><label>Key Stage</label><div>${escapeHtml(profile.keyStage||'—')}</div></div>
+    <div class="field"><label>Year</label><div>${profile.year ? 'Year ' + escapeHtml(profile.year) : '—'}</div></div>
+    <div class="field"><label>Subjects</label><div>${lmzSubjectLabels(profile.subjects).length ? escapeHtml(lmzSubjectLabels(profile.subjects).join(', ')) : 'Not recorded yet'}</div></div>
+    <div class="field"><label>Parent / Guardian Contact</label><div>${escapeHtml(profile.parentContact||'—')}</div></div>
+    <div class="field"><label>Your Tutors</label><div>${tutorLine}</div></div>
+    <div class="field"><label>Account status</label><div><span class="pill graded">${escapeHtml(profile.status||'—')}</span></div></div>
+  `;
+
+    renderMyTutorsPanel();
+  renderProfileIdCard();
+}
+
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.querySelectorAll('.nav-item').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    const titles = {
+      overview:['Overview','Your learning snapshot'],
+      results:['My Results','Every graded assessment — exams and homework'],
+      classroom:['Classroom','Lessons and resources for your subjects'],
+      homework:['Homework','Download, complete and submit'],
+      exams:['Exams','Sit exams published for your Key Stage'],
+      notices:['Notices','Announcements for your Key Stage'],
+      timetable:['Timetable','Your weekly schedule'],
+      tickets:['Contact Tutor','Raise questions and support tickets'],
+      profile:['My Profile','Your account details']
+    };
+    if(titles[btn.dataset.view]){
+      document.getElementById('pageTitle').textContent = titles[btn.dataset.view][0];
+      document.getElementById('pageSub').textContent = titles[btn.dataset.view][1];
+    }
+    if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
+  });
+});
+document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
+
+document.querySelector('.nav-item[data-view="classroom"]').addEventListener('click', ()=>{
+  if(!profile) return;
+  const host = document.getElementById('classroomHost');
+  host.innerHTML = '';
+  const box = document.createElement('div');
+  host.appendChild(box);
+  ClassroomUI.mountStudent(box, { uid: auth.currentUser && auth.currentUser.uid, profile });
+});
+
+function loadAllData(){
+  showInlineLoader('Loading your results…');
+  Promise.all([
+    getResultsForStudent(currentUser.uid),
+    getHomeworkForKeyStage(profile.keyStage),
+    getSubmissionsForStudent(currentUser.uid),
+    getExamsForKeyStage(profile.keyStage),
+    getAttemptsForStudent(currentUser.uid)
+  ]).then(([resultsSnap, hwSnap, subSnap, examSnap, attemptSnap])=>{
+    console.log("=== Dashboard Data Loaded ===");
+    console.log("Exam Results:", resultsSnap.docs.length, "docs");
+    console.log("Submissions:", subSnap.docs.length, "docs");
+
+    allExamResults = resultsSnap.docs.map(d=>({ id:d.id, ...d.data(), kind:'exam' }));
+    allHomework = hwSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    allSubmissions = subSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    allExams = examSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    allAttempts = attemptSnap.docs.map(d=>({id:d.id, ...d.data()}));
+
+    const gradedHomeworkResults = allSubmissions
+      .filter(sub => sub.status === 'Graded' && sub.grade != null)
+      .map(sub => ({
+        id: sub.id,
+        kind: 'homework',
+        date: sub.gradedAt || sub.submittedAt,
+        subject: sub.subject || 'Homework',
+        examTitle: sub.homeworkTitle || 'Homework',
+        score: Number(sub.grade) || 0,
+        maxScore: 100,
+        keyStage: sub.keyStage || '',
+        released: true,
+        status: sub.status
+      }));
+
+    allResults = allExamResults
+      .map(r => ({ ...r, kind: r.kind || 'exam', date: lmsToDate(r.date) || lmsToDate(r.createdAt) || null }))
+      .concat(gradedHomeworkResults)
+      .sort((a,b)=> (a.date||0) - (b.date||0));
+
+    console.log("Combined allResults:", allResults);
+
+    populateSubjectFilters();
+    renderOverview();
+    renderResultsTable('allResultsBody', allResults.slice().reverse());
+    renderHomework();
+    renderExams();
+    loadTickets();
+    loadNotesAndNotices();
+    renderReleaseNotice();
+    hideInlineLoader();
+  }).catch(err=>{
+    console.error("Error loading dashboard data:", err);
+    hideInlineLoader();
+  });
+}
+
+function renderReleaseNotice(){
+  const el = document.getElementById('resultsReleaseNotice');
+  if(!el) return;
+  el.innerHTML = `<div class="release-notice">
+    <i class="fas fa-circle-info"></i>
+    <div>Results appear here only after your tutor releases them.</div>
+  </div>`;
+}
+
+function subjectsList(){
+  return [...new Set(allResults.map(r=>r.subject).filter(Boolean))];
+}
+
+function populateSubjectFilters(){
+  const subs = subjectsList();
+  ['progressSubjectFilter','resultsSubjectFilter'].forEach(id=>{
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    sel.innerHTML = '<option value="__all">All subjects</option>';
+    subs.forEach(s=>{
+      const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt);
+    });
+    sel.addEventListener('change', ()=>{
+      if(id === 'progressSubjectFilter') drawProgressChart(sel.value);
+      else renderResultsTable('allResultsBody', filterBySubject(allResults, sel.value).slice().reverse());
+    });
+  });
+}
+function filterBySubject(list, subject){ return subject === '__all' ? list : list.filter(r=>r.subject === subject); }
+
+function pct(r){ return r.maxScore ? Math.round((r.score / r.maxScore) * 100) : 0; }
+function hasScore(r){ return r.maxScore && r.maxScore > 0; }
+
+function typePill(r){
+  if(r.kind === 'homework') return '<span class="pill homework"><i class="fas fa-book"></i> Homework</span>';
+  return '<span class="pill exam"><i class="fas fa-file-pen"></i> Exam</span>';
+}
+
+function renderOverview(){
+  const scored = allResults.filter(hasScore);
+
+  if(scored.length){
+    const avg = Math.round(scored.reduce((s,r)=>s+pct(r),0) / scored.length);
+    document.getElementById('statAverage').textContent = avg + '%';
+    const last = scored[scored.length-1], prev = scored[scored.length-2];
+    const trendEl = document.getElementById('statTrend');
+    if(prev){
+      const diff = pct(last) - pct(prev);
+      if(diff > 0){ trendEl.className='trend up'; trendEl.innerHTML = `<i class="fas fa-arrow-trend-up"></i> +${diff}% since last result`; }
+      else if(diff < 0){ trendEl.className='trend down'; trendEl.innerHTML = `<i class="fas fa-arrow-trend-down"></i> ${diff}% since last result`; }
+      else { trendEl.className='trend flat'; trendEl.innerHTML = `<i class="fas fa-minus"></i> No change`; }
+    } else {
+      trendEl.className='trend flat';
+      trendEl.innerHTML = `<i class="fas fa-minus"></i> First result`;
+    }
+  } else {
+    document.getElementById('statAverage').textContent = '—';
+    document.getElementById('statTrend').innerHTML = '';
+  }
+
+  const submittedHwIds = new Set(allSubmissions.map(s=>s.homeworkId));
+  const pendingHw = allHomework.filter(h=>!submittedHwIds.has(h.id)).length;
+  document.getElementById('statHwPending').textContent = pendingHw;
+
+  const attemptedExamIds = new Set(allAttempts.map(a=>a.examId));
+  const openExams = allExams.filter(e=>!attemptedExamIds.has(e.id)).length;
+  document.getElementById('statExamsOpen').textContent = openExams;
+
+  renderResultsTable('recentResultsBody', allResults.slice().reverse().slice(0,5));
+  drawProgressChart('__all');
+  drawSubjectChart();
+}
+
+function renderResultsTable(bodyId, list){
+  const body = document.getElementById(bodyId);
+  if(!body) return;
+  const cols = bodyId === 'recentResultsBody' ? 6 : 7;
+  if(!list.length){
+    body.innerHTML = `<tr><td colspan="${cols}" class="empty-row">No results yet — check back once your tutor has released an assessment.</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(r=>{
+    const sameSubject = allResults.filter(x=>x.subject===r.subject);
+    const idx = sameSubject.findIndex(x=>x.id===r.id && x.kind===r.kind);
+    const prev = idx > 0 ? sameSubject[idx-1] : null;
+
+    let trendHtml = '<span class="pill flat">First result</span>';
+    if(prev && hasScore(prev) && hasScore(r)){
+      const diff = pct(r) - pct(prev);
+      if(diff > 0) trendHtml = `<span class="pill up"><i class="fas fa-arrow-up"></i> +${diff}%</span>`;
+      else if(diff < 0) trendHtml = `<span class="pill down"><i class="fas fa-arrow-down"></i> ${diff}%</span>`;
+      else trendHtml = `<span class="pill flat"><i class="fas fa-minus"></i> 0%</span>`;
+    }
+
+    const titleCell = escapeHtml(r.examTitle || (r.kind === 'homework' ? 'Homework' : 'Assessment'));
+    const scoreCell = hasScore(r)
+      ? `${r.score}/${r.maxScore} <span style="color:var(--muted); font-size:.75rem;">(${pct(r)}%)</span>`
+      : `${r.score}`;
+
+    if(bodyId === 'recentResultsBody'){
+      return `<tr>
+        <td>${typePill(r)}</td>
+        <td>${escapeHtml(r.subject||'—')}</td>
+        <td>${titleCell}</td>
+        <td>${scoreCell}</td>
+        <td>${trendHtml}</td>
+        <td>${lmsFmtDate(r.date)}</td>
+      </tr>`;
+    }
+    return `<tr>
+      <td>${typePill(r)}</td>
+      <td>${escapeHtml(r.subject||'—')}</td>
+      <td>${titleCell}</td>
+      <td>${r.score}${hasScore(r)?('/'+r.maxScore):''}</td>
+      <td>${hasScore(r) ? pct(r)+'%' : '—'}</td>
+      <td>${trendHtml}</td>
+      <td>${lmsFmtDate(r.date)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function drawProgressChart(subjectFilter){
+  const list = filterBySubject(allResults, subjectFilter).filter(hasScore);
+  const labels = list.map(r=> lmsFmtDate(r.date));
+  const data = list.map(r=> pct(r));
+  if(progressChart) progressChart.destroy();
+  const ctx = document.getElementById('progressChart');
+  progressChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{ label:'Score %', data, borderColor:'#55BFB3', backgroundColor:'rgba(85,191,179,.15)', fill:true, tension:.35, pointBackgroundColor:'#245F5A', pointRadius:4 }]},
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ min:0, max:100, ticks:{ callback:v=>v+'%' } } }, plugins:{ legend:{ display:false } } }
+  });
+}
+
+function drawSubjectChart(){
+  const subs = subjectsList();
+  const avgs = subs.map(s=>{
+    const list = allResults.filter(r=>r.subject===s && hasScore(r));
+    return list.length ? Math.round(list.reduce((a,r)=>a+pct(r),0)/list.length) : 0;
+  });
+  if(subjectChart) subjectChart.destroy();
+  const ctx = document.getElementById('subjectChart');
+  subjectChart = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:subs, datasets:[{ label:'Average %', data:avgs, backgroundColor:'#7BCBC2', borderRadius:6, maxBarThickness:38 }]},
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ min:0, max:100, ticks:{ callback:v=>v+'%' } } }, plugins:{ legend:{ display:false } } }
+  });
+}
+
+function renderHomework(){
+  const list = document.getElementById('homeworkList');
+  if(!list) return;
+  if(!allHomework.length){ list.innerHTML = '<div class="empty-row">No homework posted for your Key Stage yet.</div>'; return; }
+  list.innerHTML = allHomework.map(h=>{
+    const sub = allSubmissions.find(s=>s.homeworkId===h.id);
+    let statusPill = '<span class="pill pending">Not submitted</span>';
+    if(sub){
+      statusPill = sub.status === 'Graded'
+        ? `<span class="pill graded">Graded — ${escapeHtml(String(sub.grade != null ? sub.grade : ''))}</span>`
+        : '<span class="pill pending">Submitted — awaiting grading</span>';
+    }
+    return `<div class="item-card">
+      <div class="ic"><i class="fas fa-book"></i></div>
+      <div class="body">
+        <div class="title">${escapeHtml(h.title||'Homework')}</div>
+        <div class="meta">${escapeHtml(h.subject||'')} · Due ${lmsFmtDate(lmsToDate(h.dueDate))} ${statusPill}</div>
+        ${h.description?`<div class="meta" style="margin-top:.4rem;">${escapeHtml(h.description)}</div>`:''}
+        ${(sub && sub.status==='Graded' && sub.feedback)?`<div class="meta" style="margin-top:.5rem; padding:.6rem; background:var(--sage); border-radius:8px;"><strong style="color:var(--brand-deep);">Tutor feedback:</strong> ${escapeHtml(sub.feedback)}</div>`:''}
+        <div class="actions">
+          ${h.fileURL?`<a class="btn-sm download-btn" href="${h.fileURL}" target="_blank" rel="noopener"><i class="fas fa-download"></i> Download</a>`:''}
+          ${sub
+            ? `<a class="btn-sm" href="submit-homework.html?id=${h.id}"><i class="fas fa-eye"></i> View submission</a>`
+            : `<a class="btn-sm primary" href="submit-homework.html?id=${h.id}"><i class="fas fa-upload"></i> Submit</a>`}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderExams(){
+  const list = document.getElementById('examsList');
+  if(!list) return;
+  if(!allExams.length){ list.innerHTML = '<div class="empty-row">No exams published for your Key Stage right now.</div>'; return; }
+  list.innerHTML = allExams.map(e=>{
+    const attempt = allAttempts.find(a=>a.examId===e.id);
+    const isLink = e.examMode === 'link';
+    const hasExternalUrl = !!(e.externalURL && e.externalURL.trim());
+
+    let statusPill;
+    let action;
+
+    if(isLink){
+      statusPill = '<span class="pill open">External paper</span>';
+      action = hasExternalUrl
+        ? `<a class="btn-sm primary" href="${escapeHtml(e.externalURL)}" target="_blank" rel="noopener"><i class="fas fa-up-right-from-square"></i> Open External Exam</a>`
+        : `<span class="pill pending">External link not configured</span>`;
+    } else {
+      if(!attempt){
+        statusPill = '<span class="pill open">Not started</span>';
+        action = `<a class="btn-sm primary" href="exam.html?id=${e.id}"><i class="fas fa-play"></i> Start Exam</a>`;
+      } else if(attempt.status === 'In progress'){
+        statusPill = '<span class="pill open">In progress</span>';
+        action = `<a class="btn-sm primary" href="exam.html?id=${e.id}"><i class="fas fa-play"></i> Resume</a>`;
+      } else if(attempt.status === 'Suspended'){
+        statusPill = '<span class="pill down">Suspended</span>';
+        action = '';
+      } else if(attempt.released === true){
+        statusPill = '<span class="pill graded">Graded — see My Results</span>';
+        action = '';
+      } else {
+        statusPill = '<span class="pill pending">Submitted — awaiting grading</span>';
+        action = '';
+      }
+    }
+
+    const metaLine = isLink
+      ? `Opens in a new tab · ${escapeHtml(e.subject||'')}`
+      : `${escapeHtml(e.subject||'')} · ${(e.duration||30)} min · ${(e.questions||[]).length} questions`;
+
+    return `<div class="item-card">
+      <div class="ic"><i class="fas fa-file-pen"></i></div>
+      <div class="body">
+        <div class="title">${escapeHtml(e.title||'Exam')}</div>
+        <div class="meta">${metaLine} ${statusPill}</div>
+        <div class="actions">${action}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+let allNotices = [], allTimetables = [], allTimetableEntries = [];
+
+function loadNotesAndNotices(){
+  Promise.all([
+    getNotificationsForKeyStage(profile.keyStage).catch(e=>{ console.error('notices:', e); return null; }),
+    getTimetablesForKeyStage(profile.keyStage).catch(e=>{ console.error('timetables:', e); return null; }),
+    getTimetableEntriesForStudent(profile).catch(e=>{ console.error('timetableEntries:', e); return null; })
+  ]).then(([tSnap, ttSnap, teList])=>{
+    allNotices    = tSnap  ? tSnap.docs.map(d=>({id:d.id, ...d.data()}))  : [];
+    allTimetables = ttSnap ? ttSnap.docs.map(d=>({id:d.id, ...d.data()})) : [];
+    allTimetableEntries = teList || [];
+
+    const byPosted = (a,b)=> ((b.postedAt&&b.postedAt.seconds)||0) - ((a.postedAt&&a.postedAt.seconds)||0);
+    allNotices.sort(byPosted); allTimetables.sort(byPosted);
+
+    renderNotices();
+    renderTimetables();
+    renderTimetableEntries();
+  });
+}
+
+function renderNotices(){
+  const list = document.getElementById('noticesList');
+  if(!list) return;
+  const badge = document.getElementById('navNoticeCount');
+  if(badge){
+    const total = allNotices.length + (typeof workNotices !== 'undefined' ? workNotices.length : 0);
+    if(total){ badge.textContent = total; badge.style.display = ''; }
+    else { badge.style.display = 'none'; }
+  }
+  if(!allNotices.length){ list.innerHTML = '<div class="empty-row">No notices right now.</div>'; return; }
+  list.innerHTML = allNotices.map(n=>{
+    const urgent = n.priority === 'Urgent';
+    return `<div class="item-card">
+      <div class="ic"><i class="fas ${urgent?'fa-triangle-exclamation':'fa-bullhorn'}"></i></div>
+      <div class="body">
+        <div class="title">${escapeHtml(n.title||'Notice')}</div>
+        <div class="meta">${n.postedBy?escapeHtml(n.postedBy)+' · ':''}${n.postedAt?lmsFmtDate(lmsToDate(n.postedAt)):''} ${urgent?'<span class="pill down">Urgent</span>':''}</div>
+        ${n.body?`<div class="meta" style="margin-top:.4rem; white-space:pre-wrap;">${escapeHtml(n.body)}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTimetables(){
+  const list = document.getElementById('timetableList');
+  if(!list) return;
+  if(!allTimetables.length){ list.innerHTML = '<div class="empty-row">No timetable published for your Key Stage yet.</div>'; return; }
+  list.innerHTML = allTimetables.map(t=>{
+    const rows = (t.slots||[]).map(sl=>`<tr>
+      <td>${escapeHtml(sl.day||'')}</td>
+      <td>${escapeHtml(sl.time||'')}</td>
+      <td>${escapeHtml(sl.subject||'')}</td>
+      <td>${escapeHtml(sl.tutor||'')}</td>
+    </tr>`).join('');
+    return `<div class="item-card">
+      <div class="ic"><i class="fas fa-calendar-days"></i></div>
+      <div class="body">
+        <div class="title">${escapeHtml(t.title||'Timetable')}</div>
+        <div class="meta">${escapeHtml(t.keyStage||'')}${t.postedBy?' · '+escapeHtml(t.postedBy):''}</div>
+        ${rows?`<div class="table-wrap" style="margin-top:.6rem;"><table><thead><tr><th>Day</th><th>Time</th><th>Subject</th><th>Tutor</th></tr></thead><tbody>${rows}</tbody></table></div>`:''}
+        ${t.fileURL?`<div class="actions"><a class="btn-sm download-btn" href="${escapeHtml(t.fileURL)}" target="_blank" rel="noopener"><i class="fas fa-download"></i> Open timetable</a></div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTimetableEntries(){
+  const grid = document.getElementById('timetableEntriesGrid');
+  if(!grid) return;
+  if(!allTimetableEntries.length){
+    grid.innerHTML = '<div class="empty-row">No timetable sessions published for your subjects yet.</div>';
+    return;
+  }
+  const byDay = groupTimetableEntriesByDay(allTimetableEntries);
+  const legacyNote = lmzStudentEntryScope(profile).legacyAllSubjects
+    ? '<div class="empty-row" style="margin-bottom:.6rem;">Your subjects have not been recorded yet, so you are seeing every session for your Key Stage. The Studio Desk will update this.</div>' : '';
+  grid.innerHTML = legacyNote + DAYS_OF_WEEK.filter(d=>byDay[d].length).map(day=>`
+    <div class="item-card" style="display:block;">
+      <div class="title" style="margin-bottom:.5rem;">${escapeHtml(day)}</div>
+      <div class="table-wrap"><table><thead><tr><th>Time</th><th>Subject</th><th>Tutor</th><th>Room</th></tr></thead><tbody>
+        ${byDay[day].map(e=>`<tr>
+          <td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td>
+          <td>${escapeHtml(e.subjectName||'')}</td>
+          <td>${escapeHtml(e.tutorName||'—')}</td>
+          <td>${lmzRoomHtml(e.room)}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+    </div>`).join('');
+}
+
+document.getElementById('downloadTimetableBtn').addEventListener('click', ()=>{
+  if(!allTimetableEntries.length){
+    alert('No timetable sessions are published for your subjects yet.');
+    return;
+  }
+
+  const byDay = groupTimetableEntriesByDay(allTimetableEntries);
+  const studentName = profile.name || 'Student';
+  const ksLabel = (profile.keyStage || '').replace(/\s*\(.*/, '') || 'All Key Stages';
+  const generatedOn = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
+
+  const daysHtml = DAYS_OF_WEEK.map(day=>{
+    const sessions = byDay[day] || [];
+    if(!sessions.length) return '';
+    const rows = sessions.map(e=>`
+      <tr>
+        <td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td>
+        <td>${escapeHtml(e.subjectName||'')}</td>
+        <td>${escapeHtml(e.tutorName||'—')}</td>
+        <td>${lmzMeetingUrl(e.room) ? 'Online class' : escapeHtml(e.room||'—')}</td>
+      </tr>`).join('');
+    return `
+      <section class="day">
+        <h2>${escapeHtml(day)}</h2>
+        <table>
+          <thead><tr><th>Time</th><th>Subject</th><th>Tutor</th><th>Room</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8" /><title>Paisley Studio — Timetable</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Quicksand', -apple-system, 'Segoe UI', Roboto, sans-serif; color: #263331; margin: 0; padding: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; border-bottom: 3px solid #55BFB3; margin-bottom: 20px; }
+  .head-left { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 46px; height: 46px; border-radius: 10px; background: #245F5A; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; }
+  .brand { font-size: 18px; font-weight: 800; color: #245F5A; line-height: 1.1; }
+  .brand span { display: block; font-size: 10px; color: #5A6E6A; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; margin-top: 2px; }
+  .meta { text-align: right; font-size: 11px; color: #5A6E6A; line-height: 1.5; }
+  .meta strong { color: #245F5A; font-size: 13px; }
+  .intro { font-size: 12px; color: #5A6E6A; margin-bottom: 18px; line-height: 1.5; }
+  .day { margin-bottom: 18px; page-break-inside: avoid; }
+  .day h2 { font-size: 12px; color: #245F5A; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px 0; padding-bottom: 5px; border-bottom: 1.5px solid #E5F2EF; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th { text-align: left; background: #E5F2EF; color: #245F5A; font-weight: 800; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; padding: 7px 9px; }
+  tbody td { padding: 7px 9px; border-bottom: 1px solid rgba(38,51,49,.08); }
+  tbody tr:last-child td { border-bottom: none; }
+  .foot { margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(38,51,49,.1); font-size: 10px; color: #5A6E6A; display: flex; justify-content: space-between; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head>
+<body>
+  <div class="head">
+    <div class="head-left">
+      <div class="logo">PS</div>
+      <div class="brand">Paisley Studio<span>Student Timetable</span></div>
+    </div>
+    <div class="meta">
+      <strong>${escapeHtml(studentName)}</strong><br />
+      ${escapeHtml(ksLabel)}<br />
+      ${escapeHtml(generatedOn)}
+    </div>
+  </div>
+  <div class="intro">Your weekly schedule. Every session listed below is a confirmed class for your Key Stage. Times are shown in your local time.</div>
+  ${daysHtml}
+  <div class="foot">
+    <span>Paisley Studio · British Curriculum Online Homeschooling</span>
+    <span>paisleystudio.online</span>
+  </div>
+  <script>
+    window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };
+  <\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if(!w){ alert('Please allow pop-ups to download your timetable.'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+});
+
+function loadTickets(){
+  db.collection('tickets')
+    .where('studentId', '==', currentUser.uid)
+    .get()
+    .then(snap=>{
+      allTickets = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      allTickets.sort((a,b)=> (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+      renderTickets();
+      updateTicketBadge();
+    })
+    .catch(err=>console.error('Tickets load error:', err));
+}
+
+function updateTicketBadge(){
+  const open = allTickets.filter(t => t.status === 'Open' || t.status === 'Replied').length;
+  const badge = document.getElementById('navTicketCount');
+  if(!badge) return;
+  if(open > 0){
+    badge.textContent = open;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderTickets(){
+  const list = document.getElementById('ticketsList');
+  if(!list) return;
+  if(!allTickets.length){
+    list.innerHTML = '<div class="empty-row">No tickets yet. Click "New Ticket" to ask your tutor a question.</div>';
+    return;
+  }
+  list.innerHTML = allTickets.map(t=>{
+    const statusClass = t.status === 'Answered' ? 'answered' : (t.status === 'Closed' ? 'flat' : 'pending');
+    // Show which tutor the ticket is for, if set.
+    const tutorLine = t.targetTutorName
+      ? `<span class="pill exam" style="margin-left:.3rem;"><i class="fas fa-chalkboard-user"></i> ${escapeHtml(t.targetTutorName)}</span>`
+      : '';
+    const subjectLine = t.subjectName
+      ? `<span class="pill flat" style="margin-left:.3rem;">${escapeHtml(t.subjectName)}</span>`
+      : '';
+    return `<div class="item-card">
+      <div class="ic"><i class="fas fa-headset"></i></div>
+      <div class="body">
+        <div class="title">${escapeHtml(t.subject || 'Ticket')}</div>
+        <div class="meta">${t.createdAt ? lmsFmtDate(lmsToDate(t.createdAt)) : ''} · <span class="pill ${statusClass}">${escapeHtml(t.status||'Open')}</span>${subjectLine}${tutorLine}</div>
+        <div class="meta" style="margin-top:.4rem;">${escapeHtml(t.message || '')}</div>
+        ${t.reply ? `<div class="meta" style="margin-top:.5rem; padding:.6rem; background:var(--sage); border-radius:8px;"><strong style="color:var(--brand-deep);">Tutor reply:</strong> ${escapeHtml(t.reply)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('newTicketBtn').addEventListener('click', ()=>{
+  document.getElementById('ticketSubject').value = '';
+  document.getElementById('ticketRef').value = '';
+  document.getElementById('ticketMessage').value = '';
+  fillTicketSubjectPicker();
+  document.getElementById('ticketModal').classList.add('show');
+});
+document.getElementById('ticketModalClose').addEventListener('click', ()=>{
+  document.getElementById('ticketModal').classList.remove('show');
+});
+document.getElementById('ticketSubjectPick').addEventListener('change', updateTicketTutorDisplay);
+
+document.getElementById('ticketConfirm').addEventListener('click', ()=>{
+  const subjectId = document.getElementById('ticketSubjectPick').value;
+  const title     = document.getElementById('ticketSubject').value.trim();
+  const ref       = document.getElementById('ticketRef').value.trim();
+  const message   = document.getElementById('ticketMessage').value.trim();
+
+  if(!subjectId){ alert('Pick a subject first.'); return; }
+  if(!title || !message){ alert('Please fill in the ticket title and message.'); return; }
+
+  const entries = eligibleTicketSubjects(profile);
+  const hit = entries.filter(e=>e.subjectId === subjectId)[0];
+  if(!hit){ alert('No tutor is assigned to that subject yet.'); return; }
+
+  db.collection('tickets').add({
+    studentId: currentUser.uid,
+    studentName: profile.name,
+    studentEmail: profile.email || '',
+    keyStage: profile.keyStage || '',
+    subjectId: hit.subjectId,
+    subjectName: hit.subjectName,
+    targetTutorId: hit.tutorId,
+    targetTutorName: hit.tutorName,
+    subject: title,
+    reference: ref,
+    message: message,
+    status: 'Open',
+    reply: '',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(()=>{
+    document.getElementById('ticketModal').classList.remove('show');
+    loadTickets();
+  }).catch(err=>alert('Could not send ticket: ' + err.message));
+});
+
+/* ============================================================
+   STUDENT ID CARD — Registration Number
+   ------------------------------------------------------------
+   Format:  RN-YYYY-KSx-YY-NNN
+     RN    fixed prefix
+     YYYY  calendar year the student joined (4 digits)
+     KSx   Key Stage at join (KS3 / KS4 / KS5)
+     YY    year group at join (7, 8, 9, 10, 11, 12, 13)
+     NNN   global per-year counter, seeded at 100, first = 101
+
+   - One running counter per calendar year, shared across every
+     Key Stage and year group.
+   - Counter resets to 100 on 1 January (first student of the
+     new year gets ...101).
+   - IDs are FROZEN at allocation. They never change, even when
+     a student moves up a year.
+   - Counter lives at counters/registrationNumbers and is
+     incremented inside a Firestore transaction, so two students
+     logging in at the same instant can never collide.
+   - Existing students who already have `registrationNumber`
+     are skipped.
+============================================================ */
+
+function keyStageSlug(ks){
+  const s = String(ks || '').toUpperCase().replace(/\s+/g, '');
+  const m = s.match(/KS(\d)/);
+  if (m) return 'KS' + m[1];
+  return 'KS0';
+}
+
+function buildRegistrationNumber(year, ks, yr, seq){
+  const ksSlug = keyStageSlug(ks);
+  const yrSlug = String(yr || 0).padStart(2, '0');
+  const seqStr = String(seq || 100).padStart(3, '0');
+  return 'RN-' + year + '-' + ksSlug + '-' + yrSlug + '-' + seqStr;
+}
+
+async function ensureStudentIdNumber(){
+  if (!profile) return;
+
+    // Already allocated — nothing to do.
+  // Legacy students with an old PS-… idNumber also keep their existing
+  // number; only new students get an RN-… registration number.
+  if (profile.registrationNumber || profile.idNumber) return;
+
+  // We need Key Stage and Year to build the number.
+  const ks = (profile.keyStage || '').replace(/\s*\(.*/, '').trim();
+  const yr = parseInt(profile.year, 10);
+  if (!ks || !yr) {
+    console.warn('ensureStudentIdNumber: missing keyStage/year, skipping allocation');
+    profile.registrationNumber = profile.registrationNumber || 'RN-XXXX-KS0-00-000';
+    return;
+  }
+
+  const currentYear = new Date().getFullYear();
+  const counterRef  = db.collection('counters').doc('registrationNumbers');
+  const studentRef  = db.collection('students').doc(currentUser.uid);
+
+  try {
+    const allocated = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(counterRef);
+
+      let lastYear = currentYear;
+      let lastSeq  = 100;
+
+      if (snap.exists) {
+        const data = snap.data() || {};
+        lastYear = data.lastYear || currentYear;
+        lastSeq  = typeof data.lastSequence === 'number' ? data.lastSequence : 100;
+      }
+
+      // Reset the counter on year boundary.
+      if (lastYear !== currentYear) {
+        lastSeq = 100;
+      }
+
+      const nextSeq = lastSeq + 1;
+      const regNum  = buildRegistrationNumber(currentYear, ks, yr, nextSeq);
+
+      // Bump the counter.
+      tx.set(counterRef, {
+        lastYear: currentYear,
+        lastSequence: nextSeq,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      // Write the registration number back to the student doc.
+      tx.update(studentRef, {
+        registrationNumber: regNum,
+        registrationSequence: nextSeq,
+        registrationYear: currentYear,
+        registrationIssuedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { regNum, nextSeq };
+    });
+
+    profile.registrationNumber   = allocated.regNum;
+    profile.registrationSequence = allocated.nextSeq;
+    profile.registrationYear     = currentYear;
+
+  } catch (e) {
+    console.warn('ensureStudentIdNumber failed:', e);
+    // Fallback so the card still renders something sensible.
+    profile.registrationNumber =
+      profile.registrationNumber ||
+      'RN-' + currentYear + '-' + keyStageSlug(ks) + '-' + String(yr).padStart(2, '0') + '-000';
+  }
+}
+
+
+function studentPhotoCooldown(){
+  if (!profile || !profile.photoUpdatedAt) return { ok: true };
+  const last = profile.photoUpdatedAt.seconds
+    ? profile.photoUpdatedAt.seconds * 1000
+    : new Date(profile.photoUpdatedAt).getTime();
+  const next = last + 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  if (now >= next) return { ok: true };
+  const daysLeft = Math.ceil((next - now) / (24 * 60 * 60 * 1000));
+  return { ok: false, daysLeft: daysLeft };
+}
+
+function studentInitialsOf(name){
+  return String(name || '?').trim().split(/\s+/).slice(0,2).map(w => w[0].toUpperCase()).join('');
+}
+
+function profileIdProgramme(){
+  const ks = (profile.keyStage || '').replace(/\s*\(.*/, '');
+  if (ks.indexOf('4') !== -1) return 'IGCSE — British Curriculum';
+  if (ks.indexOf('5') !== -1) return 'A-Level — British Curriculum';
+  return 'British Curriculum';
+}
+
+function renderProfileIdCard(){
+  const host = document.getElementById('profileIdCardHost');
+  if (!host || !profile) return;
+
+  const cool = studentPhotoCooldown();
+  const photoBlock = profile.photoUrl
+    ? '<img src="' + escapeHtml(profile.photoUrl) + '" alt="" crossorigin="anonymous" />'
+    : escapeHtml(studentInitialsOf(profile.name));
+
+    host.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h3>My Student ID</h3>
+        <div class="sub">Print it, save it as a picture, or keep it on your phone</div>
+      </div>
+    </div>
+
+    <div class="id-card-wrap">
+      <div class="id-card" id="profileIdCard">
+        <div class="id-card-left">
+          <div class="id-brand">
+            <div class="id-brand-logo">
+            <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="Paisley Studio" />
+            </div>
+            <div class="id-brand-divider"></div>
+                        <div class="id-brand-text">
+              <div class="id-brand-name">Paisley Studio</div>
+              <span class="id-brand-role">Student Identification Card</span>
+            </div>
+          </div>
+
+          <div class="id-avatar-wrap">
+            <div class="id-avatar">${photoBlock}</div>
+          </div>
+
+          <div class="id-name-block">
+            <div class="id-name">${escapeHtml(profile.name || 'Student')}</div>
+            <div class="id-meta">Year ${escapeHtml(profile.year || '—')} · ${escapeHtml((profile.keyStage || '').replace(/\s*\(.*/, ''))}</div>
+          </div>
+        </div>
+
+        <div class="id-card-right">
+          <div class="id-details">
+                        <div class="id-row"><span class="k">Reg No.</span><span class="v mono">${escapeHtml(profile.registrationNumber || profile.idNumber || '—')}</span></div>
+            <div class="id-row"><span class="k">Programme</span><span class="v">${escapeHtml(profileIdProgramme())}</span></div>
+            <div class="id-row"><span class="k">Joined</span><span class="v">${escapeHtml(new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }))}</span></div>
+            <div class="id-row"><span class="k">Renews</span><span class="v">${escapeHtml(new Date(new Date().getFullYear() + 1, 7, 31).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }))}</span></div>
+          </div>
+
+          <div class="id-verify">
+            <div class="id-qr"><img id="profileIdQr" alt="Verification QR" crossorigin="anonymous" /></div>
+            <div class="id-verify-text">
+              <div class="lbl">Verify at</div>
+              <div class="val">paisleystudio.online</div>
+              <div class="site">Scan to confirm this card is active</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="id-stripe"></div>
+      </div>
+
+      <div class="id-controls">
+        <button class="btn-sm primary" type="button" id="idPrintBtn"><i class="fas fa-print"></i> Print</button>
+        <button class="btn-sm" type="button" id="idPngBtn"><i class="fas fa-image"></i> Save PNG</button>
+        <button class="btn-sm" type="button" id="idPhotoBtn"><i class="fas fa-camera"></i> ${profile.photoUrl ? 'Change photo' : 'Add photo'}</button>
+      </div>
+
+      <div class="id-note" id="profileIdNote">
+        ${cool.ok
+          ? 'You can change your profile photo once every 7 days.'
+          : 'You can change your profile photo again in <strong>' + cool.daysLeft + ' day' + (cool.daysLeft === 1 ? '' : 's') + '</strong>.'}
+      </div>
+
+      <input type="file" id="profileIdPhotoIn" accept="image/jpeg,image/png,image/webp" style="display:none" />
+    </div>
+  `;
+
+    const qrEl = document.getElementById('profileIdQr');
+  // QR encodes the site root — scanning opens paisleystudio.online in the phone browser.
+  const qrTarget = 'https://paisleystudio.online';
+  qrEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&data=' + encodeURIComponent(qrTarget);
+
+  document.getElementById('idPrintBtn').addEventListener('click', () => window.print());
+  document.getElementById('idPngBtn').addEventListener('click', downloadIdCardPng);
+
+  const photoBtn = document.getElementById('idPhotoBtn');
+  const photoIn  = document.getElementById('profileIdPhotoIn');
+  photoBtn.addEventListener('click', () => {
+    const c = studentPhotoCooldown();
+    if (!c.ok) { alert('You can only change your profile photo once every 7 days. Please try again in ' + c.daysLeft + ' day(s).'); return; }
+    photoIn.click();
+  });
+  photoIn.addEventListener('change', handleIdPhotoUpload);
+}
+
+async function handleIdPhotoUpload(e){
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { alert('Photo must be under 5 MB.'); return; }
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { alert('Please choose a JPG, PNG or WebP image.'); return; }
+
+  const note = document.getElementById('profileIdNote');
+  if (note) note.textContent = 'Uploading…';
+
+  try {
+    const path = 'student-photos/' + currentUser.uid + '/profile_' + Date.now() + '_' + file.name.replace(/[^a-z0-9._-]/gi, '_');
+    const ref = firebase.storage().ref(path);
+    await ref.put(file, { contentType: file.type });
+    const url = await ref.getDownloadURL();
+
+    await db.collection('students').doc(currentUser.uid).update({
+      photoUrl: url,
+      photoPath: path,
+      photoUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    if (profile.photoPath && profile.photoPath !== path) {
+      firebase.storage().ref(profile.photoPath).delete().catch(() => {});
+    }
+    profile.photoUrl = url;
+    profile.photoPath = path;
+    profile.photoUpdatedAt = { seconds: Math.floor(Date.now() / 1000) };
+
+    renderProfileIdCard();
+  } catch (err) {
+    console.error('photo upload:', err);
+    if (note) note.textContent = 'Upload failed: ' + (err.message || err);
+  }
+}
+
+async function downloadIdCardPng(){
+  const btn = document.getElementById('idPngBtn');
+  if (!btn) return;
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rendering…';
+  try {
+    const card = document.getElementById('profileIdCard');
+    const canvas = await html2canvas(card, { scale: 4, backgroundColor: null, useCORS: true, allowTaint: false });
+    const a = document.createElement('a');
+    a.download = (profile.registrationNumber || profile.idNumber || 'student-id') + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  } catch (err) {
+    alert('Could not save the image: ' + (err.message || err));
+  }
+  btn.disabled = false;
+  btn.innerHTML = original;
+}
+</script>
+</body>
+</html>

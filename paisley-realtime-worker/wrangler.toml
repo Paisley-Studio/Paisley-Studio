@@ -1,0 +1,7 @@
+name = "paisley-realtime-worker"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+CLOUDFLARE_ACCOUNT_ID = "d9cd59ccb5997ae4a76a311668b37d1c"
+REALTIMEKIT_APP_ID = "f4739dee-1348-4284-a44a-d2ab0a2e10e1"

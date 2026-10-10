@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tutor Accounts — Studio Desk</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C; --warn:#E8A33D;
+    --sidebar-w:240px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+
+  #loginOverlay{position:fixed; inset:0; background:linear-gradient(160deg,var(--paper) 0%, var(--sage) 100%); display:flex; align-items:center; justify-content:center; z-index:100; padding:2rem 1.2rem;}
+  body.authed #loginOverlay{display:none;}
+  .login-card{width:100%; max-width:400px; background:var(--surface); border-radius:20px; border:1px solid var(--line); box-shadow:0 30px 70px rgba(36,95,90,.14); padding:2.4rem 2rem;}
+  .login-card h1{font-size:1.3rem; color:var(--brand-deep); margin:0 0 .3rem;}
+  .login-card p{color:var(--muted); font-size:.86rem; margin:0 0 1.6rem;}
+
+  #shell{display:none; min-height:100vh;}
+  body.authed #shell{display:flex;}
+  .sidebar{width:var(--sidebar-w); background:var(--brand-deep); flex-shrink:0; display:flex; flex-direction:column; position:fixed; top:0; bottom:0; left:0; z-index:20; transition:transform .3s;}
+  .sidebar-brand{display:flex; align-items:center; gap:.6rem; padding:1.3rem 1.1rem; border-bottom:1px solid rgba(255,255,255,.08);}
+  .sidebar-brand img{width:38px; height:38px; border-radius:9px;}
+  .sidebar-brand .name{color:#fff; font-weight:800; font-size:.95rem; line-height:1.2;}
+  .sidebar-brand .name span{display:block; font-size:.6rem; color:var(--brand-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .sidebar-nav{padding:1rem .8rem; flex:1;}
+  .nav-item{display:flex; align-items:center; gap:.7rem; padding:.68rem .8rem; border-radius:10px; color:rgba(255,255,255,.72); font-weight:700; font-size:.84rem; cursor:pointer; margin-bottom:.2rem; border:none; background:none; width:100%; text-align:left; font-family:var(--font); text-decoration:none;}
+  .nav-item i{width:16px; text-align:center;}
+  .nav-item:hover{background:rgba(255,255,255,.05); color:#fff;}
+  .nav-item.active{background:rgba(85,191,179,.16); color:#fff;}
+  .sidebar-foot{padding:1rem .8rem; border-top:1px solid rgba(255,255,255,.08);}
+  .signout{width:100%; padding:.55rem 0; border-radius:9px; border:1px solid rgba(255,255,255,.14); background:none; color:rgba(255,255,255,.75); font-family:var(--font); font-weight:700; font-size:.78rem; cursor:pointer;}
+  .signout:hover{color:#fff; background:rgba(231,76,60,.18);}
+
+  .main{margin-left:var(--sidebar-w); flex:1; min-width:0;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:1.1rem 1.8rem; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10;}
+  .topbar-title{font-size:1.15rem; font-weight:800; color:var(--brand-deep);}
+  .topbar-sub{font-size:.78rem; color:var(--muted);}
+  .menu-toggle{display:none; background:none; border:none; font-size:1.1rem; color:var(--brand-deep); cursor:pointer;}
+  .content{padding:1.8rem;}
+
+  .stats-row{display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.6rem;}
+  .stat-card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.2rem 1.3rem;}
+  .stat-card .icon-wrap{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:.7rem; font-size:.95rem;}
+  .ic-1{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .ic-2{background:rgba(245,200,66,.16); color:#9c7912;}
+  .ic-3{background:rgba(46,184,114,.14); color:#1d8b57;}
+  .ic-4{background:rgba(231,76,60,.1); color:#b8362a;}
+  .stat-card .num{font-size:1.6rem; font-weight:800; color:var(--brand-deep); line-height:1;}
+  .stat-card .lbl{font-size:.76rem; color:var(--muted); margin-top:.3rem;}
+
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.4rem;}
+  .table-toolbar{display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; margin-bottom:1rem;}
+  .filter-chips{display:flex; gap:.4rem; flex-wrap:wrap;}
+  .chip-btn{padding:.38rem .85rem; border-radius:99px; border:1.5px solid var(--line); background:var(--surface); color:var(--muted); font-family:var(--font); font-weight:700; font-size:.75rem; cursor:pointer;}
+  .chip-btn:hover{border-color:var(--brand); color:var(--brand-deep);}
+  .chip-btn.active{background:var(--brand); border-color:var(--brand); color:#fff;}
+
+  .btn{padding:.6rem 1.1rem; border-radius:10px; border:1.5px solid var(--line); background:var(--surface); color:var(--brand-deep); font-family:var(--font); font-weight:800; font-size:.82rem; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem;}
+  .btn-primary{background:var(--brand-deep); border-color:var(--brand-deep); color:#fff;}
+  .btn-primary:hover{background:var(--brand); border-color:var(--brand);}
+  .btn-ghost:hover{border-color:var(--brand);}
+  .btn-sm{padding:.5rem .95rem; font-size:.78rem;}
+  .btn:disabled{opacity:.55; cursor:not-allowed;}
+
+  .table-wrap{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; font-size:.83rem;}
+  thead th{text-align:left; padding:.6rem .5rem; color:var(--muted); font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; border-bottom:1.5px solid var(--line); white-space:nowrap;}
+  tbody td{padding:.65rem .5rem; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  .cell-name{font-weight:700; color:var(--ink);}
+  .cell-sub{display:block; font-size:.72rem; color:var(--muted); margin-top:.15rem;}
+  .badge{display:inline-flex; align-items:center; gap:.3rem; padding:.22rem .6rem; border-radius:99px; font-size:.7rem; font-weight:800;}
+  .b-confirmed{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .b-pending{background:rgba(232,163,61,.14); color:#96690f;}
+  .b-declined{background:rgba(231,76,60,.1); color:#b8362a;}
+  .b-plain{background:var(--sage); color:var(--brand-deep); font-weight:700;}
+  .row-actions{display:flex; gap:.3rem; flex-wrap:wrap;}
+  .mini-btn{width:28px; height:28px; border-radius:8px; border:1.5px solid var(--line); background:var(--surface); color:var(--muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:.72rem; text-decoration:none;}
+  .mini-btn:hover{border-color:var(--brand); color:var(--brand-deep); background:var(--sage);}
+  .mini-btn.danger:hover{border-color:var(--error); color:var(--error); background:rgba(231,76,60,.06);}
+  .mini-btn.success:hover{border-color:var(--success); color:var(--success); background:rgba(46,184,114,.06);}
+  .pager{display:flex; justify-content:space-between; align-items:center; margin-top:1rem; font-size:.76rem; color:var(--muted);}
+
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem;}
+  .form-field{display:flex; flex-direction:column;}
+  .form-field.full{grid-column:1 / -1;}
+  .form-field label{font-size:.74rem; font-weight:700; color:var(--brand-deep); margin-bottom:.35rem;}
+  .form-field input, .form-field select, .form-field textarea{padding:.6rem .75rem; border:1.5px solid var(--line); border-radius:9px; font-family:var(--font); font-size:.85rem; background:var(--paper); color:var(--ink); width:100%;}
+  .form-field textarea{min-height:80px; resize:vertical;}
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{outline:none; border-color:var(--brand);}
+  .check-grid{display:flex; flex-direction:column; gap:.35rem;}
+  .check-grid label{display:flex; align-items:center; gap:.5rem; font-size:.8rem; color:var(--ink); font-weight:600;}
+
+  .field-hint{font-size:.72rem; color:var(--warn); margin-top:.35rem; line-height:1.4; display:flex; gap:.35rem; align-items:flex-start;}
+  .field-hint i{margin-top:.15rem;}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,26,20,.5); display:none; align-items:center; justify-content:center; z-index:60; padding:1rem;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface); border-radius:18px; max-width:640px; width:100%; max-height:88vh; overflow-y:auto;}
+  .modal-head{display:flex; align-items:center; justify-content:space-between; padding:1.2rem 1.4rem; border-bottom:1px solid var(--line);}
+  .modal-head h3{margin:0; font-size:1rem; color:var(--brand-deep);}
+  .modal-close{background:none; border:none; font-size:1rem; color:var(--muted); cursor:pointer;}
+  .modal-body{padding:1.3rem 1.4rem;}
+  .modal-foot{display:flex; justify-content:flex-end; gap:.6rem; padding:1rem 1.4rem; border-top:1px solid var(--line); flex-wrap:wrap;}
+  .detail-row{display:flex; gap:1rem; padding:.5rem 0; border-bottom:1px solid var(--line-soft); font-size:.84rem;}
+  .detail-row .k{min-width:150px; color:var(--muted); font-weight:700; font-size:.76rem;}
+  .detail-row .v{flex:1; word-break:break-word;}
+
+  .msg{display:none; padding:.7rem .9rem; border-radius:10px; font-size:.82rem; margin-bottom:1.1rem; line-height:1.4;}
+  .msg.show{display:block;}
+  .msg.error{background:rgba(231,76,60,.08); color:#B8362A; border:1px solid rgba(231,76,60,.25);}
+  .setup-note{background:var(--sage); border-radius:12px; padding:.9rem 1.1rem; font-size:.8rem; color:var(--muted); line-height:1.55; margin-bottom:1.4rem; display:flex; gap:.6rem;}
+  .setup-note i{color:var(--brand-deep); margin-top:.15rem;}
+  .setup-note.warn{background:rgba(232,163,61,.1); color:#96690f;}
+  .setup-note.warn i{color:var(--warn);}
+  .copy-link{font-family:monospace; font-size:.76rem; background:var(--sage); padding:.2rem .45rem; border-radius:6px; word-break:break-all;}
+
+  /* Manage students modal */
+  .ms-toolbar{display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:.9rem; align-items:center;}
+  .ms-search{flex:1; min-width:200px; padding:.55rem .75rem; border:1.5px solid var(--line); border-radius:9px; font-family:var(--font); font-size:.84rem; background:var(--paper);}
+  .ms-search:focus{outline:none; border-color:var(--brand);}
+  .ms-list{border:1px solid var(--line); border-radius:12px; max-height:44vh; overflow-y:auto;}
+  .ms-row{display:flex; align-items:center; gap:.8rem; padding:.6rem .9rem; border-bottom:1px solid var(--line-soft); font-size:.85rem;}
+  .ms-row:last-child{border-bottom:none;}
+  .ms-row:hover{background:var(--paper);}
+  .ms-row input[type="checkbox"]{accent-color:var(--brand-deep); width:16px; height:16px; flex-shrink:0;}
+  .ms-row .ms-who{flex:1; min-width:0;}
+  .ms-row .ms-name{font-weight:700; color:var(--ink);}
+  .ms-row .ms-meta{font-size:.73rem; color:var(--muted); margin-top:.1rem;}
+  .ms-row .ms-current{font-size:.7rem; color:var(--warn); font-weight:700; margin-left:.4rem;}
+  .ms-empty{padding:1.4rem; text-align:center; color:var(--muted); font-size:.82rem;}
+  .ms-summary{font-size:.78rem; color:var(--muted); margin-top:.7rem;}
+
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%);} .sidebar.open{transform:translateX(0);}
+    .main{margin-left:0;} .menu-toggle{display:block;}
+    .stats-row{grid-template-columns:repeat(2,1fr);}
+    .form-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginOverlay">
+  <div class="login-card">
+    <h1>Studio Desk</h1>
+    <p>Sign in with your administrator account to manage tutor accounts.</p>
+    <div class="msg error" id="loginError"><span id="loginErrorText"></span></div>
+    <div class="form-field" style="margin-bottom:.9rem;"><label>Email</label><input type="email" id="loginEmail" placeholder="you@paisleystudio.online" autocomplete="username" /></div>
+    <div class="form-field" style="margin-bottom:1.1rem;"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" /></div>
+    <button class="btn btn-primary" id="loginBtn" type="button" style="width:100%; justify-content:center;"><i class="fas fa-arrow-right-to-bracket"></i> Sign In</button>
+    <a href="index.html" style="display:block; text-align:center; margin-top:1.1rem; font-size:.8rem; color:var(--muted); text-decoration:none;"><i class="fas fa-arrow-left"></i> Back to Studio Desk</a>
+  </div>
+</div>
+
+<div id="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" />
+      <div class="name">Paisley Studio<span>Studio Desk</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="index.html"><i class="fas fa-chart-pie" aria-hidden="true"></i> Back to Dashboard</a>
+      <a class="nav-item active" href="tutors.html"><i class="fas fa-chalkboard-user" aria-hidden="true"></i> Tutor Accounts</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="signout" id="signOutBtn" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex; align-items:center; gap:.8rem;">
+        <button class="menu-toggle" id="menuToggle" type="button"><i class="fas fa-bars"></i></button>
+        <div>
+          <div class="topbar-title">Tutor Accounts</div>
+          <div class="topbar-sub">Create, suspend and manage tutor logins</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="setup-note" id="setupNote">
+        <i class="fas fa-chalkboard-user" aria-hidden="true"></i>
+        <div>
+          <strong>Creating a tutor account:</strong> you set their name, email, and password.
+          The moment you click <strong>Create tutor</strong>, the password is shown <strong>once</strong> in a pop-up — copy it
+          or take a screenshot and send it to the tutor.
+          <br><br>
+          For their safety, it is not stored anywhere and will never be shown again.
+          If you lose it, click the <strong>key icon</strong> on the tutor row and the tutor will receive
+          a link by email to set a new one.
+          <br><br>
+          They sign in at <span class="copy-link" id="baseUrlHint">/tutor/{slug}</span> — a personal link you can send them.
+          To attach students, click <strong>Manage students</strong> on any tutor row.
+          The tutor sees only their own students, their own posts, and the work you ask them to help mark.
+          You remain in charge.
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="icon-wrap ic-1"><i class="fas fa-chalkboard-user" aria-hidden="true"></i></div><div class="num" id="statTutorTotal">0</div><div class="lbl">Tutor accounts</div></div>
+        <div class="stat-card"><div class="icon-wrap ic-3"><i class="fas fa-user-check" aria-hidden="true"></i></div><div class="num" id="statTutorActive">0</div><div class="lbl">Active</div></div>
+        <div class="stat-card"><div class="icon-wrap ic-2"><i class="fas fa-user-lock" aria-hidden="true"></i></div><div class="num" id="statTutorSuspended">0</div><div class="lbl">Suspended</div></div>
+        <div class="stat-card"><div class="icon-wrap ic-4"><i class="fas fa-user-graduate" aria-hidden="true"></i></div><div class="num" id="statTutorStudents">0</div><div class="lbl">Students assigned</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="table-toolbar">
+          <button class="btn btn-primary btn-sm" id="addTutorBtn" type="button"><i class="fas fa-plus" aria-hidden="true"></i> Create tutor account</button>
+          <div class="filter-chips" id="tutorStatusFilters">
+            <button class="chip-btn active" data-filter="all" type="button">All</button>
+            <button class="chip-btn" data-filter="Active" type="button">Active</button>
+            <button class="chip-btn" data-filter="Suspended" type="button">Suspended</button>
+          </div>
+          <div class="filter-chips" id="tutorAcctKS" style="margin-left:auto;">
+            <button class="chip-btn" data-filter="Key Stage 2 (Years 3-6)" type="button">KS2</button>
+            <button class="chip-btn" data-filter="Key Stage 3 (Years 7-9)" type="button">KS3</button>
+            <button class="chip-btn" data-filter="Key Stage 4 (Years 10-11) — IGCSE" type="button">KS4</button>
+            <button class="chip-btn" data-filter="Key Stage 5 (Years 12-13) — A-Level" type="button">KS5</button>
+            <button class="chip-btn active" data-filter="all" type="button">All</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tutor</th><th>Login URL</th><th>Key Stages</th><th>Subjects</th><th>Students</th><th>Status</th><th>Created</th><th></th></tr></thead>
+            <tbody id="tutorAcctBody"></tbody>
+          </table>
+        </div>
+        <div class="pager"><span id="tutorAcctCount">0 records</span><span>Live from Firestore</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Tutor</h3>
+      <button class="modal-close" id="modalClose" type="button" aria-label="Close dialog"><i class="fas fa-times" aria-hidden="true"></i></button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script>
+const auth = firebase.auth();
+
+const ADMIN_EMAILS = [
+  "info@paisleystudio.online"
+];
+
+let listenersStarted = false;
+let DB = { tutorAccounts: [], students: [] };
+let tutorStatusFilter = 'all';
+let tutorAcctKSFilter = 'all';
+
+/* =========================================================
+   SECONDARY FIREBASE APP
+   ---------------------------------------------------------
+   createUserWithEmailAndPassword signs the NEW user in on whichever app
+   instance runs it. Doing that on the default app would kick the admin out
+   of their own session. A second, throwaway app instance keeps the admin
+   signed in while the tutor's Auth user is created.
+========================================================= */
+let secondaryApp = null;
+function getSecondaryAuth(){
+  if(!secondaryApp){
+    secondaryApp = firebase.initializeApp(firebaseConfig, 'tutorCreator');
+  }
+  return secondaryApp.auth();
+}
+
+/* ---------- AUTH GATE ---------- */
+auth.onAuthStateChanged(function(user){
+  if(!user){
+    document.body.classList.remove('authed');
+    return;
+  }
+  if(ADMIN_EMAILS.includes(user.email)){ grantAdminAccess(); return; }
+  db.collection('admins').doc(user.uid).get()
+    .then(doc=>{
+      if(doc.exists && doc.data().role === 'admin'){ grantAdminAccess(); }
+      else {
+        alert('Access denied. This area is for Studio Desk administrators only.');
+        auth.signOut().then(()=>location.reload());
+      }
+    })
+    .catch(()=>{
+      alert('Access denied.');
+      auth.signOut().then(()=>location.reload());
+    });
+});
+
+function grantAdminAccess(){
+  document.body.classList.add('authed');
+  document.getElementById('baseUrlHint').textContent = location.origin + '/tutor/{slug}';
+  if(!listenersStarted){ listenersStarted = true; initFirestore(); }
+}
+
+function showLoginError(msg){
+  document.getElementById('loginErrorText').textContent = msg;
+  document.getElementById('loginError').classList.add('show');
+}
+
+function attemptLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  document.getElementById('loginError').classList.remove('show');
+  if(!email || !pass){ showLoginError('Please enter both email and password.'); return; }
+  auth.signInWithEmailAndPassword(email, pass).catch(err=>{
+    let m = 'Incorrect email or password.';
+    if(err.code === 'auth/too-many-requests') m = 'Too many attempts. Please wait a few minutes.';
+    showLoginError(m);
+    document.getElementById('loginPassword').value = '';
+  });
+}
+document.getElementById('loginBtn').addEventListener('click', attemptLogin);
+document.getElementById('loginEmail').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginPassword').focus(); });
+document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') attemptLogin(); });
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{
+  if(!confirm('Sign out of Studio Desk?')) return;
+  auth.signOut().then(()=>location.reload());
+});
+document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
+
+/* ---------- UTILITIES ---------- */
+function escapeHtml(str){
+  if(str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function toDate(ts){
+  if(!ts) return null;
+  if(typeof ts.toDate === 'function') return ts.toDate();
+  return new Date(ts);
+}
+function fmtDate(d){
+  if(!d) return '—';
+  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+const keyStages = [
+  'Key Stage 2 (Years 3-6)',
+  'Key Stage 3 (Years 7-9)',
+  'Key Stage 4 (Years 10-11) — IGCSE',
+  'Key Stage 5 (Years 12-13) — A-Level'
+];
+
+const overlay = document.getElementById('modalOverlay');
+document.getElementById('modalClose').addEventListener('click', closeModal);
+overlay.addEventListener('click', e=>{ if(e.target === overlay) closeModal(); });
+function closeModal(){ overlay.classList.remove('open'); }
+function openModal(title, bodyHtml, footHtml){
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalFoot').innerHTML = footHtml || '';
+  overlay.classList.add('open');
+}
+function row(k, v){
+  return '<div class="detail-row"><span class="k">' + escapeHtml(k) + '</span><span class="v">' + escapeHtml(v == null || v === '' ? '—' : v) + '</span></div>';
+}
+
+function wireChips(containerId, setFn, renderFn){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  container.addEventListener('click', e=>{
+    const btn = e.target.closest('.chip-btn');
+    if(!btn) return;
+    document.querySelectorAll('#'+containerId+' .chip-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    setFn(btn.dataset.filter);
+    renderFn();
+  });
+}
+wireChips('tutorStatusFilters', v=>tutorStatusFilter=v, renderTutorAccounts);
+wireChips('tutorAcctKS', v=>tutorAcctKSFilter=v, renderTutorAccounts);
+
+/* ---------- FIRESTORE ---------- */
+function initFirestore(){
+  db.collection('tutorAccounts').onSnapshot(snap=>{
+    DB.tutorAccounts = snap.docs.map(d=>({ id:d.id, ...d.data(), date: toDate(d.data().createdAt) }));
+    renderTutorAccounts();
+    // Normalise subjects saved before subject IDs existed (free text -> ids), non-destructively.
+    const stale = snap.docs.filter(d=>{ const sub = d.data().subjects; return Array.isArray(sub) && sub.length && JSON.stringify(sub) !== JSON.stringify(lmzSubjectKeys(sub)); });
+    if(stale.length){
+      const batch = db.batch();
+      stale.forEach(d=>batch.update(d.ref, lmzSubjectWriteFields(d.data().subjects)));
+      batch.commit().catch(e=>console.warn('tutor subject normalisation skipped:', e));
+    }
+  }, handleErr);
+
+  db.collection('students').onSnapshot(snap=>{
+    DB.students = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    renderTutorAccounts();
+  }, handleErr);
+}
+function handleErr(err){
+  console.error('Firestore error:', err);
+  const note = document.getElementById('setupNote');
+  note.classList.add('warn');
+  note.innerHTML = '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i><div><strong>Can\'t read data yet.</strong> Check that your Firestore rules allow admins to read <code>tutorAccounts</code> and <code>students</code>. Console error: <code>' + escapeHtml(err.message || err) + '</code></div>';
+}
+
+function studentsOf(tutorId){
+  return DB.students.filter(s=>s.tutorId === tutorId);
+}
+
+function renderTutorAccounts(){
+  const body = document.getElementById('tutorAcctBody');
+  let list = DB.tutorAccounts.slice();
+  if(tutorStatusFilter !== 'all') list = list.filter(t=>(t.status||'Active') === tutorStatusFilter);
+  if(tutorAcctKSFilter !== 'all') list = list.filter(t=>(t.keyStages||[]).indexOf(tutorAcctKSFilter) !== -1);
+  list.sort((a,b)=>(b.date||0)-(a.date||0));
+
+  document.getElementById('statTutorTotal').textContent = DB.tutorAccounts.length;
+  document.getElementById('statTutorActive').textContent = DB.tutorAccounts.filter(t=>(t.status||'Active')==='Active').length;
+  document.getElementById('statTutorSuspended').textContent = DB.tutorAccounts.filter(t=>t.status==='Suspended').length;
+  document.getElementById('statTutorStudents').textContent = DB.students.filter(s=>s.tutorId).length;
+  document.getElementById('tutorAcctCount').textContent = list.length + ' record' + (list.length===1?'':'s');
+
+  if(!list.length){
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:1.4rem;">No tutor accounts here yet.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = list.map(t=>{
+    const url = location.origin + '/tutor/' + (t.slug||'');
+    const count = studentsOf(t.id).length;
+    const suspended = t.status === 'Suspended';
+    return `<tr>
+      <td><div class="cell-name">${escapeHtml(t.name||'—')}</div><div class="cell-sub">${escapeHtml(t.email||'')}</div></td>
+      <td><span class="copy-link">/tutor/${escapeHtml(t.slug||'')}</span>
+          <button class="mini-btn" title="Copy full login URL" type="button" onclick="copyUrl('${escapeHtml(url)}')"><i class="fas fa-copy" aria-hidden="true"></i></button></td>
+      <td>${(t.keyStages||[]).map(k=>escapeHtml(k.replace(/\s*\(.*/, ''))).join(', ') || '—'}</td>
+      <td>${lmzSubjectLabels(t.subjects).map(escapeHtml).join(', ') || '<span class="cell-sub">None assigned</span>'}</td>
+      <td>${count}</td>
+      <td><span class="badge ${suspended?'b-declined':'b-confirmed'}">${escapeHtml(t.status||'Active')}</span></td>
+      <td>${fmtDate(t.date)}</td>
+      <td class="row-actions">
+        <button class="mini-btn" title="Manage students" type="button" onclick="manageStudents('${t.id}')"><i class="fas fa-user-plus" aria-hidden="true"></i></button>
+        <button class="mini-btn" title="View / edit" type="button" onclick="viewTutor('${t.id}')"><i class="fas fa-eye" aria-hidden="true"></i></button>
+        <button class="mini-btn" title="Send password reset" type="button" onclick="resetTutorPassword('${t.id}')"><i class="fas fa-key" aria-hidden="true"></i></button>
+        ${suspended
+          ? `<button class="mini-btn success" title="Reactivate" type="button" onclick="setTutorStatus('${t.id}','Active')"><i class="fas fa-unlock" aria-hidden="true"></i></button>`
+          : `<button class="mini-btn" title="Suspend" type="button" onclick="setTutorStatus('${t.id}','Suspended')"><i class="fas fa-lock" aria-hidden="true"></i></button>`}
+        <button class="mini-btn danger" title="Delete" type="button" onclick="removeTutor('${t.id}')"><i class="fas fa-trash" aria-hidden="true"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+window.copyUrl = (url) => {
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(()=>alert('Login URL copied:\n' + url)).catch(()=>prompt('Copy this login URL:', url));
+  } else {
+    prompt('Copy this login URL:', url);
+  }
+};
+
+/* =========================================================
+   MANAGE STUDENTS — bulk assign
+   ---------------------------------------------------------
+   Admin picks a tutor, sees ONLY the students whose keyStage
+   matches one of that tutor's Key Stages, ticks who to assign,
+   and saves in one go. Currently assigned students appear
+   pre-ticked; untick to remove them from this tutor.
+========================================================= */
+let msState = { tutorId: '', tutorName: '', tutorSlug: '', tutorKS: [], assignments: {}, search: '' };
+
+window.manageStudents = (tutorId) => {
+  const t = DB.tutorAccounts.find(x=>x.id===tutorId);
+  if(!t){ alert('Tutor not found.'); return; }
+
+  msState = {
+    tutorId: t.id,
+    tutorName: t.name || '',
+    tutorSlug: t.slug || '',
+    tutorKS: (t.keyStages || []).slice(),
+    assignments: {},
+    search: ''
+  };
+
+  // Pre-tick every student already assigned to this tutor.
+  DB.students.forEach(s=>{
+    if(s.tutorId === t.id) msState.assignments[s.id] = true;
+  });
+
+  const eligible = eligibleStudents();
+
+  if(!msState.tutorKS.length){
+    openModal('Manage students — ' + (t.name||'Tutor'),
+      '<div class="setup-note warn"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><div>This tutor has <strong>no Key Stages assigned</strong>. Edit the tutor and tick one or more Key Stages first — then you can assign students.</div></div>',
+      '<button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Close</button>'
+    );
+    return;
+  }
+
+  if(!eligible.length){
+    openModal('Manage students — ' + (t.name||'Tutor'),
+      '<div class="setup-note"><i class="fas fa-circle-info" aria-hidden="true"></i><div>There are no students yet in this tutor\'s Key Stages (' + escapeHtml(msState.tutorKS.map(k=>k.replace(/\s*\(.*/, '')).join(', ')) + ').</div></div>',
+      '<button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Close</button>'
+    );
+    return;
+  }
+
+  renderMsModal();
+};
+
+function eligibleStudents(){
+  return DB.students.filter(s=> msState.tutorKS.indexOf(s.keyStage || '') !== -1);
+}
+
+function renderMsModal(){
+  const eligible = eligibleStudents();
+  const assignedCount = Object.keys(msState.assignments).filter(k=>msState.assignments[k]).length;
+
+  const body = `
+    <div class="detail-row"><span class="k">Tutor</span><span class="v">${escapeHtml(msState.tutorName)}</span></div>
+    <div class="detail-row"><span class="k">Their Key Stages</span><span class="v">${msState.tutorKS.map(k=>escapeHtml(k.replace(/\s*\(.*/, ''))).join(', ')}</span></div>
+    <div class="setup-note" style="margin-top:1rem;">
+      <i class="fas fa-circle-info" aria-hidden="true"></i>
+      <div>Only students in this tutor's Key Stages are shown. Tick the ones this tutor should teach. Save to apply.</div>
+    </div>
+    <div class="ms-toolbar">
+      <input class="ms-search" id="msSearch" type="text" placeholder="Search students by name or email…" value="${escapeHtml(msState.search)}" />
+      <button class="btn btn-ghost btn-sm" type="button" onclick="msSelectAll()"><i class="fas fa-check-double" aria-hidden="true"></i> Select all</button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="msClearAll()"><i class="fas fa-eraser" aria-hidden="true"></i> Clear</button>
+    </div>
+    <div class="ms-list" id="msList">${renderMsRows(eligible)}</div>
+    <div class="ms-summary" id="msSummary">${assignedCount} of ${eligible.length} student${eligible.length===1?'':'s'} will be assigned to this tutor.</div>
+  `;
+
+  const foot = `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="saveMsAssignments()" type="button"><i class="fas fa-check" aria-hidden="true"></i> Save assignments</button>
+  `;
+
+  openModal('Manage students — ' + (msState.tutorName||'Tutor'), body, foot);
+
+  const searchEl = document.getElementById('msSearch');
+  if(searchEl){
+    searchEl.addEventListener('input', e=>{
+      msState.search = e.target.value;
+      document.getElementById('msList').innerHTML = renderMsRows(eligibleStudents());
+      wireMsCheckboxes();
+    });
+  }
+  wireMsCheckboxes();
+}
+
+function msFiltered(list){
+  const q = (msState.search||'').trim().toLowerCase();
+  if(!q) return list;
+  return list.filter(s=>
+    (s.name||'').toLowerCase().includes(q) ||
+    (s.email||'').toLowerCase().includes(q)
+  );
+}
+
+function renderMsRows(eligible){
+  const list = msFiltered(eligible);
+  if(!list.length){
+    return '<div class="ms-empty">No students match your search.</div>';
+  }
+  return list.map(s=>{
+    const checked = msState.assignments[s.id] ? 'checked' : '';
+    const currentTutor = s.tutorId && s.tutorId !== msState.tutorId
+      ? DB.tutorAccounts.find(t=>t.id===s.tutorId)
+      : null;
+    const currentTag = currentTutor
+      ? '<span class="ms-current">Currently with ' + escapeHtml(currentTutor.name||'another tutor') + '</span>'
+      : '';
+    return `<label class="ms-row" for="ms_${s.id}">
+      <input type="checkbox" id="ms_${s.id}" data-sid="${s.id}" ${checked} />
+      <div class="ms-who">
+        <div class="ms-name">${escapeHtml(s.name||'(unnamed)')}${currentTag}</div>
+        <div class="ms-meta">${escapeHtml(s.email||'')} · ${escapeHtml((s.keyStage||'').replace(/\s*\(.*/, ''))} · ${escapeHtml(s.status||'')}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function wireMsCheckboxes(){
+  document.querySelectorAll('#msList input[type="checkbox"]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const id = cb.getAttribute('data-sid');
+      if(cb.checked) msState.assignments[id] = true;
+      else delete msState.assignments[id];
+      const eligible = eligibleStudents();
+      const assignedCount = Object.keys(msState.assignments).filter(k=>msState.assignments[k]).length;
+      document.getElementById('msSummary').textContent =
+        assignedCount + ' of ' + eligible.length + ' student' + (eligible.length===1?'':'s') + ' will be assigned to this tutor.';
+    });
+  });
+}
+
+window.msSelectAll = () => {
+  eligibleStudents().forEach(s=>{ msState.assignments[s.id] = true; });
+  renderMsModal();
+};
+
+window.msClearAll = () => {
+  msState.assignments = {};
+  renderMsModal();
+};
+
+window.saveMsAssignments = async () => {
+  const tutorId = msState.tutorId;
+  const tutorName = msState.tutorName;
+  const tutorSlug = msState.tutorSlug;
+
+  // Every student currently assigned to this tutor who is NOT ticked
+  // will be unassigned. Every student in the list who IS ticked will
+  // be assigned. Anything else is left alone.
+  const toAssign = DB.students.filter(s=> msState.assignments[s.id] === true);
+  const toUnassign = DB.students.filter(s=> s.tutorId === tutorId && msState.assignments[s.id] !== true);
+
+  if(!toAssign.length && !toUnassign.length){
+    alert('No changes to save.');
+    return;
+  }
+
+  const btn = event && event.target ? event.target : null;
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
+
+  const batch = db.batch();
+  toAssign.forEach(s=>{
+    batch.update(db.collection('students').doc(s.id), {
+      tutorId: tutorId,
+      tutorName: tutorName,
+      tutorSlug: tutorSlug
+    });
+  });
+  toUnassign.forEach(s=>{
+    batch.update(db.collection('students').doc(s.id), {
+      tutorId: '',
+      tutorName: '',
+      tutorSlug: ''
+    });
+  });
+
+  try{
+    await batch.commit();
+    closeModal();
+    setTimeout(()=>{
+      alert('Saved.\n\nAssigned: ' + toAssign.length + '\nUnassigned: ' + toUnassign.length);
+    }, 100);
+  }catch(err){
+    console.error(err);
+    if(btn){ btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Save assignments'; }
+    alert('Could not save: ' + err.message);
+  }
+};
+
+/* ---------- CREATE ---------- */
+// Catalogue subjects, plus any older free-text subject already on the tutor that
+// the catalogue does not know — shown ticked so saving never drops it silently.
+function tutorSubjectOptions(current){
+  const have = lmzSubjectKeys(current);
+  const opts = LMZ_SUBJECTS.map(s=>({ key:s.id, label:s.name, checked:have.indexOf(s.id)!==-1, legacy:false }));
+  have.filter(k=>!lmzIsCatalogueSubject(k)).forEach(k=>opts.push({ key:k, label:lmzSubjectLabel(k), checked:true, legacy:true }));
+  return opts;
+}
+
+function tutorFormHtml(t, isNew){
+  t = t || {};
+  return `
+    <div class="form-grid">
+      <div class="form-field full"><label>Full name</label><input type="text" id="tName" value="${escapeHtml(t.name||'')}" placeholder="Jane Wanjiru" /></div>
+      <div class="form-field"><label>Email (this is their login)</label><input type="email" id="tEmail" value="${escapeHtml(t.email||'')}" placeholder="jane@paisleystudio.online" ${isNew?'':'disabled'} /></div>
+      <div class="form-field"><label>Phone</label><input type="text" id="tPhone" value="${escapeHtml(t.phone||'')}" placeholder="+254…" /></div>
+      ${isNew?`<div class="form-field full">
+        <label>Password (at least 6 characters)</label>
+        <input type="password" id="tPassword" placeholder="Set an initial password" autocomplete="new-password" />
+        <div class="field-hint"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>Copy or screenshot this after you click Create. It cannot be shown again for the tutor's safety.</span></div>
+      </div>`:''}
+      <div class="form-field full"><label>Login slug — their URL becomes /tutor/{slug}</label><input type="text" id="tSlug" value="${escapeHtml(t.slug||'')}" placeholder="jane-wanjiru" /></div>
+      <div class="form-field full"><label>Key Stages they teach</label>
+        <div class="check-grid" id="tKeyStages">
+          ${keyStages.map(k=>`<label><input type="checkbox" value="${escapeHtml(k)}" ${(t.keyStages||[]).indexOf(k)!==-1?'checked':''} /> ${escapeHtml(k)}</label>`).join('')}
+        </div>
+      </div>
+      <div class="form-field full"><label>Subjects they teach</label>
+        <div class="check-grid" id="tSubjects" style="display:grid; grid-template-columns:1fr 1fr; gap:.35rem .8rem;">
+          ${tutorSubjectOptions(t.subjects).map(o=>`<label><input type="checkbox" value="${escapeHtml(o.key)}" ${o.checked?'checked':''} /> ${escapeHtml(o.label)}${o.legacy?' <span class="cell-sub">(older entry — not in subject list)</span>':''}</label>`).join('')}
+        </div>
+        <div class="field-hint"><i class="fas fa-circle-info" aria-hidden="true"></i><span>A tutor only sees timetable sessions for the subjects ticked here. With none ticked they see no sessions.</span></div>
+      </div>
+    </div>
+    ${isNew?`<div class="setup-note" style="margin:1rem 0 0;"><i class="fas fa-circle-info" aria-hidden="true"></i><div>When you click Create, the password is shown once in a pop-up. Copy it or screenshot it and send it to the tutor. It is not stored anywhere and will not be shown again.</div></div>`:''}
+  `;
+}
+
+document.getElementById('addTutorBtn').addEventListener('click', ()=>{
+  openModal('Create tutor account', tutorFormHtml(null, true), `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" id="createTutorConfirm" type="button"><i class="fas fa-check" aria-hidden="true"></i> Create tutor</button>`);
+  const nameEl = document.getElementById('tName');
+  const slugEl = document.getElementById('tSlug');
+  let slugTouched = false;
+  slugEl.addEventListener('input', ()=>{ slugTouched = true; });
+  nameEl.addEventListener('input', ()=>{ if(!slugTouched) slugEl.value = tutorSlugify(nameEl.value); });
+  document.getElementById('createTutorConfirm').addEventListener('click', createTutor);
+});
+
+function readTutorForm(){
+  return {
+    name: document.getElementById('tName').value.trim(),
+    email: (document.getElementById('tEmail').value || '').trim(),
+    phone: document.getElementById('tPhone').value.trim(),
+    slug: tutorSlugify(document.getElementById('tSlug').value),
+    keyStages: Array.from(document.querySelectorAll('#tKeyStages input:checked')).map(cb=>cb.value),
+    subjects: Array.from(document.querySelectorAll('#tSubjects input:checked')).map(cb=>cb.value)
+  };
+}
+
+function createTutor(){
+  const d = readTutorForm();
+  const password = document.getElementById('tPassword').value;
+  const btn = document.getElementById('createTutorConfirm');
+
+  if(!d.name){ alert('Please enter the tutor\'s full name.'); return; }
+  if(!d.email){ alert('Please enter their email address.'); return; }
+  if(!password || password.length < 6){ alert('Please set a password of at least 6 characters.'); return; }
+  if(!d.slug){ alert('Please set a login slug.'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Creating…';
+
+  isTutorSlugTaken(d.slug, null).then(taken=>{
+    if(taken) throw new Error('That slug is already in use. Pick a different one.');
+    const secAuth = getSecondaryAuth();
+    return secAuth.createUserWithEmailAndPassword(d.email, password)
+      .then(cred=>{
+        const uid = cred.user.uid;
+        return createTutorAccount(uid, { ...d, ...lmzSubjectWriteFields(d.subjects) }).then(()=>uid);
+      })
+      .then(uid=>{
+        return secAuth.signOut().then(()=>uid);
+      });
+  }).then(uid=>{
+    closeModal();
+    const url = location.origin + '/tutor/' + d.slug;
+
+    // ---------------------------------------------------------
+    // This is the ONLY moment the password exists in this browser.
+    // It is not stored anywhere else. Firebase has already hashed
+    // it on the server and no one, not even us, can retrieve it again.
+    // ---------------------------------------------------------
+    const message =
+      'TUTOR ACCOUNT CREATED\n\n' +
+      'Name:     ' + d.name + '\n' +
+      'Email:    ' + d.email + '\n' +
+      'Password: ' + password + '\n' +
+      'Sign-in:  ' + url + '\n\n' +
+      'Copy or screenshot this message NOW and send it to the tutor. ' +
+      'For their safety, this password will not be shown again.\n\n' +
+      'If you lose it, click the key icon on the tutor row — ' +
+      'the tutor will receive a link by email to set a new one.';
+
+    // Show the alert
+    alert(message);
+
+    // Also try to copy the whole message so the admin has a second
+    // chance if they forget before dismissing the alert.
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(message).catch(()=>{});
+      }
+    } catch(e) { /* clipboard not available — no problem */ }
+  }).catch(err=>{
+    if(err && err.code === 'auth/email-already-in-use'){
+      // The same person can hold several roles (admin + tutor + parent) on ONE
+      // sign-in. Don't try to make a second Auth user — attach the tutor role to
+      // the existing one, which keeps their current password.
+      const ok = confirm('That email already has a sign-in account (for example an admin or parent account).\n\nAdd the tutor role to that existing account? They will sign in to the Tutor Portal with their current password, and the password you typed here will not be used.');
+      if(!ok){
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Create tutor';
+        return;
+      }
+      return firebase.functions().httpsCallable('createTutorForExistingAccount')({
+        name: d.name, email: d.email, phone: d.phone, slug: d.slug, keyStages: d.keyStages,
+        ...lmzSubjectWriteFields(d.subjects)
+      }).then(()=>{
+        closeModal();
+        alert('Tutor role added to the existing account for ' + d.email + '.\n\nThey can sign in at ' + location.origin + '/tutor/' + d.slug + ' with the password they already use.');
+      }).catch(e2=>{
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Create tutor';
+        alert('Could not add the tutor role: ' + (e2.message || e2));
+      });
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Create tutor';
+    let m = err.message || String(err);
+    if(err.code === 'auth/invalid-email') m = 'That email address is not valid.';
+    else if(err.code === 'auth/weak-password') m = 'Please choose a stronger password.';
+    alert('Could not create the tutor: ' + m);
+  });
+}
+
+/* ---------- VIEW / EDIT ---------- */
+window.viewTutor = (id) => {
+  const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
+  const students = studentsOf(id);
+  const url = location.origin + '/tutor/' + (t.slug||'');
+  openModal('Tutor — ' + (t.name||''), `
+    ${row('Email', t.email)}
+    ${row('Auth UID', t.id)}
+    <div class="detail-row"><span class="k">Login URL</span><span class="v"><span class="copy-link">${escapeHtml(url)}</span></span></div>
+    ${row('Students assigned', students.length ? students.map(s=>s.name).join(', ') : 'None yet')}
+    <div style="margin-top:1rem;">${tutorFormHtml(t, false)}</div>
+  `, `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Close</button>
+    <button class="btn btn-primary btn-sm" onclick="saveTutorEdit('${id}')" type="button"><i class="fas fa-check" aria-hidden="true"></i> Save changes</button>`);
+};
+
+window.saveTutorEdit = (id) => {
+  const d = readTutorForm();
+  if(!d.name){ alert('Please enter the tutor\'s full name.'); return; }
+  if(!d.slug){ alert('Please set a login slug.'); return; }
+  isTutorSlugTaken(d.slug, id).then(taken=>{
+    if(taken) throw new Error('That slug is already in use by another tutor.');
+    return updateTutorAccount(id, {
+      name: d.name, phone: d.phone, slug: d.slug,
+      keyStages: d.keyStages, ...lmzSubjectWriteFields(d.subjects)
+    });
+  }).then(()=>{
+    const kids = studentsOf(id);
+    if(!kids.length) return;
+    const batch = db.batch();
+    kids.forEach(s=>batch.update(db.collection('students').doc(s.id), { tutorName: d.name, tutorSlug: d.slug }));
+    return batch.commit();
+  }).then(closeModal).catch(err=>alert('Could not save: ' + err.message));
+};
+
+/* ---------- PASSWORD RESET / SUSPEND / DELETE ---------- */
+window.resetTutorPassword = (id) => {
+  const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
+  if(!t.email){ alert('This tutor has no email on file.'); return; }
+  if(!confirm('Send a password reset email to ' + t.email + '?')) return;
+  auth.sendPasswordResetEmail(t.email)
+    .then(()=>alert('Password reset email sent to ' + t.email + '.'))
+    .catch(err=>alert('Could not send the reset email: ' + err.message));
+};
+
+window.setTutorStatus = (id, status) => {
+  const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
+  const verb = status === 'Suspended' ? 'Suspend' : 'Reactivate';
+  if(!confirm(verb + ' ' + (t.name||'this tutor') + '?')) return;
+  updateTutorAccount(id, { status: status }).catch(err=>alert('Could not update: ' + err.message));
+};
+
+window.removeTutor = (id) => {
+  const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
+  const kids = studentsOf(id);
+  let msg = 'Delete the tutor record for ' + (t.name||'this tutor') + '?';
+  if(kids.length) msg += '\n\n' + kids.length + ' student(s) will be left with no tutor assigned.';
+  msg += '\n\nNote: this removes the tutorAccounts record only. Their Firebase Auth login must be deleted separately in the Firebase console (Authentication \u2192 Users), because browsers cannot delete another user\'s auth account. Suspending instead blocks their sign-in immediately.';
+  if(!confirm(msg)) return;
+
+  deleteTutorAccount(id).then(()=>{
+    if(!kids.length) return;
+    const batch = db.batch();
+    kids.forEach(s=>batch.update(db.collection('students').doc(s.id), { tutorId:'', tutorName:'', tutorSlug:'' }));
+    return batch.commit();
+  }).catch(err=>alert('Could not delete: ' + err.message));
+};
+</script>
+</body>
+</html>

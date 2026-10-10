@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Activity Builder — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10);
+    --font:'Quicksand',sans-serif; --error:#E74C3C; --gold:#F5C842;
+    --success:#2EB872;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:50; flex-direction:column; gap:1rem;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  body.ready #gate{display:none;}
+
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:1rem 1.6rem; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10;}
+  .topbar a{color:var(--brand-deep); text-decoration:none; font-weight:700; font-size:.85rem; display:flex; align-items:center; gap:.4rem;}
+  .topbar .actions{display:flex; gap:.6rem;}
+
+  .wrap{max-width:820px; margin:0 auto; padding:1.6rem 1rem 5rem;}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.4rem; margin-bottom:1.2rem;}
+  .card h3{margin:0 0 1rem; color:var(--brand-deep); font-size:1rem;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:1rem;}
+  @media (max-width:600px){ .grid2{grid-template-columns:1fr;} }
+  .field{margin-bottom:.9rem;}
+  .field label{display:block; font-size:.78rem; font-weight:700; color:var(--muted); margin-bottom:.3rem;}
+  .field input, .field select, .field textarea{
+    width:100%; padding:.6rem .7rem; border:1px solid var(--line); border-radius:9px;
+    font-family:var(--font); font-size:.88rem; background:#fff; color:var(--ink);
+  }
+  .field textarea{min-height:60px; resize:vertical;}
+  .checkrow{display:flex; align-items:center; gap:.5rem; font-size:.85rem; margin-bottom:.6rem;}
+
+  .qcard{border:1px solid var(--line); border-radius:12px; padding:1rem; margin-bottom:1rem; background:var(--sage);}
+  .qcard-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:.7rem;}
+  .qcard-head strong{font-size:.85rem; color:var(--brand-deep);}
+  .qcard-del{background:none; border:none; color:var(--error); cursor:pointer; font-size:.9rem;}
+
+  /* Option rows — big, tappable, correct-answer pill on the left */
+  .opt-row{display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem; background:#fff; border:1.5px solid var(--line); border-radius:10px; padding:.35rem .5rem;}
+  .opt-row .opt-text{flex:1; border:none; padding:.45rem .3rem; font-family:var(--font); font-size:.88rem; background:transparent; color:var(--ink);}
+  .opt-row .opt-text:focus{outline:none;}
+  .opt-row .opt-del{background:none; border:none; color:var(--error); cursor:pointer; padding:.2rem .4rem; font-size:.85rem;}
+
+  /* The correct-answer control — a big pill that is clickable everywhere */
+  .qcorrect-label{
+    display:inline-flex; align-items:center; gap:.4rem; cursor:pointer;
+    font-size:.72rem; font-weight:800; color:var(--muted);
+    padding:.35rem .65rem; border-radius:999px;
+    background:var(--paper); border:1.5px solid var(--line);
+    transition:all .2s ease; white-space:nowrap; user-select:none;
+  }
+  .qcorrect-label:hover{ border-color:var(--brand); color:var(--brand-deep); }
+  .qcorrect-label.is-checked{ background:var(--success); border-color:var(--success); color:#fff; }
+  .qcorrect-label input{ display:none; }
+  .qcorrect-label i{ font-size:.75rem; }
+
+  .btn-add-opt{background:none; border:1px dashed var(--brand); color:var(--brand-deep); padding:.4rem .8rem; border-radius:8px; font-size:.78rem; cursor:pointer; font-weight:700; margin-top:.3rem;}
+  .img-upload-row{display:flex; align-items:center; gap:.6rem; margin-top:.4rem;}
+  .img-upload-row img{max-height:60px; border-radius:6px;}
+  .img-upload-row input[type=file]{font-size:.75rem;}
+
+  .btn{padding:.6rem 1.2rem; border-radius:999px; font-weight:700; font-size:.82rem; cursor:pointer; border:none; font-family:var(--font);}
+  .btn-primary{background:var(--brand); color:#04231f;}
+  .btn-outline{background:none; border:1px solid var(--brand); color:var(--brand-deep);}
+  .btn-add{width:100%; padding:.8rem; border:2px dashed var(--brand); border-radius:12px; background:none; color:var(--brand-deep); font-weight:700; cursor:pointer;}
+  #saveMsg{font-size:.8rem; margin-top:.6rem;}
+  #saveMsg.err{color:var(--error);}
+  #saveMsg.ok{color:var(--brand-deep);}
+</style>
+</head>
+<body>
+
+<div id="gate"><div class="spin"></div><p>Loading builder…</p></div>
+
+<div class="topbar">
+  <a href="javascript:history.back()"><i class="fas fa-arrow-left"></i> Back</a>
+  <div class="actions">
+    <button class="btn btn-outline" id="saveDraftBtn">Save as Draft</button>
+    <button class="btn btn-primary" id="publishBtn">Publish</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <h3>Activity details</h3>
+    <div class="field"><label>Title</label><input id="fTitle" placeholder="e.g. Fractions Quiz — Key Stage 3" /></div>
+    <div class="field"><label>Description</label><textarea id="fDescription" placeholder="What is this activity for?"></textarea></div>
+    <div class="grid2">
+      <div class="field"><label>Subject</label><input id="fSubject" placeholder="e.g. Mathematics" /></div>
+      <div class="field"><label>Topic</label><input id="fTopic" placeholder="e.g. Fractions" /></div>
+      <div class="field"><label>Key Stage</label><select id="fKeyStage"></select></div>
+      <div class="field"><label>Difficulty</label>
+        <select id="fDifficulty"><option>Easy</option><option>Medium</option><option>Hard</option></select>
+      </div>
+      <div class="field">
+        <label>Activity Type</label>
+        <select id="fType">
+          <option value="quiz">Quiz</option>
+          <option value="true-false">True / False</option>
+          <option value="match-up">Match Up</option>
+          <option value="matching-pairs">Matching Pairs</option>
+          <option value="flashcards">Flashcards</option>
+          <option value="random-wheel">Random Wheel</option>
+          <option value="group-sort">Group Sort</option>
+          <option value="anagram">Anagram</option>
+          <option value="unjumble">Unjumble</option>
+          <option value="open-box">Open the Box</option>
+        </select>
+      </div>
+      <div class="field"><label>Visibility</label>
+        <select id="fVisibility"><option value="keystage">Students in this Key Stage</option><option value="assigned">Assigned students only (coming soon)</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <div class="grid2">
+      <div>
+        <div class="checkrow"><input type="checkbox" id="fShuffleQ" checked /> <label for="fShuffleQ">Shuffle question order</label></div>
+        <div class="checkrow"><input type="checkbox" id="fShuffleA" checked /> <label for="fShuffleA">Shuffle answer order</label></div>
+      </div>
+      <div>
+        <div class="field"><label>Time limit (seconds, blank = untimed)</label><input type="number" id="fTimeLimit" min="0" /></div>
+        <div class="field"><label>Passing score (%)</label><input type="number" id="fPassingScore" min="0" max="100" value="50" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="groupsCard" style="display:none;">
+    <h3>Groups (for Group Sort)</h3>
+    <div id="groupsList"></div>
+    <button class="btn-add-opt" id="addGroupBtn"><i class="fas fa-plus"></i> Add group</button>
+  </div>
+
+  <div class="card">
+    <h3>Questions</h3>
+    <div id="questionsList"></div>
+    <button class="btn-add" id="addQuestionBtn"><i class="fas fa-plus"></i> Add Question</button>
+    <div id="saveMsg"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script src="../js/uploads/storage-helpers.js"></script>
+
+<script>
+const auth = firebase.auth();
+let currentUser = null;
+let ownerRole = null; // 'admin' | 'tutor'
+let ownerName = '';
+let editingId = new URLSearchParams(location.search).get('id');
+
+let groups = [{ id: 'g1', name: 'Group A' }, { id: 'g2', name: 'Group B' }];
+let questions = [];
+
+function newId() { return Math.random().toString(36).slice(2, 10); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- auth / role detection ---------- */
+auth.onAuthStateChanged(user => {
+  if (!user) { window.location.href = '../tutor/login.html'; return; }
+  currentUser = user;
+
+  db.collection('admins').doc(user.uid).get()
+    .then(adminDoc => {
+      if (adminDoc.exists) {
+        ownerRole = 'admin';
+        ownerName = 'Admin';
+        afterRole();
+        return null;
+      }
+      return getTutorAccount(user.uid).then(tDoc => {
+        if (!tDoc.exists) {
+          alert('This account is not an admin or a tutor account.');
+          window.location.href = '../tutor/login.html';
+          return;
+        }
+        ownerRole = 'tutor';
+        ownerName = tDoc.data().name || 'Tutor';
+        afterRole();
+      });
+    })
+    .catch(err => {
+      console.error('builder.html auth check failed:', err);
+      document.body.classList.add('ready');
+      alert('Could not verify your account. Check Firestore rules for "admins" and "tutorAccounts".\n\n' + err.message);
+    });
+});
+
+function afterRole() {
+  const sel = document.getElementById('fKeyStage');
+  sel.innerHTML = KEY_STAGES.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join('');
+  document.body.classList.add('ready');
+  if (editingId) loadExisting(editingId); else { renderGroups(); renderQuestions(); }
+}
+
+function loadExisting(id) {
+  getActivity(id).then(doc => {
+    if (!doc.exists) return;
+    const a = doc.data();
+    document.getElementById('fTitle').value = a.title || '';
+    document.getElementById('fDescription').value = a.description || '';
+    document.getElementById('fSubject').value = a.subject || '';
+    document.getElementById('fTopic').value = a.topic || '';
+    document.getElementById('fKeyStage').value = a.keyStage || KEY_STAGES[0];
+    document.getElementById('fDifficulty').value = a.difficulty || 'Easy';
+    document.getElementById('fType').value = a.type || 'quiz';
+    document.getElementById('fShuffleQ').checked = !!(a.config && a.config.shuffleQuestions);
+    document.getElementById('fShuffleA').checked = !!(a.config && a.config.shuffleAnswers);
+    document.getElementById('fTimeLimit').value = (a.config && a.config.timeLimitSeconds) || '';
+    document.getElementById('fPassingScore').value = (a.config && a.config.passingScore) || 50;
+    groups = a.groups && a.groups.length ? a.groups : groups;
+    questions = (a.questions || []).map(q => ({ ...q })); // defensive copy
+    onTypeChange();
+    renderGroups();
+    renderQuestions();
+  });
+}
+
+document.getElementById('fType').addEventListener('change', onTypeChange);
+function onTypeChange() {
+  const type = document.getElementById('fType').value;
+  document.getElementById('groupsCard').style.display = (type === 'group-sort') ? 'block' : 'none';
+  renderQuestions();
+}
+
+/* ---------- groups editor (group-sort) ---------- */
+function renderGroups() {
+  const wrap = document.getElementById('groupsList');
+  wrap.innerHTML = '';
+  groups.forEach((g, i) => {
+    const row = document.createElement('div');
+    row.className = 'opt-row';
+    row.innerHTML = `<input type="text" value="${escapeHtml(g.name)}" data-i="${i}" class="groupNameInput opt-text" />
+      <button data-i="${i}" class="opt-del delGroupBtn"><i class="fas fa-times"></i></button>`;
+    wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('.groupNameInput').forEach(inp => {
+    inp.oninput = () => { groups[+inp.dataset.i].name = inp.value; };
+  });
+  wrap.querySelectorAll('.delGroupBtn').forEach(btn => {
+    btn.onclick = () => { groups.splice(+btn.dataset.i, 1); renderGroups(); renderQuestions(); };
+  });
+}
+document.getElementById('addGroupBtn').onclick = () => {
+  groups.push({ id: newId(), name: 'New Group' });
+  renderGroups();
+};
+
+/* ---------- questions editor ---------- */
+document.getElementById('addQuestionBtn').onclick = () => {
+  const type = document.getElementById('fType').value;
+  questions.push(newBlankQuestion(type));
+  renderQuestions();
+};
+
+function newBlankQuestion(type) {
+  const q = {
+    id: newId(),
+    text: '',
+    imageUrl: '',
+    options: [{ id: newId(), text: '' }, { id: newId(), text: '' }],
+    correctOptionIds: [],
+    groupId: '',
+    explanation: '',
+    hint: '',
+    marks: 1
+  };
+  if (type === 'true-false') {
+    q.options = [{ id: 'true', text: 'True' }, { id: 'false', text: 'False' }];
+    q.correctOptionIds = ['true'];
+  }
+  if (type === 'match-up' || type === 'matching-pairs') {
+    q.options = [{ id: newId(), text: '' }];
+  }
+  return q;
+}
+
+function renderQuestions() {
+  const type = document.getElementById('fType').value;
+  const wrap = document.getElementById('questionsList');
+  wrap.innerHTML = '';
+  questions.forEach((q, qi) => {
+    const card = document.createElement('div');
+    card.className = 'qcard';
+    card.innerHTML = questionFieldsHtml(type, q, qi);
+    wrap.appendChild(card);
+    wireQuestionCard(card, type, q, qi);
+  });
+  if (!questions.length) {
+    wrap.innerHTML = '<p style="color:var(--muted); font-size:.85rem; margin:.4rem 0;">No questions yet. Click "Add Question" below.</p>';
+  }
+}
+
+function questionFieldsHtml(type, q, qi) {
+  const head = `<div class="qcard-head"><strong>Question ${qi + 1}</strong><button class="qcard-del" data-qi="${qi}" type="button"><i class="fas fa-trash"></i></button></div>`;
+  const imageBlock = `
+    <div class="field"><label>Diagram / Image (optional)</label>
+      <div class="img-upload-row">
+        ${q.imageUrl ? `<img src="${q.imageUrl}" alt="">` : ''}
+        <input type="file" accept="image/*" class="qImageInput" data-qi="${qi}" />
+      </div>
+    </div>`;
+
+  /* ---- Quiz-like types: quiz, true-false, open-box, random-wheel ---- */
+  if (type === 'quiz' || type === 'true-false' || type === 'open-box' || type === 'random-wheel') {
+    const opts = type === 'true-false'
+      ? [{ id: 'true', text: 'True' }, { id: 'false', text: 'False' }]
+      : (q.options && q.options.length ? q.options : [{ id: newId(), text: '' }, { id: newId(), text: '' }]);
+    q.options = opts;
+
+    const optionRows = opts.map(o => {
+      const isChecked = (q.correctOptionIds || []).includes(o.id);
+      return `<div class="opt-row">
+        <label class="qcorrect-label ${isChecked ? 'is-checked' : ''}" title="Mark as correct answer">
+          <input type="radio" name="correct-${qi}" value="${escapeHtml(o.id)}" ${isChecked ? 'checked' : ''} class="qCorrectRadio" data-qi="${qi}" data-oid="${escapeHtml(o.id)}" />
+          <i class="fas ${isChecked ? 'fa-circle-check' : 'fa-circle'}"></i>
+          <span>Correct</span>
+        </label>
+        <input type="text" value="${escapeHtml(o.text)}" class="qOptionText opt-text" data-qi="${qi}" data-oid="${escapeHtml(o.id)}" ${type === 'true-false' ? 'readonly' : ''} />
+        ${type !== 'true-false' ? `<button class="opt-del qDelOption" data-qi="${qi}" data-oid="${escapeHtml(o.id)}" type="button"><i class="fas fa-times"></i></button>` : ''}
+      </div>`;
+    }).join('');
+
+    return head + `
+      <div class="field"><label>Question text</label><textarea class="qTextInput" data-qi="${qi}">${escapeHtml(q.text)}</textarea></div>
+      ${imageBlock}
+      <div class="field"><label>Answer options — tap "Correct" next to the right one</label>
+        <div class="qOptionsWrap" data-qi="${qi}">
+          ${optionRows}
+        </div>
+        ${type !== 'true-false' ? `<button class="btn-add-opt qAddOption" data-qi="${qi}" type="button"><i class="fas fa-plus"></i> Add option</button>` : ''}
+      </div>
+      <div class="field"><label>Explanation (shown after answering)</label><textarea class="qExplInput" data-qi="${qi}">${escapeHtml(q.explanation)}</textarea></div>
+      <div class="field"><label>Marks</label><input type="number" min="1" value="${q.marks || 1}" class="qMarksInput" data-qi="${qi}" /></div>`;
+  }
+
+  /* ---- Flashcards ---- */
+  if (type === 'flashcards') {
+    return head + `
+      <div class="field"><label>Front of card</label><textarea class="qTextInput" data-qi="${qi}">${escapeHtml(q.text)}</textarea></div>
+      ${imageBlock}
+      <div class="field"><label>Back of card</label><textarea class="qExplInput" data-qi="${qi}">${escapeHtml(q.explanation)}</textarea></div>`;
+  }
+
+  /* ---- Match Up / Matching Pairs ---- */
+  if (type === 'match-up' || type === 'matching-pairs') {
+    const right = (q.options && q.options[0]) || { id: newId(), text: '' };
+    q.options = [right];
+    return head + `
+      <div class="grid2">
+        <div class="field"><label>Left item</label><input type="text" class="qTextInput" data-qi="${qi}" value="${escapeHtml(q.text)}" /></div>
+        <div class="field"><label>Matches with</label><input type="text" class="qMatchInput" data-qi="${qi}" data-oid="${escapeHtml(right.id)}" value="${escapeHtml(right.text)}" /></div>
+      </div>`;
+  }
+
+  /* ---- Group Sort ---- */
+  if (type === 'group-sort') {
+    return head + `
+      <div class="field"><label>Item text</label><input type="text" class="qTextInput" data-qi="${qi}" value="${escapeHtml(q.text)}" /></div>
+      <div class="field"><label>Correct group</label>
+        <select class="qGroupSelect" data-qi="${qi}">
+          ${groups.map(g => `<option value="${escapeHtml(g.id)}" ${q.groupId === g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}
+        </select>
+      </div>`;
+  }
+
+  /* ---- Anagram ---- */
+  if (type === 'anagram') {
+    return head + `
+      <div class="field"><label>Answer word</label><input type="text" class="qTextInput" data-qi="${qi}" value="${escapeHtml(q.text)}" /></div>
+      ${imageBlock}
+      <div class="field"><label>Hint</label><input type="text" class="qHintInput" data-qi="${qi}" value="${escapeHtml(q.hint)}" /></div>`;
+  }
+
+  /* ---- Unjumble ---- */
+  if (type === 'unjumble') {
+    return head + `
+      <div class="field"><label>Correct sentence</label><input type="text" class="qTextInput" data-qi="${qi}" value="${escapeHtml(q.text)}" /></div>
+      ${imageBlock}`;
+  }
+
+  return head + `<div class="field"><label>Content</label><textarea class="qTextInput" data-qi="${qi}">${escapeHtml(q.text)}</textarea></div>`;
+}
+
+function wireQuestionCard(card, type, q, qi) {
+  const byClass = (cls) => card.querySelectorAll('.' + cls);
+
+  byClass('qTextInput').forEach(el => el.oninput = () => { q.text = el.value; });
+  byClass('qExplInput').forEach(el => el.oninput = () => { q.explanation = el.value; });
+  byClass('qHintInput').forEach(el => el.oninput = () => { q.hint = el.value; });
+  byClass('qMarksInput').forEach(el => el.oninput = () => { q.marks = parseInt(el.value, 10) || 1; });
+  byClass('qGroupSelect').forEach(el => el.onchange = () => { q.groupId = el.value; });
+  byClass('qMatchInput').forEach(el => el.oninput = () => { q.options[0].text = el.value; });
+
+  byClass('qOptionText').forEach(el => el.oninput = () => {
+    const opt = q.options.find(o => o.id === el.dataset.oid);
+    if (opt) opt.text = el.value;
+  });
+
+  // Correct answer radio — the whole pill is clickable, and we handle
+  // click as well as change to guarantee it fires.
+  card.querySelectorAll('.qcorrect-label').forEach((label, idx) => {
+    const input = label.querySelector('input[type="radio"]');
+    if (!input) return;
+    const oid = input.dataset.oid;
+    const onClick = () => {
+      q.correctOptionIds = [oid];
+      // Refresh the visual state of every label in this question
+      card.querySelectorAll('.qcorrect-label').forEach(l => {
+        l.classList.remove('is-checked');
+        const ic = l.querySelector('i');
+        if (ic) ic.className = 'far fa-circle';
+      });
+      label.classList.add('is-checked');
+      const ic = label.querySelector('i');
+      if (ic) ic.className = 'fas fa-circle-check';
+    };
+    label.addEventListener('click', (e) => {
+      // Let the underlying radio handle its own state, then sync ours
+      if (e.target.tagName !== 'INPUT') {
+        input.checked = true;
+        e.preventDefault();
+        onClick();
+      }
+    });
+    input.addEventListener('change', onClick);
+  });
+
+  byClass('qDelOption').forEach(el => el.onclick = () => {
+    q.options = q.options.filter(o => o.id !== el.dataset.oid);
+    q.correctOptionIds = (q.correctOptionIds || []).filter(id => id !== el.dataset.oid);
+    renderQuestions();
+  });
+
+  byClass('qAddOption').forEach(el => el.onclick = () => {
+    q.options.push({ id: newId(), text: '' });
+    renderQuestions();
+  });
+
+  byClass('qImageInput').forEach(el => el.onchange = () => {
+    const file = el.files[0];
+    if (!file) return;
+    uploadFile(storagePath('activities', editingId || 'draft-' + currentUser.uid, 'questions', q.id), file)
+      .then(res => { q.imageUrl = res.fileUrl; renderQuestions(); })
+      .catch(err => alert(err.message));
+  });
+
+  const delBtn = card.querySelector('.qcard-del');
+  if (delBtn) delBtn.onclick = () => { questions.splice(qi, 1); renderQuestions(); };
+}
+
+/* ---------- save ---------- */
+function collectActivityData(status) {
+  const type = document.getElementById('fType').value;
+  return {
+    title: document.getElementById('fTitle').value.trim(),
+    description: document.getElementById('fDescription').value.trim(),
+    subject: document.getElementById('fSubject').value.trim(),
+    topic: document.getElementById('fTopic').value.trim(),
+    keyStage: document.getElementById('fKeyStage').value,
+    difficulty: document.getElementById('fDifficulty').value,
+    type: type,
+    ownerId: currentUser.uid,
+    ownerRole: ownerRole,
+    ownerName: ownerName,
+    status: status,
+    groups: type === 'group-sort' ? groups : [],
+    config: {
+      shuffleQuestions: document.getElementById('fShuffleQ').checked,
+      shuffleAnswers: document.getElementById('fShuffleA').checked,
+      timeLimitSeconds: parseInt(document.getElementById('fTimeLimit').value, 10) || null,
+      passingScore: parseInt(document.getElementById('fPassingScore').value, 10) || 50
+    },
+    questions: questions.map(q => {
+      const out = { ...q };
+      if (type === 'flashcards') out.correctOptionIds = ['known'];
+      return out;
+    })
+  };
+}
+
+function save(status) {
+  const msg = document.getElementById('saveMsg');
+  const data = collectActivityData(status);
+  if (!data.title) { msg.textContent = 'Please give the activity a title.'; msg.className = 'err'; return; }
+  if (!data.questions.length) { msg.textContent = 'Add at least one question first.'; msg.className = 'err'; return; }
+
+  // Warn the builder if any quiz-like question has no correct answer picked
+  const type = data.type;
+  if (type === 'quiz' || type === 'open-box' || type === 'random-wheel') {
+    for (let i = 0; i < data.questions.length; i++) {
+      const q = data.questions[i];
+      if (!q.correctOptionIds || !q.correctOptionIds.length) {
+        if (!confirm('Question ' + (i + 1) + ' has no correct answer marked. Students will not be able to score it. Save anyway?')) {
+          return;
+        }
+      }
+    }
+  }
+
+  msg.textContent = 'Saving…'; msg.className = '';
+
+  const p = editingId ? updateActivity(editingId, data) : addActivity(data);
+  p.then((ref) => {
+    msg.textContent = status === 'Published' ? 'Published!' : 'Saved as draft.';
+    msg.className = 'ok';
+    if (!editingId && ref && ref.id) {
+      editingId = ref.id;
+      history.replaceState(null, '', '?id=' + ref.id);
+    }
+  }).catch(err => { msg.textContent = 'Could not save: ' + err.message; msg.className = 'err'; });
+}
+
+document.getElementById('saveDraftBtn').onclick = () => save('Draft');
+document.getElementById('publishBtn').onclick = () => save('Published');
+</script>
+
+</body>
+</html>

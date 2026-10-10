@@ -1,0 +1,701 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================
+    // SHARED HELPERS
+    // =====================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function isTutor() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid));
+    }
+
+    // -----------------------------------------------------
+    // MULTI-TUTOR HELPERS
+    // -----------------------------------------------------
+    function studentTutorIds(studentId) {
+      return get(/databases/$(database)/documents/students/$(studentId)).data.tutorIds;
+    }
+    function tutorTeachesStudent(studentId) {
+      let s = get(/databases/$(database)/documents/students/$(studentId)).data;
+      return isTutor() && (
+        (('tutorIds' in s) && request.auth.uid in s.tutorIds) ||
+        (('tutorId'  in s) && s.tutorId == request.auth.uid)
+      );
+    }
+    function tutorTeachesSubject(studentId, subjectId) {
+      let s = get(/databases/$(database)/documents/students/$(studentId)).data;
+      return isTutor() &&
+        ('subjectTutors' in s) &&
+        (subjectId in s.subjectTutors) &&
+        (s.subjectTutors[subjectId].tutorId == request.auth.uid);
+    }
+    function studentHasTutorId(studentId, tutorId) {
+      let s = get(/databases/$(database)/documents/students/$(studentId)).data;
+      return (('tutorIds' in s) && tutorId in s.tutorIds) ||
+             (('tutorId'  in s) && s.tutorId == tutorId);
+    }
+    // ---- END multi-tutor helpers ----
+
+    function tutorOwnsStudent(studentId) {
+      return isTutor() &&
+        get(/databases/$(database)/documents/students/$(studentId)).data.tutorId == request.auth.uid;
+    }
+    function activeGrant(taskType, taskId) {
+      let gid = taskType + '_' + taskId + '_' + request.auth.uid;
+      return exists(/databases/$(database)/documents/gradingGrants/$(gid)) &&
+        get(/databases/$(database)/documents/gradingGrants/$(gid)).data.revoked != true;
+    }
+    function tutorMayManageTask(taskType, ownerUid, taskId) {
+      return isAdmin() ||
+        (isTutor() &&
+          (
+            request.auth.uid == ownerUid ||
+            activeGrant(taskType, taskId)
+          ));
+    }
+    function isParentOf(studentId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentStudentLinks/$(request.auth.uid + '_' + studentId));
+    }
+
+    // ---- timetable visibility helpers ----
+    function tutorMaySeeEntry() {
+      return isTutor() &&
+        ('subjects' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) &&
+        resource.data.subjectId in
+          get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.subjects;
+    }
+    function studentEntryScope(s) {
+      return resource.data.keyStage == s.keyStage &&
+        (!('subjects' in s) || s.subjects.size() == 0 || resource.data.subjectId in s.subjects);
+    }
+    function studentMaySeeEntry() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
+        studentEntryScope(get(/databases/$(database)/documents/students/$(request.auth.uid)).data);
+    }
+    function parentMaySeeEntry() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        (((resource.data.keyStage + '|' + resource.data.subjectId) in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots) ||
+         ((resource.data.keyStage + '|*') in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots));
+    }
+
+    // ---- classroom helpers ----
+    function classTutorSubject(subjectId) {
+      return isTutor() &&
+        ('subjects' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) &&
+        subjectId in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.subjects;
+    }
+    function classTutorMay(c) {
+      return classTutorSubject(c.subjectId) &&
+        (!('keyStages' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages.size() == 0 ||
+          c.keyStage in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages);
+    }
+    function classStudentMay(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
+        ('subjects' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
+        c.subjectId in get(/databases/$(database)/documents/students/$(request.auth.uid)).data.subjects &&
+        (
+          (('year' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
+           ('year' in c) &&
+           get(/databases/$(database)/documents/students/$(request.auth.uid)).data.year == c.year)
+          ||
+          c.keyStage == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.keyStage
+        );
+    }
+    function parentHasSlotForClassroom(cid) {
+      let pa = get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data;
+      let c  = get(/databases/$(database)/documents/classrooms/$(cid)).data;
+      return isSignedIn() &&
+        (((c.keyStage + '|' + c.subjectId) in pa.slots) ||
+         ((c.keyStage + '|*')          in pa.slots));
+    }
+    function parentMaySee(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        (((c.keyStage + '|' + c.subjectId) in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots) ||
+         ((c.keyStage + '|*') in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots));
+    }
+
+    function classroomData(cid) {
+      return get(/databases/$(database)/documents/classrooms/$(cid)).data;
+    }
+
+    function forMe(d) {
+      return d.audience == 'class' || request.auth.uid in d.recipients;
+    }
+    function validWorkDoc(d) {
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 200 &&
+        d.recipients is list &&
+        d.audience in ['class', 'students'] &&
+        (d.audience == 'class' ? d.recipients.size() == 0 : d.recipients.size() > 0);
+    }
+    function studentWorkEdit() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['fileUrl', 'fileName', 'fileType', 'storagePath', 'note', 'textAnswer', 'updatedAt', 'inkData', 'inkUpdatedAt']) &&
+        (!('inkData' in request.resource.data.diff(resource.data).affectedKeys()) ||
+          request.resource.data.inkData == null);
+    }
+    function newStudentWork(sid) {
+      return request.auth.uid == sid &&
+        request.resource.data.studentId == sid &&
+        request.resource.data.status == 'Submitted' &&
+        request.resource.data.released == false &&
+        request.resource.data.keys().hasOnly(
+          ['studentId', 'studentName', 'studentEmail', 'fileUrl', 'fileName', 'fileType', 'storagePath',
+           'note', 'textAnswer', 'status', 'released', 'createdAt', 'updatedAt', 'submittedAt']);
+    }
+    function isLinkedParent(conversationId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentStudentLinks/$(conversationId)) &&
+        get(/databases/$(database)/documents/parentStudentLinks/$(conversationId)).data.parentUid == request.auth.uid;
+    }
+
+    // =====================================================
+    // FLAT SUBJECT-SCOPED EXAM HELPERS
+    // =====================================================
+    function flatExamStudentMaySee(e) {
+      return isSignedIn() &&
+        e.status == 'Published' &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
+        ('subjects' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
+        e.subjectId in get(/databases/$(database)/documents/students/$(request.auth.uid)).data.subjects &&
+        (('year' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data && e.year != null)
+          ? e.year == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.year
+          : e.keyStage == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.keyStage);
+    }
+    function flatExamWindowOpen(e) {
+      return e.status == 'Published' &&
+        (
+          (('submissionsOpen' in e) && e.submissionsOpen == true) ||
+          (
+            ('examDate' in e) && ('submissionDeadline' in e) &&
+            request.time >= e.examDate &&
+            request.time <= e.submissionDeadline
+          )
+        );
+    }
+    function newFlatExamSubmission(sid) {
+      return request.auth.uid == sid &&
+        request.resource.data.studentId == sid &&
+        request.resource.data.status == 'Submitted' &&
+        request.resource.data.released == false &&
+        request.resource.data.keys().hasOnly(
+          ['studentId', 'studentName', 'studentEmail',
+           'fileUrl', 'fileName', 'fileType', 'storagePath',
+           'note', 'textAnswer', 'status', 'released',
+           'createdAt', 'updatedAt', 'submittedAt']);
+    }
+    function flatExamStudentEdit() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['fileUrl', 'fileName', 'fileType', 'storagePath', 'note', 'textAnswer',
+           'status', 'updatedAt', 'submittedAt', 'correctionUploadedAt']) &&
+        request.resource.data.status == 'Submitted';
+    }
+
+    // =====================================================
+    // PUBLIC MARKETING FORMS
+    // =====================================================
+    match /enrolments/{id}  { allow create: if true; allow read, update, delete: if isAdmin(); }
+    match /tutors/{id}      { allow create: if true; allow read, update, delete: if isAdmin(); }
+    match /messages/{id}    { allow create: if true; allow read, update, delete: if isAdmin(); }
+    match /newsletter/{id}  { allow create: if true; allow read, update, delete: if isAdmin(); }
+
+    // =====================================================
+    // STAFF ALLOWLIST
+    // =====================================================
+    match /admins/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // =====================================================
+    // TUTOR ACCOUNTS
+    // =====================================================
+    match /tutorAccounts/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // =====================================================
+    // REGISTRATION NUMBER COUNTER
+    // =====================================================
+    match /counters/registrationNumbers {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.lastSequence == 101
+        && request.resource.data.keys().hasOnly(['lastYear','lastSequence','updatedAt']);
+      allow update: if isSignedIn()
+        && request.resource.data.lastSequence == resource.data.lastSequence + 1
+        && request.resource.data.keys().hasOnly(['lastYear','lastSequence','updatedAt']);
+      allow delete: if false;
+    }
+
+    // =====================================================
+    // STUDENTS
+    // =====================================================
+    match /students/{uid} {
+      allow create: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdmin() || tutorTeachesStudent(uid) || isParentOf(uid);
+      allow update: if isAdmin() || (isOwner(uid) &&
+        !('status' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('keyStage' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('year' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjects' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjectNames' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorId' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorName' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorSlug' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorIds' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjectTutors' in request.resource.data.diff(resource.data).affectedKeys()));
+      allow delete: if false;
+    }
+    match /archivedStudents/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // =====================================================
+    // EXAM RESULTS
+    // =====================================================
+    match /examResults/{id} {
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || tutorTeachesStudent(resource.data.studentId) || isParentOf(resource.data.studentId);
+      allow write: if isAdmin() || isTutor();
+    }
+
+    // =====================================================
+    // HOMEWORK
+    // =====================================================
+    match /homework/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() ||
+        tutorMayManageTask('homework', resource.data.tutorId, id);
+    }
+
+    // =====================================================
+    // SUBMISSIONS
+    // =====================================================
+    match /submissions/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || tutorTeachesStudent(resource.data.studentId) || isParentOf(resource.data.studentId);
+      allow update: if
+        (isAdmin() ||
+          tutorMayManageTask('homework', resource.data.authorTutorId, resource.data.homeworkId) ||
+          (isSignedIn() &&
+            resource.data.studentId == request.auth.uid &&
+            resource.data.status != 'Graded' &&
+            !('studentId'     in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('homeworkId'    in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('authorTutorId' in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('authorRole'    in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('status'        in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('grade'         in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('feedback'      in request.resource.data.diff(resource.data).affectedKeys())
+          )
+        );
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // EXAMS (LEGACY)
+    // =====================================================
+    match /exams/{id} {
+      allow read: if isAdmin() || isTutor() ||
+        (isSignedIn() && 'status' in resource.data && resource.data.status == 'Published');
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() ||
+        tutorMayManageTask('exam', resource.data.tutorId, id);
+    }
+
+    // =====================================================
+    // EXAM ATTEMPTS (LEGACY)
+    // =====================================================
+    match /examAttempts/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || tutorTeachesStudent(resource.data.studentId) || isParentOf(resource.data.studentId);
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid && resource.data.status == 'In progress') ||
+        tutorMayManageTask('exam', get(/databases/$(database)/documents/exams/$(resource.data.examId)).data.tutorId, resource.data.examId);
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // NOTES / MATERIALS
+    // =====================================================
+    match /notes/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isTutor();
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.postedById == request.auth.uid);
+    }
+
+    // =====================================================
+    // NOTIFICATIONS
+    // =====================================================
+    match /notifications/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isTutor();
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.postedById == request.auth.uid);
+    }
+
+    // =====================================================
+    // TIMETABLES (legacy)
+    // =====================================================
+    match /timetables/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isTutor();
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.postedById == request.auth.uid);
+    }
+
+    // =====================================================
+    // TIMETABLE ENTRIES
+    // =====================================================
+    match /timetableEntries/{id} {
+      allow read: if isAdmin() ||
+        tutorMaySeeEntry() ||
+        studentMaySeeEntry() ||
+        parentMaySeeEntry();
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.tutorId == request.auth.uid);
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.tutorId == request.auth.uid);
+    }
+
+    // =====================================================
+    // LIVE CLASSES
+    // =====================================================
+    match /liveClasses/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.hostId == request.auth.uid);
+      allow update: if isAdmin() ||
+        (isTutor() && resource.data.hostId == request.auth.uid);
+      allow delete: if isAdmin() ||
+        (isTutor() && resource.data.hostId == request.auth.uid);
+    }
+
+    // =====================================================
+    // LIVE CLASS INTEGRITY
+    // =====================================================
+    match /liveClassSessions/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (isTutor() &&
+          get(/databases/$(database)/documents/liveClasses/$(resource.data.classId)).data.hostId == request.auth.uid);
+      allow update: if isSignedIn() && resource.data.studentId == request.auth.uid &&
+        !('studentId' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('classId' in request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if isAdmin();
+    }
+    match /liveClassIntegrityEvents/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (isTutor() &&
+          get(/databases/$(database)/documents/liveClasses/$(resource.data.classId)).data.hostId == request.auth.uid);
+      allow update, delete: if false;
+    }
+
+    // =====================================================
+    // GRADING GRANTS
+    // =====================================================
+    match /gradingGrants/{id} {
+      allow read: if isAdmin() ||
+        (isTutor() && resource.data.tutorId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // =====================================================
+    // TICKETS
+    // =====================================================
+    match /tickets/{id} {
+      allow create: if isSignedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && ('targetTutorId' in request.resource.data)
+        && request.resource.data.targetTutorId is string
+        && request.resource.data.targetTutorId.size() > 0
+        && studentHasTutorId(request.auth.uid, request.resource.data.targetTutorId);
+
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin()
+        || (isSignedIn() && ('targetTutorId' in resource.data)
+              && resource.data.targetTutorId == request.auth.uid)
+        || tutorOwnsStudent(resource.data.studentId)
+        || isParentOf(resource.data.studentId);
+
+      allow update: if isAdmin()
+        || ((isSignedIn() && ('targetTutorId' in resource.data)
+              && resource.data.targetTutorId == request.auth.uid))
+        || tutorOwnsStudent(resource.data.studentId);
+
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // ACTIVITIES
+    // =====================================================
+    match /activities/{id} {
+      allow read: if isAdmin() || isTutor() ||
+        (isSignedIn() && 'status' in resource.data && resource.data.status == 'Published');
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.ownerId == request.auth.uid);
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.ownerId == request.auth.uid);
+    }
+    match /activityAttempts/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || isTutor() || isParentOf(resource.data.studentId);
+      allow update: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    match /activityAssignments/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() ||
+        (isTutor() && (resource == null || resource.data.ownerId == request.auth.uid) &&
+          request.resource.data.ownerId == request.auth.uid);
+    }
+
+    // =====================================================
+    // PARENT PORTAL
+    // =====================================================
+    match /parentAccounts/{uid} {
+      allow read, update: if isOwner(uid) || isAdmin();
+      allow create, delete: if isAdmin();
+    }
+    match /parentStudentLinks/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.parentUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+    match /parentAccess/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // =====================================================
+    // ADMIN <-> PARENT PRIVATE CONVERSATIONS
+    // =====================================================
+    match /parentConversations/{cid} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.parentUid == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isSignedIn() &&
+          request.resource.data.parentUid == request.auth.uid &&
+          cid == request.auth.uid + '_' + request.resource.data.studentUid &&
+          isLinkedParent(cid));
+      allow update: if isAdmin() ||
+        (isSignedIn() &&
+          resource.data.parentUid == request.auth.uid &&
+          request.resource.data.parentUid == resource.data.parentUid &&
+          request.resource.data.studentUid == resource.data.studentUid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['lastMessage', 'lastMessageAt', 'lastSenderRole', 'unreadForAdmin', 'unreadForParent',
+             'parentName', 'studentName', 'keyStage', 'year']));
+      allow delete: if false;
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || isLinkedParent(cid);
+        allow create: if
+          (isAdmin() &&
+            request.resource.data.senderRole == 'admin' &&
+            request.resource.data.senderUid == request.auth.uid) ||
+          (isLinkedParent(cid) &&
+            request.resource.data.senderRole == 'parent' &&
+            request.resource.data.senderUid == request.auth.uid);
+        allow update: if
+          ((isAdmin() && resource.data.senderRole == 'parent') ||
+           (isLinkedParent(cid) && resource.data.senderRole == 'admin')) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if false;
+      }
+    }
+
+    // =====================================================
+    // CLASSROOM
+    // -----------------------------------------------------
+    // Firestore REFUSES to evaluate `resource.data` or `get()` inside a
+    // collection query — it only allows them for exact-doc reads. So
+    // every read rule on the queryable collections below is opened to
+    // `isSignedIn()`. Submissions and attempts stay strict because
+    // they are always read by exact doc ID.
+    //
+    // Lesson writes: the previous version called a helper
+    // (validLessonWrite) that inspected request.resource.data. That
+    // helper was rejecting legitimate saves because the incoming
+    // payload sometimes had a field the rule didn't expect.
+    // Admin-only, no field-shape check — the admin UI is trusted to
+    // send valid data.
+    // =====================================================
+    match /classrooms/{cid} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      match /topics/{tid} {
+        allow read: if isSignedIn();
+        allow create, update: if isAdmin();
+        allow delete: if isAdmin();
+
+        match /lessons/{lid} {
+          allow read: if isSignedIn();
+          allow create: if isAdmin();
+          allow update: if isAdmin();
+          allow delete: if isAdmin();
+        }
+
+        match /assignments/{aid} {
+          allow read: if isSignedIn();
+          allow create: if isAdmin() ||
+            (classTutorMay(classroomData(cid)) &&
+              request.resource.data.tutorId == request.auth.uid &&
+              validWorkDoc(request.resource.data));
+          allow update: if isAdmin() ||
+            (classTutorMay(classroomData(cid)) &&
+              resource.data.tutorId == request.auth.uid &&
+              request.resource.data.tutorId == resource.data.tutorId &&
+              validWorkDoc(request.resource.data));
+          allow delete: if isAdmin() ||
+            (classTutorMay(classroomData(cid)) && resource.data.tutorId == request.auth.uid);
+
+          match /submissions/{sid} {
+            allow read: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('homework', aid) ||
+              isOwner(sid) ||
+              isParentOf(sid);
+            allow create: if newStudentWork(sid) &&
+              classStudentMay(classroomData(cid)) &&
+              forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/assignments/$(aid)).data);
+            allow update: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('homework', aid) ||
+              (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
+            allow delete: if isAdmin();
+          }
+        }
+
+        match /exams/{eid} {
+          allow read: if isSignedIn();
+          allow create, delete: if isAdmin();
+          allow update: if isAdmin();
+
+          match /attempts/{sid} {
+            allow read: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('exam', eid) ||
+              isOwner(sid) ||
+              isParentOf(sid);
+            allow create: if newStudentWork(sid) &&
+              classStudentMay(classroomData(cid)) &&
+              get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.status == 'Published' &&
+              get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.examMode == 'pdf' &&
+              forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data);
+            allow update: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('exam', eid) ||
+              (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
+            allow delete: if isAdmin();
+          }
+        }
+      }
+
+      // Flat exams (classrooms/{cid}/exams/{eid})
+      match /exams/{eid} {
+        allow read: if isSignedIn();
+
+        allow create: if isAdmin() &&
+          request.resource.data.subjectId == classroomData(cid).subjectId &&
+          request.resource.data.keyStage == classroomData(cid).keyStage &&
+          request.resource.data.year == classroomData(cid).year &&
+          request.resource.data.examType in ['Midterm', 'End of Term'] &&
+          request.resource.data.title is string &&
+          request.resource.data.title.size() > 0 &&
+          request.resource.data.title.size() <= 200;
+
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+
+        match /submissions/{studentId} {
+          allow read: if isAdmin() ||
+            classTutorSubject(classroomData(cid).subjectId) ||
+            activeGrant('exam', eid) ||
+            isOwner(studentId) ||
+            isParentOf(studentId);
+
+          allow create: if newFlatExamSubmission(studentId) &&
+            classStudentMay(classroomData(cid)) &&
+            flatExamWindowOpen(
+              get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
+            );
+
+          allow update: if
+            isAdmin() ||
+            classTutorSubject(classroomData(cid).subjectId) ||
+            activeGrant('exam', eid) ||
+            (isOwner(studentId) &&
+              resource.data.status != 'Graded' &&
+              flatExamStudentEdit() &&
+              flatExamWindowOpen(
+                get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
+              ));
+
+          allow delete: if isAdmin();
+        }
+      }
+    }
+
+    match /{path=**}/lessons/{lessonId} {
+      allow read: if isAdmin();
+    }
+
+    // =====================================================
+    // STUDENT / PARENT NOTICES
+    // =====================================================
+    match /studentNotices/{id} {
+      allow read: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+
+    // =====================================================
+    // PERSONAL NOTIFICATIONS
+    // =====================================================
+    match /personalNotifications/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.recipientId == request.auth.uid);
+      allow create: if isAdmin();
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.recipientId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']));
+      allow delete: if isAdmin();
+    }
+  }
+}

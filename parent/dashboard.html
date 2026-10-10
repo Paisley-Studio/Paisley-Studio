@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Parent Portal — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A;
+    --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --error:#E74C3C; --success:#16a34a;
+    --font:'Quicksand', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased;}
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:50; flex-direction:column; gap:1rem;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  body.ready #gate{display:none;}
+  .hidden{display:none !important;}
+
+  .app{display:flex; min-height:100vh;}
+  .sidebar{
+    width:230px; background:var(--surface); border-right:1px solid var(--line);
+    padding:1.2rem .8rem; flex-shrink:0; display:flex; flex-direction:column;
+  }
+  .sidebar .brand{
+    display:flex; align-items:center; gap:.5rem;
+    padding:.4rem .5rem 1.2rem;
+    font-weight:800; color:var(--brand-deep);
+  }
+  .nav-item{
+    display:flex; align-items:center; gap:.6rem;
+    padding:.65rem .8rem; border-radius:10px; border:none; background:none;
+    width:100%; text-align:left; font-family:var(--font); font-size:.85rem;
+    color:var(--ink); cursor:pointer; margin-bottom:.2rem;
+    transition:all .25s ease;
+  }
+  .nav-item:hover{background:var(--sage);}
+  .nav-item.active{background:var(--brand); color:#fff; font-weight:700;}
+  .sidebar .signout{
+    margin-top:auto; font-size:.78rem; color:var(--muted);
+    cursor:pointer; padding:.6rem .8rem; transition:color .2s ease;
+  }
+  .sidebar .signout:hover{color:var(--error);}
+
+  .main{flex:1; min-width:0; padding:1.6rem 1.8rem 4rem;}
+  @media (max-width:760px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%; flex-direction:row; overflow-x:auto; padding:.8rem;}
+    .sidebar .brand{display:none;}
+    .nav-item{white-space:nowrap; width:auto;}
+    .sidebar .signout{display:none;}
+    .main{padding:1rem;}
+  }
+
+  /* ---------- CHILD BAR ---------- */
+  .childbar{
+    display:flex; align-items:center; gap:.9rem; margin-bottom:1.4rem;
+    padding:.9rem 1.1rem;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 4px 14px rgba(36,95,90,.04);
+    flex-wrap:wrap;
+  }
+  .childbar .avatar{
+    width:42px; height:42px; border-radius:50%; flex-shrink:0;
+    background:var(--brand); color:#fff; font-weight:800; font-size:.95rem;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .childbar .who{min-width:0; flex:1;}
+  .childbar .who .label{
+    font-size:.68rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--muted);
+  }
+  .childbar .who .name{
+    font-size:1.05rem; font-weight:800; color:var(--brand-deep);
+    line-height:1.2; margin-top:.1rem;
+  }
+  .childbar .who .ks{
+    font-size:.75rem; color:var(--muted); margin-top:.15rem;
+  }
+  .childbar .switch{
+    display:flex; align-items:center; gap:.4rem;
+    background:var(--sage); border:1.5px solid var(--brand-soft);
+    border-radius:999px; padding:.25rem .4rem .25rem .9rem;
+  }
+  .childbar .switch label{
+    font-size:.7rem; font-weight:800; color:var(--brand-deep);
+    letter-spacing:.05em; text-transform:uppercase;
+  }
+  .childbar select{
+    padding:.5rem .9rem; border-radius:999px; border:none;
+    background:var(--surface); font-family:var(--font); font-weight:700;
+    color:var(--brand-deep); font-size:.85rem; cursor:pointer;
+  }
+  .childbar select:focus{outline:none; box-shadow:0 0 0 3px rgba(85,191,179,.3);}
+
+  .view{display:none;} .view.active{display:block; animation:fadeIn .25s;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+  h2{color:var(--brand-deep); margin:0 0 1rem; font-size:1.25rem; font-weight:800; letter-spacing:-.01em;}
+  h2 .ctx{font-size:.78rem; font-weight:600; color:var(--muted); margin-left:.4rem; letter-spacing:0; text-transform:none;}
+
+  .panel{
+    background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:1.2rem; margin-bottom:1.2rem;
+    box-shadow:0 4px 14px rgba(36,95,90,.04);
+  }
+
+  /* ---------- FILTER CHIP BAR ---------- */
+  .chipbar{
+    display:flex; gap:.45rem; flex-wrap:wrap;
+    margin:0 0 1rem;
+  }
+  .chipbar button{
+    padding:.45rem .95rem;
+    border-radius:999px;
+    border:1.5px solid var(--line);
+    background:var(--surface);
+    font-family:var(--font);
+    font-size:.76rem; font-weight:700;
+    color:var(--muted);
+    cursor:pointer;
+    transition:all .2s ease;
+    display:inline-flex; align-items:center; gap:.35rem;
+  }
+  .chipbar button:hover{border-color:var(--brand); color:var(--brand-deep);}
+  .chipbar button.active{background:var(--brand); color:#fff; border-color:var(--brand);}
+  .chipbar button .count{
+    background:rgba(38,51,49,.10);
+    padding:.05rem .4rem; border-radius:999px;
+    font-size:.65rem; font-weight:800;
+  }
+  .chipbar button.active .count{background:rgba(255,255,255,.28); color:#fff;}
+
+  .chart-wrap{height:280px; position:relative;}
+
+  .statgrid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+    gap:.8rem;
+    margin-bottom:1.2rem;
+  }
+  @media (min-width:1200px){
+    .statgrid{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
+  }
+  .stat{
+    background:var(--sage); border-radius:12px; padding:1rem;
+    text-align:center; border:1px solid rgba(85,191,179,.15);
+  }
+  .stat strong{display:block; font-size:1.4rem; color:var(--brand-deep); font-weight:800;}
+  .stat span{font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
+
+  .item-row{
+    display:flex; justify-content:space-between; align-items:center;
+    gap:.8rem; padding:.65rem 0; border-bottom:1px solid var(--line);
+  }
+  .item-row:last-child{border-bottom:none;}
+  .item-row .title{font-weight:700; font-size:.88rem; color:var(--ink);}
+  .item-row .meta{font-size:.74rem; color:var(--muted);}
+  .badge{font-size:.68rem; font-weight:800; padding:.2rem .6rem; border-radius:999px; letter-spacing:.03em;}
+  .badge.good{background:rgba(46,184,114,.14); color:#1f8557;}
+  .badge.warn{background:rgba(243,156,18,.15); color:#9a6607;}
+  .badge.neutral{background:var(--sage); color:var(--brand-deep);}
+  .badge.activity{background:rgba(155,89,182,.12); color:#7c3f96;}
+  .empty{color:var(--muted); font-size:.85rem; padding:1.2rem 0; text-align:center; font-style:italic;}
+
+  .rangebar{display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.2rem;}
+  .rangebar button{
+    padding:.45rem .9rem; border-radius:999px;
+    border:1.5px solid var(--line); background:var(--surface);
+    font-family:var(--font); font-size:.78rem; cursor:pointer;
+    color:var(--muted); font-weight:600; transition:all .2s ease;
+  }
+  .rangebar button:hover{border-color:var(--brand); color:var(--brand-deep);}
+  .rangebar button.active{background:var(--brand); color:#fff; border-color:var(--brand);}
+  .rangebar input[type=date]{
+    padding:.4rem .6rem; border-radius:8px; border:1px solid var(--line);
+    font-family:var(--font); font-size:.78rem; background:var(--surface);
+  }
+
+  table{width:100%; border-collapse:collapse;}
+  th,td{padding:.55rem .6rem; text-align:left; font-size:.8rem; border-bottom:1px solid var(--line);}
+  th{color:var(--muted); font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; font-weight:800; background:var(--sage);}
+
+  .ticket-thread{max-height:280px; overflow-y:auto; margin-bottom:.4rem;}
+  .msg{padding:.5rem .7rem; border-radius:10px; margin-bottom:.4rem; font-size:.82rem; max-width:80%; line-height:1.5;}
+  .msg.student{background:var(--sage); margin-right:auto; color:var(--ink);}
+  .msg.staff{background:var(--brand-soft); color:#04231f; margin-left:auto; text-align:right;}
+  .pm-thread{max-height:420px; overflow-y:auto; margin-bottom:.8rem; display:flex; flex-direction:column; gap:.4rem;}
+  .pm{padding:.55rem .75rem; border-radius:10px; font-size:.84rem; max-width:80%; line-height:1.5; white-space:pre-wrap; word-break:break-word;}
+  .pm .pm-meta{display:block; font-size:.66rem; opacity:.7; margin-top:.25rem; white-space:normal;}
+  .pm.in{background:var(--sage); color:var(--ink); align-self:flex-start;}
+  .pm.out{background:var(--brand-soft); color:#04231f; align-self:flex-end; text-align:right;}
+  .pm-compose{display:flex; gap:.5rem; align-items:flex-end;}
+  .pm-compose textarea{flex:1; min-height:44px; max-height:140px; padding:.55rem .7rem; border:1.5px solid var(--line); border-radius:10px; font-family:var(--font); font-size:.84rem; resize:vertical; background:var(--surface); color:var(--ink);}
+  .pm-compose textarea:focus{outline:none; border-color:var(--brand);}
+  .pm-compose button{padding:.6rem 1rem; border:none; border-radius:10px; background:var(--brand-deep); color:#fff; font-family:var(--font); font-weight:800; font-size:.82rem; cursor:pointer;}
+  .pm-compose button:hover{background:var(--brand);}
+  .pm-compose button:disabled{opacity:.6; cursor:not-allowed;}
+  .nav-dot{display:none; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--error); color:#fff; font-size:.66rem; font-weight:800; line-height:18px; text-align:center; margin-left:auto;}
+  .readonly-note{
+    font-size:.72rem; color:var(--muted); text-align:center;
+    padding:.5rem; background:var(--sage); border-radius:8px; margin-top:.5rem;
+  }
+  .ticket-head{
+    display:flex; justify-content:space-between; align-items:center; gap:.5rem;
+    margin-bottom:.4rem; flex-wrap:wrap;
+  }
+  .ticket-head .who{
+    font-size:.72rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--brand-deep);
+  }
+</style>
+</head>
+<body>
+
+<div id="gate"><div class="spin"></div><p>Loading Parent Portal…</p></div>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="brand"><i class="fas fa-user-group"></i> Parent Portal</div>
+    <button class="nav-item active" data-view="overview" type="button"><i class="fas fa-house"></i> Overview</button>
+    <button class="nav-item" data-view="progress" type="button"><i class="fas fa-chart-line"></i> Growth</button>
+    <button class="nav-item" data-view="classes" type="button"><i class="fas fa-calendar-days"></i> Classes &amp; Timetable</button>
+    <button class="nav-item" data-view="homework" type="button"><i class="fas fa-book-open"></i> Homework <span class="nav-dot" id="navHwCount" style="display:none;">0</span></button>
+    <button class="nav-item" data-view="exams" type="button"><i class="fas fa-file-pen"></i> Exams <span class="nav-dot" id="navExamCount" style="display:none;">0</span></button>
+    <button class="nav-item" data-view="activities" type="button"><i class="fas fa-gamepad"></i> Activities</button>
+    <button class="nav-item" data-view="announcements" type="button"><i class="fas fa-bullhorn"></i> Announcements <span class="nav-dot" id="navNoticeCount" style="display:none;">0</span></button>
+    <button class="nav-item" data-view="chats" type="button"><i class="fas fa-comments"></i> Chats</button>
+    <button class="nav-item" data-view="messages" type="button"><i class="fas fa-envelope"></i> Messages <span class="nav-dot" id="msgUnreadDot">0</span></button>
+    <div class="signout" id="signOutBtn"><i class="fas fa-arrow-right-from-bracket"></i> Sign out</div>
+  </div>
+
+  <div class="main">
+    <div class="childbar">
+      <div class="avatar" id="childAvatar">–</div>
+      <div class="who">
+        <div class="label">Viewing</div>
+        <div class="name" id="childName">—</div>
+        <div class="ks" id="childKeyStage">—</div>
+      </div>
+      <div class="switch hidden" id="switchWrap">
+        <label for="childSelect"><i class="fas fa-right-left"></i> Switch</label>
+        <select id="childSelect"></select>
+      </div>
+      <div id="bellHost" style="margin-left:auto;"></div>
+    </div>
+
+    <section class="view active" id="view-overview">
+      <h2>Overview <span class="ctx" id="ctxOverview"></span></h2>
+      <div class="statgrid" id="ovStats"></div>
+      <div class="panel">
+        <h3 style="margin:0 0 .6rem; font-size:.95rem;">Recent activity</h3>
+        <div id="ovRecent"></div>
+      </div>
+      <div class="panel">
+        <h3 style="margin:0 0 .6rem; font-size:.95rem;">Strengths &amp; areas for improvement</h3>
+        <div id="ovStrengths"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-progress">
+      <h2>Growth dashboard <span class="ctx" id="ctxProgress"></span></h2>
+      <div class="rangebar" id="rangeBar">
+        <button data-range="7d" type="button">Last 7 days</button>
+        <button data-range="30d" type="button">Last 30 days</button>
+        <button data-range="3m" type="button">Last 3 months</button>
+        <button data-range="year" type="button">Academic year</button>
+        <button data-range="all" class="active" type="button">All time</button>
+        <input type="date" id="rangeFrom" /> <span style="align-self:center; color:var(--muted); font-size:.8rem;">to</span> <input type="date" id="rangeTo" />
+        <button id="rangeApplyBtn" type="button">Apply</button>
+      </div>
+      <div class="panel"><div class="chart-wrap"><canvas id="progressChart"></canvas></div></div>
+      <div class="statgrid" id="progressStats"></div>
+    </section>
+
+    <section class="view" id="view-classes">
+      <h2>Classes &amp; Timetable <span class="ctx" id="ctxClasses"></span></h2>
+      <div class="panel">
+        <h3 style="margin:0 0 .6rem; font-size:.95rem;">Upcoming / live classes</h3>
+        <div id="classList"></div>
+      </div>
+      <div class="panel">
+        <h3 style="margin:0 0 .6rem; font-size:.95rem;">Weekly timetable</h3>
+        <div id="ttGrid"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-homework">
+      <h2>Homework <span class="ctx" id="ctxHomework"></span></h2>
+      <div class="chipbar" id="hwFilterBar" role="tablist" aria-label="Homework filter">
+        <button type="button" data-filter="all" class="active">All <span class="count" id="hwCntAll">0</span></button>
+        <button type="button" data-filter="todo">To do <span class="count" id="hwCntTodo">0</span></button>
+        <button type="button" data-filter="submitted">Handed in <span class="count" id="hwCntSubmitted">0</span></button>
+        <button type="button" data-filter="graded">Graded <span class="count" id="hwCntGraded">0</span></button>
+      </div>
+      <div id="hwNested"></div>
+      <details class="panel" style="margin-top:1rem;"><summary style="cursor:pointer;font-weight:800;color:var(--brand-deep);">Earlier homework (old list)</summary><div id="hwList" style="margin-top:.8rem;"></div></details>
+    </section>
+
+    <section class="view" id="view-exams">
+      <h2>Exams <span class="ctx" id="ctxExams"></span></h2>
+      <div class="chipbar" id="exFilterBar" role="tablist" aria-label="Exams filter">
+        <button type="button" data-filter="all" class="active">All <span class="count" id="exCntAll">0</span></button>
+        <button type="button" data-filter="upcoming">Upcoming <span class="count" id="exCntUpcoming">0</span></button>
+        <button type="button" data-filter="submitted">Handed in <span class="count" id="exCntSubmitted">0</span></button>
+        <button type="button" data-filter="graded">Graded <span class="count" id="exCntGraded">0</span></button>
+      </div>
+      <div id="exNested"></div>
+      <h3 style="margin:1.4rem 0 .6rem;color:var(--brand-deep);">Exam &amp; assessment results</h3>
+      <div class="panel"><div id="examList"></div></div>
+    </section>
+
+    <section class="view" id="view-activities">
+      <h2>Interactive activities <span class="ctx" id="ctxActivities"></span></h2>
+      <div class="panel"><div id="actList"></div></div>
+    </section>
+
+    <section class="view" id="view-announcements">
+      <h2>Announcements <span class="ctx" id="ctxAnnouncements"></span></h2>
+      <div class="panel" id="workNoticePanel" style="display:none;"><div id="workNoticeList"></div></div>
+      <div class="panel"><div id="noticeList"></div></div>
+    </section>
+
+    <section class="view" id="view-messages">
+      <h2>Messages <span class="ctx" id="ctxMessages"></span></h2>
+      <div class="panel">
+        <div class="ticket-head">
+          <div class="who"><i class="fas fa-lock"></i> Private conversation with the Studio Desk</div>
+          <span class="badge neutral" id="pmChildBadge">—</span>
+        </div>
+        <div class="pm-thread" id="pmThread"></div>
+        <div class="pm-compose">
+          <textarea id="pmInput" rows="2" maxlength="4000" placeholder="Write a message to the Studio Desk…"></textarea>
+          <button type="button" id="pmSendBtn"><i class="fas fa-paper-plane"></i> Send</button>
+        </div>
+        <div class="readonly-note"><i class="fas fa-lock"></i> Only you and the Studio Desk can see this conversation. Your child cannot.</div>
+      </div>
+    </section>
+
+    <section class="view" id="view-chats">
+      <h2>Chats <span style="font-size:.7rem; font-weight:700; color:var(--muted);">(read-only)</span> <span class="ctx" id="ctxChats"></span></h2>
+      <div id="chatList"></div>
+    </section>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script src="../js/parent/parent-helpers.js"></script>
+<script src="../js/classroom/classroom-helpers.js"></script>
+<script src="../js/classroom/work-helpers.js"></script>
+<script src="../js/classroom/work-learner.js"></script>
+<!-- Chart.js — capital C in "Chart.js" is required by the Cloudflare CDN path -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<script>
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(d){ d = ParentHelpers.toDateSafe(d); return d ? d.toLocaleDateString() : '—'; }
+function initials(name){
+  if(!name) return '–';
+  return name.trim().split(/\s+/).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+}
+
+const auth = firebase.auth();
+let currentUser = null;
+let children = [];
+let currentChild = null;
+let bundle = null;
+let currentRange = { from: null, to: null };
+let chartInstance = null;
+
+// Live filter state for the two nested lists (parent side).
+// These are shared across child switches and preserved between renders.
+const parentFilters = { homework: 'all', exams: 'all' };
+
+auth.onAuthStateChanged(user => {
+  if (!user) { window.location.href = 'index.html'; return; }
+  currentUser = user;
+  db.collection('parentAccounts').doc(user.uid).get().then(doc => {
+    if (!doc.exists) { auth.signOut().then(()=>window.location.href='index.html'); return; }
+    return firebase.functions().httpsCallable('refreshParentAccess')()
+      .catch(() => null)
+      .then(() => ParentHelpers.getMyChildren(user.uid));
+  }).then(kids => {
+    children = kids || [];
+    if (!children.length) {
+      document.body.classList.add('ready');
+      document.querySelector('.main').innerHTML = '<div class="panel" style="margin-top:2rem;"><h2>No linked children yet</h2><p style="color:var(--muted);">Your account isn\'t linked to a student yet. Please contact the Studio Desk.</p></div>';
+      return;
+    }
+    populateChildSelect();
+    selectChild(children[0].id);
+    watchUnreadMessages();
+    document.body.classList.add('ready');
+  }).catch(err => {
+    console.error('Auth/children load failed:', err, JSON.stringify(err));
+    document.body.classList.add('ready');
+    document.querySelector('.main').innerHTML = `<div class="panel" style="margin-top:2rem;">Could not load your account: ${escapeHtml(err && err.message ? err.message : String(err))}</div>`;
+  });
+});
+
+document.getElementById('signOutBtn').addEventListener('click', ()=> auth.signOut().then(()=>window.location.href='index.html'));
+
+function populateChildSelect(){
+  const sel = document.getElementById('childSelect');
+  const wrap = document.getElementById('switchWrap');
+  sel.innerHTML = children.map(c=>{
+    const ksShort = (c.keyStage||'').replace(/\s*\(.*/, '');
+    const label = (c.name||'Student') + (ksShort ? ' — ' + ksShort : '');
+    return `<option value="${c.id}">${escapeHtml(label)}</option>`;
+  }).join('');
+  sel.onchange = () => selectChild(sel.value);
+  if (children.length > 1) wrap.classList.remove('hidden');
+  else wrap.classList.add('hidden');
+}
+
+function setChildHeader(child){
+  document.getElementById('childAvatar').textContent = initials(child.name);
+  document.getElementById('childName').textContent = child.name || 'Student';
+  const ks = child.keyStage || '';
+  document.getElementById('childKeyStage').textContent = ks ? ks + (child.year ? ' · Year ' + child.year : '') : 'Key Stage not set';
+  const ctx = ks ? '· ' + child.name + ' (' + ks.replace(/\s*\(.*/,'') + ')' : '· ' + (child.name||'');
+  ['ctxOverview','ctxProgress','ctxClasses','ctxHomework','ctxExams','ctxActivities','ctxAnnouncements','ctxChats','ctxMessages'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.textContent = ctx;
+  });
+  const sel = document.getElementById('childSelect');
+  if(sel) sel.value = child.id;
+}
+
+function selectChild(id){
+  currentChild = children.find(c=>c.id===id);
+  if(!currentChild) return;
+  setChildHeader(currentChild);
+  document.getElementById('gate').classList.remove('hidden');
+  document.body.classList.remove('ready');
+  ParentHelpers.loadChildBundle(currentChild).then(b => {
+    bundle = b;
+    bundle.results = bundle.results || [];
+    bundle.activityAttempts = bundle.activityAttempts || [];
+    bundle.submissions = bundle.submissions || [];
+    bundle.homework = bundle.homework || [];
+    bundle.activities = bundle.activities || [];
+    bundle.liveClasses = bundle.liveClasses || [];
+    bundle.timetableEntries = bundle.timetableEntries || [];
+    bundle.notices = bundle.notices || [];
+    bundle.tickets = bundle.tickets || [];
+    bundle.allResults = bundle.allResults || [];
+    bundle.flatExams = bundle.flatExams || [];
+
+    document.body.classList.add('ready');
+    startParentWorkFeatures();
+    [
+      ['overview', renderOverview],
+      ['progress', renderProgress],
+      ['classes', renderClasses],
+      ['homework', renderHomework],
+      ['exams', renderExams],
+      ['activities', renderActivities],
+      ['announcements', renderAnnouncements],
+      ['chats', renderChats],
+      ['messages', renderMessages]
+    ].forEach(([name, fn]) => {
+      try { fn(); }
+      catch (e) { console.error('Render failed in ' + name + ':', e, e && e.stack); }
+    });
+
+    // Refresh the filter bars now that the child's data is in.
+    wireFilterBars();
+  }).catch(err => {
+    console.error('loadChildBundle failed:', err, JSON.stringify(err));
+    document.body.classList.add('ready');
+    alert('Could not load this child\'s data: ' + (err && err.message ? err.message : JSON.stringify(err)));
+  });
+}
+
+document.querySelectorAll('.nav-item[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'progress') {
+      setTimeout(renderProgress, 0);
+    }
+  });
+});
+
+/* ============================================================
+   FILTER BARS — Homework & Exams
+   ------------------------------------------------------------
+   Each bar is a chipbar with data-filter values. Clicking a chip:
+     1. flips the active chip on that bar,
+     2. updates parentFilters[<kind>],
+     3. re-mounts the corresponding WorkUI.mountParentWork().
+============================================================ */
+function wireFilterBars(){
+  // Homework bar
+  wireOneFilterBar('hwFilterBar', 'homework', () => renderHomework());
+  // Exams bar
+  wireOneFilterBar('exFilterBar', 'exams', () => renderExams());
+  // Refresh the counts on the two bars (based on the currently-loaded bundle)
+  updateFilterCounts();
+}
+
+function wireOneFilterBar(barId, kindKey, rerender){
+  const bar = document.getElementById(barId);
+  if(!bar || bar.dataset.wired === '1') return;
+  bar.dataset.wired = '1';
+
+  bar.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-filter]');
+    if(!btn) return;
+    const value = btn.dataset.filter;
+    if(parentFilters[kindKey] === value) return;
+    parentFilters[kindKey] = value;
+    Array.prototype.forEach.call(bar.querySelectorAll('button[data-filter]'), b=>{
+      b.classList.toggle('active', b.dataset.filter === value);
+    });
+    rerender();
+  });
+}
+
+// Compute counts for the chips.
+// Homework counts come from bundle.submissions + bundle.homework (legacy)
+//   — the work-learner side also handles the nested classroom homework.
+// Exam counts come from bundle.flatExams + bundle.results.
+function updateFilterCounts(){
+  if(!bundle) return;
+
+  // ----- Homework counts -----
+  // We count on the LEGACY homework only (the nested homework inside
+  // classrooms is fetched by WorkUI.mountParentWork and will filter
+  // itself). The chip counts here give the parent a quick sense of
+  // the volume on the top-level list.
+  const subsByHw = {};
+  (bundle.submissions || []).forEach(s => { subsByHw[s.homeworkId] = s; });
+
+  const hwAll = (bundle.homework || []).length;
+  let hwTodo = 0, hwSubmitted = 0, hwGraded = 0;
+  (bundle.homework || []).forEach(h=>{
+    const sub = subsByHw[h.id];
+    if(!sub){ hwTodo++; return; }
+    if(sub.status === 'Graded') hwGraded++;
+    else hwSubmitted++;
+  });
+  setCount('hwCntAll', hwAll);
+  setCount('hwCntTodo', hwTodo);
+  setCount('hwCntSubmitted', hwSubmitted);
+  setCount('hwCntGraded', hwGraded);
+
+  // ----- Exam counts -----
+  // Flat exams contribute one row each. Legacy released results also
+  // contribute "graded" so the count reflects everything visible.
+  const flat = bundle.flatExams || [];
+  const now = Date.now();
+
+  const exAll = flat.length + (bundle.results || []).length;
+  let exUpcoming = 0, exSubmitted = 0, exGraded = (bundle.results || []).length;
+  flat.forEach(({ exam, submission })=>{
+    const examDate = ParentHelpers.toDateSafe(exam.examDate);
+    if(submission){
+      if(submission.status === 'Graded') exGraded++;
+      else exSubmitted++;
+    } else if(examDate && examDate.getTime() >= now){
+      exUpcoming++;
+    }
+  });
+  setCount('exCntAll', exAll);
+  setCount('exCntUpcoming', exUpcoming);
+  setCount('exCntSubmitted', exSubmitted);
+  setCount('exCntGraded', exGraded);
+}
+
+function setCount(id, n){
+  const el = document.getElementById(id);
+  if(el) el.textContent = String(n);
+}
+
+/* ---------------- Overview ---------------- */
+function renderOverview(){
+  const merged = bundle.allResults || [];
+  const examOnly = bundle.results || [];
+  const activityOnly = (bundle.activityAttempts || []).filter(a=>a.status==='Completed');
+
+  const scored = merged.filter(r => r.maxScore);
+  const avgPct = scored.length
+    ? Math.round(scored.reduce((s,r)=> s + (r.score/r.maxScore*100), 0) / scored.length)
+    : null;
+
+  const hwDone = (bundle.submissions || []).length;
+  const hwTotal = (bundle.homework || []).length;
+
+  document.getElementById('ovStats').innerHTML = `
+    <div class="stat"><strong>${avgPct===null?'—':avgPct+'%'}</strong><span>Overall average</span></div>
+    <div class="stat"><strong>${hwDone}/${hwTotal}</strong><span>Homework submitted</span></div>
+    <div class="stat"><strong>${activityOnly.length}</strong><span>Activities completed</span></div>
+    <div class="stat"><strong>${examOnly.length + activityOnly.length}</strong><span>Graded assessments</span></div>`;
+
+  const recent = merged
+    .map(r => ({
+      type: r.kind === 'activity' ? 'Activity' : 'Exam result',
+      kind: r.kind || 'exam',
+      title: r.examTitle || (r.kind === 'activity' ? 'Activity' : 'Exam'),
+      date: r.date || r.gradedAt,
+      extra: r.maxScore ? Math.round(r.score/r.maxScore*100)+'%' : ''
+    }))
+    .filter(r => r.date)
+    .sort((a,b)=> (ParentHelpers.toDateSafe(b.date)||0) - (ParentHelpers.toDateSafe(a.date)||0))
+    .slice(0,8);
+
+  document.getElementById('ovRecent').innerHTML = recent.length ? recent.map(r=>`
+    <div class="item-row">
+      <div>
+        <div class="title">${escapeHtml(r.title)}</div>
+        <div class="meta">${escapeHtml(r.type)} · ${fmtDate(r.date)}</div>
+      </div>
+      <span class="badge ${r.kind==='activity'?'activity':'neutral'}">${escapeHtml(r.extra||'')}</span>
+    </div>
+  `).join('') : '<div class="empty">No activity yet.</div>';
+
+  const bySubject = {};
+  merged.forEach(r=>{
+    const subj = r.subject || 'General';
+    if(!bySubject[subj]) bySubject[subj] = [];
+    if(r.maxScore) bySubject[subj].push(r.score/r.maxScore*100);
+  });
+  const subjectAverages = Object.keys(bySubject)
+    .filter(s => bySubject[s].length)
+    .map(s=>({ subject:s, avg: bySubject[s].reduce((a,b)=>a+b,0)/bySubject[s].length }))
+    .sort((a,b)=>b.avg-a.avg);
+
+  if(!subjectAverages.length){
+    document.getElementById('ovStrengths').innerHTML = '<div class="empty">Not enough graded work yet to show trends.</div>';
+  } else {
+    const strong = subjectAverages.slice(0,2);
+    const weak = subjectAverages.slice(-2).reverse();
+    document.getElementById('ovStrengths').innerHTML = `
+      <div class="item-row"><div class="title">Strongest</div><div>${strong.map(s=>`<span class="badge good" style="margin-left:.3rem;">${escapeHtml(s.subject)} ${Math.round(s.avg)}%</span>`).join('')}</div></div>
+      <div class="item-row"><div class="title">Could use more practice</div><div>${weak.map(s=>`<span class="badge warn" style="margin-left:.3rem;">${escapeHtml(s.subject)} ${Math.round(s.avg)}%</span>`).join('')}</div></div>`;
+  }
+}
+
+/* ---------------- Growth / Progress ---------------- */
+document.querySelectorAll('#rangeBar button[data-range]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#rangeBar button[data-range]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentRange = ParentHelpers.presetRange(btn.dataset.range);
+    document.getElementById('rangeFrom').value = '';
+    document.getElementById('rangeTo').value = '';
+    renderProgress();
+  });
+});
+document.getElementById('rangeApplyBtn').addEventListener('click', ()=>{
+  document.querySelectorAll('#rangeBar button[data-range]').forEach(b=>b.classList.remove('active'));
+  const from = document.getElementById('rangeFrom').value ? new Date(document.getElementById('rangeFrom').value) : null;
+  const to = document.getElementById('rangeTo').value ? new Date(document.getElementById('rangeTo').value) : null;
+  currentRange = { from, to };
+  renderProgress();
+});
+
+function renderProgress(){
+  if(!bundle) return;
+  const merged = bundle.allResults || [];
+
+  const filtered = ParentHelpers.filterByDateRange(merged, 'date', currentRange.from, currentRange.to)
+    .filter(r=>r.maxScore)
+    .sort((a,b)=> (ParentHelpers.toDateSafe(a.date)||0) - (ParentHelpers.toDateSafe(b.date)||0));
+
+  const canvas = document.getElementById('progressChart');
+  if(chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+  if(!filtered.length){
+    const c2d = canvas.getContext('2d');
+    c2d.clearRect(0, 0, canvas.width, canvas.height);
+  } else {
+    chartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: filtered.map(r=>fmtDate(r.date)),
+        datasets: [{
+          label: 'Score %',
+          data: filtered.map(r=>Math.round(r.score/r.maxScore*100)),
+          borderColor: '#55BFB3',
+          backgroundColor: 'rgba(85,191,179,.15)',
+          fill: true,
+          tension: .3,
+          pointBackgroundColor: '#245F5A',
+          pointRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  const filteredHw = ParentHelpers.filterByDateRange(bundle.submissions || [], 'date', currentRange.from, currentRange.to);
+  const filteredActs = (bundle.activityAttempts || [])
+    .filter(a => a.status === 'Completed')
+    .filter(a => {
+      const d = ParentHelpers.toDateSafe(a.completedAt) || ParentHelpers.toDateSafe(a.startedAt);
+      if(!d) return false;
+      if(currentRange.from && d < currentRange.from) return false;
+      if(currentRange.to && d > currentRange.to) return false;
+      return true;
+    });
+  const avgPct = filtered.length ? Math.round(filtered.reduce((s,r)=>s+(r.score/r.maxScore*100),0)/filtered.length) : null;
+
+  document.getElementById('progressStats').innerHTML = `
+    <div class="stat"><strong>${filtered.length}</strong><span>Assessments in this period</span></div>
+    <div class="stat"><strong>${avgPct===null?'—':avgPct+'%'}</strong><span>Average score</span></div>
+    <div class="stat"><strong>${filteredHw.length}</strong><span>Homework submitted</span></div>
+    <div class="stat"><strong>${filteredActs.length}</strong><span>Activities completed</span></div>`;
+}
+
+/* ---------------- Classes & Timetable ---------------- */
+function renderClasses(){
+  const list = (bundle.liveClasses || []).slice().sort((a,b)=>{
+    const order = { 'Live':0, 'Scheduled':1, 'Ended':2 };
+    return (order[a.status]??3) - (order[b.status]??3);
+  });
+  document.getElementById('classList').innerHTML = list.length ? list.map(c=>`
+    <div class="item-row"><div><div class="title">${escapeHtml(c.title||'Class')}</div><div class="meta">${escapeHtml(c.subject||'')} · ${escapeHtml(c.status||'')}</div></div>
+    <span class="badge ${c.status==='Live'?'good':'neutral'}">${escapeHtml(c.status||'')}</span></div>
+  `).join('') : '<div class="empty">No classes scheduled.</div>';
+
+  const grid = document.getElementById('ttGrid');
+  if(!(bundle.timetableEntries || []).length){ grid.innerHTML = '<div class="empty">No timetable sessions published for this child\'s subjects yet.</div>'; return; }
+  const byDay = groupTimetableEntriesByDay(bundle.timetableEntries);
+  const legacyNote = lmzStudentEntryScope(currentChild).legacyAllSubjects
+    ? '<div class="empty" style="margin-bottom:.6rem;">This child\'s subjects have not been recorded yet, so every session for their Key Stage is shown. The Studio Desk will update this.</div>' : '';
+  grid.innerHTML = legacyNote + DAYS_OF_WEEK.filter(d=>byDay[d].length).map(day=>`
+    <div style="margin-bottom:1rem;">
+      <strong style="color:var(--brand-deep); display:block; margin-bottom:.4rem;">${escapeHtml(day)}</strong>
+      <table><thead><tr><th>Time</th><th>Subject</th><th>Tutor</th><th>Room</th></tr></thead><tbody>
+        ${byDay[day].map(e=>`<tr><td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td><td>${escapeHtml(e.subjectName||'')}</td><td>${escapeHtml(e.tutorName||'—')}</td><td>${lmzRoomHtml(e.room)}</td></tr>`).join('')}
+      </tbody></table>
+    </div>`).join('');
+}
+
+/* ---------------- Homework ----------------
+   The nested list is rendered by WorkUI.mountParentWork.
+   We pass parentFilters.homework so the renderer can filter rows.
+   The legacy "Earlier homework" list below is intentionally not filtered.
+*/
+function renderHomework(){
+  WorkUI.mountParentWork(document.getElementById('hwNested'), {
+    kind: 'homework',
+    child: currentChild,
+    filter: parentFilters.homework
+  });
+
+  const subsByHw = {};
+  (bundle.submissions || []).forEach(s=>{ subsByHw[s.homeworkId] = s; });
+  document.getElementById('hwList').innerHTML = (bundle.homework || []).length ? bundle.homework.map(h=>{
+    const sub = subsByHw[h.id];
+    const status = sub ? (sub.status==='Graded' ? `Graded${sub.grade?': '+escapeHtml(String(sub.grade)):''}` : 'Submitted — awaiting grading') : 'Not submitted';
+    const cls = sub ? (sub.status==='Graded'?'good':'neutral') : 'warn';
+    return `<div class="item-row"><div><div class="title">${escapeHtml(h.title||'Homework')}</div><div class="meta">${escapeHtml(h.subject||'')} · Due ${fmtDate(h.dueDate)}</div></div><span class="badge ${cls}">${status}</span></div>`;
+  }).join('') : '<div class="empty">No homework posted for this Key Stage yet.</div>';
+}
+
+/* ---------------- Exams & assessments (merged) ----------------
+   The nested list is rendered by WorkUI.mountParentWork.
+   The results table below is untouched.
+*/
+function renderExams(){
+  WorkUI.mountParentWork(document.getElementById('exNested'), {
+    kind: 'exams',
+    child: currentChild,
+    filter: parentFilters.exams
+  });
+
+  const merged = (bundle.allResults || []).slice()
+    .filter(r => r.maxScore)
+    .sort((a,b)=>(ParentHelpers.toDateSafe(b.date)||0)-(ParentHelpers.toDateSafe(a.date)||0));
+
+  document.getElementById('examList').innerHTML = merged.length ? merged.map(r=>`
+    <div class="item-row">
+      <div>
+        <div class="title">${escapeHtml(r.examTitle||'Assessment')}</div>
+        <div class="meta">${escapeHtml(r.subject||'')} · ${fmtDate(r.date)} · ${r.kind==='activity'?'Activity':'Exam'}</div>
+      </div>
+      <span class="badge ${r.kind==='activity'?'activity':'good'}">${Math.round(r.score/r.maxScore*100)}%</span>
+    </div>
+  `).join('') : '<div class="empty">No released results yet.</div>';
+}
+
+/* ---------------- Activities ---------------- */
+function renderActivities(){
+  const byActivity = {};
+  (bundle.activityAttempts || []).filter(a=>a.status==='Completed').forEach(a=>{
+    const best = byActivity[a.activityId];
+    if(!best || (a.maxScore && (!best.maxScore || (a.score/a.maxScore) > (best.score/best.maxScore)))) {
+      byActivity[a.activityId] = a;
+    }
+  });
+  document.getElementById('actList').innerHTML = (bundle.activities || []).length ? bundle.activities.map(act=>{
+    const best = byActivity[act.id];
+    return `<div class="item-row"><div><div class="title">${escapeHtml(act.title||'Activity')}</div><div class="meta">${escapeHtml(act.subject||'')} · ${escapeHtml(act.type||'')}</div></div>
+    <span class="badge ${best?'good':'neutral'}">${best && best.maxScore ? Math.round(best.score/best.maxScore*100)+'%' : 'Not played'}</span></div>`;
+  }).join('') : '<div class="empty">No activities published for this Key Stage yet.</div>';
+}
+
+/* ---------------- Announcements ---------------- */
+function renderAnnouncements(){
+  document.getElementById('noticeList').innerHTML = (bundle.notices || []).length ? bundle.notices.map(n=>`
+    <div class="item-row"><div><div class="title">${escapeHtml(n.title||'Announcement')}</div><div class="meta">${fmtDate(n.postedAt)}</div><div style="font-size:.82rem; margin-top:.3rem;">${escapeHtml(n.body||n.message||'')}</div></div></div>
+  `).join('') : '<div class="empty">No announcements for this Key Stage right now.</div>';
+}
+
+/* ---------------- Work notices + bell (read-only) ---------------- */
+let workNoticeUnsub = null, parentBellMounted = false;
+function startParentWorkFeatures(){
+  if(!currentUser) return;
+  if(!parentBellMounted){
+    parentBellMounted = true;
+    mountNotificationBell(document.getElementById('bellHost'), currentUser.uid, 'parent', {
+      navBadges: { homework:'#navHwCount', exams:'#navExamCount', notices:'#navNoticeCount' },
+      navigate: (cat)=>{
+        const view = { homework:'homework', exams:'exams', notices:'announcements', messages:'messages' }[cat];
+        const btn = view && document.querySelector('.nav-item[data-view="'+view+'"]'); if(btn) btn.click();
+      }
+    });
+  }
+  if(workNoticeUnsub) workNoticeUnsub();
+  workNoticeUnsub = watchMyStudentNotices(currentUser.uid, rows=>{
+    const mine = rows.filter(n => !currentChild || !n.studentId || n.studentId === currentChild.id);
+    document.getElementById('workNoticePanel').style.display = mine.length ? '' : 'none';
+    document.getElementById('workNoticeList').innerHTML = mine.map(n=>{
+      const when = n.createdAt && n.createdAt.toDate ? n.createdAt.toDate().toLocaleDateString() : '';
+      return `<div class="item-row"><div><div class="title">${escapeHtml(n.title||'Notice')}</div><div class="meta">${when}</div>
+        <div style="font-size:.82rem;margin-top:.3rem;white-space:pre-wrap;">${escapeHtml(n.message||'')}</div></div>
+        ${n.fileUrl?`<a class="badge good" style="text-decoration:none;" href="${escapeHtml(n.fileUrl)}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> ${escapeHtml(n.fileName||'Download')}</a>`:''}</div>`;
+    }).join('');
+  });
+}
+
+/* ---------------- Messages (private admin ↔ parent) ---------------- */
+let pmUnsub = null;
+
+function renderMessages(){
+  if (pmUnsub) { pmUnsub(); pmUnsub = null; }
+  const child = currentChild;
+  const thread = document.getElementById('pmThread');
+  document.getElementById('pmChildBadge').textContent = 'About ' + (child.name || 'your child');
+  thread.innerHTML = '<div class="empty">Loading…</div>';
+  pmUnsub = watchParentMessages(currentUser.uid, child.id, list => {
+    if (!currentChild || currentChild.id !== child.id) return;
+    thread.innerHTML = list.length ? list.map(m => {
+      const mine = m.senderRole === 'parent';
+      const when = m.createdAt ? ParentHelpers.toDateSafe(m.createdAt) : null;
+      return `<div class="pm ${mine ? 'out' : 'in'}">${escapeHtml(m.text || '')}<span class="pm-meta">${mine ? 'You' : 'Studio Desk'}${when ? ' · ' + when.toLocaleString() : ''}</span></div>`;
+    }).join('') : '<div class="empty">No messages yet. Write to the Studio Desk below.</div>';
+    thread.scrollTop = thread.scrollHeight;
+    markParentThreadRead(currentUser.uid, child.id, 'parent', list).catch(() => {});
+  }, err => {
+    console.error('Messages listener:', err);
+    thread.innerHTML = '<div class="empty">Could not load messages.</div>';
+  });
+}
+
+document.getElementById('pmSendBtn').addEventListener('click', () => {
+  const input = document.getElementById('pmInput');
+  const btn = document.getElementById('pmSendBtn');
+  const text = input.value.trim();
+  if (!text || !currentChild) return;
+  btn.disabled = true;
+  sendParentMessage({
+    parentUid: currentUser.uid,
+    studentUid: currentChild.id,
+    senderUid: currentUser.uid,
+    senderRole: 'parent',
+    senderName: currentUser.displayName || currentUser.email || 'Parent',
+    parentName: currentUser.displayName || currentUser.email || 'Parent',
+    studentName: currentChild.name || '',
+    keyStage: currentChild.keyStage || '',
+    year: (typeof currentChild.year === 'number') ? currentChild.year : null
+  }, text).then(() => { input.value = ''; })
+    .catch(err => alert('Could not send your message: ' + (err && err.message ? err.message : err)))
+    .then(() => { btn.disabled = false; });
+});
+
+function watchUnreadMessages(){
+  db.collection('parentConversations').where('parentUid', '==', currentUser.uid).onSnapshot(snap => {
+    const n = snap.docs.filter(d => d.data().unreadForParent === true).length;
+    const dot = document.getElementById('msgUnreadDot');
+    dot.textContent = n;
+    dot.style.display = n ? 'inline-block' : 'none';
+  }, () => {});
+}
+
+function renderChats(){
+  const wrap = document.getElementById('chatList');
+  const childName = (currentChild && currentChild.name) || 'Student';
+  if(!(bundle.tickets || []).length){ wrap.innerHTML = '<div class="panel"><div class="empty">No conversations yet.</div></div>'; return; }
+  wrap.innerHTML = bundle.tickets.slice().sort((a,b)=>(ParentHelpers.toDateSafe(b.createdAt)||0)-(ParentHelpers.toDateSafe(a.createdAt)||0)).map(t=>`
+    <div class="panel">
+      <div class="ticket-head">
+        <div class="who"><i class="fas fa-user"></i> ${escapeHtml(childName)}</div>
+        <span class="badge ${t.status==='Answered'?'good':'neutral'}">${escapeHtml(t.status||'Open')}</span>
+      </div>
+      <div style="font-weight:700; margin-bottom:.3rem;">${escapeHtml(t.subject||'Conversation')}</div>
+      <div class="meta" style="font-size:.72rem; color:var(--muted); margin-bottom:.5rem;">${fmtDate(t.createdAt)}</div>
+      <div class="ticket-thread">
+        <div class="msg student">${escapeHtml(t.message||'')}</div>
+        ${t.reply ? `<div class="msg staff">${escapeHtml(t.reply)}</div>` : ''}
+      </div>
+      <div class="readonly-note"><i class="fas fa-eye"></i> You can view this conversation but can't reply from the Parent Portal.</div>
+    </div>
+  `).join('');
+}
+</script>
+
+</body>
+</html>

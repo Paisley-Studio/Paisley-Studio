@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Activities — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{ --brand:#55BFB3; --brand-deep:#245F5A; --paper:#F1F9F7; --surface:#FFFFFF; --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10); --font:'Quicksand',sans-serif; --gold:#F5C842; }
+  *{box-sizing:border-box;} body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:1rem 1.6rem; background:var(--surface); border-bottom:1px solid var(--line);}
+  .topbar a{color:var(--brand-deep); text-decoration:none; font-weight:700; font-size:.85rem;}
+  .wrap{max-width:960px; margin:0 auto; padding:1.6rem 1rem 4rem;}
+  .btn{padding:.6rem 1.2rem; border-radius:999px; font-weight:700; font-size:.82rem; cursor:pointer; border:none; font-family:var(--font); text-decoration:none; display:inline-flex; align-items:center; gap:.4rem;}
+  .btn-primary{background:var(--brand); color:#04231f;}
+  .toprow{display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:.6rem;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem;}
+  .actcard{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:1rem;}
+  .actcard h4{margin:0 0 .3rem; color:var(--brand-deep); font-size:.95rem;}
+  .actcard .meta{font-size:.72rem; color:var(--muted); margin-bottom:.6rem;}
+  .badge{display:inline-block; font-size:.65rem; font-weight:800; padding:.15rem .5rem; border-radius:999px; margin-right:.3rem;}
+  .badge.draft{background:#fef3c7; color:#92400e;}
+  .badge.published{background:#dcfce7; color:#166534;}
+  .actcard .row{display:flex; gap:.5rem; margin-top:.6rem; flex-wrap:wrap;}
+  .actcard .row a, .actcard .row button{font-size:.72rem; padding:.35rem .7rem; border-radius:8px; border:1px solid var(--line); background:none; cursor:pointer; color:var(--ink); text-decoration:none; font-family:var(--font);}
+  .actcard .row .del{color:#dc2626; border-color:#dc262640;}
+  .empty{text-align:center; color:var(--muted); padding:3rem 1rem;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="javascript:history.back()"><i class="fas fa-arrow-left"></i> Back</a>
+</div>
+
+<div class="wrap">
+  <div class="toprow">
+    <h2 style="margin:0;color:var(--brand-deep);">Activities</h2>
+    <a href="builder.html" class="btn btn-primary"><i class="fas fa-plus"></i> New Activity</a>
+  </div>
+  <div class="grid" id="activityGrid"><div class="empty">Loading…</div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+
+<script>
+const auth = firebase.auth();
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+auth.onAuthStateChanged(user => {
+  if (!user) { window.location.href = '../tutor/login.html'; return; }
+  db.collection('admins').doc(user.uid).get().then(adminDoc => {
+    const isAdmin = adminDoc.exists;
+    const query = isAdmin ? getAllActivities() : getActivitiesForOwner(user.uid);
+    query.then(snap => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderGrid(list, user.uid, isAdmin);
+    }).catch(err => {
+      document.getElementById('activityGrid').innerHTML = `<div class="empty">Could not load activities: ${escapeHtml(err.message)}</div>`;
+    });
+  });
+});
+
+function renderGrid(list, uid, isAdmin) {
+  const grid = document.getElementById('activityGrid');
+  if (!list.length) {
+    grid.innerHTML = `<div class="empty">No activities yet. Click "New Activity" to build your first one.</div>`;
+    return;
+  }
+  grid.innerHTML = list.map(a => {
+    const canEdit = isAdmin || a.ownerId === uid;
+    return `
+    <div class="actcard">
+      <span class="badge ${a.status==='Published'?'published':'draft'}">${escapeHtml(a.status||'Draft')}</span>
+      <h4>${escapeHtml(a.title || 'Untitled')}</h4>
+      <div class="meta">${escapeHtml(a.type||'')} · ${escapeHtml(a.subject||'—')} · ${escapeHtml(a.keyStage||'')}</div>
+      <div class="meta">${(a.questions||[]).length} question${(a.questions||[]).length===1?'':'s'} · by ${escapeHtml(a.ownerName||'')}</div>
+      <div class="row">
+        ${canEdit ? `<a href="builder.html?id=${a.id}"><i class="fas fa-pen"></i> Edit</a>` : ''}
+        <a href="analytics.html?id=${a.id}"><i class="fas fa-chart-simple"></i> Analytics</a>
+        ${a.status==='Published' ? `<a href="play.html?id=${a.id}" target="_blank"><i class="fas fa-play"></i> Preview</a>` : ''}
+        ${canEdit ? `<button class="del" data-id="${a.id}"><i class="fas fa-trash"></i> Delete</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.del').forEach(btn => {
+    btn.onclick = () => {
+      if (!confirm('Delete this activity? This cannot be undone.')) return;
+      deleteActivity(btn.dataset.id).then(() => btn.closest('.actcard').remove())
+        .catch(err => alert('Could not delete: ' + err.message));
+    };
+  });
+}
+</script>
+
+</body>
+</html>

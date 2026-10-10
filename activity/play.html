@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Activity — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<link rel="stylesheet" href="../js/activity-engine/activity-engine.css" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --ink:#263331; --muted:#5A6E6A;
+    --line:rgba(38,51,49,.10); --font:'Quicksand',sans-serif;
+    --act-primary:#55BFB3; --act-primary-dark:#245F5A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:50; flex-direction:column; gap:1rem;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  body.ready #gate{display:none;}
+  .topbar{display:flex; align-items:center; gap:.8rem; padding:1rem 1.4rem; background:var(--surface); border-bottom:1px solid var(--line);}
+  .topbar a{color:var(--brand-deep); text-decoration:none; font-weight:700; font-size:.85rem; display:flex; align-items:center; gap:.4rem;}
+  #playRoot{padding:20px 12px 60px;}
+</style>
+</head>
+<body>
+
+<div id="gate"><div class="spin"></div><p>Loading activity…</p></div>
+
+<div class="topbar">
+  <a href="javascript:history.back()"><i class="fas fa-arrow-left"></i> Back</a>
+</div>
+
+<div id="playRoot"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+
+<script src="../js/activity-engine/activity-state.js"></script>
+<script src="../js/activity-engine/activity-scoring.js"></script>
+<script src="../js/activity-engine/activity-timer.js"></script>
+<script src="../js/activity-engine/activity-results.js"></script>
+<script src="../js/activity-engine/activity-firestore.js"></script>
+<script src="../js/activity-engine/templates/quiz.js"></script>
+<script src="../js/activity-engine/templates/true-false.js"></script>
+<script src="../js/activity-engine/templates/flashcards.js"></script>
+<script src="../js/activity-engine/templates/match-up.js"></script>
+<script src="../js/activity-engine/templates/matching-pairs.js"></script>
+<script src="../js/activity-engine/templates/random-wheel.js"></script>
+<script src="../js/activity-engine/templates/group-sort.js"></script>
+<script src="../js/activity-engine/templates/anagram.js"></script>
+<script src="../js/activity-engine/templates/unjumble.js"></script>
+<script src="../js/activity-engine/templates/open-box.js"></script>
+<script src="../js/activity-engine/activity-engine.js"></script>
+
+<script>
+const auth = firebase.auth();
+const root = document.getElementById('playRoot');
+const params = new URLSearchParams(location.search);
+const activityId = params.get('id');
+
+function fail(msg) {
+  document.body.classList.add('ready');
+  root.innerHTML = `<div class="activity-error">${msg}</div>`;
+}
+
+if (!activityId) {
+  fail('No activity was specified.');
+} else {
+  auth.onAuthStateChanged(user => {
+    if (!user) { window.location.href = '../student/index.html'; return; }
+    getStudentProfile(user.uid).then(doc => {
+      if (!doc.exists || doc.data().status !== 'Active') {
+        fail('Your account isn\'t active yet — please contact your tutor or admin.');
+        return;
+      }
+      ActivityFirestore.loadActivity(activityId).then(activity => {
+        if (activity.status !== 'Published') {
+          fail('This activity isn\'t published yet.');
+          return;
+        }
+        document.body.classList.add('ready');
+        ActivityEngine(root, activity, user.uid).start();
+      }).catch(err => fail(err.message));
+    }).catch(err => fail('Could not load your profile: ' + err.message));
+  });
+}
+</script>
+
+</body>
+</html>

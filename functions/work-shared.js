@@ -1,0 +1,182 @@
+/* =========================================================
+   Paisley Studio — shared helpers for nested homework / exams
+   -----------------------------------------------------------
+   Used by deadlines.js (scheduled jobs), work.js (triggers and
+   migration) and nothing else. Keeps recipient resolution,
+   in-app notification writes and Storage-path handling in one
+   place so every job behaves the same way.
+========================================================= */
+const admin = require("firebase-admin");
+const { defineSecret } = require("firebase-functions/params");
+const notifications = require("./notifications");
+
+const LOCATION = "us-central1";
+const TIME_ZONE = "Africa/Nairobi";
+
+const SMTP_HOST = defineSecret("SMTP_HOST");
+const SMTP_PORT = defineSecret("SMTP_PORT");
+const SMTP_USER = defineSecret("SMTP_USER");
+const SMTP_PASS = defineSecret("SMTP_PASS");
+const SMTP_FROM = defineSecret("SMTP_FROM");
+const SMTP_SECRETS = [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM];
+
+const sendEmail = notifications.sendEmail;
+
+function subjectKey(v) {
+  return String(v || "")
+    .toLowerCase()
+    .replace(/\((a-level|igcse|as-level|as level|a level)\)/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/^maths?$/, "mathematics");
+}
+
+function db() { return admin.firestore(); }
+function FV() { return admin.firestore.FieldValue; }
+
+function toDate(ts) {
+  if (!ts) return null;
+  if (ts.toDate) return ts.toDate();
+  if (ts instanceof Date) return ts;
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* ---------------------------------------------------------
+   In-app notification (the bell). Same shape as the rest of
+   the system plus relatedEntity / relatedEntityId.
+--------------------------------------------------------- */
+async function notify(recipientId, recipientType, fields) {
+  if (!recipientId) return null;
+  return db().collection("personalNotifications").add({
+    recipientId,
+    recipientType,
+    type: fields.type,
+    title: fields.title,
+    message: fields.message,
+    relatedEntity: fields.relatedEntity || "",
+    relatedEntityId: fields.relatedEntityId || "",
+    ...(fields.extra || {}),
+    read: false,
+    emailSent: !!fields.emailSent,
+    createdAt: FV().serverTimestamp()
+  });
+}
+
+/* A notice that shows on the Notices panel of a student / parent. */
+async function addStudentNotice(recipientId, recipientType, fields) {
+  if (!recipientId) return null;
+  return db().collection("studentNotices").add({
+    recipientId,
+    recipientType,
+    type: fields.type,
+    title: fields.title,
+    message: fields.message,
+    fileUrl: fields.fileUrl || "",
+    fileName: fields.fileName || "",
+    studentId: fields.studentId || "",
+    studentName: fields.studentName || "",
+    createdAt: FV().serverTimestamp()
+  });
+}
+
+/* ---------------------------------------------------------
+   Who is in an assignment / exam?
+   recipients[] non-empty -> exactly those students.
+   recipients[] empty     -> every active student enrolled in the
+                              classroom's subject + Year.
+--------------------------------------------------------- */
+async function classroomOf(cid) {
+  const snap = await db().collection("classrooms").doc(cid).get();
+  return snap.exists ? { id: snap.id, ...snap.data() } : null;
+}
+
+async function resolveStudents(classroom, recipients) {
+  const out = [];
+  if (Array.isArray(recipients) && recipients.length) {
+    const snaps = await Promise.all(recipients.map((uid) => db().collection("students").doc(uid).get()));
+    snaps.forEach((s) => { if (s.exists) out.push({ id: s.id, ...s.data() }); });
+    return out;
+  }
+  if (!classroom) return out;
+  // Same visibility rule as firestore.rules classStudentMay(): the student
+  // must take the subject and be in the classroom's Year (or, for older
+  // profiles with no Year, its Key Stage). Subject ids are normalised so an
+  // old free-text subject name still matches.
+  const snap = await db().collection("students").where("keyStage", "==", classroom.keyStage).get();
+  snap.forEach((d) => {
+    const s = d.data();
+    if (String(s.status || "").toLowerCase() === "pending") return;
+    const subs = Array.isArray(s.subjects) ? s.subjects.map(subjectKey) : [];
+    if (!subs.includes(subjectKey(classroom.subjectId))) return;
+    if (s.year != null && classroom.year != null && Number(s.year) !== Number(classroom.year)) return;
+    out.push({ id: d.id, ...s });
+  });
+  return out;
+}
+
+async function parentsOfStudent(studentId) {
+  const links = await db().collection("parentStudentLinks").where("studentUid", "==", studentId).get();
+  const out = [];
+  for (const l of links.docs) {
+    const uid = l.data().parentUid;
+    if (!uid) continue;
+    const p = await db().collection("parentAccounts").doc(uid).get();
+    if (p.exists) out.push({ id: uid, ...p.data() });
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------
+   Storage helpers
+--------------------------------------------------------- */
+function pathFromDownloadUrl(url) {
+  try {
+    const m = /\/o\/([^?]+)/.exec(String(url || ""));
+    return m ? decodeURIComponent(m[1]) : "";
+  } catch (e) { return ""; }
+}
+
+async function downloadStoredFile(pathOrUrl) {
+  const path = pathOrUrl && pathOrUrl.indexOf("http") === 0 ? pathFromDownloadUrl(pathOrUrl) : pathOrUrl;
+  if (!path) return null;
+  try {
+    const [buf] = await admin.storage().bucket().file(path).download();
+    return buf;
+  } catch (e) {
+    console.error("downloadStoredFile failed for", path, e.message);
+    return null;
+  }
+}
+
+async function saveStoredPdf(path, bytes) {
+  const bucket = admin.storage().bucket();
+  const file = bucket.file(path);
+  const crypto = require("crypto");
+  const token = crypto.randomUUID();
+  await file.save(Buffer.from(bytes), {
+    contentType: "application/pdf",
+    metadata: { metadata: { firebaseStorageDownloadTokens: token } }
+  });
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+}
+
+/* ---------------------------------------------------------
+   Iterate nested assignments / exams through collection-group
+   queries on a single field only (no composite index needed);
+   the per-job flags are filtered in code.
+--------------------------------------------------------- */
+function cidTidFromRef(ref) {
+  // classrooms/{cid}/topics/{tid}/(assignments|exams)/{id}
+  const parts = ref.path.split("/");
+  return { cid: parts[1], tid: parts[3], id: parts[5] };
+}
+
+module.exports = {
+  LOCATION, TIME_ZONE, SMTP_SECRETS, sendEmail,
+  db, FV, toDate, subjectKey, notify, addStudentNotice,
+  classroomOf, resolveStudents, parentsOfStudent,
+  pathFromDownloadUrl, downloadStoredFile, saveStoredPdf, cidTidFromRef
+};

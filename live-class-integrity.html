@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Class Integrity — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{ --brand:#55BFB3; --brand-deep:#245F5A; --paper:#F1F9F7; --surface:#FFFFFF; --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10); --font:'Quicksand',sans-serif; --error:#E74C3C; --gold:#F5C842; }
+  *{box-sizing:border-box;} body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+  .topbar{display:flex; align-items:center; padding:1rem 1.6rem; background:var(--surface); border-bottom:1px solid var(--line);}
+  .topbar a{color:var(--brand-deep); text-decoration:none; font-weight:700; font-size:.85rem;}
+  .wrap{max-width:960px; margin:0 auto; padding:1.6rem 1rem 4rem;}
+  h2{color:var(--brand-deep); margin:0 0 1rem;}
+  select{padding:.6rem .8rem; border:1px solid var(--line); border-radius:9px; font-family:var(--font); font-size:.85rem; width:100%; max-width:520px; margin-bottom:1.2rem; background:#fff;}
+  table{width:100%; border-collapse:collapse; background:var(--surface); border-radius:12px; overflow:hidden;}
+  th,td{padding:.6rem .8rem; text-align:left; font-size:.82rem; border-bottom:1px solid var(--line);}
+  th{background:#f8f9fc; color:var(--muted); font-size:.72rem; text-transform:uppercase;}
+  tr.clickable{cursor:pointer;}
+  tr.clickable:hover{background:#f8fafc;}
+  .viol-0{color:#16a34a; font-weight:700;} .viol-low{color:#d97706; font-weight:700;} .viol-high{color:#dc2626; font-weight:700;}
+  .modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:100; padding:1rem;}
+  .modal-backdrop.hidden{display:none;}
+  .modal{background:#fff; border-radius:16px; padding:1.6rem; max-width:560px; width:100%; max-height:82vh; overflow-y:auto;}
+  .modal h3{margin:0 0 .3rem; color:var(--brand-deep);}
+  .modal .sub{font-size:.78rem; color:var(--muted); margin-bottom:1rem;}
+  .summary-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:.6rem; margin-bottom:1.2rem;}
+  .summary-card{background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:.7rem .5rem; text-align:center;}
+  .summary-card .n{font-size:1.3rem; font-weight:800; color:var(--brand-deep); line-height:1;}
+  .summary-card .l{font-size:.66rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-top:.3rem; font-weight:700;}
+  .summary-card.warn .n{color:#d97706;}
+  .summary-card.danger .n{color:#dc2626;}
+  .timeline-row{display:flex; gap:.7rem; padding:.5rem 0; border-bottom:1px solid var(--line); font-size:.82rem;}
+  .timeline-row:last-child{border-bottom:none;}
+  .timeline-time{color:var(--muted); flex-shrink:0; width:74px; font-variant-numeric:tabular-nums; font-size:.78rem;}
+  .timeline-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:.4rem; background:#cbd5e1;}
+  .timeline-dot.warn{background:#d97706;}
+  .timeline-dot.danger{background:#dc2626;}
+  .timeline-dot.info{background:#55BFB3;}
+  .timeline-event{font-weight:600; flex:1;}
+  .timeline-event.warn{color:#d97706;}
+  .timeline-event.danger{color:#dc2626;}
+  .timeline-event.muted{color:var(--muted); font-weight:500;}
+  .closeModalBtn{margin-top:1rem; padding:.5rem 1rem; border-radius:8px; border:1px solid var(--line); background:none; cursor:pointer; font-family:var(--font);}
+  .empty{text-align:center; color:var(--muted); padding:2rem;}
+  .note{background:#fef9e7; border:1px solid #fbe8a6; border-radius:10px; padding:.8rem 1rem; font-size:.78rem; color:#7a5c00; margin-bottom:1.2rem; line-height:1.5;}
+</style>
+</head>
+<body>
+
+<div class="topbar"><a href="javascript:history.back()"><i class="fas fa-arrow-left"></i> Back</a></div>
+
+<div class="wrap">
+  <h2>Live Class Integrity</h2>
+  <div class="note"><i class="fas fa-circle-info"></i> This shows what the browser can detect while a student is in the classroom page — tab switches, lost focus, fullscreen exits, and navigation attempts. It cannot detect a closed browser, a second device, or anything outside this tab, and no screen recording is used.</div>
+  <select id="classSelect"><option value="">Select a live class…</option></select>
+  <div id="tableWrap"><div class="empty">Choose a class above to see who joined and any recorded events.</div></div>
+</div>
+
+<div class="modal-backdrop hidden" id="timelineModal">
+  <div class="modal">
+    <h3 id="tlStudentName">Student</h3>
+    <div class="sub" id="tlMeta"></div>
+    <div id="tlSummary"></div>
+    <div id="tlEvents"></div>
+    <button class="closeModalBtn" id="tlCloseBtn">Close</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="lms-helpers.js?v=4"></script>
+
+<script>
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtTime(ts){
+  const d = ts && ts.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+  return d ? d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }) : '—';
+}
+function fmtDuration(seconds){
+  if(!seconds && seconds !== 0) return '—';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if(m === 0) return s + 's';
+  return m + 'm ' + s + 's';
+}
+
+const EVENT_LABELS = {
+  tab_hidden: 'Switched away from the class tab',
+  tab_returned: 'Returned to the class tab',
+  window_blur: 'Clicked out of the browser window',
+  window_focus: 'Returned focus to the browser window',
+  fullscreen_exited: 'Exited fullscreen',
+  fullscreen_entered: 'Entered fullscreen',
+  fullscreen_exit_warning_shown: 'Warning banner issued',
+  navigation_attempt: 'Tried to navigate away',
+  class_left: 'Left the class'
+};
+
+function eventSeverity(type){
+  if(type === 'tab_hidden' || type === 'window_blur' || type === 'fullscreen_exited') return 'danger';
+  if(type === 'navigation_attempt' || type === 'fullscreen_exit_warning_shown') return 'warn';
+  if(type === 'tab_returned' || type === 'window_focus' || type === 'fullscreen_entered') return 'info';
+  return '';
+}
+
+const ADMIN_EMAILS = ["info@paisleystudio.online"];
+
+const auth = firebase.auth();
+let isAdmin = false, uid = null;
+let studentNameCache = {};
+
+auth.onAuthStateChanged(user=>{
+  if(!user){ window.location.href = 'tutor/login.html'; return; }
+  uid = user.uid;
+
+  if(ADMIN_EMAILS.includes(user.email)){
+    isAdmin = true;
+    loadClasses();
+    return;
+  }
+
+  db.collection('admins').doc(user.uid).get()
+    .then(adminDoc=>{
+      isAdmin = adminDoc.exists;
+      loadClasses();
+    })
+    .catch(()=>{
+      isAdmin = false;
+      loadClasses();
+    });
+});
+
+function loadClasses(){
+  db.collection('liveClasses').get().then(snap=>{
+    let classes = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(!isAdmin) classes = classes.filter(c=>c.hostId===uid);
+
+    classes.sort((a,b)=>{
+      const av = (a.createdAt && a.createdAt.seconds) || (a.startAt && a.startAt.seconds) || 0;
+      const bv = (b.createdAt && b.createdAt.seconds) || (b.startAt && b.startAt.seconds) || 0;
+      return bv - av;
+    });
+
+    const sel = document.getElementById('classSelect');
+    if(!classes.length){
+      sel.innerHTML = '<option value="">No live classes available</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">Select a live class…</option>' + classes.map(c=>
+      `<option value="${c.id}">${escapeHtml(c.title||'Untitled')} — ${escapeHtml(c.subject||'')} (${escapeHtml(c.status||'')})</option>`
+    ).join('');
+    sel.onchange = () => loadSessions(sel.value);
+  }).catch(err=>{
+    document.getElementById('tableWrap').innerHTML =
+      '<div class="empty">Could not load classes: ' + escapeHtml(err.message) + '</div>';
+  });
+}
+
+function violClass(n){ if(!n) return 'viol-0'; if(n<=2) return 'viol-low'; return 'viol-high'; }
+
+function resolveStudent(studentId, fallbackName){
+  if(studentNameCache[studentId]) return Promise.resolve(studentNameCache[studentId]);
+  return db.collection('students').doc(studentId).get()
+    .then(doc=>{
+      if(doc.exists){
+        const d = doc.data() || {};
+        const info = { name: d.name || fallbackName || studentId, email: d.email || '' };
+        studentNameCache[studentId] = info;
+        return info;
+      }
+      const info = { name: fallbackName || studentId, email: '' };
+      studentNameCache[studentId] = info;
+      return info;
+    })
+    .catch(()=>{
+      const info = { name: fallbackName || studentId, email: '' };
+      studentNameCache[studentId] = info;
+      return info;
+    });
+}
+
+// Merge duplicate sessions for the same (studentId, classId) into one row.
+// Uses the earliest classOpenedAt and the latest classLeftAt so nothing
+// gets lost. violationCount is summed. This cleans up stale data that
+// existed before findOpenSessionForStudent was deployed.
+function mergeSessions(sessions){
+  const byKey = {};
+  sessions.forEach(s=>{
+    const key = (s.studentId || 'unknown') + '|' + (s.classId || 'unknown');
+    if(!byKey[key]){
+      byKey[key] = { ...s, _mergedIds: [s.id] };
+    } else {
+      const g = byKey[key];
+      g._mergedIds.push(s.id);
+      // Earliest open
+      const aOp = (g.classOpenedAt && g.classOpenedAt.seconds) || Infinity;
+      const sOp = (s.classOpenedAt && s.classOpenedAt.seconds) || Infinity;
+      if(sOp < aOp) g.classOpenedAt = s.classOpenedAt;
+      // Earliest joined
+      const aJ = (g.classJoinedAt && g.classJoinedAt.seconds) || Infinity;
+      const sJ = (s.classJoinedAt && s.classJoinedAt.seconds) || Infinity;
+      if(sJ < aJ) g.classJoinedAt = s.classJoinedAt;
+      // Latest left (if any left)
+      const aL = (g.classLeftAt && g.classLeftAt.seconds) || 0;
+      const sL = (s.classLeftAt && s.classLeftAt.seconds) || 0;
+      if(sL > aL) g.classLeftAt = s.classLeftAt;
+      // Latest activity
+      const aAct = (g.lastActivityAt && g.lastActivityAt.seconds) || 0;
+      const sAct = (s.lastActivityAt && s.lastActivityAt.seconds) || 0;
+      if(sAct > aAct) g.lastActivityAt = s.lastActivityAt;
+      // Sum violations
+      g.violationCount = (g.violationCount || 0) + (s.violationCount || 0);
+      // Keep largest totalDuration
+      if((s.totalDuration || 0) > (g.totalDuration || 0)) g.totalDuration = s.totalDuration;
+    }
+  });
+  return Object.values(byKey);
+}
+
+function loadSessions(classId){
+  const wrap = document.getElementById('tableWrap');
+  if(!classId){ wrap.innerHTML = '<div class="empty">Choose a class above to see who joined and any recorded events.</div>'; return; }
+  wrap.innerHTML = '<div class="empty">Loading…</div>';
+  getSessionsForClass(classId).then(snap=>{
+    const raw = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(!raw.length){
+      wrap.innerHTML = '<div class="empty">No students have joined this class yet.</div>';
+      return;
+    }
+    const sessions = mergeSessions(raw);
+    sessions.sort((a,b)=> (a.classJoinedAt&&a.classJoinedAt.seconds||0) - (b.classJoinedAt&&b.classJoinedAt.seconds||0));
+
+    Promise.all(sessions.map(s => resolveStudent(s.studentId, s.studentName)))
+      .then(infos=>{
+        wrap.innerHTML = `<table>
+          <thead><tr><th>Student</th><th>Joined</th><th>Duration</th><th>Violations</th></tr></thead>
+          <tbody>${sessions.map((s,i)=>{
+            const info = infos[i];
+            let durationText = '—';
+            // Prefer classLeftAt - classJoinedAt when both exist.
+            const j = s.classJoinedAt && s.classJoinedAt.seconds;
+            const l = s.classLeftAt && s.classLeftAt.seconds;
+            if(j && l){
+              durationText = fmtDuration(Math.max(0, l - j));
+            } else if(s.totalDuration && s.totalDuration > 0){
+              durationText = fmtDuration(s.totalDuration);
+            } else if(j && !l){
+              durationText = 'In progress';
+            }
+            return `<tr class="clickable" data-sid="${s.id}" data-name="${escapeHtml(info.name)}" data-email="${escapeHtml(info.email)}">
+              <td>
+                <div style="font-weight:700;">${escapeHtml(info.name)}</div>
+                <div style="font-size:.72rem; color:var(--muted);">${escapeHtml(info.email)}</div>
+              </td>
+              <td>${fmtTime(s.classJoinedAt)}</td>
+              <td>${durationText}</td>
+              <td class="${violClass(s.violationCount)}">${s.violationCount||0}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>`;
+        wrap.querySelectorAll('tr.clickable').forEach(row=>{
+          row.onclick = () => openTimeline(row.dataset.sid, row.dataset.name, row.dataset.email);
+        });
+      })
+      .catch(err=>{
+        wrap.innerHTML = `<div class="empty">Could not resolve students: ${escapeHtml(err.message)}</div>`;
+      });
+  }).catch(err=>{
+    wrap.innerHTML = `<div class="empty">Could not load sessions: ${escapeHtml(err.message)}</div>`;
+  });
+}
+
+function openTimeline(sessionId, studentName, studentEmail){
+  document.getElementById('tlStudentName').textContent = studentName;
+  document.getElementById('tlMeta').textContent = studentEmail || 'Loading timeline…';
+  document.getElementById('tlSummary').innerHTML = '';
+  document.getElementById('tlEvents').innerHTML = '<div class="empty">Loading…</div>';
+  document.getElementById('timelineModal').classList.remove('hidden');
+
+  getEventsForSession(sessionId).then(snap=>{
+    const events = snap.docs.map(d=>d.data());
+
+    const counts = { tab_hidden: 0, window_blur: 0, fullscreen_exited: 0, navigation_attempt: 0 };
+    events.forEach(e => { if(counts[e.eventType] !== undefined) counts[e.eventType]++; });
+
+    document.getElementById('tlSummary').innerHTML = `
+      <div class="summary-grid">
+        <div class="summary-card danger"><div class="n">${counts.tab_hidden}</div><div class="l">Tab switches</div></div>
+        <div class="summary-card danger"><div class="n">${counts.window_blur}</div><div class="l">Window blurs</div></div>
+        <div class="summary-card warn"><div class="n">${counts.fullscreen_exited}</div><div class="l">Fullscreen exits</div></div>
+        <div class="summary-card warn"><div class="n">${counts.navigation_attempt}</div><div class="l">Nav attempts</div></div>
+      </div>`;
+
+    document.getElementById('tlMeta').textContent = (studentEmail ? studentEmail + ' · ' : '') +
+      events.length + ' recorded event' + (events.length === 1 ? '' : 's');
+
+    document.getElementById('tlEvents').innerHTML = events.length
+      ? events.map(e=>{
+          const sev = eventSeverity(e.eventType);
+          return `<div class="timeline-row">
+            <div class="timeline-time">${fmtTime(e.timestamp)}</div>
+            <div class="timeline-dot ${sev}"></div>
+            <div class="timeline-event ${sev} ${sev === 'info' ? 'muted' : ''}">
+              ${escapeHtml(EVENT_LABELS[e.eventType] || e.eventType)}${e.duration ? ` (${e.duration}s)` : ''}
+            </div>
+          </div>`;
+        }).join('')
+      : '<div class="empty">No events recorded for this session.</div>';
+  }).catch(err=>{
+    document.getElementById('tlMeta').textContent = 'Could not load: ' + err.message;
+    document.getElementById('tlEvents').innerHTML = '';
+  });
+}
+
+document.getElementById('tlCloseBtn').onclick = () => document.getElementById('timelineModal').classList.add('hidden');
+document.getElementById('timelineModal').onclick = (e) => {
+  if(e.target.id === 'timelineModal') e.currentTarget.classList.add('hidden');
+};
+</script>
+
+</body>
+</html>

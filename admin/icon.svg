@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="capTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3a3a3a"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="capBase" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#0f0f0f"/>
+    </linearGradient>
+    <linearGradient id="goldBand" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="50%" stop-color="#F5C842"/>
+      <stop offset="100%" stop-color="#B58A0E"/>
+    </linearGradient>
+    <linearGradient id="goldTassel" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#E0AB0F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background: deep teal, rounded -->
+  <rect width="512" height="512" rx="112" ry="112" fill="#245F5A"/>
+
+  <!-- Subtle inner border -->
+  <rect x="14" y="14" width="484" height="484" rx="98" ry="98" fill="none" stroke="rgba(85,191,179,0.30)" stroke-width="3"/>
+
+  <!-- Cap group, tilted slightly like the reference -->
+  <g transform="translate(256 268) rotate(-8)">
+    <!-- Base (the cylindrical band the head goes in) -->
+    <ellipse cx="0" cy="72" rx="118" ry="34" fill="#0f0f0f"/>
+    <path d="M -118 72 L -118 40 Q 0 -2 118 40 L 118 72 Q 0 110 -118 72 Z" fill="url(#capBase)"/>
+
+    <!-- Gold band around the top of the base -->
+    <ellipse cx="0" cy="40" rx="118" ry="34" fill="url(#goldBand)"/>
+    <ellipse cx="0" cy="40" rx="100" ry="26" fill="#0a0a0a"/>
+
+    <!-- Top flat board (the diamond/square you see from above) -->
+    <path d="M -190 8 L 0 -60 L 190 8 L 0 76 Z" fill="url(#capTop)" stroke="#0a0a0a" stroke-width="4" stroke-linejoin="round"/>
+
+    <!-- Highlight line across the top surface -->
+    <path d="M -160 4 L 0 -50 L 160 4" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="3"/>
+
+    <!-- Tassel cord running from centre-top down to the left -->
+    <path d="M 0 -50 Q -50 -40 -110 40 Q -128 62 -136 92" fill="none" stroke="url(#goldTassel)" stroke-width="7" stroke-linecap="round"/>
+
+    <!-- Tassel knot -->
+    <circle cx="-138" cy="98" r="13" fill="url(#goldTassel)" stroke="#B58A0E" stroke-width="2"/>
+
+    <!-- Tassel threads (fanning down) -->
+    <path d="M -146 108 L -152 148" stroke="url(#goldTassel)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M -138 108 L -138 152" stroke="url(#goldTassel)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M -130 108 L -124 148" stroke="url(#goldTassel)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M -143 106 L -146 150" stroke="#B58A0E" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    <path d="M -133 106 L -130 150" stroke="#B58A0E" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  </g>
+</svg>

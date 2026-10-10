@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Parent Portal — Paisley Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A;
+    --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --error:#E74C3C; --success:#2EB872;
+    --font:'Quicksand', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:1.5rem; -webkit-font-smoothing:antialiased;
+  }
+  .card{
+    background:var(--surface); border-radius:20px; max-width:420px; width:100%;
+    padding:2.2rem 1.8rem;
+    box-shadow:0 10px 40px rgba(36,95,90,.12);
+    border:1px solid var(--line);
+  }
+  .badge{
+    display:inline-flex; align-items:center; gap:.4rem;
+    background:var(--sage); color:var(--brand-deep);
+    font-weight:800; font-size:.72rem; padding:.35rem .8rem;
+    border-radius:999px; margin-bottom:1rem;
+    letter-spacing:.03em; text-transform:uppercase;
+  }
+  h1{font-size:1.4rem; margin:0 0 .3rem; color:var(--brand-deep); font-weight:800; letter-spacing:-.01em;}
+  p.sub{color:var(--muted); font-size:.85rem; margin:0 0 1.6rem; line-height:1.5;}
+  .field{margin-bottom:1rem;}
+  .field label{display:block; font-size:.78rem; font-weight:700; color:var(--muted); margin-bottom:.35rem; text-transform:uppercase; letter-spacing:.03em;}
+  .field input{
+    width:100%; padding:.7rem .9rem; border:1.5px solid var(--line);
+    border-radius:10px; font-family:var(--font); font-size:.9rem;
+    background:var(--paper); color:var(--ink); transition:all .2s ease;
+  }
+  .field input:focus{
+    outline:none; border-color:var(--brand); background:var(--surface);
+    box-shadow:0 0 0 4px rgba(85,191,179,.15);
+  }
+  .btn{
+    width:100%; padding:.85rem; border-radius:999px; border:none;
+    background:var(--brand); color:#fff; font-weight:800; font-size:.85rem;
+    cursor:pointer; font-family:var(--font);
+    letter-spacing:.06em; text-transform:uppercase;
+    transition:all .3s ease; box-shadow:0 8px 22px rgba(85,191,179,.28);
+  }
+  .btn:hover:not(:disabled){background:var(--brand-deep); transform:translateY(-2px); box-shadow:0 12px 28px rgba(85,191,179,.4);}
+  .btn:disabled{opacity:.6; cursor:default;}
+  .linkrow{text-align:center; margin-top:1rem; font-size:.82rem;}
+  .linkrow a{color:var(--brand-deep); font-weight:700; text-decoration:none; cursor:pointer;}
+  .linkrow a:hover{color:var(--brand);}
+  #errMsg, #okMsg{font-size:.82rem; margin-bottom:.8rem; padding:.6rem .8rem; border-radius:8px; display:none;}
+  #errMsg{background:rgba(231,76,60,.08); color:var(--error); border:1px solid rgba(231,76,60,.2);}
+  #okMsg{background:rgba(46,184,114,.1); color:#1f8557; border:1px solid rgba(46,184,114,.25);}
+  .hidden{display:none;}
+  .footer-note{text-align:center; font-size:.72rem; color:var(--muted); margin-top:1.6rem; line-height:1.5;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <span class="badge"><i class="fas fa-user-group"></i> Parent Portal</span>
+
+  <div id="loginPane">
+    <h1>Welcome back</h1>
+    <p class="sub">Sign in to follow your child's progress at Paisley Studio.</p>
+    <div id="errMsg"></div>
+    <div class="field"><label>Email</label><input type="email" id="loginEmail" autocomplete="username" /></div>
+    <div class="field"><label>Password</label><input type="password" id="loginPassword" autocomplete="current-password" /></div>
+    <button class="btn" id="loginBtn" type="button">Sign In</button>
+    <div class="linkrow"><a id="forgotLink">Forgot your password?</a></div>
+  </div>
+
+  <div id="forgotPane" class="hidden">
+    <h1>Reset your password</h1>
+    <p class="sub">Enter the email your account was set up with — we'll send a reset link.</p>
+    <div id="okMsg"></div>
+    <div class="field"><label>Email</label><input type="email" id="resetEmail" autocomplete="username" /></div>
+    <button class="btn" id="resetBtn" type="button">Send reset link</button>
+    <div class="linkrow"><a id="backToLogin">Back to sign in</a></div>
+  </div>
+
+  <div class="footer-note">Parent accounts are set up by Paisley Studio using the guardian email on your child's registration. If you don't have one yet, ask your child's tutor or the Studio Desk.</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+
+<script>
+const auth = firebase.auth();
+
+// Already-signed-in parents skip straight to the dashboard.
+auth.onAuthStateChanged(user => {
+  if (user) {
+    db.collection('parentAccounts').doc(user.uid).get().then(doc => {
+      if (doc.exists) window.location.href = 'dashboard.html';
+    });
+  }
+});
+
+function showErr(msg){ const e=document.getElementById('errMsg'); e.textContent=msg; e.style.display='block'; }
+function hideErr(){ document.getElementById('errMsg').style.display='none'; }
+
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  hideErr();
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if(!email || !password){ showErr('Please enter your email and password.'); return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  auth.signInWithEmailAndPassword(email, password).then(cred => {
+    return db.collection('parentAccounts').doc(cred.user.uid).get();
+  }).then(doc => {
+    if(!doc.exists){
+      auth.signOut();
+      showErr('This account is not set up as a Parent Portal account. Please contact the Studio Desk.');
+      btn.disabled = false; btn.textContent = 'Sign In';
+      return;
+    }
+    window.location.href = 'dashboard.html';
+  }).catch(err => {
+    showErr(err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found'
+      ? 'Incorrect email or password.' : err.message);
+    btn.disabled = false; btn.textContent = 'Sign In';
+  });
+});
+
+document.getElementById('forgotLink').addEventListener('click', ()=>{
+  document.getElementById('loginPane').classList.add('hidden');
+  document.getElementById('forgotPane').classList.remove('hidden');
+});
+document.getElementById('backToLogin').addEventListener('click', ()=>{
+  document.getElementById('forgotPane').classList.add('hidden');
+  document.getElementById('loginPane').classList.remove('hidden');
+});
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  const email = document.getElementById('resetEmail').value.trim();
+  const ok = document.getElementById('okMsg');
+  if(!email){ return; }
+  const btn = document.getElementById('resetBtn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  auth.sendPasswordResetEmail(email).then(()=>{
+    ok.textContent = 'If that email has an account, a reset link is on its way.';
+    ok.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Send reset link';
+  }).catch(()=>{
+    // Deliberately identical message on failure — don't reveal which
+    // emails have accounts.
+    ok.textContent = 'If that email has an account, a reset link is on its way.';
+    ok.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Send reset link';
+  });
+});
+
+document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginBtn').click(); });
+</script>
+
+</body>
+</html>
