@@ -39,6 +39,10 @@
     ],
     "rewrites": [
       {
+        "source": "/tutor/:slug",
+        "destination": "/tutor/login.html"
+      },
+      {
         "source": "/parent",
         "destination": "/parent/index.html"
       },
@@ -57,10 +61,6 @@
       {
         "source": "/student",
         "destination": "/student/index.html"
-      },
-      {
-        "source": "/tutor/:slug",
-        "destination": "/tutor/login.html"
       }
     ]
   },

@@ -389,7 +389,46 @@ function getTutorAccount(uid) {
 }
 
 function getTutorBySlug(slug) {
-  return db.collection('tutorAccounts').where('slug', '==', slug).limit(1).get();
+  // Public slug lookup now goes through the `lookupTutorBySlug` Cloud
+  // Function. Reason: Firestore rules keep tutorAccounts locked to
+  // signed-in users, so an anonymous visitor to /tutor/{slug} would
+  // always get permission-denied querying it directly. The function
+  // runs server-side with the Admin SDK and returns a minimal payload.
+  //
+  // The return value is shaped like a Firestore QuerySnapshot so the
+  // existing caller in tutor/login.html keeps working unchanged:
+  //   snap.empty       → true | false
+  //   snap.docs[0].id  → uid
+  //   snap.docs[0].data() → { name, slug, status, email }
+  const cleanSlug = String(slug == null ? '' : slug).trim().toLowerCase();
+  if (!cleanSlug) {
+    return Promise.resolve({ empty: true, docs: [] });
+  }
+  if (!firebase || !firebase.functions) {
+    return Promise.reject(new Error('Firebase Functions SDK not loaded on this page.'));
+  }
+  const callable = firebase.functions().httpsCallable('lookupTutorBySlug');
+  return callable({ slug: cleanSlug }).then(function (result) {
+    const data = (result && result.data) || {};
+    if (!data.found || !data.tutor) {
+      return { empty: true, docs: [] };
+    }
+    const t = data.tutor;
+    return {
+      empty: false,
+      docs: [{
+        id: t.uid,
+        data: function () {
+          return {
+            name:   t.name   || '',
+            slug:   t.slug   || cleanSlug,
+            status: t.status || 'Active',
+            email:  t.email  || ''
+          };
+        }
+      }]
+    };
+  });
 }
 
 function getAllTutorAccounts() {

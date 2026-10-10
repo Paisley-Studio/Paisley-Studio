@@ -920,3 +920,71 @@ exports.onFlatExamSubmissionWritten = onDocumentWritten(
     } catch (e) { console.warn("onFlatExamSubmissionWritten: parent link read failed", e.message || e); }
   }
 );
+
+
+/* =========================================================
+   12. lookupTutorBySlug
+   -----------------------------------------------------------
+   Public callable. Resolves a tutor login slug to a minimal
+   public payload so /tutor/{slug} can pre-fill the sign-in
+   form WITHOUT opening tutorAccounts to unauthenticated reads.
+
+   Why this exists:
+     Before this function, tutor/login.html called
+     getTutorBySlug() which ran a Firestore query against
+     tutorAccounts. The rules require isSignedIn() — so an
+     anonymous visitor to /tutor/brian-ndungu always got
+     permission-denied, and the page fell into its error state.
+
+     Rather than open tutorAccounts to public reads (which
+     would leak phone, subjects, and any internal notes on
+     every tutor doc), this function runs on the server with
+     the Admin SDK — which bypasses rules — and returns only
+     the fields the login page needs.
+
+   Returns:
+     { found: true,  tutor: { uid, name, slug, status, email } }
+     { found: false }
+
+   Never throws for "not found" — the caller treats a miss as
+   a normal "unrecognised link" case, not an error.
+========================================================= */
+exports.lookupTutorBySlug = onCall(
+  { cors: true, region: LOCATION, timeoutSeconds: 15, memory: "256MiB" },
+  async (request) => {
+    const raw = request.data && request.data.slug;
+    const slug = String(raw == null ? "" : raw).trim().toLowerCase();
+
+    if (!slug || slug.length > 64 || !/^[a-z0-9-]+$/.test(slug)) {
+      return { found: false };
+    }
+
+    const db = admin.firestore();
+    try {
+      const snap = await db
+        .collection("tutorAccounts")
+        .where("slug", "==", slug)
+        .limit(1)
+        .get();
+
+      if (snap.empty) return { found: false };
+
+      const doc = snap.docs[0];
+      const d = doc.data() || {};
+
+      return {
+        found: true,
+        tutor: {
+          uid: doc.id,
+          name: typeof d.name === "string" ? d.name : "",
+          slug: typeof d.slug === "string" ? d.slug : slug,
+          status: typeof d.status === "string" ? d.status : "Active",
+          email: typeof d.email === "string" ? d.email : ""
+        }
+      };
+    } catch (err) {
+      console.error("lookupTutorBySlug error:", err);
+      return { found: false };
+    }
+  }
+);
