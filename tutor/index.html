@@ -15,8 +15,7 @@
     --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
     --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
     --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.12);
-    --gold:#F5C842; --font:'Quicksand',sans-serif;
-    --success:#2EB872; --error:#E74C3C;
+    --font:'Quicksand',sans-serif;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
@@ -65,11 +64,6 @@
   .back-link:hover{color:var(--brand-deep);}
   .forgot{background:none; border:none; color:var(--muted); font-family:var(--font); font-size:.78rem; cursor:pointer; margin-top:.9rem; width:100%; text-align:center;}
   .forgot:hover{color:var(--brand-deep);}
-  .pending-note{
-    background:var(--sage); border-radius:12px; padding:1rem 1.1rem; font-size:.8rem; color:var(--muted);
-    line-height:1.5; margin-bottom:1.2rem; display:flex; gap:.6rem;
-  }
-  .pending-note i{color:var(--brand-deep); margin-top:.1rem;}
 </style>
 </head>
 <body>
@@ -80,10 +74,8 @@
     <div class="word">Paisley Studio<span>Tutor Portal</span></div>
   </div>
 
-  <h1 id="titleText">Welcome back</h1>
-  <p class="sub" id="subText">Sign in to manage your students, homework and classes.</p>
-
-  <div class="pending-note" id="tutorNote" style="display:none;"></div>
+  <h1>Welcome back</h1>
+  <p class="sub">Sign in to manage your students, homework and classes.</p>
 
   <div class="msg error" id="errMsg"></div>
   <div class="msg success" id="okMsg"></div>
@@ -110,28 +102,6 @@
 <script>
 const auth = firebase.auth();
 
-/* =========================================================
-   The slug arrives one of two ways:
-     /tutor/jane-wanjiru          (Firebase Hosting rewrite)
-     /tutor/login.html?slug=jane-wanjiru
-   Either way we resolve it to a tutorAccounts record and pin the
-   sign-in to that tutor.
-========================================================= */
-function readSlug(){
-  const q = new URLSearchParams(location.search).get('slug');
-  if(q) return q.trim().toLowerCase();
-  const parts = location.pathname.split('/').filter(Boolean);
-  const last = parts[parts.length - 1] || '';
-  if(!last || /\.html?$/i.test(last)) return '';
-  return decodeURIComponent(last).trim().toLowerCase();
-}
-
-const slug = readSlug();
-let tutorDoc = null;
-
-function escapeHtml(str){
-  return String(str == null ? '' : str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
 function hideMsgs(){
   document.getElementById('errMsg').classList.remove('show');
   document.getElementById('okMsg').classList.remove('show');
@@ -140,36 +110,12 @@ function showErr(msg){ hideMsgs(); const e=document.getElementById('errMsg'); e.
 function showOk(msg){ hideMsgs(); const o=document.getElementById('okMsg'); o.textContent=msg; o.classList.add('show'); }
 function setLoading(btn, on){ btn.disabled = on; btn.classList.toggle('loading', on); }
 
-if(slug){
-  getTutorBySlug(slug).then(snap=>{
-    if(!snap || snap.empty){
-      showErr('That tutor link is not recognised. Check the URL with the Studio Desk.');
-      return;
-    }
-    const d = snap.docs[0];
-    tutorDoc = { id: d.id, ...d.data() };
-    const note = document.getElementById('tutorNote');
-    if(tutorDoc.status === 'Suspended'){
-      showErr('This tutor account is suspended. Please contact the Studio Desk.');
-      document.getElementById('loginBtn').disabled = true;
-      return;
-    }
-    document.getElementById('titleText').textContent = 'Welcome back, ' + (tutorDoc.name || 'tutor').split(' ')[0];
-    note.innerHTML = '<i class="fas fa-chalkboard-user"></i><div>Signing in as <strong>' + escapeHtml(tutorDoc.name||'') + '</strong>. Not you? Check your login link with the Studio Desk Admin.</div>';
-    note.style.display = 'flex';
-    if(tutorDoc.email) document.getElementById('loginEmail').value = tutorDoc.email;
-  }).catch(err=>{
-    console.error('Tutor lookup failed:', err);
-    showErr('Could not load this tutor link. Please try again.');
-  });
-}
-
-// Already signed in? Go straight through.
+// Already signed in? Go straight to the dashboard.
 auth.onAuthStateChanged(user=>{
   if(!user) return;
   getTutorAccount(user.uid).then(doc=>{
     if(doc.exists && doc.data().status !== 'Suspended'){
-      window.location.href = 'index.html';
+      window.location.href = 'dashboard.html';
     }
   }).catch(()=>{});
 });
@@ -192,11 +138,7 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
       if(data.status === 'Suspended'){
         return auth.signOut().then(()=>{ throw new Error('This tutor account is suspended. Please contact the Studio Desk.'); });
       }
-      // If the URL named a tutor, the signed-in account must be that tutor.
-      if(slug && tutorDoc && doc.id !== tutorDoc.id){
-        return auth.signOut().then(()=>{ throw new Error('Those details do not match this tutor link. Use your own login URL.'); });
-      }
-      window.location.href = 'index.html';
+      window.location.href = 'dashboard.html';
     })
     .catch(err=>{
       setLoading(btn, false);
