@@ -16,6 +16,7 @@
   ],
   "hosting": {
     "public": ".",
+    "cleanUrls": true,
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -23,6 +24,18 @@
       "functions/**",
       "vertex-key.json",
       "FIRESTORE_RULES.md"
+    ],
+    "redirects": [
+      {
+        "source": "/tutor",
+        "destination": "/tutor/login.html",
+        "type": 301
+      },
+      {
+        "source": "/tutors",
+        "destination": "/tutor/login.html",
+        "type": 301
+      }
     ],
     "rewrites": [
       {
@@ -40,14 +53,6 @@
       {
         "source": "/student",
         "destination": "/student/index.html"
-      },
-      {
-        "source": "/tutors",
-        "destination": "/tutor/login.html"
-      },
-      {
-        "source": "/tutor",
-        "destination": "/tutor/login.html"
       },
       {
         "source": "/tutor/:slug",
