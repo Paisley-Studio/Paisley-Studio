@@ -65,5 +65,11 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Google Cloud / Vertex AI service account keys
+vertex-key.json
+*-key.json
+*-credentials.json
+serviceAccountKey.json
+
 # dataconnect generated files
 .dataconnect
