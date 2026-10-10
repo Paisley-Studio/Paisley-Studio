@@ -1,0 +1,14 @@
+{
+  "rewrites": [
+    { "source": "/tutor/:slug",      "destination": "/tutor/login.html" },
+    { "source": "/parent/dashboard", "destination": "/parent/dashboard.html" },
+    { "source": "/parent",           "destination": "/parent/index.html" },
+    { "source": "/admin",            "destination": "/admin/index.html" },
+    { "source": "/admin/",           "destination": "/admin/index.html" },
+    { "source": "/student",          "destination": "/student/index.html" }
+  ],
+  "redirects": [
+    { "source": "/tutor",  "destination": "/tutor/login.html", "permanent": true },
+    { "source": "/tutors", "destination": "/tutor/login.html", "permanent": true }
+  ]
+}
