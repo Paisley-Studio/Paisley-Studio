@@ -230,7 +230,7 @@ function setLoading(btn, on){
 // Redirect signed-in users straight to the dashboard
 auth.onAuthStateChanged(user=>{
   if(user && !window._justSignedUp){
-    window.location.href = 'dashboard.html';
+    window.location.href = '/student/dashboard.html';
   }
 });
 

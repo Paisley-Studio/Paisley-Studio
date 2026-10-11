@@ -115,7 +115,7 @@ auth.onAuthStateChanged(user=>{
   if(!user) return;
   getTutorAccount(user.uid).then(doc=>{
     if(doc.exists && doc.data().status !== 'Suspended'){
-      window.location.href = 'dashboard.html';
+      window.location.href = '/tutor/dashboard.html';
     }
   }).catch(()=>{});
 });
