@@ -138,7 +138,7 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
       if(data.status === 'Suspended'){
         return auth.signOut().then(()=>{ throw new Error('This tutor account is suspended. Please contact the Studio Desk.'); });
       }
-      window.location.href = 'dashboard.html';
+      window.location.href = '/tutor/dashboard.html';
     })
     .catch(err=>{
       setLoading(btn, false);

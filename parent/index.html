@@ -132,7 +132,7 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
       btn.disabled = false; btn.textContent = 'Sign In';
       return;
     }
-    window.location.href = 'dashboard.html';
+    window.location.href = '/parent/dashboard.html';
   }).catch(err => {
     showErr(err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found'
       ? 'Incorrect email or password.' : err.message);

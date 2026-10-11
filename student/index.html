@@ -242,7 +242,7 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
   const btn = document.getElementById('loginBtn');
   setLoading(btn, true);
   auth.signInWithEmailAndPassword(email, pass)
-    .then(()=>{ window.location.href = 'dashboard.html'; })
+    .then(()=>{ window.location.href = '/student/dashboard.html'; })
     .catch(err=>{
       setLoading(btn, false);
       let m = 'Incorrect email or password.';
@@ -349,7 +349,7 @@ document.getElementById('signupBtn').addEventListener('click', ()=>{
     .then(()=>{
       setLoading(btn, false);
       showOk('Account created! Redirecting to your dashboard…');
-      setTimeout(()=>{ window.location.href = 'dashboard.html'; }, 1200);
+      setTimeout(()=>{ window.location.href = '/student/dashboard.html'; }, 1200);
     })
     .catch(err=>{
       setLoading(btn, false);
