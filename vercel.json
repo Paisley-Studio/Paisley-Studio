@@ -1,12 +1,23 @@
 {
   "rewrites": [
-    { "source": "/tutor/:slug",      "destination": "/tutor/login.html" },
-    { "source": "/parent/dashboard", "destination": "/parent/dashboard.html" },
-    { "source": "/parent",           "destination": "/parent/index.html" },
-    { "source": "/admin",            "destination": "/admin/index.html" },
-    { "source": "/admin/",           "destination": "/admin/index.html" },
-    { "source": "/student",          "destination": "/student/index.html" },
-    { "source": "/student/dashboard", "destination": "/student/dashboard.html" }
+    { "source": "/tutor/:slug",             "destination": "/tutor/login.html" },
+    { "source": "/tutor/login",             "destination": "/tutor/login.html" },
+    { "source": "/tutor/dashboard",         "destination": "/tutor/dashboard.html" },
+    { "source": "/tutor/integrity",         "destination": "/tutor/integrity.html" },
+
+    { "source": "/parent/dashboard",        "destination": "/parent/dashboard.html" },
+    { "source": "/parent",                  "destination": "/parent/index.html" },
+
+    { "source": "/admin",                   "destination": "/admin/index.html" },
+    { "source": "/admin/",                  "destination": "/admin/index.html" },
+    { "source": "/admin/tutors",            "destination": "/admin/tutors.html" },
+    { "source": "/admin/integrity",         "destination": "/admin/integrity.html" },
+    { "source": "/admin/import-exam",       "destination": "/admin/import-exam.html" },
+
+    { "source": "/student",                 "destination": "/student/index.html" },
+    { "source": "/student/dashboard",       "destination": "/student/dashboard.html" },
+    { "source": "/student/exam",            "destination": "/student/exam.html" },
+    { "source": "/student/submit-homework", "destination": "/student/submit-homework.html" }
   ],
   "redirects": [
     { "source": "/tutor",  "destination": "/tutor/login.html", "permanent": true },
