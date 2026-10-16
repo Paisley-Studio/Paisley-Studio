@@ -14,6 +14,9 @@
     { "source": "/admin/integrity",         "destination": "/admin/integrity.html" },
     { "source": "/admin/import-exam",       "destination": "/admin/import-exam.html" },
 
+    { "source": "/remote",                  "destination": "/remote/index.html" },
+    { "source": "/remote/dashboard",        "destination": "/remote/dashboard.html" },
+
     { "source": "/student",                 "destination": "/student/index.html" },
     { "source": "/student/dashboard",       "destination": "/student/dashboard.html" },
     { "source": "/student/exam",            "destination": "/student/exam.html" },

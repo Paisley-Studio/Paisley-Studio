@@ -33,12 +33,22 @@ const BRAND = {
   logo:     'https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png'
 };
 
+// Single source of truth for every link that points users back to Paisley Studio.
+// Override with the APP_URL environment variable for staging; production default below.
+const APP_URL = String(process.env.APP_URL || 'https://paisleystudio.online').replace(/\/+$/, '');
+
 const PORTALS = {
-  student: 'https://paisleystudio.online/student',
-  tutor:   'https://paisleystudio.online/tutor/login.html',
-  parent:  'https://paisleystudio.online/parent/index.html',
-  admin:   'https://paisleystudio.online/admin'
+  student: APP_URL + '/student',
+  remote:  APP_URL + '/remote',
+  tutor:   APP_URL + '/tutor/login.html',
+  parent:  APP_URL + '/parent/index.html',
+  admin:   APP_URL + '/admin'
 };
+
+// Remote students sign in at their own portal; everyone else uses the normal one.
+function studentPortal(student) {
+  return student && student.studentType === 'remote' ? PORTALS.remote : PORTALS.student;
+}
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -242,7 +252,47 @@ function studentApproved({ student }) {
           For your safety, please keep these details private. If you ever forget your password, use the <em>Forgot password</em> link on the portal sign-in page.
         </p>
       `,
-      cta: { label: 'Open the Student Portal', url: PORTALS.student }
+      cta: { label: 'Open the Student Portal', url: studentPortal(student) }
+    })
+  };
+}
+
+
+/* Remote student — admitted by the Studio Desk; sets own password via a
+   single-use Firebase link, then lands on the Remote Student portal. */
+function remoteStudentInvite({ student, resetLink }) {
+  return {
+    subject: `Activate your Paisley Studio remote learning account`,
+    html: render({
+      preheader: 'You have been admitted — set your password to open your remote learning portal.',
+      heading: 'Remote student portal',
+      intro: `Welcome, ${esc(firstName(student.name))}!`,
+      body: `
+        <p style="margin:0 0 14px;">You have been admitted to <strong>Paisley Studio</strong> for remote learning${student.keyStage ? ` in <strong>${esc(student.keyStage)}</strong>` : ''}.</p>
+        <p style="margin:0 0 14px;">Click the button below to choose your password. You will then be taken to the Remote Student portal, where you can sign in with <strong>${esc(student.email || 'this email address')}</strong> and your new password.</p>
+        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">If you were not expecting this, you can ignore this email — your account is not usable until a password is set.</p>
+      `,
+      cta: { label: 'Set your password', url: resetLink },
+      footer: `<div style="margin-top:8px;">This link can only be used once and expires for your safety. You can request a new one from the Remote Student sign-in page ("Forgot password").</div>`
+    })
+  };
+}
+
+
+/* Admin — a remote student raised a support ticket */
+function adminNewRemoteTicket({ student, ticket }) {
+  return {
+    subject: `New remote student ticket — ${ticket.subject || 'Support ticket'}`,
+    html: render({
+      preheader: `${student.name || 'A remote student'} needs help.`,
+      heading: 'Admin alert',
+      intro: `${esc(student.name || 'A remote student')} raised a support ticket.`,
+      body: `
+        <p style="margin:0 0 8px;"><strong>${esc(ticket.subject || '—')}</strong></p>
+        <p style="margin:0 0 14px;white-space:pre-wrap;">${esc(String(ticket.message || '').slice(0, 600))}</p>
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">Reply from Student Tickets in the admin dashboard.</p>
+      `,
+      cta: { label: 'Open admin dashboard', url: PORTALS.admin }
     })
   };
 }
@@ -342,7 +392,7 @@ function liveClassScheduled({ recipientName, student, liveClass }) {
         </ul>
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">The Join button appears on the portal once the class goes live.</p>
       `,
-      cta: { label: 'Open Paisley Studio', url: PORTALS.student }
+      cta: { label: 'Open Paisley Studio', url: studentPortal(student) }
     })
   };
 }
@@ -364,7 +414,7 @@ function homeworkAssigned({ student, homework }) {
         </ul>
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">You can submit from the Homework section of your portal.</p>
       `,
-      cta: { label: 'Open the Student Portal', url: PORTALS.student }
+      cta: { label: 'Open the Student Portal', url: studentPortal(student) }
     })
   };
 }
@@ -389,16 +439,16 @@ function parentNewMessage({ parentName, student }) {
 /* 9. Student — tutor replied to a ticket */
 function ticketReplyStudent({ student, ticket }) {
   return {
-    subject: `Your tutor replied — ${ticket.subject || 'Support ticket'}`,
+    subject: `${ticket.targetAdmin ? 'Paisley Studio replied' : 'Your tutor replied'} — ${ticket.subject || 'Support ticket'}`,
     html: render({
       preheader: `You've got a reply to "${ticket.subject || 'your ticket'}".`,
       heading: 'Student portal',
       intro: `Hi ${esc(firstName(student.name))},`,
       body: `
-        <p style="margin:0 0 14px;">Your tutor has replied to your ticket <strong>"${esc(ticket.subject || '—')}"</strong>.</p>
+        <p style="margin:0 0 14px;">${ticket.targetAdmin ? 'The Paisley Studio team has' : 'Your tutor has'} replied to your ticket <strong>"${esc(ticket.subject || '—')}"</strong>.</p>
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">Log in to read the reply and continue the conversation.</p>
       `,
-      cta: { label: 'Open Contact Tutor', url: PORTALS.student }
+      cta: { label: ticket.targetAdmin ? 'Open Support Tickets' : 'Open Contact Tutor', url: studentPortal(student) }
     })
   };
 }
@@ -427,7 +477,7 @@ function homeworkGraded({ audience, student, parentName, kind, item, submission 
   const score = submission.grade != null && submission.maxScore != null
     ? `${submission.grade} / ${submission.maxScore}`
     : (submission.grade != null ? String(submission.grade) : 'See feedback');
-  const portal = audience === 'parent' ? PORTALS.parent : PORTALS.student;
+  const portal = audience === 'parent' ? PORTALS.parent : studentPortal(student);
   return {
     subject: `Graded: ${item.title || label} (${item.subjectName || item.subject || 'Paisley Studio'})`,
     html: render({
@@ -475,7 +525,7 @@ function homeworkDeadlineReminder({ audience, student, parentName, assignment, d
           ? 'Please encourage and help them finish and upload the completed work from their student portal before the deadline. A little support tonight makes a big difference.'
           : 'Open the Homework section of your portal, finish the work and upload it before the deadline.'}</p>
       `,
-      cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: audience === 'parent' ? PORTALS.parent : PORTALS.student }
+      cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: audience === 'parent' ? PORTALS.parent : studentPortal(student) }
     })
   };
 }
@@ -500,7 +550,7 @@ function homeworkOverdueGraceNotice({ audience, student, parentName, assignment,
         ])}
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">Work still outstanding after the extension is added to an Unattended Work Report, which is sent to the student and the parent.</p>
       `,
-      cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: audience === 'parent' ? PORTALS.parent : PORTALS.student }
+      cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: audience === 'parent' ? PORTALS.parent : studentPortal(student) }
     })
   };
 }
@@ -533,7 +583,7 @@ function unattendedWorkReport({ audience, student, parentName, items, reportUrl 
         </table>
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">A PDF copy of this report is attached and is also available in the portal. Please speak to the tutor if there is a reason the work could not be done.</p>
       `,
-      cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: audience === 'parent' ? PORTALS.parent : PORTALS.student }
+      cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: audience === 'parent' ? PORTALS.parent : studentPortal(student) }
     })
   };
 }
@@ -579,7 +629,7 @@ function workPosted({ student, kind, item, dueAt }) {
           dueAt ? ['fa-calendar-day', isExam ? 'Exam date' : 'Due', fmtWhen(dueAt)] : null
         ])}
       `,
-      cta: { label: 'Open the Student Portal', url: PORTALS.student }
+      cta: { label: 'Open the Student Portal', url: studentPortal(student) }
     })
   };
 }
@@ -636,7 +686,7 @@ function examPostedStudent({ student, exam, examDate }) {
         ${exam.requirements ? `<p style="margin:0 0 6px;font-weight:800;color:${BRAND.deep};">Requirements</p><p style="margin:0 0 14px;white-space:pre-wrap;">${esc(exam.requirements)}</p>` : ''}
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">On the exam day, work through the printed paper. When the submission window opens in your portal you'll be able to upload a photo or PDF of your completed paper. Look out for a follow-up email from us.</p>
       `,
-      cta: { label: 'Open the Student Portal', url: PORTALS.student }
+      cta: { label: 'Open the Student Portal', url: studentPortal(student) }
     })
   };
 }
@@ -648,7 +698,7 @@ function examResultsReleased({ audience, student, parentName, exam, submission }
     ? `${submission.grade} / ${submission.maxScore}`
     : (submission.grade != null ? String(submission.grade) : 'See feedback');
   const forParent = audience === 'parent';
-  const portal = forParent ? PORTALS.parent : PORTALS.student;
+  const portal = forParent ? PORTALS.parent : studentPortal(student);
 
   return {
     subject: `Results released: ${exam.title || 'Exam'} (${exam.subjectName || exam.subjectId || 'Paisley Studio'})`,
@@ -683,11 +733,15 @@ function examResultsReleased({ audience, student, parentName, exam, submission }
 module.exports = {
   render,
   PORTALS,
+  APP_URL,
+  studentPortal,
   templates: {
     adminNewStudentSignup,
     studentApproved,
     tutorWelcome,
     parentWelcomeNew,
+    remoteStudentInvite,
+    adminNewRemoteTicket,
     parentNewChild,
     liveClassScheduled,
     homeworkAssigned,

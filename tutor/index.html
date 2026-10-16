@@ -153,7 +153,7 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
 document.getElementById('forgotBtn').addEventListener('click', ()=>{
   const email = document.getElementById('loginEmail').value.trim();
   if(!email){ showErr('Enter your email address first, then press Forgot your password.'); return; }
-  auth.sendPasswordResetEmail(email)
+  auth.sendPasswordResetEmail(email, { url: window.location.origin + '/tutor/login.html' })
     .then(()=>showOk('Password reset email sent to ' + email + '.'))
     .catch(err=>showErr('Could not send the reset email: ' + err.message));
 });

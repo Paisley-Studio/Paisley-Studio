@@ -317,6 +317,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
@@ -470,8 +471,8 @@ document.getElementById('menuToggle').addEventListener('click', ()=>document.get
 const titles = {
   overview:['Overview','Your students at a glance'],
   students:['My Students','Students assigned to you'],
-  classroom:['Classroom','Topics and lessons for the subjects you teach'],
-  hwmgmt:['Homework Management','Assignments in your subjects. Post new ones inside any topic.'],
+  classroom:['Classroom','Material the Studio Desk has posted to you for the subjects you teach'],
+  hwmgmt:['Homework Management','Homework the Studio Desk has posted to you: release it to your students and mark their work.'],
   exmgmt:['Exam Management','Exams in your subjects: see every hand-in and grade it'],
   granted:['Granted to Me','Tasks the Studio Desk has asked you to help mark'],
   content:['Timetable & Notices','Notices and timetables for your Key Stages'],
@@ -492,8 +493,8 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
 });
 // Homework Management and Exam Management mount from work-helpers.js.
 // Both are tutor-restricted there: no topic create, no exam create.
-// The one write action tutors keep in Homework Management is
-// "Post Assignment" inside each existing topic.
+// Tutors cannot create or edit assignments. What they keep: releasing
+// admin-posted homework to their own students, grading and feedback.
 function mountWorkManagement(kind, hostId){
   const host = document.getElementById(hostId);
   host.innerHTML = '';
@@ -685,6 +686,7 @@ async function subscribeHomeworkIndex(){
     for (const t of topics) {
       const unsub = db.collection('classrooms').doc(cls.id)
         .collection('topics').doc(t.id).collection('assignments')
+        .where('audiences.tutors', '==', true)   // only work the Studio Desk posted to tutors
         .onSnapshot(snap => {
           snap.docs.forEach(d => {
             const data = d.data();
@@ -735,7 +737,8 @@ async function subscribeHomeworkSubmissions(){
       let assignments = [];
       try {
         const aSnap = await db.collection('classrooms').doc(cls.id)
-          .collection('topics').doc(t.id).collection('assignments').get();
+          .collection('topics').doc(t.id).collection('assignments')
+          .where('audiences.tutors', '==', true).get();
         assignments = aSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       } catch (e) { continue; }
 
@@ -773,7 +776,8 @@ async function subscribeFlatExamSubmissions(){
   for (const cls of classrooms) {
     let exams = [];
     try {
-      const eSnap = await db.collection('classrooms').doc(cls.id).collection('exams').get();
+      const eSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
+        .where('audiences.tutors', '==', true).get();
       exams = eSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     } catch (e) { continue; }
 

@@ -32,6 +32,21 @@ const crypto = require("crypto");
 
 const { templates } = require("./email-templates");
 
+
+/* ---------------------------------------------------------
+   Firebase Auth action links (password set / reset).
+   Without `continue` settings users land on the default
+   firebaseapp.com handler and are never sent back. These settings
+   return them to the right portal on the production domain.
+   NOTE: the domain must be listed under Authentication → Settings →
+   Authorized domains in the Firebase Console.
+--------------------------------------------------------- */
+const { PORTALS } = require("./email-templates");
+function actionSettings(portal) {
+  const url = PORTALS[portal] || PORTALS.student;
+  return { url, handleCodeInApp: false };
+}
+
 const LOCATION = "us-central1";
 
 const SMTP_HOST = defineSecret("SMTP_HOST");
@@ -135,6 +150,7 @@ exports.onStudentSignup = onDocumentCreated(
   },
   async (event) => {
     const student = event.data.data() || {};
+    if (student.studentType === "remote") return; // admitted by an admin, not a self-registration
     const studentId = event.params.studentId;
     const db = admin.firestore();
 
@@ -191,6 +207,7 @@ exports.onLiveClassScheduled = onDocumentCreated(
 
     for (const doc of studentsSnap.docs) {
       const student = doc.data();
+      if (student.studentType === "remote") continue; // remote learners have no live-class feed
       if (!studentTakes(student, liveClass.subject)) continue;
 
       // In-app
@@ -258,6 +275,7 @@ exports.onHomeworkAssigned = onDocumentCreated(
 
     for (const doc of studentsSnap.docs) {
       const student = doc.data();
+      if (student.studentType === "remote") continue; // legacy homework is online-only
       if (!studentTakes(student, hw.subject)) continue;
 
       // In-app
@@ -294,171 +312,126 @@ exports.onHomeworkAssigned = onDocumentCreated(
    Never creates a duplicate Auth user for an email that already
    has one. Refuses to use the student's own email as a parent.
 ========================================================= */
+
+/* Link every guardian of a student to the Parent Portal (shared by the
+   admin callable below and by remote admission). Never creates a duplicate
+   Auth user for an email that already has one; deterministic link ids make
+   re-running safe. Returns one result row per guardian. */
+async function linkGuardians(db, studentId, student, guardians) {
+  const studentEmail = String(student.email || "").trim().toLowerCase();
+  const results = [];
+  const seen = new Set();
+
+  for (const g of guardians) {
+    const email = String(g.email).trim();
+    const emailKey = email.toLowerCase();
+
+    if (!/^\S+@\S+\.\S+$/.test(email)) { results.push({ email, skipped: "invalid email" }); continue; }
+    if (seen.has(emailKey)) { results.push({ email, skipped: "duplicate of another guardian" }); continue; }
+    seen.add(emailKey);
+    if (emailKey === studentEmail) { results.push({ email, skipped: "same as the student's own sign-in email" }); continue; }
+
+    const name = g.name || "Parent/Guardian";
+    let parentUid;
+    let created = false;
+    try {
+      parentUid = (await admin.auth().getUserByEmail(email)).uid;
+    } catch (e) {
+      if (e && e.code && e.code !== "auth/user-not-found") throw e;
+      // Random initial password — never derived from personal data and never
+      // stored. The parent sets their own through the emailed link.
+      const createdUser = await admin.auth().createUser({
+        email, password: crypto.randomBytes(18).toString("base64url"), displayName: name
+      });
+      parentUid = createdUser.uid;
+      created = true;
+    }
+
+    if (parentUid === studentId) { results.push({ email, skipped: "same identity as the student" }); continue; }
+
+    const parentRef = db.collection("parentAccounts").doc(parentUid);
+    const parentSnap = await parentRef.get();
+    await parentRef.set({
+      name: g.name || (parentSnap.exists ? parentSnap.data().name : "") || "",
+      email,
+      ...(parentSnap.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() })
+    }, { merge: true });
+
+    const linkRef = db.collection("parentStudentLinks").doc(parentUid + "_" + studentId);
+    const linkSnap = await linkRef.get();
+    const newLink = !linkSnap.exists;
+    if (newLink) {
+      await linkRef.set({ parentUid, studentUid: studentId, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    }
+
+    let emailSent = false;
+    if (created) {
+      let resetLink = null;
+      try { resetLink = await admin.auth().generatePasswordResetLink(email, actionSettings("parent")); }
+      catch (e) { console.error("Could not generate password reset link:", e); }
+      if (resetLink) {
+        const t = templates.parentWelcomeNew({ parentName: name, student, resetLink });
+        emailSent = !!(await sendEmail(email, t.subject, t.html)).sent;
+      }
+    } else if (newLink) {
+      // Existing parent: no password change, just a heads-up about the new child.
+      const t = templates.parentNewChild({ parentName: name, student });
+      emailSent = !!(await sendEmail(email, t.subject, t.html)).sent;
+    }
+    results.push({ email, parentUid, created, emailSent, newLink });
+  }
+  return results;
+}
+
+function guardiansOf(student) {
+  let guardians = Array.isArray(student.guardians) ? student.guardians : [];
+  if (!guardians.length && (student.guardianEmail || student.guardianPhone)) {
+    guardians = [{ name: student.guardianName || "", email: student.guardianEmail || "", phone: student.guardianPhone || "" }];
+  }
+  return guardians.filter((g) => g && g.email);
+}
+
 exports.createParentAccount = onCall(
-  {
-    cors: true,
-    region: LOCATION,
-    secrets: SMTP_SECRETS
-  },
+  { cors: true, region: LOCATION, secrets: SMTP_SECRETS },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "You must be signed in.");
-    const callerUid = request.auth.uid;
     const db = admin.firestore();
+    if (!(await db.collection("admins").doc(request.auth.uid).get()).exists) throw new HttpsError("permission-denied", "Admins only.");
 
-    const callerAdminDoc = await db.collection("admins").doc(callerUid).get();
-    if (!callerAdminDoc.exists) {
-      throw new HttpsError("permission-denied", "Admins only.");
-    }
-
-    const studentId = (request.data && request.data.studentId) || "";
+    const d = request.data || {};
+    const studentId = d.studentId || "";
     if (!studentId) throw new HttpsError("invalid-argument", "studentId required.");
-
-    const studentDoc = await db.collection("students").doc(studentId).get();
+    const studentRef = db.collection("students").doc(studentId);
+    const studentDoc = await studentRef.get();
     if (!studentDoc.exists) throw new HttpsError("not-found", "Student not found.");
     const student = studentDoc.data() || {};
-    const studentEmail = String(student.email || "").trim().toLowerCase();
 
-    let guardians = Array.isArray(student.guardians) ? student.guardians : [];
-    if (!guardians.length && (student.guardianEmail || student.guardianPhone)) {
-      guardians = [{
-        name: student.guardianName || "",
-        email: student.guardianEmail || "",
-        phone: student.guardianPhone || ""
-      }];
+    // An explicitly supplied parent (the admin "Add parent" form) is added to
+    // the student's guardian list first, so it is kept on the record and linked.
+    const extraEmail = String(d.parentEmail || "").trim();
+    if (extraEmail) {
+      if (!/^\S+@\S+\.\S+$/.test(extraEmail)) throw new HttpsError("invalid-argument", "That parent email is not valid.");
+      const list = Array.isArray(student.guardians) ? student.guardians.slice() : [];
+      if (!list.some((g) => String(g.email || "").toLowerCase() === extraEmail.toLowerCase())) {
+        if (list.length >= 4) throw new HttpsError("failed-precondition", "A student can have at most four guardians on record.");
+        list.push({ name: String(d.parentName || "").trim().slice(0, 120), email: extraEmail, phone: String(d.parentPhone || "").trim().slice(0, 40) });
+        await studentRef.update({ guardians: list });
+        student.guardians = list;
+      }
     }
-    guardians = guardians.filter((g) => g && g.email);
+
+    let guardians = guardiansOf(student);
+    if (extraEmail) guardians = guardians.filter((g) => String(g.email).toLowerCase() === extraEmail.toLowerCase());
     if (!guardians.length) {
-      throw new HttpsError(
-        "failed-precondition",
-        "This student has no structured guardian email/phone on file. Add it via Student Management first."
-      );
+      throw new HttpsError("failed-precondition", "This student has no structured guardian email/phone on file. Add it via Student Management first.");
     }
 
-    const results = [];
-    const seen = new Set();
-
-    for (const g of guardians) {
-      const email = String(g.email).trim();
-      const emailKey = email.toLowerCase();
-
-      if (!/^\S+@\S+\.\S+$/.test(email)) {
-        results.push({ email, skipped: "invalid email" });
-        continue;
-      }
-      if (seen.has(emailKey)) {
-        results.push({ email, skipped: "duplicate of another guardian" });
-        continue;
-      }
-      seen.add(emailKey);
-      if (emailKey === studentEmail) {
-        results.push({ email, skipped: "same as the student's own sign-in email" });
-        continue;
-      }
-
-      const name = g.name || "Parent/Guardian";
-      let parentUid;
-      let created = false;
-
-      try {
-        const existing = await admin.auth().getUserByEmail(email);
-        parentUid = existing.uid;
-      } catch (e) {
-        // No existing Auth user → create one with an initial password.
-        // The initial password is never stored in Firestore; the parent
-        // immediately gets a reset link so they set their own.
-        const phone = String(g.phone || "").replace(/\s+/g, "");
-        const initialPassword =
-          phone.length >= 6 ? phone : crypto.randomBytes(12).toString("base64url");
-        const createdUser = await admin.auth().createUser({
-          email,
-          password: initialPassword,
-          displayName: name
-        });
-        parentUid = createdUser.uid;
-        created = true;
-      }
-
-      if (parentUid === studentId) {
-        results.push({ email, skipped: "same identity as the student" });
-        continue;
-      }
-
-      // Upsert the parent role record.
-      const parentRef = db.collection("parentAccounts").doc(parentUid);
-      const parentSnap = await parentRef.get();
-      await parentRef.set(
-        {
-          name: g.name || (parentSnap.exists ? parentSnap.data().name : "") || "",
-          email,
-          ...(parentSnap.exists
-            ? {}
-            : { createdAt: admin.firestore.FieldValue.serverTimestamp() })
-        },
-        { merge: true }
-      );
-
-      // Deterministic link id — re-running is safe.
-      const linkRef = db
-        .collection("parentStudentLinks")
-        .doc(parentUid + "_" + studentId);
-      const linkSnap = await linkRef.get();
-      if (!linkSnap.exists) {
-        await linkRef.set({
-          parentUid,
-          studentUid: studentId,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-      }
-
-      // ---- Email ----
-      let emailSent = false;
-
-      if (created) {
-        // Brand-new parent → reset link, then back to the login page.
-        let resetLink = null;
-        try {
-          resetLink = await admin.auth().generatePasswordResetLink(email);
-        } catch (e) {
-          console.error("Could not generate password reset link:", e);
-        }
-        if (resetLink) {
-          const t = templates.parentWelcomeNew({
-            parentName: name,
-            student,
-            resetLink
-          });
-          const r = await sendEmail(email, t.subject, t.html);
-          emailSent = !!r.sent;
-        }
-      } else {
-        // Existing parent (an admin, a tutor, another child's parent,
-        // or any other Paisley Studio account) → no password change,
-        // just a heads-up that a new child is now linked.
-        const t = templates.parentNewChild({
-          parentName: name,
-          student
-        });
-        const r = await sendEmail(email, t.subject, t.html);
-        emailSent = !!r.sent;
-      }
-
-      results.push({ email, parentUid, created, emailSent });
-    }
-
+    const results = await linkGuardians(db, studentId, student, guardians);
     const linked = results.filter((r) => r.parentUid);
     if (!linked.length) {
-      throw new HttpsError(
-        "failed-precondition",
-        "No guardian could be linked: " +
-          results.map((r) => r.email + " (" + r.skipped + ")").join("; ")
-      );
+      throw new HttpsError("failed-precondition", "No guardian could be linked: " + results.map((r) => r.email + " (" + r.skipped + ")").join("; "));
     }
-
-    return {
-      results,
-      parentUid: linked[0].parentUid,
-      emailSent: linked.some((r) => r.emailSent)
-    };
+    return { results, parentUid: linked[0].parentUid, emailSent: linked.some((r) => r.emailSent) };
   }
 );
 
@@ -476,5 +449,8 @@ module.exports = {
   onLiveClassScheduled: exports.onLiveClassScheduled,
   onHomeworkAssigned:   exports.onHomeworkAssigned,
   createParentAccount:  exports.createParentAccount,
-  sendEmail
+  sendEmail,
+  linkGuardians,
+  guardiansOf,
+  actionSettings
 };

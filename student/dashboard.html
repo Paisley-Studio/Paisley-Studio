@@ -771,6 +771,8 @@ auth.onAuthStateChanged(user=>{
   getStudentProfile(user.uid).then(doc=>{
     if(!doc.exists){ window.location.href = 'index.html'; return; }
     profile = doc.data();
+    // Remote students have their own portal; the stored studentType decides, nothing in the URL.
+    if(profile.studentType === 'remote'){ window.location.replace('/remote/dashboard.html'); return; }
     if(profile.status !== 'Active'){
       document.body.classList.add('pending');
       document.body.classList.add('ready');

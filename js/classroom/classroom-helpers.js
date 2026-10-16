@@ -6,27 +6,30 @@
    one mount call:
 
      ClassroomUI.mountManager(el, { role:'admin'|'tutor', uid, name,
-                                    subjects:[...], keyStages:[...] });
+                                    subjects:[...], keyStages:[...],
+                                    scope:'remote' });   // optional
      ClassroomUI.mountStudent(el, { uid, profile });
+
+   scope:'remote' is used by the Remote Students → Classwork tab.
+   It forces every lesson authored inside it to be posted to remote
+   students only, and (for tutors) filters the visible lesson list
+   to remote-posted lessons. Admin still sees the full lesson tree —
+   the audience filter never hides anything from admin, so Classwork
+   looks exactly like Classroom for them, with two exceptions:
+   the blue scope banner at the top, and the Publish / Set Audience
+   shortcuts hidden so the audience cannot be flipped by accident.
 
    Data model (Firestore):
      classrooms/{subjectId}_y{year}            subjectId, subjectName, keyStage, year
        topics/{topicId}                        title, description, order
        lessons/{lessonId}                      topicId, title, order, content (HTML),
-                                               attachments[], status, publishAt, author…
+                                               attachments[], status, publishAt, author,
+                                               audiences { online, remote, tutors }
    Subjects are the SAME ids used by students, tutors and the timetable
    (see lmzSubjectKey in lms-helpers.js) — no separate subject list.
    Files live in Firebase Storage under
      classroom-files/{subjectId}/{classroomId}/{lessonId}/…
    and only metadata + download URL is kept in Firestore.
-
-   Tutor restrictions (role === 'tutor'):
-     Tutors see the full subject → topic → lesson tree for their
-     subjects and Key Stages, but they cannot create, edit, delete
-     or reorder topics or lessons. They can only open the Lesson
-     Editor and press "Post Assignment" — which drops them into
-     WorkUI.openPostAssignment for the lesson's topic. Everything
-     else is view-only.
 
    Requires (loaded earlier on the page): firebase-config.js (global `db`),
    lms-helpers.js. Staff pages also load the Storage SDK for uploads.
@@ -164,6 +167,20 @@
   /* ---------------------------------------------------------
      Styles
   --------------------------------------------------------- */
+  var AUD_NAMES = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
+  // Records created before the audience model carry no `audiences`: they were live to
+  // online students (when published) and visible to tutors; never to remote students.
+  function effAud(l) {
+    if (l && l.audiences && typeof l.audiences === 'object') return l.audiences;
+    return { online: !!l && (l.status === 'published' || l.status === 'scheduled'), remote: false, tutors: true };
+  }
+  function audBadges(l) {
+    var a = effAud(l);
+    return '<span class="cr-auds" title="Where this lesson has been posted">' + Object.keys(AUD_NAMES).map(function (k) {
+      return '<span class="cr-aud ' + (a[k] ? 'on' : 'off') + '">' + AUD_NAMES[k] + '</span>';
+    }).join('') + '</span>';
+  }
+
   function injectStyle() {
     if (document.getElementById('cr-style')) return;
     var st = document.createElement('style');
@@ -217,6 +234,10 @@
       '.cr-badge.scheduled{background:rgba(232,163,61,.14);color:#96690f}',
       '.cr-badge.published{background:rgba(46,184,114,.12);color:#1d8b57}',
       '.cr-badge.archived{background:rgba(90,110,106,.14);color:var(--muted,#5A6E6A)}',
+      '.cr-auds{display:inline-flex;gap:.2rem;flex-wrap:wrap}',
+      '.cr-aud{padding:.1rem .45rem;border-radius:99px;font-size:.62rem;font-weight:800}',
+      '.cr-aud.on{background:rgba(46,184,114,.14);color:#1d8b57}',
+      '.cr-aud.off{background:rgba(90,110,106,.1);color:var(--muted,#5A6E6A);opacity:.7}',
       '.cr-table-wrap{overflow-x:auto;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;background:var(--surface,#fff)}',
       '.cr-table{width:100%;border-collapse:collapse;font-size:.82rem;min-width:720px}',
       '.cr-table th{text-align:left;padding:.65rem .8rem;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#5A6E6A);background:var(--paper,#F1F9F7)}',
@@ -268,6 +289,7 @@
       '.cr-title-edit.editing{background:var(--sage,#E5F2EF);border-radius:8px;padding:2px 6px}',
       '.cr-title-edit .cr-pen{font-size:.7rem;color:var(--muted,#5A6E6A);flex-shrink:0}',
       '.cr-title-edit .cr-name{outline:none}',
+      '.cr-scope-banner{background:rgba(74,144,217,.1);border:1px solid rgba(74,144,217,.35);color:#2b6cad;border-radius:12px;padding:.65rem 1rem;font-size:.82rem;margin-bottom:1rem;display:flex;align-items:center;gap:.55rem}',
       '@media (max-width:640px){.cr-row2{grid-template-columns:1fr}.cr-overlay{padding:0}.cr-modal,.cr-modal.wide{max-width:100%;max-height:100vh;height:100vh;border-radius:0}.cr-lesson .n{width:auto}}'
     ].join('\n');
     document.head.appendChild(st);
@@ -276,7 +298,7 @@
   /* ---------------------------------------------------------
      Firestore data layer
   --------------------------------------------------------- */
-    function clsRef(cid) { return db.collection('classrooms').doc(cid); }
+  function clsRef(cid) { return db.collection('classrooms').doc(cid); }
   function topicsRef(cid) { return clsRef(cid).collection('topics'); }
   function topicRef(cid, tid) { return topicsRef(cid).doc(tid); }
   function lessonsRef(cid, tid) { return topicRef(cid, tid).collection('lessons'); }
@@ -312,13 +334,18 @@
     return snapDocs(snap).sort(byOrder);
   }
 
-    async function loadLessons(cid, publishedOnly) {
+  /* Lessons are authored once and carry audiences { online, remote, tutors }.
+     aud: 'online' | 'remote' | 'tutors' restricts the read to lessons posted to
+     that audience (the Firestore rules require the same filter); omit it for the
+     admin who wants to see everything. */
+  async function loadLessons(cid, publishedOnly, aud) {
     var topics = await loadTopics(cid);
     var out = [];
     for (var i = 0; i < topics.length; i++) {
       var t = topics[i];
       var q = lessonsRef(cid, t.id);
       if (publishedOnly) q = q.where('status', '==', 'published');
+      if (aud) q = q.where('audiences.' + aud, '==', true);
       var snap = await q.get();
       snap.docs.forEach(function (d) {
         out.push(Object.assign({ id: d.id, topicId: t.id }, d.data()));
@@ -499,6 +526,10 @@
   function mountManager(root, opts) {
     injectStyle();
     var isAdmin = opts.role === 'admin';
+    var scope = opts.scope || null;   // 'remote' → Classwork inside Remote Students
+    var scopeBanner = scope === 'remote'
+      ? '<div class="cr-scope-banner"><i class="fas fa-house-laptop"></i> <b>Classwork — Remote students only.</b> Everything saved here is posted to remote students. Online students and tutors will not see it.</div>'
+      : '';
     var tutorSubjects = lmzSubjectKeys(opts.subjects || []);
     var tutorKS = opts.keyStages || [];
     var user = { uid: opts.uid, name: opts.name || (isAdmin ? 'Studio Desk' : 'Tutor') };
@@ -514,7 +545,7 @@
       var cRef = clsRef(cls.id);
       var now = firebase.firestore.FieldValue.serverTimestamp();
       await cRef.update({ subjectName: newName, updatedAt: now, updatedBy: user.uid });
-            try {
+      try {
         var topicsSnap = await cRef.collection('topics').get();
         var docs = [];
         for (var ti = 0; ti < topicsSnap.docs.length; ti++) {
@@ -537,7 +568,7 @@
     }
 
     function openRenameSubject() {
-      if (!isAdmin) return; // tutors cannot rename classrooms
+      if (!isAdmin) return;
       var heading = document.getElementById('crTitleHeading');
       if (!heading || heading.classList.contains('editing')) return;
 
@@ -623,14 +654,26 @@
         root.innerHTML = '<div class="cr-panel"><div class="cr-empty">No subjects have been assigned to your account yet.</div></div>';
         return;
       }
-      h += '<div class="cr-bar"><div><h3>' + (isAdmin ? 'Classroom Management' : 'My Classrooms') + '</h3>' +
-        '<div class="cr-sub">' + (isAdmin ? 'Every subject and Year — create, edit, publish and schedule lessons.' : 'The subjects you teach. Open one to view its topics and lessons, and to post assignments inside them.') + '</div></div>' +
+      h += scopeBanner;
+      h += '<div class="cr-bar"><div><h3>' + (isAdmin ? (scope === 'remote' ? 'Classwork (Remote)' : 'Classroom Management') : 'My Classrooms') + '</h3>' +
+        '<div class="cr-sub">' + (isAdmin
+          ? (scope === 'remote'
+              ? 'Build lessons and materials for remote students. Every lesson you save is posted to Remote only.'
+              : 'Every subject and Year — prepare lessons and homework, then post them to the right audience from the Publish tab.')
+          : 'The subjects you teach. Open one to view the material the Studio Desk has posted to you.') + '</div></div>' +
         (isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add classroom</button>' : '') + '</div>';
-      if (isAdmin) {
+      if (isAdmin && scope !== 'remote') {
         h += '<div class="cr-tabs"><button type="button" class="cr-btn ' + (S.tab === 'classrooms' ? 'on' : '') + '" data-a="tab" data-v="classrooms"><i class="fas fa-chalkboard"></i> Classrooms</button>' +
-          '<button type="button" class="cr-btn ' + (S.tab === 'lessons' ? 'on' : '') + '" data-a="tab" data-v="lessons"><i class="fas fa-list"></i> All lessons</button></div>';
+          '<button type="button" class="cr-btn ' + (S.tab === 'lessons' ? 'on' : '') + '" data-a="tab" data-v="lessons"><i class="fas fa-list"></i> All lessons</button>' +
+          '<button type="button" class="cr-btn ' + (S.tab === 'publish' ? 'on' : '') + '" data-a="tab" data-v="publish"><i class="fas fa-paper-plane"></i> Publish</button></div>';
       }
-      if (isAdmin && S.tab === 'lessons') { root.innerHTML = h + '<div id="crLessonsHost"></div>'; renderAllLessons(); return; }
+      if (isAdmin && scope !== 'remote' && S.tab === 'lessons') { root.innerHTML = h + '<div id="crLessonsHost"></div>'; renderAllLessons(); return; }
+      if (isAdmin && scope !== 'remote' && S.tab === 'publish') {
+        root.innerHTML = h + '<div id="crPublishHost"></div>';
+        if (global.PublishUI) global.PublishUI.mount(document.getElementById('crPublishHost'), { user: user, classrooms: S.classrooms });
+        else document.getElementById('crPublishHost').innerHTML = '<div class="cr-empty">Publishing is unavailable on this page.</div>';
+        return;
+      }
 
       var list = (S.classrooms || []).filter(function (c) {
         var f = S.filters;
@@ -694,11 +737,11 @@
       if (!rows.length) {
         h += '<div class="cr-panel"><div class="cr-empty">No lessons match.</div></div>';
       } else {
-        h += '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Lesson</th><th>Subject</th><th>Year</th><th>Tutor</th><th>Status</th><th></th></tr></thead><tbody>' +
+        h += '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Lesson</th><th>Subject</th><th>Year</th><th>Author</th><th>Status</th><th>Posted to</th><th></th></tr></thead><tbody>' +
           rows.map(function (l) {
             return '<tr><td><strong>' + esc(l.title) + '</strong><div class="cr-note">' + esc(l.topicTitle || '') + '</div></td>' +
               '<td>' + esc(l.subjectName || lmzSubjectLabel(l.subjectId)) + '</td><td>Year ' + esc(l.year) + '</td>' +
-              '<td>' + esc(l.authorName || '—') + '</td><td>' + statusBadge(l) + '</td>' +
+              '<td>' + esc(l.authorName || '—') + '</td><td>' + statusBadge(l) + '</td><td>' + audBadges(l) + '</td>' +
               '<td><div class="cr-actions"><button type="button" class="cr-btn sm" data-a="edit-any" data-c="' + esc(l.classroomId) + '" data-id="' + esc(l.id) + '"><i class="fas fa-pen"></i> Edit</button>' +
               '<button type="button" class="cr-btn sm danger" data-a="del-any" data-c="' + esc(l.classroomId) + '" data-id="' + esc(l.id) + '"><i class="fas fa-trash"></i></button></div></td></tr>';
           }).join('') + '</tbody></table></div>' +
@@ -718,7 +761,10 @@
         var doc = await clsRef(cid).get();
         if (!doc.exists) throw new Error('Classroom not found.');
         S.cls = Object.assign({ id: doc.id }, doc.data());
-        var res = await Promise.all([loadTopics(cid), loadLessons(cid, false)]);
+        // Admin always sees the full lesson tree, exactly like in the main
+        // Classroom tab. Only tutors are filtered by audience.
+        var audForLoad = isAdmin ? null : 'tutors';
+        var res = await Promise.all([loadTopics(cid), loadLessons(cid, false, audForLoad)]);
         S.topics = res[0]; S.lessons = res[1];
       } catch (e) {
         console.error('openClassroom:', e);
@@ -729,7 +775,8 @@
     }
 
     async function refreshClassroom() {
-      var res = await Promise.all([loadTopics(S.cls.id), loadLessons(S.cls.id, false)]);
+      var audForLoad = isAdmin ? null : 'tutors';
+      var res = await Promise.all([loadTopics(S.cls.id), loadLessons(S.cls.id, false, audForLoad)]);
       S.topics = res[0]; S.lessons = res[1];
       S.allLessons = null;
       renderClassroom();
@@ -745,12 +792,19 @@
         : ' class="cr-title-edit" style="cursor:default"';
       var pen = isAdmin ? '<i class="fas fa-pen cr-pen" aria-hidden="true"></i>' : '';
       var addTopicBtn = isAdmin
-        ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>'
+        ? '<div class="cr-actions">' +
+          (scope === 'remote'
+            ? ''
+            : '<button type="button" class="cr-btn" data-a="publish-class"><i class="fas fa-paper-plane"></i> Publish…</button>') +
+          '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button></div>'
         : '';
       var tutorHint = isAdmin
-        ? 'Topics and lessons appear to students in this order. Scheduled lessons are released automatically within a minute of their time.'
-        : 'Open a lesson to post an assignment inside its topic. You can grade the work your students hand in. Lessons themselves are managed by the Studio Desk.';
-      var h = '<div class="cr-crumb"><a data-a="back">' + (isAdmin ? 'Classroom Management' : 'My Classrooms') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' +
+        ? (scope === 'remote'
+            ? 'Everything you add here is posted to remote students only. Online students and tutors never see it.'
+            : 'Topics and lessons appear to students in this order. Scheduled lessons are released automatically within a minute of their time.')
+        : 'Lessons and homework are prepared and posted to you by the Studio Desk. Open homework in the Homework tab to release it to your students and to mark their work.';
+      var h = scopeBanner +
+        '<div class="cr-crumb"><a data-a="back">' + (isAdmin ? (scope === 'remote' ? 'Classwork (Remote)' : 'Classroom Management') : 'My Classrooms') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' +
         esc(name) + esc(yearTxt) + '</span></div>' +
         '<div class="cr-bar"><div>' +
         '<h3 id="crTitleHeading"' + headingAttr + '>' +
@@ -794,7 +848,7 @@
               : '';
             h += '<div class="cr-lesson"><span class="n">' + pad2(numOf[l.id]) + '</span>' +
               '<span class="tt">' + esc(l.title) + '<small>' + esc(l.authorName || '') + (l.attachments && l.attachments.length ? ' · ' + l.attachments.length + ' resource' + (l.attachments.length === 1 ? '' : 's') : '') + '</small></span>' +
-              statusBadge(l) +
+              statusBadge(l) + audBadges(l) +
               lessonActions + '</div>';
           });
         }
@@ -865,7 +919,7 @@
             await coll.doc(topic.id).update({ title: title, description: desc, updatedAt: now });
             if (topic.title !== title) {
               var ls = S.lessons.filter(function (l) { return l.topicId === topic.id; });
-                            if (ls.length) { var bt = db.batch(); ls.forEach(function (l) { bt.update(lessonRef(S.cls.id, topic.id, l.id), { topicTitle: title }); }); await bt.commit(); }
+              if (ls.length) { var bt = db.batch(); ls.forEach(function (l) { bt.update(lessonRef(S.cls.id, topic.id, l.id), { topicTitle: title }); }); await bt.commit(); }
             }
           } else {
             var max = S.topics.reduce(function (a, t) { return Math.max(a, t.order || 0); }, 0);
@@ -878,7 +932,7 @@
 
     async function openLessonEditor(cls, topics, lesson, presetTopicId, afterSave) {
       var isNew = !lesson;
-            var presetTopic = presetTopicId || (lesson && lesson.topicId) || (topics[0] && topics[0].id);
+      var presetTopic = presetTopicId || (lesson && lesson.topicId) || (topics[0] && topics[0].id);
       var lid = lesson ? lesson.id : (presetTopic ? lessonsRef(cls.id, presetTopic).doc().id : clsRef(cls.id).collection('topics').doc().collection('lessons').doc().id);
       var atts = (lesson && lesson.attachments ? lesson.attachments : []).map(function (a) { return Object.assign({}, a); });
       var uploadedNow = [];
@@ -912,9 +966,6 @@
       var topicId0 = lesson ? lesson.topicId : (presetTopicId || (topics[0] && topics[0].id) || '');
 
       if (readOnly) {
-        // Read-only view for tutors: show the lesson, its notes and its
-        // resources, and a "Post Assignment" button that drops them into
-        // WorkUI.openPostAssignment for this lesson's topic.
         var topic0 = topics.filter(function (t) { return t.id === topicId0; })[0];
         m.body.innerHTML =
           '<div class="cr-note" style="margin-bottom:.7rem;"><strong>Topic:</strong> ' + esc(topic0 ? topic0.title : '—') + '</div>' +
@@ -933,20 +984,12 @@
           ) : '');
         m.foot.innerHTML = '<span class="cr-err" id="crLErr"></span>' +
           '<button type="button" class="cr-btn" data-a="cancel">Close</button>' +
-          (global.WorkUI && topicId0 ? '<button type="button" class="cr-btn primary" data-a="post-assignment"><i class="fas fa-clipboard-check"></i> Post Assignment</button>' : '');
+          '';
         m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(true); };
-        var pa = m.foot.querySelector('[data-a="post-assignment"]');
-        if (pa) pa.onclick = function () {
-          global.WorkUI.openPostAssignment({
-            cls: cls, topics: topics, topicId: topicId0, user: user,
-            lessonTitle: lesson ? lesson.title : '',
-            afterSave: async function () { m.close(true); if (afterSave) await afterSave(); }
-          });
-        };
         return;
       }
 
-      // ---- Admin path: full lesson editor (unchanged) ----
+      // ---- Admin path: full lesson editor ----
       m.body.innerHTML =
         '<div class="cr-row2"><div class="cr-field"><label>Lesson title</label><input type="text" id="crLTitle" maxlength="200" placeholder="e.g. Linear Equations" value="' + esc(lesson ? lesson.title : '') + '"></div>' +
         '<div class="cr-field"><label>Topic</label><select id="crLTopic">' + topics.map(function (t) {
@@ -963,15 +1006,79 @@
         '<div class="cr-field"><label>Release</label><div class="cr-actions"><span class="cr-note">Schedule for</span>' +
         '<input type="date" id="crSchDate" value="' + defDate + '"><input type="time" id="crSchTime" value="' + defTime + '"></div>' +
         (lesson ? '<div class="cr-note" style="margin-top:.35rem;">Current status: ' + statusBadge(lesson) + '</div>' : '') + '</div>';
+
+      // In remote scope, the audience is forced to remote-only and the button is hidden.
+      var audienceButton = (scope === 'remote')
+        ? ''
+        : '<button type="button" class="cr-btn" data-a="set-audience"><i class="fas fa-users-viewfinder"></i> Set Audience</button>';
+
       m.foot.innerHTML = '<span class="cr-err" id="crLErr"></span>' +
         '<button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
+        audienceButton +
         '<button type="button" class="cr-btn" data-s="draft"><i class="fas fa-floppy-disk"></i> Save Draft</button>' +
         '<button type="button" class="cr-btn" data-s="scheduled"><i class="fas fa-clock"></i> Schedule</button>' +
-        (global.WorkUI ? '<button type="button" class="cr-btn" data-a="post-assignment"><i class="fas fa-clipboard-check"></i> Post Assignment</button>' : '') +
-        '<button type="button" class="cr-btn primary" data-s="published"><i class="fas fa-paper-plane"></i> Publish Now</button>';
+        (global.WorkUI && scope !== 'remote' ? '<button type="button" class="cr-btn" data-a="post-assignment"><i class="fas fa-clipboard-check"></i> Prepare Assignment</button>' : '') +
+        '<button type="button" class="cr-btn primary" data-s="published" title="Marks the lesson ready."><i class="fas fa-circle-check"></i> Mark Ready</button>';
+
+      // ---- Audience state ----
+      // In remote scope, this is locked to remote-only.
+      var pendingAudiences = (scope === 'remote')
+        ? { online: false, remote: true, tutors: false }
+        : ((lesson && lesson.audiences && typeof lesson.audiences === 'object')
+            ? { online: !!lesson.audiences.online, remote: !!lesson.audiences.remote, tutors: !!lesson.audiences.tutors }
+            : { online: false, remote: false, tutors: false });
 
       var errEl = m.foot.querySelector('#crLErr');
       var attsEl = m.body.querySelector('#crAtts');
+
+      // Set Audience modal
+      var audBtn = m.foot.querySelector('[data-a="set-audience"]');
+      if (audBtn) audBtn.onclick = function () {
+        var am = openModal({ title: 'Set audience — where this lesson is posted' });
+        am.body.innerHTML =
+          '<div class="cr-note" style="margin-bottom:.8rem;">Choose who receives this lesson. You can tick any combination, or tick All.</div>' +
+          '<div class="cr-field"><label style="display:flex; align-items:center; gap:.5rem; text-transform:none; letter-spacing:0; font-weight:700; font-size:.9rem; cursor:pointer;">' +
+            '<input type="checkbox" id="audAll"' + (pendingAudiences.online && pendingAudiences.remote && pendingAudiences.tutors ? ' checked' : '') + '> All — Online, Remote and Tutors</label></div>' +
+          '<hr style="border:none; border-top:1px solid var(--line); margin:.6rem 0;">' +
+          '<div class="cr-field"><label style="display:flex; align-items:center; gap:.5rem; text-transform:none; letter-spacing:0; font-weight:700; font-size:.9rem; cursor:pointer;">' +
+            '<input type="checkbox" id="audOnline"' + (pendingAudiences.online ? ' checked' : '') + '> Online students</label></div>' +
+          '<div class="cr-field"><label style="display:flex; align-items:center; gap:.5rem; text-transform:none; letter-spacing:0; font-weight:700; font-size:.9rem; cursor:pointer;">' +
+            '<input type="checkbox" id="audRemote"' + (pendingAudiences.remote ? ' checked' : '') + '> Remote students</label></div>' +
+          '<div class="cr-field"><label style="display:flex; align-items:center; gap:.5rem; text-transform:none; letter-spacing:0; font-weight:700; font-size:.9rem; cursor:pointer;">' +
+            '<input type="checkbox" id="audTutors"' + (pendingAudiences.tutors ? ' checked' : '') + '> Tutors</label></div>';
+        am.foot.innerHTML =
+          '<button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
+          '<button type="button" class="cr-btn primary" data-a="ok"><i class="fas fa-check"></i> Set audience</button>';
+
+        var allBox    = am.body.querySelector('#audAll');
+        var onlineBox = am.body.querySelector('#audOnline');
+        var remoteBox = am.body.querySelector('#audRemote');
+        var tutorsBox = am.body.querySelector('#audTutors');
+
+        function syncFromAll() {
+          var v = allBox.checked;
+          onlineBox.checked = v;
+          remoteBox.checked = v;
+          tutorsBox.checked = v;
+        }
+        function syncToAll() {
+          allBox.checked = onlineBox.checked && remoteBox.checked && tutorsBox.checked;
+        }
+        allBox.addEventListener('change', syncFromAll);
+        [onlineBox, remoteBox, tutorsBox].forEach(function (b) { b.addEventListener('change', syncToAll); });
+
+        am.foot.querySelector('[data-a="cancel"]').onclick = function () { am.close(true); };
+        am.foot.querySelector('[data-a="ok"]').onclick = function () {
+          pendingAudiences = {
+            online: !!onlineBox.checked,
+            remote: !!remoteBox.checked,
+            tutors: !!tutorsBox.checked
+          };
+          markDirty();
+          am.close(true);
+        };
+      };
+
       function renderAtts() {
         attsEl.innerHTML = atts.length ? atts.map(function (a, i) {
           return '<div class="cr-res"><i class="fas ' + fileIcon(a) + '"></i><span class="nm">' + esc(a.name) + '<small>' +
@@ -1077,7 +1184,7 @@
           if (isNaN(when.getTime()) || when.getTime() <= Date.now()) { errEl.textContent = 'The release time must be in the future.'; return; }
           publishAt = firebase.firestore.Timestamp.fromDate(when);
         }
-                var siblings = [];
+        var siblings = [];
         try {
           var sn = await lessonsRef(cls.id, topicId).get();
           siblings = snapDocs(sn);
@@ -1088,6 +1195,7 @@
           content: content,
           attachments: atts.map(function (a) { return Object.assign({}, a); }),
           status: status, publishAt: publishAt,
+          audiences: pendingAudiences,
           subjectId: cls.subjectId, subjectName: displayName(cls), keyStage: cls.keyStage, year: cls.year,
           updatedAt: FV.serverTimestamp(), updatedBy: user.uid
         };
@@ -1095,11 +1203,12 @@
         if (isNew || (lesson && lesson.topicId !== topicId)) {
           data.order = siblings.reduce(function (a, l) { return Math.max(a, l.order || 0); }, 0) + 1;
         }
-        if (isNew) { data.authorId = user.uid; data.authorName = user.name; data.createdAt = FV.serverTimestamp(); }
+        if (isNew) {
+          data.authorId = user.uid; data.authorName = user.name; data.createdAt = FV.serverTimestamp();
+        }
         btn.disabled = true;
-                                try {
+        try {
           var writeRef = lessonRef(cls.id, topicId, lid);
-          console.log('LESSON WRITE →', writeRef.path);
           await writeRef.set(data, { merge: true });
           removedExisting.forEach(function (a) { deleteStored(a.storagePath); });
           dirty = false; uploadedNow.length = 0;
@@ -1118,7 +1227,7 @@
 
     async function editLesson(lessonId, cid) {
       var cls, topics, lesson;
-            if (cid && (!S.cls || S.cls.id !== cid)) {
+      if (cid && (!S.cls || S.cls.id !== cid)) {
         var doc = await clsRef(cid).get();
         cls = Object.assign({ id: doc.id }, doc.data());
         topics = await loadTopics(cid);
@@ -1142,7 +1251,7 @@
         message: 'Delete “' + esc(title) + '”?<br><br>This will remove the lesson, its notes and its uploaded files. This action may not be reversible.'
       });
       if (!ok) return;
-            try {
+      try {
         (attachments || []).forEach(function (a) { if (a.storagePath) deleteStored(a.storagePath); });
         var ts = await loadTopics(cid);
         var removed = false;
@@ -1169,7 +1278,7 @@
       if (!ok) return;
       try {
         ls.forEach(function (l) { (l.attachments || []).forEach(function (a) { if (a.storagePath) deleteStored(a.storagePath); }); });
-                var batch = db.batch();
+        var batch = db.batch();
         ls.forEach(function (l) { batch.delete(lessonRef(S.cls.id, topicId, l.id)); });
         batch.delete(topicRef(S.cls.id, topicId));
         await batch.commit();
@@ -1185,13 +1294,14 @@
         else if (a === 'open') openClassroom(id);
         else if (a === 'back') { S.classrooms = null; loadClassrooms(); }
         else if (a === 'add-class') { if (isAdmin) openAddClassroom(); }
+        else if (a === 'publish-class') { if (isAdmin && scope !== 'remote' && global.PublishUI) global.PublishUI.openForClassroom(S.cls, user, refreshClassroom); }
         else if (a === 'tab') { S.tab = el.dataset.v; renderList(); }
         else if (a === 'add-topic') { if (isAdmin) openTopicModal(null); }
         else if (a === 'edit-topic') { if (isAdmin) openTopicModal(S.topics.filter(function (t) { return t.id === id; })[0]); }
         else if (a === 'del-topic') { if (isAdmin) deleteTopic(id); }
         else if (a === 'toggle') { S.collapsed[id] = !S.collapsed[id]; renderClassroom(); }
         else if (a === 'topic-up' || a === 'topic-down') { if (isAdmin) { await moveInList(S.topics, id, a === 'topic-up' ? -1 : 1, clsRef(S.cls.id).collection('topics')); await refreshClassroom(); } }
-                else if (a === 'lesson-up' || a === 'lesson-down') {
+        else if (a === 'lesson-up' || a === 'lesson-down') {
           if (!isAdmin) return;
           var l = S.lessons.filter(function (x) { return x.id === id; })[0];
           var sibs = S.lessons.filter(function (x) { return x.topicId === l.topicId; });
@@ -1207,7 +1317,7 @@
         else if (a === 'edit-any') editLesson(id, el.dataset.c);
         else if (a === 'archive') {
           if (!isAdmin) return;
-                    var ls = S.lessons.filter(function (x) { return x.id === id; })[0];
+          var ls = S.lessons.filter(function (x) { return x.id === id; })[0];
           await lessonRef(S.cls.id, ls.topicId, id).update({
             status: ls.status === 'archived' ? 'draft' : 'archived', publishAt: null,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid
@@ -1256,6 +1366,7 @@
     var subjects = lmzSubjectKeys(profile.subjects);
     var year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
     var S = { cls: null, topics: [], lessons: [], work: { assignments: [], exams: [] } };
+    var AUD = profile.studentType === 'remote' ? 'remote' : 'online';
 
     function renderHome() {
       if (!subjects.length) {
@@ -1274,9 +1385,9 @@
       try {
         var cls = await findClassroom(subjectId, year, profile.keyStage);
         if (!cls) { S.cls = { subjectName: lmzSubjectLabel(subjectId), year: year }; S.topics = []; S.lessons = []; return renderClass(); }
-        var res = await Promise.all([loadTopics(cls.id), loadLessons(cls.id, true)]);
+        var res = await Promise.all([loadTopics(cls.id), loadLessons(cls.id, true, AUD)]);
         S.cls = cls; S.topics = res[0]; S.lessons = res[1];
-        S.work = global.WorkUI ? await global.WorkUI.loadStudentWork(cls, S.topics, opts.uid).catch(function () { return { assignments: [], exams: [] }; }) : { assignments: [], exams: [] };
+        S.work = global.WorkUI ? await global.WorkUI.loadStudentWork(cls, S.topics, opts.uid, profile).catch(function () { return { assignments: [], exams: [] }; }) : { assignments: [], exams: [] };
       } catch (e) {
         console.error('student classroom:', e);
         root.innerHTML = '<div class="cr-crumb"><a data-a="home">My Classes</a></div><div class="cr-panel"><div class="cr-empty">Could not load this class right now.</div></div>';
@@ -1383,12 +1494,74 @@
     return { reload: renderHome };
   }
 
+  /* =========================================================
+     PARENT (read-only)
+  ========================================================= */
+  function mountParent(root, opts) {
+    injectStyle();
+    root.classList.add('cr-root');
+    var child = opts.child || {};
+    var AUD = child.studentType === 'remote' ? 'remote' : 'online';
+    var subjects = lmzSubjectKeys(child.subjects);
+    var year = child.year != null && child.year !== '' ? Number(child.year) : null;
+    var S = { subject: null, cls: null, topics: [], lessons: [], open: null };
+
+    function home() {
+      S.open = null; S.subject = null;
+      if (!subjects.length) { root.innerHTML = '<div class="cr-panel"><div class="cr-empty">No subjects are recorded for ' + esc(child.name || 'your child') + ' yet.</div></div>'; return; }
+      root.innerHTML = '<div class="cr-bar"><div><h3>' + esc(child.name || 'Your child') + '\u2019s classroom</h3><div class="cr-sub">Lessons and resources released to ' + esc(child.name || 'your child') + '. View only.</div></div></div>' +
+        '<div class="cr-grid">' + subjects.map(function (k) {
+          return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '"><div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' + esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(child.keyStage))) + '</div></button>';
+        }).join('') + '</div>';
+    }
+    async function openSubject(k) {
+      root.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
+      try {
+        var cls = await findClassroom(k, year, child.keyStage);
+        if (!cls) { S.cls = { subjectName: lmzSubjectLabel(k), year: year }; S.topics = []; S.lessons = []; }
+        else { var r = await Promise.all([loadTopics(cls.id), loadLessons(cls.id, true, AUD)]); S.cls = cls; S.topics = r[0]; S.lessons = r[1]; }
+      } catch (e) { console.error('parent classroom:', e); root.innerHTML = '<div class="cr-crumb"><a data-a="home">Subjects</a></div><div class="cr-panel"><div class="cr-empty">Could not load this subject.</div></div>'; return; }
+      list();
+    }
+    function list() {
+      S.open = null;
+      var h = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(displayName(S.cls)) + '</span></div>';
+      var any = false;
+      S.topics.forEach(function (t) {
+        var ls = S.lessons.filter(function (l) { return l.topicId === t.id; }).sort(byOrder);
+        if (!ls.length) return; any = true;
+        h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t">' + esc(t.title) + '</span></div>' + ls.map(function (l) {
+          return '<div class="cr-lesson student" data-a="lesson" data-id="' + esc(l.id) + '" tabindex="0" role="button"><span class="tt">' + esc(l.title) + '<small>' + esc(fmtDate(l.publishedAt || l.createdAt)) + '</small></span>' +
+            (l.attachments && l.attachments.length ? '<span class="cr-note"><i class="fas fa-paperclip"></i> ' + l.attachments.length + '</span>' : '') + '</div>';
+        }).join('') + '</div>';
+      });
+      root.innerHTML = h + (any ? '' : '<div class="cr-panel"><div class="cr-empty">Nothing has been released to ' + esc(child.name || 'your child') + ' in this subject yet.</div></div>');
+    }
+    function lesson(id) {
+      var l = S.lessons.filter(function (x) { return x.id === id; })[0]; if (!l) return list();
+      var h = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><a data-a="list">' + esc(displayName(S.cls)) + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(l.title) + '</span></div>' +
+        '<div class="cr-panel"><h2 class="cr-lesson-title">' + esc(l.title) + '</h2>' + (l.content ? '<div class="cr-prose">' + sanitizeHtml(l.content) + '</div>' : '');
+      var atts = l.attachments || [];
+      if (atts.length) h += '<h4 style="margin:1.2rem 0 .5rem;font-size:.8rem;text-transform:uppercase;color:var(--brand-deep,#245F5A)">Resources</h4>' + atts.map(function (a) {
+        var url = safeUrl(a.url);
+        return '<div class="cr-res"><i class="fas ' + fileIcon(a) + '"></i><span class="nm">' + esc(a.name) + '</span>' + (url ? '<a class="cr-btn sm primary" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" style="text-decoration:none">Open</a>' : '') + '</div>';
+      }).join('');
+      root.innerHTML = h + '</div>';
+    }
+    root.addEventListener('click', function (e) {
+      var el = e.target.closest('[data-a]'); if (!el) return; var a = el.dataset.a;
+      if (a === 'home') home(); else if (a === 'open') openSubject(el.dataset.s); else if (a === 'list') list(); else if (a === 'lesson') lesson(el.dataset.id);
+    });
+    home();
+    return { reload: home };
+  }
+
   global.ClassroomUI = {
-    mountManager: mountManager, mountStudent: mountStudent, sanitizeHtml: sanitizeHtml,
+    mountManager: mountManager, mountStudent: mountStudent, mountParent: mountParent, sanitizeHtml: sanitizeHtml,
     util: {
       esc: esc, toDate: toDate, fmtDate: fmtDate, fmtDateTime: fmtDateTime, pad2: pad2, ksShort: ksShort, byOrder: byOrder,
       displayName: displayName, snapDocs: snapDocs, clsRef: clsRef, injectStyle: injectStyle, openModal: openModal, confirmModal: confirmModal,
-      loadTopics: loadTopics, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
+      loadTopics: loadTopics, loadLessons: loadLessons, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
       KEY_STAGES: KEY_STAGES
     }
   };

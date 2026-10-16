@@ -154,7 +154,7 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   if(!email){ return; }
   const btn = document.getElementById('resetBtn');
   btn.disabled = true; btn.textContent = 'Sending…';
-  auth.sendPasswordResetEmail(email).then(()=>{
+  auth.sendPasswordResetEmail(email, { url: window.location.origin + '/parent/index.html' }).then(()=>{
     ok.textContent = 'If that email has an account, a reset link is on its way.';
     ok.style.display = 'block';
     btn.disabled = false; btn.textContent = 'Send reset link';

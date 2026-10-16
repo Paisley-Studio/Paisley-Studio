@@ -166,10 +166,12 @@
   }
 
   // Homework only: assignments under topics + their submissions.
-  async function loadClassHomework(cid, topics) {
+  async function loadClassHomework(cid, topics, tutorOnly) {
     var items = [];
     var parts = await Promise.all(topics.map(function (t) {
-      return coll(cid, t.id, 'assignment').get().then(function (snap) {
+      var q = coll(cid, t.id, 'assignment');
+      if (tutorOnly) q = q.where('audiences.tutors', '==', true);   // tutors only read what the Studio Desk posted to them
+      return q.get().then(function (snap) {
         return snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cid }, d.data()); });
       });
     }));
@@ -185,8 +187,10 @@
   }
 
   // Flat exams: classrooms/{cid}/exams/{eid} + their submissions subcollection.
-  async function loadFlatExams(cid) {
-    var snap = await flatExamsRef(cid).get();
+  async function loadFlatExams(cid, tutorOnly) {
+    var fq = flatExamsRef(cid);
+    if (tutorOnly) fq = fq.where('audiences.tutors', '==', true);
+    var snap = await fq.get();
     var items = snap.docs.map(function (d) { return Object.assign({ id: d.id, cid: cid, flat: true }, d.data()); });
     items.sort(function (a, b) {
       var da = (a.examDate && U.toDate(a.examDate)) || (a.createdAt && U.toDate(a.createdAt)) || 0;
@@ -203,12 +207,27 @@
     return { items: items, subs: subs };
   }
 
+  /* ---- audiences: who may see an item (mirrors functions/work-shared.js) ---- */
+  var AUD_LABEL = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
+  function studentAud(s) { return s && s.studentType === 'remote' ? 'remote' : 'online'; }
+  // Records created before the audience model have no `audiences`: they were live to
+  // online students and tutors, never to remote students.
+  function effAudiences(it) { return it && it.audiences && typeof it.audiences === 'object' ? it.audiences : { online: true, remote: false, tutors: true }; }
+  function studentSees(s, it) {
+    return effAudiences(it)[studentAud(s)] === true || (Array.isArray(it.releasedTo) && it.releasedTo.indexOf(s.id) !== -1);
+  }
+  function audChips(it) {
+    var a = effAudiences(it);
+    return Object.keys(AUD_LABEL).map(function (k) {
+      return '<span class="wk-chip" style="' + (a[k] ? 'background:rgba(46,184,114,.14);color:#1d8b57' : 'opacity:.5') + '" title="' + (a[k] ? 'Posted to ' : 'Not posted to ') + AUD_LABEL[k] + '">' + AUD_LABEL[k] + '</span>';
+    }).join('');
+  }
   function audienceOf(item, enrolled) {
     if (item.recipients && item.recipients.length) {
       var byId = {}; enrolled.forEach(function (s) { byId[s.id] = s; });
-      return item.recipients.map(function (id) { return byId[id] || { id: id, name: 'Student' }; });
+      return item.recipients.map(function (id) { return byId[id] || { id: id, name: 'Student' }; }).filter(function (s) { return !s.status || studentSees(s, item); });
     }
-    return enrolled;
+    return enrolled.filter(function (s) { return studentSees(s, item); });
   }
 
   function uploadTo(path, file, contentType, onProgress) {
@@ -280,7 +299,7 @@
     var due = ex ? dueOf(ex, 'assignment') : null, dp = dtParts(due);
     var topicId0 = ex ? ex.tid : (o.topicId || (topics[0] && topics[0].id) || '');
 
-    var m = U.openModal({ title: ex ? 'Edit assignment' : 'Post assignment \u2014 ' + U.displayName(cls) + ' Year ' + cls.year, wide: true,
+    var m = U.openModal({ title: ex ? 'Edit assignment' : 'Prepare assignment \u2014 ' + U.displayName(cls) + ' Year ' + cls.year, wide: true,
       beforeClose: function () { if (busy) { alert('An upload is still in progress.'); return false; } return true; } });
     m.body.innerHTML =
       '<div class="cr-row2"><div class="cr-field"><label>Title</label><input type="text" id="wkTitle" maxlength="200" value="' + esc(ex ? ex.title : (o.lessonTitle ? 'Homework: ' + o.lessonTitle : '')) + '"></div>' +
@@ -293,7 +312,7 @@
       '<input type="file" id="wkPdfIn" accept="application/pdf,.pdf" style="display:none"><div class="cr-prog" id="wkProg" style="display:none"><div></div></div></div>' +
       recipientsHtml('wkR');
     m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
-      '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Post assignment') + '</button>';
+      '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Save assignment') + '</button>';
     var errEl = m.foot.querySelector('#wkErr');
     var readRecipients = wireRecipients(m, 'wkR', cls, ex ? ex.recipients : []);
 
@@ -339,6 +358,9 @@
       if (!ex) {
         data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
+        // Prepared, not posted: nobody (students, parents, tutors) sees it until the
+        // Studio Desk posts it from Classroom \u2192 Publish.
+        data.audiences = { online: false, remote: false, tutors: false };
         data.tutorId = user.uid; data.tutorName = user.name || ''; data.createdBy = user.uid; data.createdAt = FV().serverTimestamp();
       } else if (due && when.getTime() !== due.getTime()) {
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
@@ -348,10 +370,10 @@
         await coll(cls.id, tid, 'assignment').doc(aid).set(data, { merge: true });
         m.close(true);
         if (o.afterSave) await o.afterSave();
-        else alert('Assignment posted. It now appears in Homework Management and in the students\u2019 classroom.');
+        else alert('Assignment saved. Post it to students or tutors from Classroom \u2192 Publish.');
       } catch (e) {
         console.error('post assignment:', e);
-        errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'you do not have permission to post in this subject.' : (e.message || e));
+        errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'only the Studio Desk can prepare assignments.' : (e.message || e));
         btn.disabled = false;
       }
     };
@@ -701,11 +723,17 @@
       var enrolledP = loadEnrolled(S.cls).catch(function () { return []; });
       if (kind === 'exam') {
         // Flat exams under the classroom + their submissions. No topics.
-        var res = await Promise.all([loadFlatExams(S.cls.id), enrolledP]);
+        var res = await Promise.all([loadFlatExams(S.cls.id, !isAdmin), enrolledP]);
         S.items = res[0].items; S.subs = res[0].subs; S.enrolled = res[1];
       } else {
-        var res2 = await Promise.all([loadClassHomework(S.cls.id, S.topics), enrolledP]);
+        var res2 = await Promise.all([loadClassHomework(S.cls.id, S.topics, !isAdmin), enrolledP]);
         S.items = res2[0].items; S.subs = res2[0].subs; S.enrolled = res2[1];
+      }
+      // opts.audience ('remote' | 'online') narrows the whole view to one audience:
+      // only items posted to it, and only that audience's students.
+      if (opts.audience) {
+        S.items = S.items.filter(function (it) { return effAudiences(it)[opts.audience] === true; });
+        S.enrolled = S.enrolled.filter(function (st) { return studentAud(st) === opts.audience; });
       }
     }
     async function refresh() { await reload(); render(); }
@@ -743,7 +771,8 @@
       return pill('b-plain', 'Open');
     }
 
-    function canEdit(it) { return isAdmin || it.tutorId === user.uid; }
+    // Only the Studio Desk edits or deletes prepared work. Tutors deliver and grade it.
+    function canEdit(it) { return isAdmin; }
 
     /* ---------- render main list ---------- */
     function render() {
@@ -759,7 +788,7 @@
         topBtn = isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
       }
       var h = '<div class="cr-crumb"><a data-a="back">' + title + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div></div>' +
+        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
         topBtn + '</div>';
 
       if (kind === 'exam') {
@@ -780,7 +809,7 @@
                 (isAdmin
                   ? (it.status === 'Published'
                       ? '<button type="button" class="cr-btn sm" data-a="close-exam" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close</button>'
-                      : '<button type="button" class="cr-btn sm" data-a="publish-exam" data-id="' + esc(it.id) + '"><i class="fas fa-upload"></i> Publish</button>') +
+                      : '<button type="button" class="cr-btn sm" data-a="publish-exam" data-id="' + esc(it.id) + '"><i class="fas fa-upload"></i> Mark ready</button>') +
                     (it.submissionsOpen === true
                       ? '<button type="button" class="cr-btn sm" data-a="close-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close submissions</button>'
                       : '<button type="button" class="cr-btn sm" data-a="open-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock-open"></i> Open submissions</button>')
@@ -788,7 +817,7 @@
                 (canEdit(it) ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '')
               : '';
             h += '<tr>' +
-              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '</td>' +
+              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div></td>' +
               '<td>' + pill('b-plain', it.examType || '—') + '</td>' +
               '<td>' + esc(examDate) + '</td>' +
               '<td>' + esc(deadline) + '</td>' +
@@ -815,19 +844,21 @@
           var open = !S.collapsed[t.id];
           // Both admin and tutor can press "Post Assignment" inside a topic.
           // Only admin can create topics — that button is at the top bar.
-          var topicActions = '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Post Assignment</button></div>';
+          var topicActions = isAdmin && !opts.audience ? '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Prepare assignment</button></div>' : '';
           h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' +
             esc(t.title) + '<small>' + rows.length + ' assignment' + (rows.length === 1 ? '' : 's') + '</small></span>' +
             topicActions + '</div>';
           if (open) {
-            if (!rows.length) h += '<div class="cr-empty">No assignments in this topic yet. Use \u201cPost Assignment\u201d above to add the first one.</div>';
+            if (!rows.length) h += '<div class="cr-empty">' + (isAdmin ? 'No assignments in this topic yet. Use \u201cPrepare assignment\u201d above, then post it from Classroom \u2192 Publish.' : 'Nothing has been posted to you in this topic yet.') + '</div>';
             rows.forEach(function (it) {
               var cnt = counts(it), due = dueOf(it, 'assignment');
               h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas fa-clipboard-check"></i></span>' +
                 '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : 'No date') + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + '</small></span>' +
+                '<span class="wk-chips" title="Posted to">' + audChips(it) + '</span>' +
                 '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
                 itemPill(it) +
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
+                (!isAdmin ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
                 (canEdit(it) ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
             });
@@ -1079,6 +1110,48 @@
     }
 
     /* ---------- events ---------- */
+    /* ---------- tutor: release prepared work to MY students ---------- */
+    async function myStudents(it) {
+      var found = {};
+      var qs = [db.collection('students').where('tutorIds', 'array-contains', user.uid), db.collection('students').where('tutorId', '==', user.uid)];
+      var snaps = await Promise.all(qs.map(function (q) { return q.get().catch(function () { return { docs: [] }; }); }));
+      snaps.forEach(function (sn) { sn.docs.forEach(function (d) { found[d.id] = Object.assign({ id: d.id }, d.data()); }); });
+      var want = lmzSubjectKey(it.subjectId || S.cls.subjectId);
+      return Object.keys(found).map(function (k) { return found[k]; }).filter(function (st) {
+        if (['pending', 'suspended'].indexOf(String(st.status || '').toLowerCase()) !== -1) return false;
+        if (lmzSubjectKeys(st.subjects).indexOf(want) === -1) return false;
+        return !(st.year != null && S.cls.year != null && Number(st.year) !== Number(S.cls.year));
+      }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+    }
+    async function openRelease(it) {
+      var m = U.openModal({ title: 'Release to my students \u2014 ' + it.title });
+      m.body.innerHTML = '<div class="cr-empty">Loading your students\u2026</div>';
+      m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
+      m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
+      var list = [];
+      try { list = await myStudents(it); } catch (e) { m.body.innerHTML = '<div class="cr-empty">Could not load students: ' + esc(e.message || e) + '</div>'; return; }
+      if (!list.length) { m.body.innerHTML = '<div class="cr-empty">None of your students take this subject in this Year.</div>'; return; }
+      m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.6rem">Choose the students you teach who should receive this now. You cannot change the work itself or who else receives it.</div><div class="wk-pick">' +
+        list.map(function (st) {
+          var already = (it.releasedTo || []).indexOf(st.id) !== -1 || studentSees(st, Object.assign({}, it, { releasedTo: [] }));
+          return '<label><input type="checkbox" value="' + esc(st.id) + '"' + (already ? ' checked disabled' : '') + '> ' + esc(st.name || st.email || st.id) +
+            (st.studentType === 'remote' ? ' <span class="cr-note">(remote)</span>' : '') + (already ? ' <span class="cr-note">\u2014 already has it</span>' : '') + '</label>';
+        }).join('') + '</div>';
+      m.foot.innerHTML = '<span class="cr-err" id="rlErr"></span><button type="button" class="cr-btn" data-a="x">Cancel</button><button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-share-from-square"></i> Release</button>';
+      m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
+      m.foot.querySelector('[data-a="go"]').onclick = async function () {
+        var ids = Array.prototype.map.call(m.body.querySelectorAll('input:checked:not(:disabled)'), function (c) { return c.value; });
+        var err = m.foot.querySelector('#rlErr');
+        if (!ids.length) { err.textContent = 'Tick at least one student.'; return; }
+        var btn = this; btn.disabled = true;
+        var path = 'classrooms/' + it.cid + '/topics/' + it.tid + '/assignments/' + it.id;
+        try {
+          var r = await firebase.functions().httpsCallable('tutorReleaseWork')({ path: path, studentIds: ids });
+          m.close(); alert('Released to ' + ((r.data && r.data.released) || []).length + ' student(s).'); await refresh();
+        } catch (e2) { err.textContent = e2.message || 'Could not release.'; btn.disabled = false; }
+      };
+    }
+
     root.addEventListener('click', async function (e) {
       var el = e.target.closest('[data-a]'); if (!el) return;
       var a = el.dataset.a, id = el.dataset.id;
@@ -1101,13 +1174,14 @@
             openDetail(it2);
           }
         }
+        else if (a === 'release' && item) openRelease(item);
         else if (a === 'add-assignment') {
-          // Both admin and tutor: post an assignment inside this topic.
+          if (!isAdmin) { alert('Assignments are prepared by the Studio Desk.'); return; }
           openPostAssignment({ cls: S.cls, topics: S.topics, topicId: id, user: user, afterSave: refresh });
         }
         else if (a === 'add-flat-exam') { if (isAdmin) openCreateExam({ cls: S.cls, user: user, afterSave: refresh }); }
         else if (a === 'edit' && item) {
-          if (!canEdit(item)) { alert('Only the Studio Desk or the tutor who posted this can edit it.'); return; }
+          if (!canEdit(item)) { alert('Only the Studio Desk can edit prepared work.'); return; }
           if (kind === 'exam') openCreateExam({ cls: S.cls, existing: item, user: user, afterSave: refresh });
           else openPostAssignment({ cls: S.cls, topics: S.topics, existing: item, user: user, afterSave: refresh });
         }
@@ -1145,7 +1219,7 @@
       workState: workState, dueOf: dueOf, fmtScore: fmtScore,
       windowState: windowState, isWindowOpen: isWindowOpen,
       loadEnrolled: loadEnrolled, uploadTo: uploadTo, cleanName: cleanName,
-      injectStyle: injectStyle, audienceOf: audienceOf
+      injectStyle: injectStyle, audienceOf: audienceOf, effAudiences: effAudiences, studentAud: studentAud, studentSees: studentSees
     }
   });
 })(window);

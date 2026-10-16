@@ -122,7 +122,9 @@ const ParentHelpers = (function () {
     // For each classroom, read the flat exams collection.
     for (const cls of classrooms) {
       try {
-        const examsSnap = await db.collection('classrooms').doc(cls.id).collection('exams').get();
+        const examsSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
+          .where('audiences.' + (child.studentType === 'remote' ? 'remote' : 'online'), '==', true)
+          .where('status', '==', 'Published').get();
         for (const examDoc of examsSnap.docs) {
           const exam = Object.assign({ id: examDoc.id, cid: cls.id }, examDoc.data());
           // Parents see Published exams. Drafts/Closed aren't visible.
@@ -155,17 +157,22 @@ const ParentHelpers = (function () {
 
   // Everything a child's dashboard tab needs, fetched in parallel.
   function loadChildBundle(child) {
+    // Legacy key-stage-wide lists (homework, exams, activities, live classes,
+    // announcements) belong to the online programme. A remote child's parent
+    // sees only that child's own classroom work, results and tickets.
+    const isRemote = child.studentType === 'remote';
+    const none = () => Promise.resolve({ docs: [] });
     return Promise.all([
       getResultsForStudent(child.id).catch(() => ({ docs: [] })),
-      getHomeworkForKeyStage(child.keyStage).catch(() => ({ docs: [] })),
+      (isRemote ? none() : getHomeworkForKeyStage(child.keyStage)).catch(() => ({ docs: [] })),
       getSubmissionsForStudent(child.id).catch(() => ({ docs: [] })),
-      getExamsForKeyStage(child.keyStage).catch(() => ({ docs: [] })),
+      (isRemote ? none() : getExamsForKeyStage(child.keyStage)).catch(() => ({ docs: [] })),
       getAttemptsForStudent(child.id).catch(() => ({ docs: [] })),
-      getActivitiesForKeyStage(child.keyStage).catch(() => ({ docs: [] })),
+      (isRemote ? none() : getActivitiesForKeyStage(child.keyStage)).catch(() => ({ docs: [] })),
       getActivityAttemptsForStudent(child.id).catch(() => ({ docs: [] })),
-      getTimetableEntriesForStudent(child).catch(() => []),
-      getLiveClassesForKeyStage(child.keyStage).catch(() => ({ docs: [] })),
-      getNotificationsForKeyStage(child.keyStage).catch(() => ({ docs: [] })),
+      (isRemote ? Promise.resolve([]) : getTimetableEntriesForStudent(child)).catch(() => []),
+      (isRemote ? none() : getLiveClassesForKeyStage(child.keyStage)).catch(() => ({ docs: [] })),
+      (isRemote ? none() : getNotificationsForKeyStage(child.keyStage)).catch(() => ({ docs: [] })),
       getTicketsForStudent(child.id).catch(() => ({ docs: [] })),
       // New: flat exams + the child's submission per exam
       loadFlatExamsForChild(child).catch(() => [])

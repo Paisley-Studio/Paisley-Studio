@@ -98,7 +98,7 @@ async function runHomeworkDeadlineReminder() {
 
     const { cid, tid, id } = W.cidTidFromRef(doc.ref);
     const classroom = await W.classroomOf(cid);
-    const students = await W.resolveStudents(classroom, a.recipients);
+    const students = await W.resolveStudents(classroom, a.recipients, a);
     const dueAt = W.toDate(a.dueAt);
 
     for (const student of students) {
@@ -145,7 +145,7 @@ async function runHomeworkOverdueGraceNotice() {
 
     const { cid, tid, id } = W.cidTidFromRef(doc.ref);
     const classroom = await W.classroomOf(cid);
-    const students = await W.resolveStudents(classroom, a.recipients);
+    const students = await W.resolveStudents(classroom, a.recipients, a);
     const dueAt = W.toDate(a.dueAt);
     const graceUntil = new Date(dueAt.getTime() + GRACE_HOURS * HOUR);
 
@@ -311,7 +311,7 @@ async function runGenerateUnattendedWorkReport() {
     claimed++;
     const { cid } = W.cidTidFromRef(doc.ref);
     const classroom = await W.classroomOf(cid);
-    const students = await W.resolveStudents(classroom, a.recipients);
+    const students = await W.resolveStudents(classroom, a.recipients, a);
     const dueAt = W.toDate(a.dueAt);
     for (const student of students) {
       if (await hasSubmitted(doc.ref, student.id)) continue;
@@ -419,7 +419,7 @@ async function runExamReminderToParents() {
     const eid = isNested ? parts[5] : parts[3];
 
     const classroom = await W.classroomOf(cid);
-    const students = await W.resolveStudents(classroom, e.recipients);
+    const students = await W.resolveStudents(classroom, e.recipients, e);
     const examDate = W.toDate(e.examDate);
 
     // Download the paper once, shared across every parent.

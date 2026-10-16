@@ -142,3 +142,8 @@ subjects to ids.
 Deploy: `firebase deploy --only functions,firestore:rules,firestore:indexes,storage`
 then hosting. The index takes a few minutes to build; scheduled release starts
 working once it is ready.
+
+
+## Audience model (Remote Students upgrade)
+
+Lessons, assignments and exams are readable per audience via `audiences.{online,remote,tutors}`; queries must filter on the same flag. `students.studentType` is writable only by admins/Cloud Functions. Tutors cannot create or modify curriculum, assignments, exams or notes. See `REMOTE_UPGRADE.md` for the data model, deployment order and the emulator tests in `tests/rules/`.

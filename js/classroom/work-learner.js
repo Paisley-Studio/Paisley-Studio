@@ -54,8 +54,14 @@
      Data
   --------------------------------------------------------- */
 
-  async function loadStudentWork(cls, topics, uid) {
+  // Which audience flag this viewer reads: remote students see only work posted to
+  // remote students; everyone else sees work posted to online students.
+  function audOf(profileOrChild) { return profileOrChild && profileOrChild.studentType === 'remote' ? 'remote' : 'online'; }
+  function noDocs() { return { docs: [] }; }
+
+  async function loadStudentWork(cls, topics, uid, profile) {
     var out = { assignments: [], exams: [], attempts: null };
+    var FLAG = 'audiences.' + audOf(profile);
 
     // ---- homework (unchanged) ----
     async function loadAssignments() {
@@ -63,9 +69,10 @@
       await Promise.all(topics.map(async function (t) {
         var base = coll(cls.id, t.id, 'assignment');
         var qs = [];
-        var a = base.where('audience', '==', 'class');
-        var b = base.where('recipients', 'array-contains', uid);
-        var snaps = await Promise.all([a.get(), b.get()]);
+        var a = base.where('audience', '==', 'class').where(FLAG, '==', true);
+        var b = base.where('recipients', 'array-contains', uid).where(FLAG, '==', true);
+        var c = base.where('releasedTo', 'array-contains', uid);   // delivered by a tutor
+        var snaps = await Promise.all([a.get(), b.get(), c.get().catch(noDocs)]);
         var seen = {};
         snaps.forEach(function (sn) { sn.docs.forEach(function (d) { if (!seen[d.id]) { seen[d.id] = 1; qs.push(Object.assign({ id: d.id, tid: t.id, cid: cls.id }, d.data())); } }); });
         await Promise.all(qs.map(async function (it) {
@@ -83,9 +90,10 @@
       await Promise.all(topics.map(async function (t) {
         var base = coll(cls.id, t.id, 'exam');
         var qs = [];
-        var a = base.where('audience', '==', 'class').where('status', '==', 'Published');
-        var b = base.where('recipients', 'array-contains', uid).where('status', '==', 'Published');
-        var snaps = await Promise.all([a.get(), b.get()]);
+        var a = base.where('audience', '==', 'class').where('status', '==', 'Published').where(FLAG, '==', true);
+        var b = base.where('recipients', 'array-contains', uid).where('status', '==', 'Published').where(FLAG, '==', true);
+        var c = base.where('releasedTo', 'array-contains', uid).where('status', '==', 'Published');
+        var snaps = await Promise.all([a.get(), b.get(), c.get().catch(noDocs)]);
         var seen = {};
         snaps.forEach(function (sn) { sn.docs.forEach(function (d) { if (!seen[d.id]) { seen[d.id] = 1; qs.push(Object.assign({ id: d.id, tid: t.id, cid: cls.id, flat: false }, d.data())); } }); });
         await Promise.all(qs.map(async function (it) {
@@ -113,7 +121,7 @@
     // keeps the Exams tab in sync with the notification bell, which
     // already fires for upcoming exams.
     async function loadFlatExams() {
-      var snap = await H.flatExamsRef(cls.id).get().catch(function () { return { docs: [] }; });
+      var snap = await H.flatExamsRef(cls.id).where(FLAG, '==', true).where('status', '==', 'Published').get().catch(noDocs);
       var items = snap.docs.map(function (d) { return Object.assign({ id: d.id, cid: cls.id, flat: true }, d.data()); });
       var out = [];
       await Promise.all(items.map(async function (it) {
@@ -489,7 +497,7 @@
           var cls = await U.findClassroom(subjects[i], year, profile.keyStage);
           if (!cls) continue;
           var topics = kind === 'exam' ? [] : await U.loadTopics(cls.id);
-          var work = await loadStudentWork(cls, topics, opts.uid);
+          var work = await loadStudentWork(cls, topics, opts.uid, profile);
           groups.push({
             cls: cls,
             topics: topics,
@@ -608,6 +616,7 @@
      Parent: strictly read-only  --------------------------------------------------------- */
 
   async function loadParentWork(child, kind) {
+    var PFLAG = 'audiences.' + audOf(child);
     var year = child.year != null && child.year !== '' ? Number(child.year) : null;
     var groups = [];
     var subjects = lmzSubjectKeys(child.subjects);
@@ -620,7 +629,7 @@
         if (kind === 'assignment') {
           var topics = await U.loadTopics(cls.id), items = [];
           await Promise.all(topics.map(async function (t) {
-            var q = coll(cls.id, t.id, 'assignment');
+            var q = coll(cls.id, t.id, 'assignment').where(PFLAG, '==', true);
             var snap = await q.get();
             var mine = snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cls.id }, d.data()); }).filter(function (x) {
               return x.audience === 'class' || (x.recipients || []).indexOf(child.id) !== -1;
@@ -637,7 +646,7 @@
 
           var topics2 = await U.loadTopics(cls.id);
           await Promise.all(topics2.map(async function (t) {
-            var q = coll(cls.id, t.id, 'exam').where('status', '==', 'Published');
+            var q = coll(cls.id, t.id, 'exam').where('status', '==', 'Published').where(PFLAG, '==', true);
             var snap = await q.get();
             var mine = snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cls.id, flat: false }, d.data()); }).filter(function (x) {
               return x.audience === 'class' || (x.recipients || []).indexOf(child.id) !== -1;
@@ -656,7 +665,7 @@
           }));
 
           try {
-            var fSnap = await H.flatExamsRef(cls.id).get();
+            var fSnap = await H.flatExamsRef(cls.id).where(PFLAG, '==', true).where('status', '==', 'Published').get();
             await Promise.all(fSnap.docs.map(async function (d) {
               var it = Object.assign({ id: d.id, cid: cls.id, flat: true }, d.data());
               if (String(it.status || '') !== 'Published') return;

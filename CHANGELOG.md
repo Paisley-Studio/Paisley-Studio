@@ -1,3 +1,12 @@
+# Remote Students upgrade (see REMOTE_UPGRADE.md)
+
+- New admin nav item **Remote Students**; central publishing (Publish tab / Publish… button) inside **Classroom**.
+- Remote student portal (`/remote`), remote-aware parent portal, audience model (`audiences`/`publication`/`releasedTo`) on lessons, assignments and exams.
+- Tutors can no longer create or edit curriculum/assignments (UI + Firestore/Storage rules); they release posted work to their own students and grade.
+- Student Results section copied to `index.html`. Emails use a single `APP_URL` (default https://paisleystudio.online); auth links carry a continue URL.
+- **Deployment order matters — run the `backfillAudiences` migration before deploying the new rules.**
+- Security reminder still open: rotate the service-account key that was in the original zip (`vertex-key.json`, now excluded).
+
 # CHANGELOG - Homework and Exams moved into the Classroom tree
 
 Date: 2026-10-07. Nothing has been run against a live Firebase project or an emulator. See "Not verified".

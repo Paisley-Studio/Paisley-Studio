@@ -21,6 +21,34 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------
+    // STUDENT TYPE HELPERS
+    //   A student is "remote" only if students/{uid}.studentType == 'remote'.
+    //   That field is writable only by admins / Cloud Functions (see the
+    //   students rules), so it cannot be forged from the client.
+    //   Records with no studentType are normal online students.
+    // -----------------------------------------------------
+    function isStudentDoc() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid));
+    }
+    function myStudent() {
+      return get(/databases/$(database)/documents/students/$(request.auth.uid)).data;
+    }
+    function isRemoteStudent() {
+      return isStudentDoc() && ('studentType' in myStudent()) && myStudent().studentType == 'remote';
+    }
+    function isOnlineStudent() {
+      return isStudentDoc() && !isRemoteStudent();
+    }
+    // A suspended or not-yet-active remote account has no access.
+    function remoteActive() {
+      return isRemoteStudent() && myStudent().status == 'Active';
+    }
+    function notRemote() {
+      return isSignedIn() && !isRemoteStudent();
+    }
+
+    // -----------------------------------------------------
     // MULTI-TUTOR HELPERS
     // -----------------------------------------------------
     function studentTutorIds(studentId) {
@@ -81,9 +109,23 @@ service cloud.firestore {
         (!('subjects' in s) || s.subjects.size() == 0 || resource.data.subjectId in s.subjects);
     }
     function studentMaySeeEntry() {
-      return isSignedIn() &&
+      return notRemote() &&
         exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
         studentEntryScope(get(/databases/$(database)/documents/students/$(request.auth.uid)).data);
+    }
+    function parentSlotOnline(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        ('online' in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data) &&
+        (((c.keyStage + '|' + c.subjectId) in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.online) ||
+         ((c.keyStage + '|*') in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.online));
+    }
+    function parentSlotRemote(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        ('remote' in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data) &&
+        (((c.keyStage + '|' + c.subjectId) in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.remote) ||
+         ((c.keyStage + '|*') in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.remote));
     }
     function parentMaySeeEntry() {
       return isSignedIn() &&
@@ -140,7 +182,7 @@ service cloud.firestore {
     }
 
     function forMe(d) {
-      return d.audience == 'class' || request.auth.uid in d.recipients;
+      return (d.audience == 'class' || request.auth.uid in d.recipients) && postedToMyType(d);
     }
     function validWorkDoc(d) {
       return d.title is string && d.title.size() > 0 && d.title.size() <= 200 &&
@@ -167,6 +209,59 @@ service cloud.firestore {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/parentStudentLinks/$(conversationId)) &&
         get(/databases/$(database)/documents/parentStudentLinks/$(conversationId)).data.parentUid == request.auth.uid;
+    }
+
+    // =====================================================
+    // AUDIENCE-AWARE CONTENT ACCESS
+    //   Lessons / assignments / exams carry
+    //     audiences: { online, remote, tutors }   (booleans)
+    //   Each read branch below tests ONE literal audience flag, so a
+    //   collection query must include the same filter, e.g.
+    //     .where('audiences.remote', '==', true)
+    //   Authoring is admin-only; tutors can only READ what the admin posted
+    //   to tutors and may grade submissions.
+    // =====================================================
+    function postedToMyType(d) {
+      return ('audiences' in d) && (
+        (isRemoteStudent() && d.audiences.get('remote', false) == true) ||
+        (!isRemoteStudent() && d.audiences.get('online', false) == true) ||
+        (('releasedTo' in d) && request.auth.uid in d.releasedTo));
+    }
+    function studentSeesLesson(cid) {
+      return (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && resource.data.audiences.online == true) ||
+             (remoteActive() && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && resource.data.audiences.remote == true);
+    }
+    function parentSeesLesson(cid) {
+      return resource.data.status == 'published' && (
+        (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
+        (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))));
+    }
+    function tutorSeesPosted(cid) {
+      return isTutor() && classTutorMay(classroomData(cid)) && resource.data.audiences.tutors == true;
+    }
+    // Homework: whole-class or named recipients, per student type.
+    function studentSeesWork(cid) {
+      return (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
+               ((resource.data.audiences.online == true &&
+                 (resource.data.audience == 'class' || request.auth.uid in resource.data.recipients)) ||
+                request.auth.uid in resource.data.releasedTo)) ||
+             (remoteActive() && classStudentMay(classroomData(cid)) &&
+               ((resource.data.audiences.remote == true &&
+                 (resource.data.audience == 'class' || request.auth.uid in resource.data.recipients)) ||
+                request.auth.uid in resource.data.releasedTo));
+    }
+    function parentSeesWork(cid) {
+      return (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
+             (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid)));
+    }
+    // Published exams (nested or flat).
+    function studentSeesExam(cid) {
+      return resource.data.status == 'Published' && studentSeesWork(cid);
+    }
+    function parentSeesExam(cid) {
+      return resource.data.status == 'Published' && parentSeesWork(cid);
     }
 
     // =====================================================
@@ -253,9 +348,24 @@ service cloud.firestore {
     // STUDENTS
     // =====================================================
     match /students/{uid} {
-      allow create: if isOwner(uid);
+      // Self-registration creates a normal, PENDING online student only.
+      // Remote students are created by the admitRemoteStudent Cloud Function,
+      // never from a client, and no one can self-assign privileged fields.
+      allow create: if isOwner(uid) &&
+        request.resource.data.status == 'Pending' &&
+        !('studentType' in request.resource.data) &&
+        !('admittedBy' in request.resource.data) &&
+        !('tutorId' in request.resource.data) &&
+        !('tutorIds' in request.resource.data) &&
+        !('subjectTutors' in request.resource.data);
       allow read: if isOwner(uid) || isAdmin() || tutorTeachesStudent(uid) || isParentOf(uid);
-      allow update: if isAdmin() || (isOwner(uid) &&
+      // Remote students may edit only a few contact fields.
+      allow update: if isAdmin() ||
+        (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt'])) ||
+        (isOwner(uid) && !(('studentType' in resource.data) && resource.data.studentType == 'remote') &&
+        !('studentType' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('admittedBy' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('status' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('keyStage' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('year' in request.resource.data.diff(resource.data).affectedKeys()) &&
@@ -286,10 +396,10 @@ service cloud.firestore {
     // HOMEWORK
     // =====================================================
     match /homework/{id} {
-      allow read: if isSignedIn();
+      allow read: if notRemote();
       allow create: if isAdmin();
-      allow update, delete: if isAdmin() ||
-        tutorMayManageTask('homework', resource.data.tutorId, id);
+      // Tutors no longer edit or delete admin-authored homework.
+      allow update, delete: if isAdmin();
     }
 
     // =====================================================
@@ -322,10 +432,10 @@ service cloud.firestore {
     // =====================================================
     match /exams/{id} {
       allow read: if isAdmin() || isTutor() ||
-        (isSignedIn() && 'status' in resource.data && resource.data.status == 'Published');
+        (notRemote() && 'status' in resource.data && resource.data.status == 'Published');
       allow create: if isAdmin();
-      allow update, delete: if isAdmin() ||
-        tutorMayManageTask('exam', resource.data.tutorId, id);
+      // Tutors no longer edit or delete admin-authored exams.
+      allow update, delete: if isAdmin();
     }
 
     // =====================================================
@@ -345,17 +455,17 @@ service cloud.firestore {
     // NOTES / MATERIALS
     // =====================================================
     match /notes/{id} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin() || isTutor();
-      allow update, delete: if isAdmin() ||
-        (isTutor() && resource.data.postedById == request.auth.uid);
+      allow read: if notRemote();
+      // Learning materials are admin-authored; tutors can no longer create them.
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     // =====================================================
     // NOTIFICATIONS
     // =====================================================
     match /notifications/{id} {
-      allow read: if isSignedIn();
+      allow read: if notRemote();
       allow create: if isAdmin() || isTutor();
       allow update, delete: if isAdmin() ||
         (isTutor() && resource.data.postedById == request.auth.uid);
@@ -365,7 +475,7 @@ service cloud.firestore {
     // TIMETABLES (legacy)
     // =====================================================
     match /timetables/{id} {
-      allow read: if isSignedIn();
+      allow read: if notRemote();
       allow create: if isAdmin() || isTutor();
       allow update, delete: if isAdmin() ||
         (isTutor() && resource.data.postedById == request.auth.uid);
@@ -389,7 +499,7 @@ service cloud.firestore {
     // LIVE CLASSES
     // =====================================================
     match /liveClasses/{id} {
-      allow read: if isSignedIn();
+      allow read: if notRemote();
       allow create: if isAdmin() ||
         (isTutor() && request.resource.data.hostId == request.auth.uid);
       allow update: if isAdmin() ||
@@ -441,6 +551,18 @@ service cloud.firestore {
         && request.resource.data.targetTutorId.size() > 0
         && studentHasTutorId(request.auth.uid, request.resource.data.targetTutorId);
 
+      // Remote students raise tickets with the Studio Desk (admins).
+      allow create: if remoteActive()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.targetAdmin == true
+        && request.resource.data.status == 'Open'
+        && request.resource.data.subject is string && request.resource.data.subject.size() > 0
+        && request.resource.data.subject.size() <= 200
+        && request.resource.data.message is string && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 5000
+        && request.resource.data.keys().hasOnly(['studentId', 'studentName', 'studentEmail', 'studentType',
+             'keyStage', 'targetAdmin', 'subject', 'reference', 'message', 'status', 'reply', 'createdAt']);
+
       allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
       allow read: if isAdmin()
         || (isSignedIn() && ('targetTutorId' in resource.data)
@@ -461,7 +583,7 @@ service cloud.firestore {
     // =====================================================
     match /activities/{id} {
       allow read: if isAdmin() || isTutor() ||
-        (isSignedIn() && 'status' in resource.data && resource.data.status == 'Published');
+        (notRemote() && 'status' in resource.data && resource.data.status == 'Published');
       allow create: if isAdmin() ||
         (isTutor() && request.resource.data.ownerId == request.auth.uid);
       allow update, delete: if isAdmin() ||
@@ -475,10 +597,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     match /activityAssignments/{id} {
-      allow read: if isSignedIn();
+      allow read: if notRemote();
       allow write: if isAdmin() ||
         (isTutor() && (resource == null || resource.data.ownerId == request.auth.uid) &&
           request.resource.data.ownerId == request.auth.uid);
+    }
+
+    // =====================================================
+    // PUBLICATION AUDIT TRAIL (written by Cloud Functions only)
+    // =====================================================
+    match /publications/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // =====================================================
@@ -564,25 +694,17 @@ service cloud.firestore {
         allow delete: if isAdmin();
 
         match /lessons/{lid} {
-          allow read: if isSignedIn();
+          allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesLesson(cid) || parentSeesLesson(cid);
           allow create: if isAdmin();
           allow update: if isAdmin();
           allow delete: if isAdmin();
         }
 
         match /assignments/{aid} {
-          allow read: if isSignedIn();
-          allow create: if isAdmin() ||
-            (classTutorMay(classroomData(cid)) &&
-              request.resource.data.tutorId == request.auth.uid &&
-              validWorkDoc(request.resource.data));
-          allow update: if isAdmin() ||
-            (classTutorMay(classroomData(cid)) &&
-              resource.data.tutorId == request.auth.uid &&
-              request.resource.data.tutorId == resource.data.tutorId &&
-              validWorkDoc(request.resource.data));
-          allow delete: if isAdmin() ||
-            (classTutorMay(classroomData(cid)) && resource.data.tutorId == request.auth.uid);
+          allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesWork(cid) || parentSeesWork(cid);
+          // Assignments are prepared and posted by the Studio Desk only.
+          // Tutors cannot create, edit or delete them (they grade submissions).
+          allow create, update, delete: if isAdmin();
 
           match /submissions/{sid} {
             allow read: if isAdmin() ||
@@ -591,6 +713,7 @@ service cloud.firestore {
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
+              (!isRemoteStudent() || remoteActive()) &&
               classStudentMay(classroomData(cid)) &&
               forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/assignments/$(aid)).data);
             allow update: if isAdmin() ||
@@ -602,7 +725,7 @@ service cloud.firestore {
         }
 
         match /exams/{eid} {
-          allow read: if isSignedIn();
+          allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesExam(cid) || parentSeesExam(cid);
           allow create, delete: if isAdmin();
           allow update: if isAdmin();
 
@@ -613,6 +736,7 @@ service cloud.firestore {
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
+              (!isRemoteStudent() || remoteActive()) &&
               classStudentMay(classroomData(cid)) &&
               get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.status == 'Published' &&
               get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.examMode == 'pdf' &&
@@ -628,7 +752,7 @@ service cloud.firestore {
 
       // Flat exams (classrooms/{cid}/exams/{eid})
       match /exams/{eid} {
-        allow read: if isSignedIn();
+        allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesExam(cid) || parentSeesExam(cid);
 
         allow create: if isAdmin() &&
           request.resource.data.subjectId == classroomData(cid).subjectId &&
@@ -651,6 +775,8 @@ service cloud.firestore {
 
           allow create: if newFlatExamSubmission(studentId) &&
             classStudentMay(classroomData(cid)) &&
+            (!isRemoteStudent() || remoteActive()) &&
+            postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data) &&
             flatExamWindowOpen(
               get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
             );

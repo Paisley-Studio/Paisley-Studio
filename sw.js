@@ -1,7 +1,7 @@
 // Paisley Studio Service Worker
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v1';
+const CACHE_NAME = 'paisley-studio-v2'; // bumped: new audience-aware client code must not be served from the old cache
 const CACHE_URLS = ['./', './index.html'];
 
 self.addEventListener('install', event => {

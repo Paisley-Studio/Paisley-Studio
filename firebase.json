@@ -61,6 +61,14 @@
       {
         "source": "/student",
         "destination": "/student/index.html"
+      },
+      {
+        "source": "/remote",
+        "destination": "/remote/index.html"
+      },
+      {
+        "source": "/remote/dashboard",
+        "destination": "/remote/dashboard.html"
       }
     ]
   },

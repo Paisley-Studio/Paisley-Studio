@@ -82,6 +82,83 @@ async function addStudentNotice(recipientId, recipientType, fields) {
   });
 }
 
+
+/* ---------------------------------------------------------
+   AUDIENCE MODEL
+   -----------------------------------------------------------
+   Content (lessons, assignments, exams) is authored ONCE by the
+   Studio Desk. Who may see it is a separate, per-audience flag:
+
+     audiences: { online: bool, remote: bool, tutors: bool }
+     publication: { <audience>: { publishedAt, publishedBy, ... } }
+
+   A student's audience comes from students/{uid}.studentType
+   ("remote" or absent/"online"). Records written before this model
+   existed carry no `audiences` field; they are treated as posted to
+   online students and tutors only (never to remote students) until the
+   backfillAudiences migration stamps them explicitly.
+--------------------------------------------------------- */
+const AUDIENCES = ["online", "remote", "tutors"];
+
+function studentAudience(student) {
+  return student && student.studentType === "remote" ? "remote" : "online";
+}
+
+function itemPostedTo(item, audience) {
+  const a = item && item.audiences;
+  if (!a || typeof a !== "object") return audience === "online" || audience === "tutors";
+  return a[audience] === true;
+}
+
+// Can this student see this item at all (before recipient scoping)?
+function studentMaySee(student, item) {
+  if (itemPostedTo(item, studentAudience(student))) return true;
+  return Array.isArray(item && item.releasedTo) && item.releasedTo.indexOf(student.id) !== -1;
+}
+
+
+/* Is `item` currently visible to `audience`?  `liveStatus` is the status an
+   item needs before anyone can see it ("published" for lessons, "Published"
+   for exams, null for assignments, which have no status). Triggers compare
+   before/after visibility so a notification fires exactly when an item
+   BECOMES visible to an audience — and never for the migration, which only
+   restates what was already true. */
+function isVisibleTo(item, audience, liveStatus) {
+  if (!item) return false;
+  if (liveStatus && String(item.status || "") !== liveStatus) return false;
+  return itemPostedTo(item, audience);
+}
+
+/* Create a notification exactly once, keyed by a deterministic id, so a
+   retried or duplicated trigger can never notify the same person twice.
+   Returns true only for the call that actually created it. */
+async function notifyOnce(docId, recipientId, recipientType, fields) {
+  if (!recipientId || !docId) return false;
+  try {
+    await db().collection("personalNotifications").doc(docId).create({
+      recipientId,
+      recipientType,
+      type: fields.type,
+      title: fields.title,
+      message: fields.message,
+      relatedEntity: fields.relatedEntity || "",
+      relatedEntityId: fields.relatedEntityId || "",
+      ...(fields.extra || {}),
+      read: false,
+      emailSent: !!fields.emailSent,
+      createdAt: FV().serverTimestamp()
+    });
+    return true;
+  } catch (e) {
+    if (e && (e.code === 6 || /ALREADY_EXISTS/i.test(String(e.message)))) return false;
+    throw e;
+  }
+}
+
+function stableId(...parts) {
+  return require("crypto").createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 28);
+}
+
 /* ---------------------------------------------------------
    Who is in an assignment / exam?
    recipients[] non-empty -> exactly those students.
@@ -93,11 +170,12 @@ async function classroomOf(cid) {
   return snap.exists ? { id: snap.id, ...snap.data() } : null;
 }
 
-async function resolveStudents(classroom, recipients) {
+async function resolveStudents(classroom, recipients, item) {
   const out = [];
+  const keep = (s) => String(s.status || "").toLowerCase() !== "suspended" && (!item || studentMaySee(s, item));
   if (Array.isArray(recipients) && recipients.length) {
     const snaps = await Promise.all(recipients.map((uid) => db().collection("students").doc(uid).get()));
-    snaps.forEach((s) => { if (s.exists) out.push({ id: s.id, ...s.data() }); });
+    snaps.forEach((s) => { if (s.exists) { const row = { id: s.id, ...s.data() }; if (keep(row)) out.push(row); } });
     return out;
   }
   if (!classroom) return out;
@@ -109,6 +187,7 @@ async function resolveStudents(classroom, recipients) {
   snap.forEach((d) => {
     const s = d.data();
     if (String(s.status || "").toLowerCase() === "pending") return;
+    if (!keep({ id: d.id, ...s })) return;
     const subs = Array.isArray(s.subjects) ? s.subjects.map(subjectKey) : [];
     if (!subs.includes(subjectKey(classroom.subjectId))) return;
     if (s.year != null && classroom.year != null && Number(s.year) !== Number(classroom.year)) return;
@@ -178,5 +257,6 @@ module.exports = {
   LOCATION, TIME_ZONE, SMTP_SECRETS, sendEmail,
   db, FV, toDate, subjectKey, notify, addStudentNotice,
   classroomOf, resolveStudents, parentsOfStudent,
+  AUDIENCES, studentAudience, itemPostedTo, isVisibleTo, studentMaySee, notifyOnce, stableId,
   pathFromDownloadUrl, downloadStoredFile, saveStoredPdf, cidTidFromRef
 };

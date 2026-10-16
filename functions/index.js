@@ -92,6 +92,19 @@ exports.generateUnattendedWorkReport = deadlines.generateUnattendedWorkReport;
 exports.examReminderToParents        = deadlines.examReminderToParents;
 exports.runDeadlineJob               = deadlines.runDeadlineJob;
 
+const publishing = require("./publishing");
+exports.publishClassroomContent       = publishing.publishClassroomContent;
+exports.tutorReleaseWork              = publishing.tutorReleaseWork;
+exports.backfillAudiences             = publishing.backfillAudiences;
+exports.onAssignmentAudienceChanged   = publishing.onAssignmentAudienceChanged;
+exports.onNestedExamAudienceChanged   = publishing.onNestedExamAudienceChanged;
+
+const remote = require("./remote");
+exports.admitRemoteStudent            = remote.admitRemoteStudent;
+exports.resendRemoteInvite            = remote.resendRemoteInvite;
+exports.setRemoteStudentStatus        = remote.setRemoteStudentStatus;
+exports.onRemoteTicketCreated         = remote.onRemoteTicketCreated;
+
 const work = require("./work");
 exports.onAssignmentPosted           = work.onAssignmentPosted;
 exports.onExamPostedOrPublished      = work.onExamPostedOrPublished;
@@ -247,29 +260,7 @@ async function requireAdminCaller(request) {
   return request.auth.uid;
 }
 
-async function rebuildParentAccess(parentUid) {
-  const db = admin.firestore();
-  const links = await db.collection("parentStudentLinks").where("parentUid", "==", parentUid).get();
-  const slots = new Set();
-  for (const link of links.docs) {
-    const studentUid = link.data().studentUid;
-    if (!studentUid) continue;
-    const stu = await db.collection("students").doc(studentUid).get();
-    if (!stu.exists) continue;
-    const s = stu.data() || {};
-    if (!s.keyStage) continue;
-    const subjects = Array.isArray(s.subjects) ? s.subjects.filter(Boolean) : [];
-    if (!subjects.length) slots.add(s.keyStage + "|*");
-    else subjects.forEach((id) => slots.add(s.keyStage + "|" + id));
-  }
-  const ref = db.collection("parentAccess").doc(parentUid);
-  if (!slots.size) { await ref.delete().catch(() => {}); return 0; }
-  await ref.set({
-    slots: Array.from(slots).sort(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  });
-  return slots.size;
-}
+const { rebuildParentAccess } = require("./parent-access");
 
 exports.syncParentAccessOnLink = onDocumentWritten(
   { document: "parentStudentLinks/{linkId}", region: LOCATION },
@@ -286,7 +277,7 @@ exports.syncParentAccessOnStudent = onDocumentWritten(
   async (event) => {
     const before = event.data.before.exists ? event.data.before.data() : null;
     const after = event.data.after.exists ? event.data.after.data() : null;
-    const sig = (d) => d ? JSON.stringify([d.keyStage || "", (d.subjects || []).slice().sort()]) : "deleted";
+    const sig = (d) => d ? JSON.stringify([d.keyStage || "", (d.subjects || []).slice().sort(), d.studentType || "online"]) : "deleted";
     if (sig(before) === sig(after)) return;
     const links = await admin.firestore().collection("parentStudentLinks")
       .where("studentUid", "==", event.params.studentId).get();
@@ -450,7 +441,7 @@ exports.onTutorCreated = onDocumentCreated(
     if (!tutor.email) return;
     if (tutor.welcomeEmailSent === true) return;
     let resetLink = null;
-    try { resetLink = await admin.auth().generatePasswordResetLink(tutor.email); }
+    try { resetLink = await admin.auth().generatePasswordResetLink(tutor.email, notifications.actionSettings("tutor")); }
     catch (e) { console.error("onTutorCreated: could not generate reset link:", e); }
     const t = templates.tutorWelcome({ tutor, password: null });
     const html = resetLink
@@ -540,7 +531,7 @@ exports.onTicketReplied = onDocumentUpdated(
           recipientId: ticket.studentId,
           recipientType: "student",
           type: "ticket_reply",
-          title: "Your tutor replied",
+          title: ticket.targetAdmin ? "Paisley Studio replied" : "Your tutor replied",
           message: `Reply on ticket: ${ticket.subject || ""}`.trim(),
           relatedEntity: "tickets", relatedEntityId: event.params.ticketId,
           read: false, emailSent: false,
@@ -620,22 +611,28 @@ exports.onFlatExamPosted = onDocumentWritten(
     const after  = event.data.after.exists  ? event.data.after.data()  : null;
     if (!after) return;
 
-    const nowPublished = String(after.status || "") === "Published";
-    if (!nowPublished) return;
-    const wasPublished = before && String(before.status || "") === "Published";
-    if (wasPublished) return;
+    // Audience-aware: act only on the audiences this exam has JUST become
+    // visible to (online students / remote students / tutors). Each audience
+    // is claimed once, so a retry or a later post to another audience never
+    // re-notifies people who were already told.
+    const WS = require("./work-shared");
+    const becameVisible = (aud) => WS.isVisibleTo(after, aud, "Published") && !WS.isVisibleTo(before, aud, "Published");
+    const wanted = ["online", "remote", "tutors"].filter(becameVisible);
+    if (!wanted.length) return;
 
-    const claimed = await admin.firestore().runTransaction(async (tx) => {
+    const claimedAuds = await admin.firestore().runTransaction(async (tx) => {
       const snap = await tx.get(event.data.after.ref);
-      if (!snap.exists) return false;
+      if (!snap.exists) return [];
       const d = snap.data() || {};
-      if (d.notificationsSentAt) return false;
-      tx.update(event.data.after.ref, {
-        notificationsSentAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return true;
+      const sent = d.notificationsSent || {};
+      const todo = wanted.filter((a) => sent[a] !== true);
+      if (!todo.length) return [];
+      const patch = { notificationsSentAt: admin.firestore.FieldValue.serverTimestamp() };
+      todo.forEach((a) => { patch["notificationsSent." + a] = true; });
+      tx.update(event.data.after.ref, patch);
+      return todo;
     });
-    if (!claimed) return;
+    if (!claimedAuds.length) return;
 
     const { cid, eid } = event.params;
     const exam = after;
@@ -684,6 +681,8 @@ exports.onFlatExamPosted = onDocumentWritten(
       const subjects = Array.isArray(student.subjects) ? student.subjects : [];
       if (!subjects.includes(exam.subjectId)) continue;
       if (wantYear != null && student.year != null && Number(student.year) !== wantYear) continue;
+      if (String(student.status || "").toLowerCase() === "suspended") continue;
+      if (claimedAuds.indexOf(WS.studentAudience(student)) === -1) continue;
 
       const studentId = stuDoc.id;
 
@@ -745,7 +744,7 @@ exports.onFlatExamPosted = onDocumentWritten(
        exists so they can mark the hand-ins once the window opens.
     --------------------------------------------------------- */
     try {
-      const tutorsSnap = await db.collection("tutorAccounts").get();
+      const tutorsSnap = claimedAuds.indexOf("tutors") === -1 ? { docs: [] } : await db.collection("tutorAccounts").get();
       for (const tutDoc of tutorsSnap.docs) {
         const tutor = tutDoc.data() || {};
         if (String(tutor.status || "").toLowerCase() === "suspended") continue;

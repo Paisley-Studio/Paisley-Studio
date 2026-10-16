@@ -136,6 +136,131 @@
       --error: #E74C3C;
     }
 
+        /* ===== SLIDER CTA ===== */
+    .slider-cta {
+      margin-top: 2.6rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.1rem;
+    }
+    .slider-cta-line {
+      color: #fff;
+      font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin: 0;
+      position: relative;
+      display: inline-block;
+      padding: 0 0.4rem;
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.25);
+    }
+    .slider-cta-line::after {
+      content: '';
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      bottom: -6px;
+      height: 2px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      opacity: 0.85;
+    }
+    .slider-cta-btn {
+      background: var(--gold);
+      color: var(--brand-deep);
+      border: none;
+      padding: 1rem 2.4rem;
+      font-size: 0.9rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-radius: 50px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      box-shadow:
+        0 0 0 0 rgba(245, 200, 66, 0.55),
+        0 12px 30px rgba(0, 0, 0, 0.25);
+      position: relative;
+      overflow: hidden;
+      animation: ctaPulse 2.6s ease-in-out infinite;
+      transition: transform .35s cubic-bezier(.4,0,.2,1),
+                  box-shadow .35s cubic-bezier(.4,0,.2,1),
+                  background .35s ease,
+                  color .35s ease;
+    }
+    .slider-cta-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -60%;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(
+        115deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.55) 50%,
+        transparent 100%
+      );
+      transform: skewX(-20deg);
+      animation: ctaShine 3.4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .slider-cta-btn:hover {
+      background: var(--gold-soft);
+      color: var(--brand-deep);
+      transform: translateY(-3px) scale(1.03);
+      box-shadow:
+        0 0 0 6px rgba(245, 200, 66, 0.14),
+        0 18px 44px rgba(245, 200, 66, 0.38);
+      animation-play-state: paused;
+    }
+    .slider-cta-btn i {
+      transition: transform .35s cubic-bezier(.4,0,.2,1);
+    }
+    .slider-cta-btn:hover i {
+      transform: translateX(3px) rotate(-8deg);
+    }
+
+    @keyframes ctaPulse {
+      0%, 100% {
+        box-shadow:
+          0 0 0 0 rgba(245, 200, 66, 0.55),
+          0 12px 30px rgba(0, 0, 0, 0.25);
+      }
+      50% {
+        box-shadow:
+          0 0 0 10px rgba(245, 200, 66, 0),
+          0 12px 30px rgba(0, 0, 0, 0.25);
+      }
+    }
+    @keyframes ctaShine {
+      0%   { left: -60%; }
+      55%  { left: 130%; }
+      100% { left: 130%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slider-cta-btn,
+      .slider-cta-btn::before {
+        animation: none !important;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .slider-cta {
+        margin-top: 2rem;
+      }
+      .slider-cta-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 0.95rem 1.6rem;
+        font-size: 0.82rem;
+      }
+    }
+
     /* ===== SUCCESS MESSAGE ===== */
     .form-success {
       display: none;
@@ -1411,6 +1536,139 @@
     @media(max-width:340px){
       .header-cta, .main-nav { display:none; }
     }
+
+    /* ===== INFINITY SLIDER ===== */
+    .slider-section {
+      background: var(--brand-deep);
+      padding: 2.5rem 0;
+      overflow: hidden;
+      position: relative;
+      border-top: 3px solid var(--brand);
+      border-bottom: 3px solid var(--brand);
+    }
+    .slider-section .section-label {
+      color: var(--brand-soft);
+    }
+    .slider-section .section-label i {
+      color: var(--gold);
+    }
+    .slider-section h2 {
+      color: #fff;
+    }
+    .slider-section .section-sub {
+      color: rgba(255,255,255,0.7);
+    }
+
+    .slider-wrapper {
+      overflow: hidden;
+      position: relative;
+      margin-top: 2rem;
+      width: 100%;
+    }
+    .slider-wrapper::before,
+    .slider-wrapper::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 80px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .slider-wrapper::before {
+      left: 0;
+      background: linear-gradient(to right, var(--brand-deep), transparent);
+    }
+    .slider-wrapper::after {
+      right: 0;
+      background: linear-gradient(to left, var(--brand-deep), transparent);
+    }
+
+    .infinity-track {
+      display: flex;
+      gap: 2rem;
+      width: max-content;
+      animation: infinityScroll 110s linear infinite;
+      padding: 0.5rem 0;
+    }
+    .infinity-track:hover {
+      animation-play-state: paused;
+    }
+
+    .result-card {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+      padding: 1.2rem 1.8rem;
+      min-width: 200px;
+      border: 1px solid rgba(255,255,255,0.1);
+      transition: all .3s ease;
+      flex-shrink: 0;
+      text-align: center;
+    }
+    .result-card:hover {
+      background: rgba(255,255,255,0.15);
+      transform: scale(1.05);
+      border-color: var(--brand-soft);
+    }
+    .result-card .flag-img {
+      width: 48px;
+      height: 32px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      margin: 0 auto 0.3rem;
+      display: block;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .result-card .student-country {
+      color: rgba(255,255,255,0.5);
+      font-size: .65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-top: -0.1rem;
+    }
+    .result-card .student-name {
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-top: 0.2rem;
+    }
+    .result-card .student-stage {
+      color: var(--brand-soft);
+      font-size: .7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-top: 0.3rem;
+    }
+    .result-card .student-subject {
+      color: rgba(255,255,255,0.6);
+      font-size: .75rem;
+    }
+    .result-card .student-result {
+      color: var(--gold);
+      font-size: 1.3rem;
+      font-weight: 800;
+      margin-top: 0.2rem;
+    }
+    @keyframes infinityScroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @media(prefers-reduced-motion:reduce){ .infinity-track { animation: none !important; } }
+    @media(max-width:600px){
+      .result-card { min-width: 160px; padding: 1rem 1.2rem; }
+      .result-card .flag-img { width: 40px; height: 27px; }
+      .result-card .student-result { font-size: 1.1rem; }
+    }
+    @media(max-width:480px){
+      .result-card { min-width: 140px; padding: .8rem 1rem; }
+      .result-card .flag-img { width: 36px; height: 24px; }
+      .result-card .student-name { font-size: .85rem; }
+      .result-card .student-country { font-size: .6rem; }
+    }
   </style>
 </head>
 <body>
@@ -1880,6 +2138,32 @@
     </div>
   </section>
 
+    <!-- ===== INFINITY SLIDER ===== -->
+  <section class="slider-section">
+    <div class="container">
+      <div class="reveal">
+        <span class="section-label"><i class="fas fa-graduation-cap"></i> Student Results</span>
+        <h2 class="section-heading">See what our students achieve.</h2>
+        <p class="section-sub">Real results from real students around the world.</p>
+      </div>
+    </div>
+
+    <div class="slider-wrapper">
+      <div class="infinity-track" id="sliderTrack">
+        <!-- Results will be rendered by JavaScript -->
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="slider-cta reveal">
+        <p class="slider-cta-line">What are you waiting for?</p>
+        <a href="enrolment.html" class="btn slider-cta-btn">
+          <i class="fas fa-rocket"></i> Enrol Today
+        </a>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <!-- ===== FOOTER ===== -->
@@ -2005,6 +2289,74 @@ window.addEventListener('resize', () => {
 // ============================================================
 // SCROLL REVEAL
 // ============================================================
+// ============================================================
+// STUDENT RESULTS SLIDER (same data/markup as why-paisley.html)
+// ============================================================
+(function(){
+const studentResults = [
+  { name: 'Amina K.', flag: 'ke', country: 'Kenya', stage: 'IGCSE', subject: 'Mathematics', result: 'A*' },
+  { name: 'James M.', flag: 'gb', country: 'United Kingdom', stage: 'A-Level', subject: 'Physics', result: 'A*' },
+  { name: 'Sarah O.', flag: 'ng', country: 'Nigeria', stage: 'IGCSE', subject: 'English', result: 'A' },
+  { name: 'David W.', flag: 'ke', country: 'Kenya', stage: 'A-Level', subject: 'Chemistry', result: 'A' },
+  { name: 'Emily R.', flag: 'us', country: 'United States', stage: 'IGCSE', subject: 'Biology', result: 'A*' },
+  { name: 'Michael C.', flag: 'ae', country: 'UAE', stage: 'A-Level', subject: 'Economics', result: 'A*' },
+  { name: 'Grace N.', flag: 'ke', country: 'Kenya', stage: 'IGCSE', subject: 'History', result: 'A' },
+  { name: 'Daniel K.', flag: 'tz', country: 'Tanzania', stage: 'A-Level', subject: 'Mathematics', result: 'A' },
+  { name: 'Sophie L.', flag: 'fr', country: 'France', stage: 'IGCSE', subject: 'French', result: 'A*' },
+  { name: 'Thomas B.', flag: 'de', country: 'Germany', stage: 'A-Level', subject: 'Geography', result: 'B' },
+  { name: 'Olivia P.', flag: 'ke', country: 'Kenya', stage: 'IGCSE', subject: 'Business Studies', result: 'A' },
+  { name: 'William K.', flag: 'ug', country: 'Uganda', stage: 'A-Level', subject: 'Psychology', result: 'A*' },
+  { name: 'Zara H.', flag: 'ke', country: 'Kenya', stage: 'IGCSE', subject: 'Computer Science', result: 'A*' },
+  { name: 'Ethan M.', flag: 'gb', country: 'United Kingdom', stage: 'A-Level', subject: 'Further Maths', result: 'A' },
+  { name: 'Maya S.', flag: 'in', country: 'India', stage: 'IGCSE', subject: 'Art & Design', result: 'A' },
+  { name: 'Alex T.', flag: 'ke', country: 'Kenya', stage: 'A-Level', subject: 'Biology', result: 'A*' },
+  { name: 'Priya R.', flag: 'ke', country: 'Kenya', stage: 'IGCSE', subject: 'Mathematics', result: 'A*' },
+  { name: 'John D.', flag: 'us', country: 'United States', stage: 'A-Level', subject: 'History', result: 'A' },
+  { name: 'Faith M.', flag: 'ke', country: 'Kenya', stage: 'IGCSE', subject: 'English Literature', result: 'A' },
+  { name: 'Peter N.', flag: 'ke', country: 'Kenya', stage: 'A-Level', subject: 'Chemistry', result: 'A*' },
+  { name: 'Fatima A.', flag: 'ae', country: 'UAE', stage: 'IGCSE', subject: 'Mathematics', result: 'A*' },
+  { name: 'Kwame A.', flag: 'gh', country: 'Ghana', stage: 'A-Level', subject: 'Economics', result: 'A' },
+  { name: 'Liam O.', flag: 'ie', country: 'Ireland', stage: 'IGCSE', subject: 'English', result: 'A*' },
+  { name: 'Chloe W.', flag: 'ca', country: 'Canada', stage: 'A-Level', subject: 'Psychology', result: 'A*' },
+  { name: 'Said A.', flag: 'ke', country: 'Kenya', stage: 'IGCSE', subject: 'Physics', result: 'A' },
+  { name: 'Isabella M.', flag: 'it', country: 'Italy', stage: 'A-Level', subject: 'Art & Design', result: 'A' },
+  { name: 'Omar H.', flag: 'eg', country: 'Egypt', stage: 'IGCSE', subject: 'Mathematics', result: 'A*' },
+  { name: 'Naomi K.', flag: 'ke', country: 'Kenya', stage: 'A-Level', subject: 'History', result: 'A' },
+  { name: 'Carlos G.', flag: 'es', country: 'Spain', stage: 'IGCSE', subject: 'Spanish', result: 'A*' },
+  { name: 'Sarah J.', flag: 'ke', country: 'Kenya', stage: 'A-Level', subject: 'Business Studies', result: 'A' },
+];
+
+function renderSlider() {
+  const track = document.getElementById('sliderTrack');
+  let html = '';
+  
+  // Duplicate results to ensure seamless infinite scroll (4x for smoothness)
+  const allResults = [...studentResults, ...studentResults, ...studentResults, ...studentResults];
+  
+  allResults.forEach(student => {
+    html += `
+      <div class="result-card">
+        <img src="https://flagcdn.com/w80/${student.flag}.png" 
+             alt="${student.country} flag" 
+             class="flag-img"
+             loading="lazy"
+             width="48"
+             height="32">
+        <div class="student-country">${student.country}</div>
+        <div class="student-name">${student.name}</div>
+        <div class="student-stage">${student.stage}</div>
+        <div class="student-subject">${student.subject}</div>
+        <div class="student-result">${student.result}</div>
+      </div>
+    `;
+  });
+  
+  track.innerHTML = html;
+}
+
+renderSlider();
+})();
+
 const revealElements = document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-scale, .reveal-fade, .reveal-rotate');
 
 const revealObserver = new IntersectionObserver((entries) => {

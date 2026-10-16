@@ -60,7 +60,9 @@
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js"></script>
 <script src="../js/classroom/work-helpers.js"></script>
+<script src="../js/classroom/publish-helpers.js"></script>
 <script src="../js/classroom/ink-grader.js"></script>
+<script src="../js/admin/remote-students.js"></script>
 
 <style>
   :root{
@@ -404,6 +406,7 @@
 
       <div class="sidebar-section-label">Learning Management</div>
       <button class="nav-item" data-view="studentmgmt" type="button"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Student Management <span class="nav-badge" id="navCountStudents">0</span></button>
+      <button class="nav-item" data-view="remotestudents" type="button"><i class="fas fa-house-laptop" aria-hidden="true"></i> Remote Students</button>
       <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard" aria-hidden="true"></i> Classroom <span class="nav-badge" id="navCountClassroom" style="display:none;">0</span></button>
       <button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open" aria-hidden="true"></i> Homework Management <span class="nav-badge" id="navCountHw" style="display:none;">0</span></button>
       <button class="nav-item" data-view="exmgmt" type="button"><i class="fas fa-file-pen" aria-hidden="true"></i> Exam Management <span class="nav-badge" id="navCountEx" style="display:none;">0</span></button>
@@ -649,6 +652,7 @@
       </section>
 
       <section class="view" id="view-classroom"><div id="classroomHost"></div></section>
+      <section class="view" id="view-remotestudents"><div id="remoteHost"></div></section>
       <section class="view" id="view-hwmgmt"><div id="hwHost"></div></section>
       <section class="view" id="view-exmgmt"><div id="exHost"></div></section>
 
@@ -1264,6 +1268,7 @@ const titles = {
   classroom: ['Classroom', 'Topics, lessons and materials for every subject'],
   hwmgmt: ['Homework Management', 'Assignments by subject and topic, with ink grading'],
   exmgmt: ['Exam Management', 'AI-tracked and PDF-upload exams by subject and topic'],
+  remotestudents: ['Remote Students', 'Admissions, parents, remote classroom delivery, submissions and grading'],
   studentmgmt: ['Student Management', 'Accounts, results, homework, exams and submissions'],
   content: ['Timetable & Notices', 'Announcements and timetables by Key Stage'],
   liveclasses: ['Live Classes', 'Schedule and run Jitsi Meet sessions'],
@@ -1286,6 +1291,21 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
 document.getElementById('menuToggle').addEventListener('click', ()=>{
   document.getElementById('sidebar').classList.toggle('open');
 });
+
+// Remote Students: remote admissions, parents, delivery monitoring and grading.
+// Mounted fresh each time the tab opens so listeners never stack.
+(function(){
+  let remoteInstance = null;
+  document.querySelector('.nav-item[data-view="remotestudents"]').addEventListener('click', ()=>{
+    const u = firebase.auth().currentUser; if(!u) return;
+    if(remoteInstance && remoteInstance.destroy) remoteInstance.destroy();
+    const host = document.getElementById('remoteHost');
+    host.innerHTML = '';
+    const box = document.createElement('div');
+    host.appendChild(box);
+    remoteInstance = RemoteAdmin.mount(box, { uid: u.uid, name: 'Studio Desk' });
+  });
+})();
 
 // Classroom: full admin control. Mounted each time the tab opens (fresh container
 // so listeners never stack).
@@ -1566,7 +1586,7 @@ function renderTicketTable(){
     const status = t.status || 'Open';
     return `<tr>
       <td><div class="cell-name">${escapeHtml(t.studentName||'—')}</div><div class="cell-sub">${escapeHtml(t.studentEmail||'')}</div></td>
-      <td>${escapeHtml(t.subject||'—')}</td>
+      <td>${escapeHtml(t.subject||'—')}${t.studentType==='remote'?' <span class="badge b-plain">Remote</span>':''}</td>
       <td style="max-width:260px;"><div class="cell-sub" style="color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.message||'')}</div></td>
       <td><span class="badge ${statusBadgeClass(status)}">${escapeHtml(status)}</span></td>
       <td>${fmtDate(t.date)}</td>
@@ -1716,9 +1736,10 @@ function renderStudentMgmt(){
   renderGrantTable();
   renderParentMgmt();
 
-  const total = DB.students.length;
-  const pending = DB.students.filter(s=>s.status==='Pending').length;
-  const active = DB.students.filter(s=>s.status==='Active').length;
+  const normalStudents = DB.students.filter(s=>!isRemoteStu(s));
+  const total = normalStudents.length;
+  const pending = normalStudents.filter(s=>s.status==='Pending').length;
+  const active = normalStudents.filter(s=>s.status==='Active').length;
   document.getElementById('statStuTotal').textContent = total;
   document.getElementById('statStuPending').textContent = pending;
   document.getElementById('statStuActive').textContent = active;
@@ -1736,9 +1757,11 @@ function renderStudentMgmt(){
   if(badge) badge.textContent = activeGrants;
 }
 
+// Normal vs remote is decided by the stored studentType field, never by the page visited.
+const isRemoteStu = s => s && s.studentType === 'remote';
 function renderStuTable(){
   const body = document.getElementById('stuTableBody');
-  let list = DB.students;
+  let list = DB.students.filter(s=>!isRemoteStu(s));
   list = list.filter(r=>ksMatch(r, stuKSFilter));
   if(stuFilter !== 'all') list = list.filter(s=>s.status===stuFilter);
   document.getElementById('stuCountText').textContent = list.length + ' record' + (list.length===1?'':'s');

@@ -31,6 +31,10 @@ exports.onAssignmentPosted = onDocumentCreated(
   async (event) => {
     const a = event.data.data() || {};
     if (a.migrated === true) return;
+    // New-model records carry `audiences`; they are announced by
+    // onAssignmentAudienceChanged when they are posted. Only legacy records
+    // (no audiences field) keep the old "notify on create" behaviour.
+    if (a.audiences && typeof a.audiences === "object") return;
     const { cid, tid, aid } = event.params;
     const classroom = await W.classroomOf(cid);
     // Firestore rules cannot check every recipient against enrolment, so it is enforced here:
@@ -42,7 +46,7 @@ exports.onAssignmentPosted = onDocumentCreated(
       if (!valid.length) { console.warn("onAssignmentPosted: no valid recipients, deleting", event.data.ref.path); await event.data.ref.delete(); return; }
       if (valid.length !== a.recipients.length) { await event.data.ref.update({ recipients: valid, recipientsSanitized: true }); a.recipients = valid; }
     }
-    const students = await W.resolveStudents(classroom, a.recipients);
+    const students = await W.resolveStudents(classroom, a.recipients, a);
     const dueAt = W.toDate(a.dueAt);
     for (const s of students) {
       if (s.email) {
@@ -74,10 +78,11 @@ exports.onExamPostedOrPublished = onDocumentWritten(
     const after = event.data.after.exists ? event.data.after.data() : null;
     const before = event.data.before.exists ? event.data.before.data() : null;
     if (!after || after.migrated === true) return;
+    if (after.audiences && typeof after.audiences === "object") return; // handled by onNestedExamAudienceChanged
     if (after.status !== "Published" || (before && before.status === "Published")) return;
     const { cid, tid, eid } = event.params;
     const classroom = await W.classroomOf(cid);
-    const students = await W.resolveStudents(classroom, after.recipients);
+    const students = await W.resolveStudents(classroom, after.recipients, after);
     const when = W.toDate(after.examDate);
     for (const s of students) {
       if (s.email) {

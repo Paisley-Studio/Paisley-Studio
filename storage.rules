@@ -138,11 +138,18 @@ service firebase.storage {
         request.resource.contentType.matches('video/.*')
       );
     }
+    // NOTE (audience enforcement): the Storage path does not contain the
+    // topic id, so Storage rules cannot look up a lesson's `audiences`
+    // flags. File download URLs are therefore only exposed inside Firestore
+    // documents that ARE audience-gated (see firestore.rules); reads here
+    // remain "signed in" and unguessable-token based, as before.
     match /classroom-files/{subjectId}/{classroomId}/{lessonId}/{fileName} {
       allow get: if isSignedIn();
       allow list: if false;
-      allow create, update: if (isAdmin() || classTutorFor(subjectId)) && classFileOk();
-      allow delete: if isAdmin() || classTutorFor(subjectId);
+      // Curriculum files (lesson resources, assignment/exam PDFs) are
+      // uploaded and removed by the Studio Desk only.
+      allow create, update: if isAdmin() && classFileOk();
+      allow delete: if isAdmin();
     }
 
 
@@ -162,8 +169,10 @@ service firebase.storage {
     match /classroom-files/{subjectId}/{classroomId}/exams/{examId}/{fileName} {
       allow get: if isSignedIn();
       allow list: if false;
-      allow create, update: if (isAdmin() || classTutorFor(subjectId)) && classFileOk();
-      allow delete: if isAdmin() || classTutorFor(subjectId);
+      // Curriculum files (lesson resources, assignment/exam PDFs) are
+      // uploaded and removed by the Studio Desk only.
+      allow create, update: if isAdmin() && classFileOk();
+      allow delete: if isAdmin();
     }
 
 

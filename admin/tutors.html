@@ -860,7 +860,7 @@ window.resetTutorPassword = (id) => {
   const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
   if(!t.email){ alert('This tutor has no email on file.'); return; }
   if(!confirm('Send a password reset email to ' + t.email + '?')) return;
-  auth.sendPasswordResetEmail(t.email)
+  auth.sendPasswordResetEmail(t.email, { url: window.location.origin + '/tutor/login.html' })
     .then(()=>alert('Password reset email sent to ' + t.email + '.'))
     .catch(err=>alert('Could not send the reset email: ' + err.message));
 };
