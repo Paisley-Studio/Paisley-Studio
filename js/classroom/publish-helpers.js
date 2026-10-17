@@ -83,7 +83,9 @@
       '.pb-review h4{margin:.2rem 0 .3rem;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-deep,#245F5A)}',
       '.pb-warn{background:rgba(232,163,61,.13);border:1px solid rgba(232,163,61,.4);border-radius:12px;padding:.6rem .8rem;font-size:.82rem;margin-bottom:.8rem}',
       '.pb-info{background:rgba(74,144,217,.1);border:1px solid rgba(74,144,217,.35);color:#2b6cad;border-radius:12px;padding:.6rem .8rem;font-size:.82rem;margin-bottom:.8rem}',
-      '.pb-list{max-height:220px;overflow:auto}'
+      '.pb-list{max-height:220px;overflow:auto}',
+      '.cr-filters{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem; align-items:center;}',
+      '.cr-filters select, .cr-filters input { min-width: 150px; }'
     ].join('\n');
     document.head.appendChild(st);
   }
@@ -363,10 +365,33 @@
       else if (a === 'choose') review(el.dataset.c);
     });
     root.addEventListener('change', function (e) {
-      if (e.target.dataset.p) { if (e.target.checked) S.selected[e.target.dataset.p] = true; else delete S.selected[e.target.dataset.p]; var n = root.querySelector('.pb-bar .n'); if (n) n.textContent = Object.keys(S.selected).length + ' selected'; var any = Object.keys(S.selected).length; ['menu', 'clear'].forEach(function (k) { var b = root.querySelector('[data-a="' + k + '"]'); if (b) b.disabled = !any; }); return; }
-      var f = e.target.dataset.f; if (!f) return;
+      if (e.target.dataset.p) { 
+        if (e.target.checked) S.selected[e.target.dataset.p] = true; 
+        else delete S.selected[e.target.dataset.p]; 
+        var n = root.querySelector('.pb-bar .n'); 
+        if (n) n.textContent = Object.keys(S.selected).length + ' selected'; 
+        var any = Object.keys(S.selected).length; 
+        ['menu', 'clear'].forEach(function (k) { 
+          var b = root.querySelector('[data-a="' + k + '"]'); 
+          if (b) b.disabled = !any; 
+        }); 
+        return; 
+      }
+      
+      var f = e.target.dataset.f; 
+      if (!f) return;
+      
       S.f[f] = e.target.value;
-      if (f === 'ks' || f === 'year' || f === 'subject') { if (f === 'ks') S.f.year = ''; render(); loadItems(); } else render();
+      
+      // If changing the main filters, we need to reload the items from Firestore
+      if (f === 'ks' || f === 'year' || f === 'subject') { 
+        if (f === 'ks') S.f.year = ''; 
+        render(); 
+        loadItems(); 
+      } else {
+        // Topic, Type, State, and Aud filters just re-render the existing items
+        render(); 
+      }
     });
     root.addEventListener('input', function (e) {
       if (e.target.dataset.f === 'q') { S.f.q = e.target.value; var pos = e.target.selectionStart; render(); var i = root.querySelector('[data-f="q"]'); if (i) { i.focus(); i.setSelectionRange(pos, pos); } }
