@@ -358,9 +358,14 @@
       if (!ex) {
         data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
-        // Prepared, not posted: nobody (students, parents, tutors) sees it until the
-        // Studio Desk posts it from Classroom \u2192 Publish.
-        data.audiences = { online: false, remote: false, tutors: false };
+        
+        // Force audience based on scope
+        if (o.scope === 'remote') {
+          data.audiences = { online: false, remote: true, tutors: false };
+        } else {
+          data.audiences = { online: false, remote: false, tutors: false };
+        }
+
         data.tutorId = user.uid; data.tutorName = user.name || ''; data.createdBy = user.uid; data.createdAt = FV().serverTimestamp();
       } else if (due && when.getTime() !== due.getTime()) {
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
@@ -381,21 +386,6 @@
 
   /* =========================================================
      CREATE / EDIT FLAT EXAM (Midterm or End of Term)
-     ----------------------------------------------------------
-     Admins only. The mount code hides the "New exam" button
-     from tutors and blocks the click; this function still
-     exists so admin keeps full use.
-
-     Path:  classrooms/{cid}/exams/{eid}
-     Fields:
-       examType       'Midterm' | 'End of Term'
-       title          string
-       examDate       timestamp     (when the paper is taken)
-       submissionDeadline timestamp  (when the hand-in window closes)
-       requirements   string        (free text)
-       examPdfUrl / examPdfName / examPdfPath
-       status         'Draft' | 'Published' | 'Closed'
-       submissionsOpen boolean      (manual toggle, overrides the auto window)
   ========================================================= */
   function openCreateExam(o) {
     injectStyle();
@@ -559,13 +549,6 @@
 
   /* ---------------------------------------------------------
      GRADE A FLAT-EXAM SUBMISSION (via InkGrader)
-     ----------------------------------------------------------
-     Same marking workspace used for homework. InkGrader
-     enforces mandatory score + max, always releases marks on
-     completion, and writes inkData + gradedFileUrl as the
-     tutor draws.
-
-     ctx: { cid, exam, student, sub, user, onDone }
   --------------------------------------------------------- */
   function openGradeFlatExamInk(ctx) {
     if (!global.InkGrader) {
@@ -590,8 +573,6 @@
 
   /* =========================================================
      STAFF MANAGEMENT SCREENS
-       WorkUI.mountManagement(root, { kind:'homework'|'exams', role, uid, name,
-                                      subjects, keyStages, onOpenAttempts })
   ========================================================= */
   function mountManagement(root, opts) {
     injectStyle();
@@ -601,7 +582,7 @@
     var tutorSubjects = lmzSubjectKeys(opts.subjects || []);
     var tutorKS = opts.keyStages || [];
     var user = { uid: opts.uid, name: opts.name || (isAdmin ? 'Studio Desk' : 'Tutor') };
-    var S = { screen: 'list', tab: 'classes', classrooms: null, cls: null, topics: [], items: [], subs: {}, enrolled: [], collapsed: {}, filters: { subject: '', ks: '', year: '' }, granted: [] };
+    var S = { screen: 'list', tab: 'classes', classrooms: null, cls: null, topics: [], items: [], subs: {}, enrolled: [], collapsed: {}, filters: { subject: '', ks: '', year: '' }, granted: [], monitoringOnly: !!opts.monitoringOnly };
     root.classList.add('cr-root');
 
     /* ---------- classroom list ---------- */
@@ -619,8 +600,6 @@
     }
 
     // Load items another tutor was asked to help mark.
-    //   Homework grants: classrooms/{cid}/topics/{tid}/assignments/{aid}
-    //   Flat exam grants: classrooms/{cid}/exams/{eid}
     async function loadGranted() {
       try {
         var snap = await db.collection('gradingGrants').where('tutorId', '==', user.uid).get();
@@ -722,7 +701,6 @@
       S.topics = await U.loadTopics(S.cls.id);
       var enrolledP = loadEnrolled(S.cls).catch(function () { return []; });
       if (kind === 'exam') {
-        // Flat exams under the classroom + their submissions. No topics.
         var res = await Promise.all([loadFlatExams(S.cls.id, !isAdmin), enrolledP]);
         S.items = res[0].items; S.subs = res[0].subs; S.enrolled = res[1];
       } else {
@@ -771,7 +749,6 @@
       return pill('b-plain', 'Open');
     }
 
-    // Only the Studio Desk edits or deletes prepared work. Tutors deliver and grade it.
     function canEdit(it) { return isAdmin; }
 
     /* ---------- render main list ---------- */
@@ -780,15 +757,13 @@
       var c = S.cls, name = U.displayName(c);
       var topBtn;
       if (kind === 'exam') {
-        // Only admins get "New exam". Tutors see the list and grade, nothing else.
         topBtn = isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-flat-exam"><i class="fas fa-plus"></i> New exam</button>' : '';
       } else {
-        // Homework: only admins get "Add Topic". Tutors see topics and can
-        // press "Post Assignment" inside each existing topic.
-        topBtn = isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
+        // Hide "Add Topic" if we are inside the Remote Students view
+        topBtn = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
       }
       var h = '<div class="cr-crumb"><a data-a="back">' + title + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
+        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !S.monitoringOnly && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
         topBtn + '</div>';
 
       if (kind === 'exam') {
@@ -803,7 +778,6 @@
             var cnt = counts(it);
             var examDate = it.examDate ? U.fmtDateTime(U.toDate(it.examDate)) : '—';
             var deadline = it.submissionDeadline ? U.fmtDateTime(U.toDate(it.submissionDeadline)) : '—';
-            // Admin-only controls (edit / publish / close / window toggle / delete).
             var adminControls = isAdmin || canEdit(it)
               ? (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i> Edit</button>' : '') +
                 (isAdmin
@@ -833,7 +807,7 @@
         }
       } else {
         // Homework: keep the topic accordion.
-        if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin
+        if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience
           ? 'No topics yet. Add a topic, then add assignments inside it.'
           : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
         S.topics.forEach(function (t) {
@@ -842,14 +816,13 @@
             return (da ? da.getTime() : 0) - (db2 ? db2.getTime() : 0);
           });
           var open = !S.collapsed[t.id];
-          // Both admin and tutor can press "Post Assignment" inside a topic.
-          // Only admin can create topics — that button is at the top bar.
-          var topicActions = isAdmin && !opts.audience ? '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Prepare assignment</button></div>' : '';
+          // Hide Prepare assignment inside remote view
+          var topicActions = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Prepare assignment</button></div>' : '';
           h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' +
             esc(t.title) + '<small>' + rows.length + ' assignment' + (rows.length === 1 ? '' : 's') + '</small></span>' +
             topicActions + '</div>';
           if (open) {
-            if (!rows.length) h += '<div class="cr-empty">' + (isAdmin ? 'No assignments in this topic yet. Use \u201cPrepare assignment\u201d above, then post it from Classroom \u2192 Publish.' : 'Nothing has been posted to you in this topic yet.') + '</div>';
+            if (!rows.length) h += '<div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience ? 'No assignments in this topic yet. Use \u201cPrepare assignment\u201d above, then post it from Classroom \u2192 Publish.' : 'No assignments posted to this audience yet.') + '</div>';
             rows.forEach(function (it) {
               var cnt = counts(it), due = dueOf(it, 'assignment');
               h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas fa-clipboard-check"></i></span>' +

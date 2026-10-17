@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Remote Student Portal — Paisley Studio</title>
+<title>Remote Student Portal-Paisley Studio</title>
 <meta name="robots" content="noindex, nofollow" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -204,6 +204,52 @@ document.querySelectorAll('input').forEach(inp => inp.addEventListener('keydown'
 auth.onAuthStateChanged(async user => {
   if(!user || busy) return;
   try{ const r = await checkRemote(user); if(r.ok) window.location.href = '/remote/dashboard.html'; }catch(e){}
+});
+
+/* ---------------------------------------------------------
+   SEAMLESS PASSWORD RESET HANDLER
+   Catches the link from the new emails, prompts for password,
+   logs them in, and routes to the dashboard.
+--------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const mode = urlParams.get('mode');
+  const oobCode = urlParams.get('oobCode');
+
+  if (mode === 'resetPassword' && oobCode) {
+    let email = "";
+    try {
+      email = await auth.verifyPasswordResetCode(oobCode);
+    } catch (err) {
+      showErr("This password reset link is invalid or has expired. Please request a new one.");
+      window.history.replaceState({}, document.title, "/remote/index.html");
+      return;
+    }
+
+    const newPassword = prompt(`Welcome to Paisley Studio!\n\nPlease set a password for ${email}.\n(Must be at least 6 characters)`);
+
+    if (!newPassword || newPassword.length < 6) {
+      showErr("Password must be at least 6 characters. Please click the link in your email again.");
+      return;
+    }
+
+    try {
+      await auth.confirmPasswordReset(oobCode, newPassword);
+      const cred = await auth.signInWithEmailAndPassword(email, newPassword);
+      
+      db.collection('students').doc(cred.user.uid).update({ lastLoginAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
+      
+      showOk("Password set successfully! Taking you to your dashboard...");
+      window.history.replaceState({}, document.title, "/remote/index.html");
+      
+      setTimeout(() => {
+        window.location.href = '/remote/dashboard.html';
+      }, 1200);
+
+    } catch (err) {
+      showErr("Error setting password: " + err.message);
+    }
+  }
 });
 </script>
 </body>

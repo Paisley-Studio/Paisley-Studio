@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Parent Portal — Paisley Studio</title>
+<title>Parent Portal-Paisley Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
@@ -168,6 +168,53 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginBtn').click(); });
+
+/* ---------------------------------------------------------
+   SEAMLESS PASSWORD RESET HANDLER
+   Catches the link from the new emails, prompts for password,
+   logs them in, and routes to the dashboard.
+--------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const mode = urlParams.get('mode');
+  const oobCode = urlParams.get('oobCode');
+
+  if (mode === 'resetPassword' && oobCode) {
+    document.getElementById('loginPane').classList.add('hidden');
+    document.getElementById('forgotPane').classList.add('hidden');
+
+    let email = "";
+    try {
+      email = await auth.verifyPasswordResetCode(oobCode);
+    } catch (err) {
+      showErr("This password reset link is invalid or has expired. Please request a new one.");
+      document.getElementById('loginPane').classList.remove('hidden');
+      window.history.replaceState({}, document.title, "/parent/index.html");
+      return;
+    }
+
+    const newPassword = prompt(`Welcome to Paisley Studio!\n\nPlease set a password for ${email}.\n(Must be at least 6 characters)`);
+
+    if (!newPassword || newPassword.length < 6) {
+      showErr("Password must be at least 6 characters. Please click the link in your email again.");
+      document.getElementById('loginPane').classList.remove('hidden');
+      return;
+    }
+
+    try {
+      await auth.confirmPasswordReset(oobCode, newPassword);
+      const cred = await auth.signInWithEmailAndPassword(email, newPassword);
+      
+      window.history.replaceState({}, document.title, "/parent/index.html");
+      
+      // The auth.onAuthStateChanged at the top will handle redirecting to dashboard.html once signed in.
+
+    } catch (err) {
+      showErr("Error setting password: " + err.message);
+      document.getElementById('loginPane').classList.remove('hidden');
+    }
+  }
+});
 </script>
 
 </body>

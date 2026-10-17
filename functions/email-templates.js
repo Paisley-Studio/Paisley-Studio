@@ -10,16 +10,6 @@
      • Quicksand from Google Fonts (loaded via <link>)
      • Max width 600px, single column, mobile-first
      • Dark-mode safe (color-scheme: light only)
-
-   If you add a new email, add a new function here — do not
-   write raw HTML in notifications.js or index.js.
-
-   Flat subject-scoped exams (this revision):
-     • examPostedParent       — paper attached, sent on publish
-     • examPostedStudent      — heads-up only, no attachment
-     • examResultsReleased    — sent when the tutor releases
-                                marks after ink-grading, wording
-                                is "Results released"
 ========================================================= */
 
 const BRAND = {
@@ -34,12 +24,11 @@ const BRAND = {
 };
 
 // Single source of truth for every link that points users back to Paisley Studio.
-// Override with the APP_URL environment variable for staging; production default below.
-const APP_URL = String(process.env.APP_URL || 'https://paisleystudio.online').replace(/\/+$/, '');
+const APP_URL = String(process.env.APP_URL || 'https://www.paisleystudio.online').replace(/\/+$/, '');
 
 const PORTALS = {
-  student: APP_URL + '/student',
-  remote:  APP_URL + '/remote',
+  student: APP_URL + '/student/index.html',
+  remote:  APP_URL + '/remote/index.html',
   tutor:   APP_URL + '/tutor/login.html',
   parent:  APP_URL + '/parent/index.html',
   admin:   APP_URL + '/admin'
@@ -48,6 +37,24 @@ const PORTALS = {
 // Remote students sign in at their own portal; everyone else uses the normal one.
 function studentPortal(student) {
   return student && student.studentType === 'remote' ? PORTALS.remote : PORTALS.student;
+}
+
+/* ---------------------------------------------------------
+   Crucial: Convert the default ugly Firebaseapp.com link 
+   into a beautiful link on our own domain.
+--------------------------------------------------------- */
+function buildAuthLink(originalLink, portalBaseUrl) {
+  try {
+    const urlObj = new URL(originalLink);
+    const code = urlObj.searchParams.get('oobCode');
+    const mode = urlObj.searchParams.get('mode');
+    if (code && mode) {
+      return `${portalBaseUrl}?mode=${mode}&oobCode=${code}`;
+    }
+  } catch (e) {
+    console.warn("Could not parse Firebase auth link, using fallback", e);
+  }
+  return originalLink; // fallback if parsing fails
 }
 
 function esc(s) {
@@ -200,7 +207,7 @@ function whoLine(audience, student) {
 }
 
 /* =========================================================
-   TEMPLATES — one per email (existing set, unchanged)
+   TEMPLATES
 ========================================================= */
 
 /* 1. Admin — new student registration */
@@ -228,7 +235,7 @@ function adminNewStudentSignup({ student }) {
   };
 }
 
-/* 2. Student — account approved */
+/* 2. Student — account approved (Login uses normal portal, no code needed) */
 function studentApproved({ student }) {
   return {
     subject: `Welcome to Paisley Studio — you've been accepted`,
@@ -239,7 +246,6 @@ function studentApproved({ student }) {
       body: `
         <p style="margin:0 0 14px;">You've been accepted into <strong>Paisley Studio</strong>. Your enrolment for <strong>${esc(student.keyStage || 'your Key Stage')}</strong> is now confirmed and your learning portal is live.</p>
         <p style="margin:0 0 18px;">We're glad you chose us. Here's to a great term ahead.</p>
-
         <div style="background:${BRAND.sage};border-radius:12px;padding:16px 18px;margin:0 0 8px;">
           <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${BRAND.deep};margin-bottom:8px;">Your login details</div>
           <div style="font-size:14px;line-height:1.7;">
@@ -247,20 +253,16 @@ function studentApproved({ student }) {
             Password: the one you chose when you registered
           </div>
         </div>
-
-        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">
-          For your safety, please keep these details private. If you ever forget your password, use the <em>Forgot password</em> link on the portal sign-in page.
-        </p>
       `,
       cta: { label: 'Open the Student Portal', url: studentPortal(student) }
     })
   };
 }
 
-
-/* Remote student — admitted by the Studio Desk; sets own password via a
-   single-use Firebase link, then lands on the Remote Student portal. */
+/* 3. Remote student — admitted by the Studio Desk (custom domain handler) */
 function remoteStudentInvite({ student, resetLink }) {
+  const finalLink = buildAuthLink(resetLink, PORTALS.remote);
+
   return {
     subject: `Activate your Paisley Studio remote learning account`,
     html: render({
@@ -269,17 +271,16 @@ function remoteStudentInvite({ student, resetLink }) {
       intro: `Welcome, ${esc(firstName(student.name))}!`,
       body: `
         <p style="margin:0 0 14px;">You have been admitted to <strong>Paisley Studio</strong> for remote learning${student.keyStage ? ` in <strong>${esc(student.keyStage)}</strong>` : ''}.</p>
-        <p style="margin:0 0 14px;">Click the button below to choose your password. You will then be taken to the Remote Student portal, where you can sign in with <strong>${esc(student.email || 'this email address')}</strong> and your new password.</p>
+        <p style="margin:0 0 14px;">Click the button below to choose your password. You will be taken directly to your Remote Student portal.</p>
         <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">If you were not expecting this, you can ignore this email — your account is not usable until a password is set.</p>
       `,
-      cta: { label: 'Set your password', url: resetLink },
-      footer: `<div style="margin-top:8px;">This link can only be used once and expires for your safety. You can request a new one from the Remote Student sign-in page ("Forgot password").</div>`
+      cta: { label: 'Set your password & open portal', url: finalLink },
+      footer: `<div style="margin-top:8px;">This link can only be used once and expires for your safety.</div>`
     })
   };
 }
 
-
-/* Admin — a remote student raised a support ticket */
+/* 4. Admin — a remote student raised a support ticket */
 function adminNewRemoteTicket({ student, ticket }) {
   return {
     subject: `New remote student ticket — ${ticket.subject || 'Support ticket'}`,
@@ -297,7 +298,7 @@ function adminNewRemoteTicket({ student, ticket }) {
   };
 }
 
-/* 3. Tutor — account created */
+/* 5. Tutor — account created */
 function tutorWelcome({ tutor, password }) {
   const passwordLine = password
     ? `Password: <strong>${esc(password)}</strong>`
@@ -311,7 +312,6 @@ function tutorWelcome({ tutor, password }) {
       intro: `Welcome to the team, ${esc(firstName(tutor.name))}!`,
       body: `
         <p style="margin:0 0 14px;">Your tutor account at <strong>Paisley Studio</strong> is now live. We're glad to have you with us.</p>
-
         <div style="background:${BRAND.sage};border-radius:12px;padding:16px 18px;margin:0 0 8px;">
           <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${BRAND.deep};margin-bottom:8px;">Your login details</div>
           <div style="font-size:14px;line-height:1.7;">
@@ -319,18 +319,16 @@ function tutorWelcome({ tutor, password }) {
             ${passwordLine}
           </div>
         </div>
-
-        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">
-          Please keep these details private. You can change your password after your first sign-in. If you forget it, use the <em>Forgot password</em> link on the tutor sign-in page.
-        </p>
       `,
       cta: { label: 'Open the Tutor Portal', url: PORTALS.tutor }
     })
   };
 }
 
-/* 4. Parent — brand-new account (password reset flow) */
+/* 6. Parent — brand-new account (custom domain handler) */
 function parentWelcomeNew({ parentName, student, resetLink }) {
+  const finalLink = buildAuthLink(resetLink, PORTALS.parent);
+
   return {
     subject: `Set up your Paisley Studio Parent Portal`,
     html: render({
@@ -339,20 +337,16 @@ function parentWelcomeNew({ parentName, student, resetLink }) {
       intro: `Hi ${esc(firstName(parentName))},`,
       body: `
         <p style="margin:0 0 14px;">An account has been set up so you can follow <strong>${esc(student.name || 'your child')}</strong>'s progress at Paisley Studio — results, homework, exams, attendance and messages from the Studio Desk.</p>
-
         <p style="margin:0 0 14px;">Click below to set a password. You'll be taken back to the Parent Portal sign-in page, where you can use your email and new password to log in.</p>
-
-        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">
-          If you weren't expecting this, you can ignore this email — no account is activated until you set a password.
-        </p>
+        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">If you weren't expecting this, you can ignore this email — no account is activated until you set a password.</p>
       `,
-      cta: { label: 'Set your password', url: resetLink },
+      cta: { label: 'Set your password & open portal', url: finalLink },
       footer: `<div style="margin-top:8px;">This link can only be used once and expires for your safety.</div>`
     })
   };
 }
 
-/* 5. Parent — existing parent, new child linked */
+/* 7. Parent — existing parent, new child linked */
 function parentNewChild({ parentName, student }) {
   return {
     subject: `A new child, ${student.name || 'your child'}, has been added to your Parent Portal`,
@@ -362,19 +356,15 @@ function parentNewChild({ parentName, student }) {
       intro: `Hello ${esc(firstName(parentName))},`,
       body: `
         <p style="margin:0 0 14px;"><strong>${esc(student.name || 'Your child')}</strong> has just been enrolled at Paisley Studio, and we've linked them to your existing Parent Portal account.</p>
-
         <p style="margin:0 0 14px;">No password change is needed — just sign in as usual to see their progress. Use the child selector at the top of the dashboard to switch between children.</p>
-
-        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">
-          If you weren't expecting this, please contact the Studio Desk.
-        </p>
+        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">If you weren't expecting this, please contact the Studio Desk.</p>
       `,
       cta: { label: 'Open the Parent Portal', url: PORTALS.parent }
     })
   };
 }
 
-/* 6. Student + guardian — live class scheduled */
+/* 8. Student + guardian — live class scheduled */
 function liveClassScheduled({ recipientName, student, liveClass }) {
   return {
     subject: `New live class: ${liveClass.title || 'Scheduled'}`,
@@ -397,7 +387,7 @@ function liveClassScheduled({ recipientName, student, liveClass }) {
   };
 }
 
-/* 7. Student — homework posted (legacy collection) */
+/* 9. Student — homework posted (legacy collection) */
 function homeworkAssigned({ student, homework }) {
   return {
     subject: `New homework: ${homework.title || 'Posted'}`,
@@ -419,7 +409,7 @@ function homeworkAssigned({ student, homework }) {
   };
 }
 
-/* 8. Parent — new message from admin */
+/* 10. Parent — new message from admin */
 function parentNewMessage({ parentName, student }) {
   return {
     subject: `New message from the Studio Desk about ${student.name || 'your child'}`,
@@ -436,7 +426,7 @@ function parentNewMessage({ parentName, student }) {
   };
 }
 
-/* 9. Student — tutor replied to a ticket */
+/* 11. Student — tutor replied to a ticket */
 function ticketReplyStudent({ student, ticket }) {
   return {
     subject: `${ticket.targetAdmin ? 'Paisley Studio replied' : 'Your tutor replied'} — ${ticket.subject || 'Support ticket'}`,
@@ -453,7 +443,7 @@ function ticketReplyStudent({ student, ticket }) {
   };
 }
 
-/* 10. Tutor — student replied to a ticket */
+/* 12. Tutor — student replied to a ticket */
 function ticketReplyTutor({ student, ticket }) {
   return {
     subject: `New ticket reply from ${student.name || 'a student'}`,
@@ -470,7 +460,7 @@ function ticketReplyTutor({ student, ticket }) {
   };
 }
 
-/* 11. Student + parent — work graded and released (homework path) */
+/* 13. Student + parent — work graded and released (homework path) */
 function homeworkGraded({ audience, student, parentName, kind, item, submission }) {
   const isExam = kind === 'exam';
   const label = isExam ? 'exam' : 'homework';
@@ -501,7 +491,7 @@ function homeworkGraded({ audience, student, parentName, kind, item, submission 
   };
 }
 
-/* 12. Student + parent — one day left */
+/* 14. Student + parent — one day left */
 function homeworkDeadlineReminder({ audience, student, parentName, assignment, dueAt }) {
   return {
     subject: `Reminder: ${assignment.title || 'Homework'} is due within 24 hours`,
@@ -530,7 +520,7 @@ function homeworkDeadlineReminder({ audience, student, parentName, assignment, d
   };
 }
 
-/* 13. Student + parent — deadline missed, 48-hour extension */
+/* 15. Student + parent — deadline missed, 48-hour extension */
 function homeworkOverdueGraceNotice({ audience, student, parentName, assignment, dueAt, graceUntil }) {
   return {
     subject: `Overdue: ${assignment.title || 'Homework'} - 48-hour extension`,
@@ -555,7 +545,7 @@ function homeworkOverdueGraceNotice({ audience, student, parentName, assignment,
   };
 }
 
-/* 14. Student + parent — unattended work report */
+/* 16. Student + parent — unattended work report */
 function unattendedWorkReport({ audience, student, parentName, items, reportUrl }) {
   const rows = items.map(i =>
     `<tr>
@@ -588,7 +578,7 @@ function unattendedWorkReport({ audience, student, parentName, items, reportUrl 
   };
 }
 
-/* 15. Parent — exam paper two days ahead (legacy nested model) */
+/* 17. Parent — exam paper two days ahead (legacy nested model) */
 function examParentReminder({ parentName, student, exam, examDate }) {
   return {
     subject: `Exam paper for ${student && student.name ? student.name : 'your child'}: ${exam.title || 'Exam'}`,
@@ -611,7 +601,7 @@ function examParentReminder({ parentName, student, exam, examDate }) {
   };
 }
 
-/* 16. Student — new assignment or PDF exam posted (nested model) */
+/* 18. Student — new assignment or PDF exam posted (nested model) */
 function workPosted({ student, kind, item, dueAt }) {
   const isExam = kind === 'exam';
   return {
@@ -638,7 +628,7 @@ function workPosted({ student, kind, item, dueAt }) {
    Flat subject-scoped exam templates
 ========================================================= */
 
-/* 17. Parent — an exam has just been posted (paper attached) */
+/* 19. Parent — an exam has just been posted (paper attached) */
 function examPostedParent({ parentName, student, exam, examDate }) {
   const examType = exam.examType || 'Exam';
   return {
@@ -666,7 +656,7 @@ function examPostedParent({ parentName, student, exam, examDate }) {
   };
 }
 
-/* 18. Student — heads-up that an exam has been posted (no paper attached) */
+/* 20. Student — heads-up that an exam has been posted (no paper attached) */
 function examPostedStudent({ student, exam, examDate }) {
   const examType = exam.examType || 'Exam';
   return {
@@ -691,7 +681,7 @@ function examPostedStudent({ student, exam, examDate }) {
   };
 }
 
-/* 19. Student + parent — results released (flat exam, ink-graded) */
+/* 21. Student + parent — results released (flat exam, ink-graded) */
 function examResultsReleased({ audience, student, parentName, exam, submission }) {
   const examType = exam.examType || 'Exam';
   const score = submission.grade != null && submission.maxScore != null
@@ -735,6 +725,7 @@ module.exports = {
   PORTALS,
   APP_URL,
   studentPortal,
+  buildAuthLink,
   templates: {
     adminNewStudentSignup,
     studentApproved,
@@ -754,7 +745,6 @@ module.exports = {
     unattendedWorkReport,
     examParentReminder,
     workPosted,
-    // Flat subject-scoped exams
     examPostedParent,
     examPostedStudent,
     examResultsReleased

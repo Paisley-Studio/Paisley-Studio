@@ -16,8 +16,10 @@
    to remote-posted lessons. Admin still sees the full lesson tree —
    the audience filter never hides anything from admin, so Classwork
    looks exactly like Classroom for them, with two exceptions:
-   the blue scope banner at the top, and the Publish / Set Audience
-   shortcuts hidden so the audience cannot be flipped by accident.
+   the blue scope banner at the top, and the Set Audience shortcut
+   hidden so the audience cannot be flipped by accident. (The
+   Prepare Assignment button is still shown so remote assignments
+   can be created directly from Classwork.)
 
    Data model (Firestore):
      classrooms/{subjectId}_y{year}            subjectId, subjectName, keyStage, year
@@ -1017,7 +1019,7 @@
         audienceButton +
         '<button type="button" class="cr-btn" data-s="draft"><i class="fas fa-floppy-disk"></i> Save Draft</button>' +
         '<button type="button" class="cr-btn" data-s="scheduled"><i class="fas fa-clock"></i> Schedule</button>' +
-        (global.WorkUI && scope !== 'remote' ? '<button type="button" class="cr-btn" data-a="post-assignment"><i class="fas fa-clipboard-check"></i> Prepare Assignment</button>' : '') +
+        (global.WorkUI ? '<button type="button" class="cr-btn" data-a="post-assignment"><i class="fas fa-clipboard-check"></i> Prepare Assignment</button>' : '') +
         '<button type="button" class="cr-btn primary" data-s="published" title="Marks the lesson ready."><i class="fas fa-circle-check"></i> Mark Ready</button>';
 
       // ---- Audience state ----
@@ -1161,7 +1163,7 @@
         var tid = m.body.querySelector('#crLTopic').value;
         if (!tid) { errEl.textContent = 'Choose a topic first (the assignment is posted inside it).'; return; }
         errEl.textContent = '';
-        global.WorkUI.openPostAssignment({ cls: cls, topics: topics, topicId: tid, user: user, lessonTitle: m.body.querySelector('#crLTitle').value.trim() });
+        global.WorkUI.openPostAssignment({ cls: cls, topics: topics, topicId: tid, user: user, lessonTitle: m.body.querySelector('#crLTitle').value.trim(), scope: scope });
       };
 
       async function save(status, btn) {

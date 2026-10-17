@@ -220,6 +220,51 @@ document.getElementById('forgotBtn').addEventListener('click', ()=>{
 document.querySelectorAll('input').forEach(inp=>{
   inp.addEventListener('keydown', e=>{ if(e.key === 'Enter') document.getElementById('loginBtn').click(); });
 });
+
+/* ---------------------------------------------------------
+   SEAMLESS PASSWORD RESET HANDLER
+   Catches the link from the new emails, prompts for password,
+   logs them in, and routes to the dashboard.
+--------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const mode = urlParams.get('mode');
+  const oobCode = urlParams.get('oobCode');
+
+  if (mode === 'resetPassword' && oobCode) {
+    let email = "";
+    try {
+      email = await auth.verifyPasswordResetCode(oobCode);
+    } catch (err) {
+      showErr("This password reset link is invalid or has expired. Please request a new one.");
+      window.history.replaceState({}, document.title, "/tutor/login.html");
+      return;
+    }
+
+    const newPassword = prompt(`Welcome to Paisley Studio!\n\nPlease set a password for ${email}.\n(Must be at least 6 characters)`);
+
+    if (!newPassword || newPassword.length < 6) {
+      showErr("Password must be at least 6 characters. Please click the link in your email again.");
+      return;
+    }
+
+    try {
+      await auth.confirmPasswordReset(oobCode, newPassword);
+      const cred = await auth.signInWithEmailAndPassword(email, newPassword);
+      
+      window.history.replaceState({}, document.title, "/tutor/login.html");
+      
+      showOk("Password set successfully! Taking you to your dashboard...");
+      
+      setTimeout(() => {
+        window.location.href = '/tutor/index.html';
+      }, 1200);
+
+    } catch (err) {
+      showErr("Error setting password: " + err.message);
+    }
+  }
+});
 </script>
 </body>
 </html>

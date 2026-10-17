@@ -24,7 +24,26 @@
   var CU = global.ClassroomUI.util, WH = global.WorkUI._h, esc = CU.esc;
   var PAGE_SIZES = [10, 25, 50];
 
-  function fn(name, data) { return firebase.functions().httpsCallable(name)(data).then(function (r) { return r.data; }); }
+  // Manual fetch wrapper for the explicit CORS Cloud Functions
+  async function fetchAction(name, data) {
+    var user = firebase.auth().currentUser;
+    if (!user) throw new Error("You must be signed in.");
+    var token = await user.getIdToken();
+    var res = await fetch('https://us-central1-paisley-89c77.cloudfunctions.net/' + name, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({ data: data })
+    });
+    var json = await res.json();
+    if (!res.ok || json.error) {
+      throw new Error((json.error && json.error.message) || 'Request failed');
+    }
+    return json.result;
+  }
+
   function ts(d) { var x = CU.toDate(d); return x ? x.getTime() : 0; }
   function statusBadge(s) {
     var cls = s === 'Active' ? 'b-confirmed' : (s === 'Suspended' ? 'b-declined' : 'b-pending');
@@ -204,7 +223,7 @@
         if (!d.guardians.length || d.guardians.some(function (g) { return !/^\S+@\S+\.\S+$/.test(g.email || ''); })) { err.textContent = 'Each parent / guardian needs a valid email.'; return; }
         busy = true; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Admitting…';
         try {
-          var r = await fn('admitRemoteStudent', d);
+          var r = await fetchAction('admitRemoteStudent', d);
           var okp = (r.parents || []).filter(function (p) { return p.parentUid; }).length;
           m.body.innerHTML = '<div class="cr-panel" style="margin:0"><h4 style="margin:0 0 .5rem;color:var(--brand-deep)"><i class="fas fa-circle-check" style="color:#1d8b57"></i> ' + (r.existing ? 'Already admitted' : 'Student admitted') + '</h4>' +
             '<p style="font-size:.88rem;margin:.2rem 0">' + (r.existing ? 'This email already belongs to a remote student; their parents were re-checked and no duplicate was created.' : (r.inviteSent ? 'An invitation with a single-use password link was emailed to ' + esc(d.email) + '.' : '<b>The invitation email could not be sent</b> (check the SMTP settings). Use “Resend invitation” from the student’s profile.')) + '</p>' +
@@ -237,7 +256,7 @@
       var ok = await CU.confirmModal({ title: verb + ' access', danger: status === 'Suspended', confirmLabel: verb,
         message: status === 'Suspended' ? 'Suspend <b>' + esc(s.name) + '</b>? They will be signed out and unable to sign in until reactivated. Their work and records are kept.' : 'Reactivate <b>' + esc(s.name) + '</b>? They will be able to sign in again.' });
       if (!ok) return;
-      try { await fn('setRemoteStudentStatus', { studentId: s.id, status: status }); } catch (e) { alert('Could not update: ' + errMsg(e)); }
+      try { await fetchAction('setRemoteStudentStatus', { studentId: s.id, status: status }); } catch (e) { alert('Could not update: ' + errMsg(e)); }
     }
 
     /* ---- profile + progress ---- */
@@ -273,7 +292,7 @@
       var inv = m.foot.querySelector('[data-a="invite"]');
       if (inv) inv.onclick = async function () {
         inv.disabled = true; var e = m.foot.querySelector('#rsErr');
-        try { var r = await fn('resendRemoteInvite', { studentId: s.id }); toast(e, r.inviteSent ? 'Invitation sent.' : 'Could not send the email — check SMTP settings.', !r.inviteSent); }
+        try { var r = await fetchAction('resendRemoteInvite', { studentId: s.id }); toast(e, r.inviteSent ? 'Invitation sent.' : 'Could not send the email — check SMTP settings.', !r.inviteSent); }
         catch (x) { toast(e, errMsg(x), true); } inv.disabled = false;
       };
       try {
@@ -371,7 +390,14 @@
       if (sub === 'classwork') { renderClasswork(host); return; }
       if (sub === 'content') { renderPostedContent(host); return; }
       // Homework / Exams: same management screens (and ink grading) used everywhere else, narrowed to remote work + remote students.
-      WorkUI.mountManagement(host, { kind: sub === 'exams' ? 'exams' : 'homework', role: 'admin', uid: opts.uid, name: opts.name || 'Studio Desk', audience: 'remote' });
+      WorkUI.mountManagement(host, { 
+        kind: sub === 'exams' ? 'exams' : 'homework', 
+        role: 'admin', 
+        uid: opts.uid, 
+        name: opts.name || 'Studio Desk', 
+        audience: 'remote',
+        monitoringOnly: true 
+      });
     }
 
     /* ---------------- classwork (remote-scoped classroom builder) ---------------- */
