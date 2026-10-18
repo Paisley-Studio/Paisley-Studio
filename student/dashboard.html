@@ -183,7 +183,6 @@
     white-space: nowrap;
   }
 
-  /* My Tutors panel */
   .tutor-grid{display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin-top:.4rem;}
   .tutor-chip{display:flex; align-items:center; gap:.55rem; padding:.55rem .75rem; background:var(--sage); border-radius:10px;}
   .tutor-chip .t-ic{width:28px; height:28px; border-radius:50%; background:var(--brand); color:#04231f; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.72rem; flex-shrink:0;}
@@ -206,13 +205,11 @@
     .tutor-grid{grid-template-columns:1fr;}
   }
 
-    /* ====== PROFILE TAB LAYOUT ====== */
   .profile-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:1.2rem;}
   @media(min-width:1100px){
     .profile-grid{grid-template-columns:minmax(0,400px) minmax(0,1fr); align-items:start;}
   }
 
-  /* ====== STUDENT ID CARD — horizontal, matches brand inspo ====== */
   .id-card-wrap{display:flex; flex-direction:column; gap:1rem;}
 
   .id-card{
@@ -271,11 +268,11 @@
     overflow:hidden; flex-shrink:0;
     display:flex; align-items:center; justify-content:center;
   }
-    .id-brand-logo img{width:100%; height:100%; object-fit:contain; display:block; padding:5px;}
+  .id-brand-logo img{width:100%; height:100%; object-fit:contain; display:block; padding:5px;}
   .id-brand-divider{width:1px; height:32px; background:rgba(255,255,255,.18);}
   .id-brand-text{line-height:1.05;}
   .id-brand-name{font-weight:800; font-size:15px; letter-spacing:-.01em; color:#fff;}
-    .id-brand-role{
+  .id-brand-role{
     display:block; font-size:8.5px; font-weight:800;
     text-transform:uppercase; letter-spacing:.10em;
     color:#7BCBC2; margin-top:4px;
@@ -309,7 +306,7 @@
 
   .id-details{display:flex; flex-direction:column; gap:9px; padding-top:4px;}
   .id-row{display:flex; align-items:baseline; gap:10px;}
-    .id-row .k{
+  .id-row .k{
     font-size:9px; font-weight:800;
     text-transform:uppercase; letter-spacing:.16em;
     color:rgba(255,255,255,.72); min-width:78px; flex-shrink:0;
@@ -337,7 +334,7 @@
   }
   .id-qr img{width:100%; height:100%; display:block; border-radius:4px;}
   .id-verify-text{flex:1; min-width:0;}
-    .id-verify-text .lbl{
+  .id-verify-text .lbl{
     font-size:9px; font-weight:800;
     text-transform:uppercase; letter-spacing:.16em;
     color:rgba(255,255,255,.72);
@@ -382,6 +379,23 @@
       print-color-adjust:exact;
     }
   }
+
+  /* ===== NEW: host-scoped loaders + skeleton shimmer ===== */
+  .ps-host-loader{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1rem; padding:3rem 1rem;
+  }
+  .ps-host-loader .spin{
+    width:42px; height:42px; border:4px solid rgba(38,51,49,.1);
+    border-top-color:#55BFB3; border-radius:50%; animation:spin .8s linear infinite;
+  }
+  .ps-host-loader .msg{color:#245F5A; font-weight:700; font-size:.9rem;}
+  .stat-skel{
+    display:inline-block; height:1.3rem; width:60%; border-radius:6px;
+    background:linear-gradient(90deg,#eef4f3 25%,#f7fbfa 50%,#eef4f3 75%);
+    background-size:200% 100%; animation:shimmer 1.2s infinite; vertical-align:middle;
+  }
+  @keyframes shimmer{from{background-position:200% 0;} to{background-position:-200% 0;}}
 </style>
 </head>
 <body>
@@ -446,18 +460,18 @@
         <div class="stats-row">
           <div class="stat-card">
             <div class="icon-wrap ic-1"><i class="fas fa-bullseye"></i></div>
-            <div class="num" id="statAverage">—</div>
+            <div class="num" id="statAverage"><span class="stat-skel"></span></div>
             <div class="lbl">Overall average</div>
             <div class="trend" id="statTrend"></div>
           </div>
           <div class="stat-card">
             <div class="icon-wrap ic-2"><i class="fas fa-book"></i></div>
-            <div class="num" id="statHwPending">0</div>
+            <div class="num" id="statHwPending"><span class="stat-skel"></span></div>
             <div class="lbl">Homework pending</div>
           </div>
           <div class="stat-card">
             <div class="icon-wrap ic-3"><i class="fas fa-file-pen"></i></div>
-            <div class="num" id="statExamsOpen">0</div>
+            <div class="num" id="statExamsOpen"><span class="stat-skel"></span></div>
             <div class="lbl">Exams available</div>
           </div>
         </div>
@@ -480,7 +494,7 @@
           <div class="panel-head"><div><h3>Recent results</h3><div class="sub">Latest 5 graded items — exams and homework</div></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Type</th><th>Subject</th><th>Exam</th><th>Score</th><th>Trend</th><th>Date</th></tr></thead>
-            <tbody id="recentResultsBody"></tbody>
+            <tbody id="recentResultsBody"><tr><td colspan="6" class="empty-row">Loading…</td></tr></tbody>
           </table></div>
         </div>
       </section>
@@ -495,7 +509,7 @@
           <div id="resultsReleaseNotice"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Type</th><th>Subject</th><th>Exam</th><th>Score</th><th>Percentage</th><th>Trend vs previous</th><th>Date</th></tr></thead>
-            <tbody id="allResultsBody"></tbody>
+            <tbody id="allResultsBody"><tr><td colspan="7" class="empty-row">Loading…</td></tr></tbody>
           </table></div>
         </div>
       </section>
@@ -562,7 +576,7 @@
         </div>
       </section>
 
-                 <!-- PROFILE -->
+      <!-- PROFILE -->
       <section class="view" id="view-profile">
         <div class="profile-grid">
           <div class="panel">
@@ -642,14 +656,6 @@ let progressChart, subjectChart;
 
 /* ============================================================
    MULTI-TUTOR HELPERS
-   ------------------------------------------------------------
-   A student can have several tutors — one per subject.
-   The student doc carries:
-     tutorIds:       ["tutorA", "tutorB", ...]
-     subjectTutors:  { "mathematics": { tutorId, tutorName, tutorSlug }, ... }
-     tutorId, tutorName, tutorSlug:  legacy single-tutor fields
-   These helpers read the map with a legacy fallback so old
-   accounts still work.
 ============================================================ */
 function tutorEntriesForStudent(p){
   if(!p) return [];
@@ -668,7 +674,6 @@ function tutorEntriesForStudent(p){
     });
   });
   if(out.length) return out;
-  // Legacy fallback: single tutor with no subject map.
   if(p.tutorId){
     return [{
       subjectId:   '',
@@ -742,7 +747,7 @@ function updateTicketTutorDisplay(){
 }
 
 /* ============================================================
-   INLINE LOADER — appears inside the main content area
+   LOADER HELPERS
 ============================================================ */
 function showInlineLoader(msg){
   const content = document.querySelector('.content');
@@ -765,24 +770,197 @@ function hideInlineLoader(){
   if(el) el.style.display = 'none';
 }
 
+function hostLoader(host, msg){
+  if(!host) return;
+  host.innerHTML = '<div class="ps-host-loader"><div class="spin"></div><div class="msg">' + (msg || 'Loading…') + '</div></div>';
+}
+
+/* Mount `mountFn` into a detached node, paint a loader in `host` first so the
+   browser gets one frame, then swap the node into `host` when the mount API
+   resolves. The mount functions on this page (ClassroomUI.mountStudent and
+   WorkUI.mountStudentHome) write into the root they're given and return
+   synchronously — so we treat their return as "the node is ready" and, if it
+   ever returns a thenable, honour it too. */
+function withHostLoader(host, msg, mountFn){
+  hostLoader(host, msg);
+  return new Promise(function(resolve){
+    requestAnimationFrame(function(){
+      const box = document.createElement('div');
+      let ret;
+      try { ret = mountFn(box); } catch(e){ ret = Promise.reject(e); }
+      Promise.resolve(ret).then(function(api){
+        host.innerHTML = '';
+        host.appendChild(box);
+        resolve(api || null);
+      }).catch(function(e){
+        console.error(e);
+        host.innerHTML = '<div class="panel"><div class="empty-row">Could not load: ' + escapeHtml(e && e.message ? e.message : e) + '</div></div>';
+        resolve(null);
+      });
+    });
+  });
+}
+
+/* ============================================================
+   PROFILE CACHE — shell paints instantly on repeat navigations
+============================================================ */
+const PROFILE_CACHE_KEY = 'ps_profile_v1';
+function readProfileCache(uid){
+  try {
+    const raw = sessionStorage.getItem(PROFILE_CACHE_KEY);
+    if(!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && o.uid === uid) ? o : null;
+  } catch(e){ return null; }
+}
+function writeProfileCache(uid, data){
+  try { sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ uid: uid, profile: data, ts: Date.now() })); } catch(e){}
+}
+function clearProfileCache(){
+  try { sessionStorage.removeItem(PROFILE_CACHE_KEY); } catch(e){}
+}
+
+/* ============================================================
+   PREFETCH — build Classroom / Homework / Exams DOM nodes off-screen
+   so clicking the tab is an appendChild, not a network round trip.
+============================================================ */
+const prefetchCache = { classroom: null, homework: null, exams: null };
+const PREFETCH_MAX_AGE_MS = 5 * 60 * 1000; // refresh cached nodes older than 5 min
+
+function buildClassroomNode(){
+  if(!currentUser || !profile) return null;
+  const box = document.createElement('div');
+  let api = null;
+  try { api = ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile: profile }); }
+  catch(e){ console.warn('classroom prefetch failed', e); return null; }
+  return { node: box, api: api, ts: Date.now() };
+}
+function buildWorkNode(kind){
+  if(!currentUser || !profile) return null;
+  const box = document.createElement('div');
+  let api = null;
+  try { api = WorkUI.mountStudentHome(box, { kind: kind, uid: currentUser.uid, profile: profile }); }
+  catch(e){ console.warn(kind + ' prefetch failed', e); return null; }
+  return { node: box, api: api, ts: Date.now() };
+}
+
+function prefetchAll(){
+  const go = function(){
+    if(!currentUser || !profile) return;
+    if(!prefetchCache.classroom) prefetchCache.classroom = buildClassroomNode();
+    if(!prefetchCache.homework)  prefetchCache.homework  = buildWorkNode('homework');
+    if(!prefetchCache.exams)     prefetchCache.exams     = buildWorkNode('exams');
+  };
+  if('requestIdleCallback' in window){
+    requestIdleCallback(go, { timeout: 2500 });
+  } else {
+    setTimeout(go, 600);
+  }
+}
+
+function mountClassroom(){
+  const host = document.getElementById('classroomHost');
+  if(!profile) return;
+
+  const cached = prefetchCache.classroom;
+  if(cached && cached.node && (Date.now() - cached.ts) < PREFETCH_MAX_AGE_MS){
+    host.innerHTML = '';
+    host.appendChild(cached.node);
+    // Silent background refresh so the node stays current.
+    if(cached.api && typeof cached.api.reload === 'function'){
+      setTimeout(function(){
+        try { cached.api.reload(); } catch(e){}
+      }, 200);
+    }
+    return;
+  }
+
+  withHostLoader(host, 'Loading your classroom…', function(box){
+    return ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile: profile });
+  }).then(function(api){
+    if(api) prefetchCache.classroom = { node: host.firstChild, api: api, ts: Date.now() };
+  });
+}
+
+function mountWork(kind){
+  const host = document.getElementById(kind === 'exams' ? 'workExHost' : 'workHwHost');
+  const key = kind === 'exams' ? 'exams' : 'homework';
+  if(!profile) return;
+
+  const cached = prefetchCache[key];
+  if(cached && cached.node && (Date.now() - cached.ts) < PREFETCH_MAX_AGE_MS){
+    host.innerHTML = '';
+    host.appendChild(cached.node);
+    if(cached.api && typeof cached.api.reload === 'function'){
+      setTimeout(function(){
+        try { cached.api.reload(); } catch(e){}
+      }, 200);
+    }
+    return;
+  }
+
+  withHostLoader(host, kind === 'exams' ? 'Loading exams…' : 'Loading homework…', function(box){
+    return WorkUI.mountStudentHome(box, { kind: kind, uid: currentUser.uid, profile: profile });
+  }).then(function(api){
+    if(api) prefetchCache[key] = { node: host.firstChild, api: api, ts: Date.now() };
+  });
+}
+
+/* ============================================================
+   BOOT
+============================================================ */
 auth.onAuthStateChanged(user=>{
   if(!user){ window.location.href = 'index.html'; return; }
   currentUser = user;
-  getStudentProfile(user.uid).then(doc=>{
-    if(!doc.exists){ window.location.href = 'index.html'; return; }
-    profile = doc.data();
-    // Remote students have their own portal; the stored studentType decides, nothing in the URL.
+
+  const cached = readProfileCache(user.uid);
+  if(cached && cached.profile){
+    profile = cached.profile;
     if(profile.studentType === 'remote'){ window.location.replace('/remote/dashboard.html'); return; }
     if(profile.status !== 'Active'){
       document.body.classList.add('pending');
       document.body.classList.add('ready');
       return;
     }
-        document.body.classList.add('ready');
+    // Instant shell
+    document.body.classList.add('ready');
     renderProfile();
     ensureStudentIdNumber().then(() => renderProfileIdCard());
     loadAllData();
     startWorkFeatures();
+    prefetchAll();
+  }
+
+  // Revalidate in the background (or do the first-time boot if nothing cached).
+  getStudentProfile(user.uid).then(doc=>{
+    if(!doc.exists){ window.location.href = 'index.html'; return; }
+    const data = doc.data();
+    const wasCached = !!(cached && cached.profile);
+    profile = data;
+    writeProfileCache(user.uid, data);
+
+    if(profile.studentType === 'remote'){ window.location.replace('/remote/dashboard.html'); return; }
+    if(profile.status !== 'Active'){
+      document.body.classList.add('pending');
+      document.body.classList.add('ready');
+      return;
+    }
+
+    if(!wasCached){
+      // No cache — this is the first paint for this session.
+      document.body.classList.add('ready');
+      renderProfile();
+      ensureStudentIdNumber().then(() => renderProfileIdCard());
+      loadAllData();
+      startWorkFeatures();
+      prefetchAll();
+    } else {
+      // Quiet re-render with any changes from the server.
+      renderProfile();
+    }
+  }).catch(err=>{
+    console.error('profile load failed:', err);
+    if(!cached){ window.location.href = 'index.html'; }
   });
 });
 
@@ -815,25 +993,21 @@ function renderWorkNotices(){
     if(total){ badge.textContent = total; badge.style.display = ''; } else { badge.style.display = 'none'; }
   }
 }
-function mountStudentWork(kind){
-  const host = document.getElementById(kind === 'exams' ? 'workExHost' : 'workHwHost');
-  host.innerHTML = '';
-  const box = document.createElement('div'); host.appendChild(box);
-  WorkUI.mountStudentHome(box, { kind, uid: currentUser.uid, profile });
-}
-document.querySelector('.nav-item[data-view="homework"]').addEventListener('click', ()=>{ if(currentUser && profile) mountStudentWork('homework'); });
-document.querySelector('.nav-item[data-view="exams"]').addEventListener('click', ()=>{ if(currentUser && profile) mountStudentWork('exams'); });
 
-document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut().then(()=>window.location.href='index.html'); });
-document.getElementById('topSignOutBtn').addEventListener('click', ()=>{ if(!confirm('Sign out of your student portal?')) return; auth.signOut().then(()=>window.location.href='index.html'); });
-document.getElementById('pendingSignOut').addEventListener('click', ()=>{ auth.signOut().then(()=>window.location.href='index.html'); });
+/* Route clicks through the prefetched mounters */
+document.querySelector('.nav-item[data-view="homework"]').addEventListener('click', ()=>{ if(currentUser && profile) mountWork('homework'); });
+document.querySelector('.nav-item[data-view="exams"]').addEventListener('click', ()=>{ if(currentUser && profile) mountWork('exams'); });
+document.querySelector('.nav-item[data-view="classroom"]').addEventListener('click', ()=>{ if(currentUser && profile) mountClassroom(); });
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{ clearProfileCache(); auth.signOut().then(()=>window.location.href='index.html'); });
+document.getElementById('topSignOutBtn').addEventListener('click', ()=>{ if(!confirm('Sign out of your student portal?')) return; clearProfileCache(); auth.signOut().then(()=>window.location.href='index.html'); });
+document.getElementById('pendingSignOut').addEventListener('click', ()=>{ clearProfileCache(); auth.signOut().then(()=>window.location.href='index.html'); });
 
 function renderProfile(){
   const initials = lmsInitials(profile.name);
   document.getElementById('sideAvatar').textContent = initials;
   document.getElementById('sideWho').innerHTML = profile.name + '<span>' + (profile.keyStage||'').replace(/\s*\(.*/, '') + (profile.year ? ' · Year ' + profile.year : '') + '</span>';
 
-  // Topbar tutor chip — show all tutors, or legacy single tutor.
   const tutorBar = document.getElementById('tutorBar');
   if(tutorBar){
     const entries = tutorEntriesForStudent(profile);
@@ -848,7 +1022,6 @@ function renderProfile(){
     }
   }
 
-  // Profile tab
   const entries = tutorEntriesForStudent(profile);
   const tutorLine = entries.length
     ? entries.map(e=>`${escapeHtml(e.tutorName)} — ${escapeHtml(e.subjectName)}`).join('<br>')
@@ -865,7 +1038,7 @@ function renderProfile(){
     <div class="field"><label>Account status</label><div><span class="pill graded">${escapeHtml(profile.status||'—')}</span></div></div>
   `;
 
-    renderMyTutorsPanel();
+  renderMyTutorsPanel();
   renderProfileIdCard();
 }
 
@@ -897,69 +1070,76 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
 });
 document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
 
-document.querySelector('.nav-item[data-view="classroom"]').addEventListener('click', ()=>{
-  if(!profile) return;
-  const host = document.getElementById('classroomHost');
-  host.innerHTML = '';
-  const box = document.createElement('div');
-  host.appendChild(box);
-  ClassroomUI.mountStudent(box, { uid: auth.currentUser && auth.currentUser.uid, profile });
-});
-
+/* ============================================================
+   PROGRESSIVE loadAllData — five independent promises, each
+   renders its portion of the UI as soon as it lands.
+============================================================ */
 function loadAllData(){
   showInlineLoader('Loading your results…');
+
+  // 1) Results + submissions in parallel — cheapest, paints charts + tables.
   Promise.all([
     getResultsForStudent(currentUser.uid),
-    getHomeworkForKeyStage(profile.keyStage),
-    getSubmissionsForStudent(currentUser.uid),
-    getExamsForKeyStage(profile.keyStage),
-    getAttemptsForStudent(currentUser.uid)
-  ]).then(([resultsSnap, hwSnap, subSnap, examSnap, attemptSnap])=>{
-    console.log("=== Dashboard Data Loaded ===");
-    console.log("Exam Results:", resultsSnap.docs.length, "docs");
-    console.log("Submissions:", subSnap.docs.length, "docs");
-
+    getSubmissionsForStudent(currentUser.uid)
+  ]).then(([resultsSnap, subSnap])=>{
     allExamResults = resultsSnap.docs.map(d=>({ id:d.id, ...d.data(), kind:'exam' }));
-    allHomework = hwSnap.docs.map(d=>({id:d.id, ...d.data()}));
     allSubmissions = subSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    allExams = examSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    allAttempts = attemptSnap.docs.map(d=>({id:d.id, ...d.data()}));
-
-    const gradedHomeworkResults = allSubmissions
-      .filter(sub => sub.status === 'Graded' && sub.grade != null)
-      .map(sub => ({
-        id: sub.id,
-        kind: 'homework',
-        date: sub.gradedAt || sub.submittedAt,
-        subject: sub.subject || 'Homework',
-        examTitle: sub.homeworkTitle || 'Homework',
-        score: Number(sub.grade) || 0,
-        maxScore: 100,
-        keyStage: sub.keyStage || '',
-        released: true,
-        status: sub.status
-      }));
-
-    allResults = allExamResults
-      .map(r => ({ ...r, kind: r.kind || 'exam', date: lmsToDate(r.date) || lmsToDate(r.createdAt) || null }))
-      .concat(gradedHomeworkResults)
-      .sort((a,b)=> (a.date||0) - (b.date||0));
-
-    console.log("Combined allResults:", allResults);
-
+    buildAllResults();
     populateSubjectFilters();
     renderOverview();
     renderResultsTable('allResultsBody', allResults.slice().reverse());
-    renderHomework();
-    renderExams();
-    loadTickets();
-    loadNotesAndNotices();
     renderReleaseNotice();
     hideInlineLoader();
   }).catch(err=>{
-    console.error("Error loading dashboard data:", err);
+    console.error("Error loading results:", err);
     hideInlineLoader();
   });
+
+  // 2) Homework — paint the earlier-homework list + refresh stats as soon as it lands.
+  getHomeworkForKeyStage(profile.keyStage).then(snap=>{
+    allHomework = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderHomework();
+    renderOverview();
+  }).catch(err=>{ console.warn('homework load:', err); });
+
+  // 3) Exams — same.
+  getExamsForKeyStage(profile.keyStage).then(snap=>{
+    allExams = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderExams();
+    renderOverview();
+  }).catch(err=>{ console.warn('exams load:', err); });
+
+  // 4) Attempts — same.
+  getAttemptsForStudent(currentUser.uid).then(snap=>{
+    allAttempts = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderOverview();
+  }).catch(err=>{ console.warn('attempts load:', err); });
+
+  // 5) Tickets, notices, timetable — all independent.
+  loadTickets();
+  loadNotesAndNotices();
+}
+
+function buildAllResults(){
+  const gradedHomeworkResults = allSubmissions
+    .filter(sub => sub.status === 'Graded' && sub.grade != null)
+    .map(sub => ({
+      id: sub.id,
+      kind: 'homework',
+      date: sub.gradedAt || sub.submittedAt,
+      subject: sub.subject || 'Homework',
+      examTitle: sub.homeworkTitle || 'Homework',
+      score: Number(sub.grade) || 0,
+      maxScore: 100,
+      keyStage: sub.keyStage || '',
+      released: true,
+      status: sub.status
+    }));
+
+  allResults = allExamResults
+    .map(r => ({ ...r, kind: r.kind || 'exam', date: lmsToDate(r.date) || lmsToDate(r.createdAt) || null }))
+    .concat(gradedHomeworkResults)
+    .sort((a,b)=> (a.date||0) - (b.date||0));
 }
 
 function renderReleaseNotice(){
@@ -984,10 +1164,14 @@ function populateSubjectFilters(){
     subs.forEach(s=>{
       const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt);
     });
-    sel.addEventListener('change', ()=>{
-      if(id === 'progressSubjectFilter') drawProgressChart(sel.value);
-      else renderResultsTable('allResultsBody', filterBySubject(allResults, sel.value).slice().reverse());
-    });
+    // Avoid stacking listeners on repeat calls.
+    if(!sel.dataset.wired){
+      sel.dataset.wired = '1';
+      sel.addEventListener('change', ()=>{
+        if(id === 'progressSubjectFilter') drawProgressChart(sel.value);
+        else renderResultsTable('allResultsBody', filterBySubject(allResults, sel.value).slice().reverse());
+      });
+    }
   });
 }
 function filterBySubject(list, subject){ return subject === '__all' ? list : list.filter(r=>r.subject === subject); }
@@ -1401,7 +1585,6 @@ function renderTickets(){
   }
   list.innerHTML = allTickets.map(t=>{
     const statusClass = t.status === 'Answered' ? 'answered' : (t.status === 'Closed' ? 'flat' : 'pending');
-    // Show which tutor the ticket is for, if set.
     const tutorLine = t.targetTutorName
       ? `<span class="pill exam" style="margin-left:.3rem;"><i class="fas fa-chalkboard-user"></i> ${escapeHtml(t.targetTutorName)}</span>`
       : '';
@@ -1467,28 +1650,8 @@ document.getElementById('ticketConfirm').addEventListener('click', ()=>{
 });
 
 /* ============================================================
-   STUDENT ID CARD — Registration Number
-   ------------------------------------------------------------
-   Format:  RN-YYYY-KSx-YY-NNN
-     RN    fixed prefix
-     YYYY  calendar year the student joined (4 digits)
-     KSx   Key Stage at join (KS3 / KS4 / KS5)
-     YY    year group at join (7, 8, 9, 10, 11, 12, 13)
-     NNN   global per-year counter, seeded at 100, first = 101
-
-   - One running counter per calendar year, shared across every
-     Key Stage and year group.
-   - Counter resets to 100 on 1 January (first student of the
-     new year gets ...101).
-   - IDs are FROZEN at allocation. They never change, even when
-     a student moves up a year.
-   - Counter lives at counters/registrationNumbers and is
-     incremented inside a Firestore transaction, so two students
-     logging in at the same instant can never collide.
-   - Existing students who already have `registrationNumber`
-     are skipped.
+   STUDENT ID CARD
 ============================================================ */
-
 function keyStageSlug(ks){
   const s = String(ks || '').toUpperCase().replace(/\s+/g, '');
   const m = s.match(/KS(\d)/);
@@ -1505,13 +1668,8 @@ function buildRegistrationNumber(year, ks, yr, seq){
 
 async function ensureStudentIdNumber(){
   if (!profile) return;
-
-    // Already allocated — nothing to do.
-  // Legacy students with an old PS-… idNumber also keep their existing
-  // number; only new students get an RN-… registration number.
   if (profile.registrationNumber || profile.idNumber) return;
 
-  // We need Key Stage and Year to build the number.
   const ks = (profile.keyStage || '').replace(/\s*\(.*/, '').trim();
   const yr = parseInt(profile.year, 10);
   if (!ks || !yr) {
@@ -1537,7 +1695,6 @@ async function ensureStudentIdNumber(){
         lastSeq  = typeof data.lastSequence === 'number' ? data.lastSequence : 100;
       }
 
-      // Reset the counter on year boundary.
       if (lastYear !== currentYear) {
         lastSeq = 100;
       }
@@ -1545,14 +1702,12 @@ async function ensureStudentIdNumber(){
       const nextSeq = lastSeq + 1;
       const regNum  = buildRegistrationNumber(currentYear, ks, yr, nextSeq);
 
-      // Bump the counter.
       tx.set(counterRef, {
         lastYear: currentYear,
         lastSequence: nextSeq,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      // Write the registration number back to the student doc.
       tx.update(studentRef, {
         registrationNumber: regNum,
         registrationSequence: nextSeq,
@@ -1569,13 +1724,11 @@ async function ensureStudentIdNumber(){
 
   } catch (e) {
     console.warn('ensureStudentIdNumber failed:', e);
-    // Fallback so the card still renders something sensible.
     profile.registrationNumber =
       profile.registrationNumber ||
       'RN-' + currentYear + '-' + keyStageSlug(ks) + '-' + String(yr).padStart(2, '0') + '-000';
   }
 }
-
 
 function studentPhotoCooldown(){
   if (!profile || !profile.photoUpdatedAt) return { ok: true };
@@ -1609,7 +1762,7 @@ function renderProfileIdCard(){
     ? '<img src="' + escapeHtml(profile.photoUrl) + '" alt="" crossorigin="anonymous" />'
     : escapeHtml(studentInitialsOf(profile.name));
 
-    host.innerHTML = `
+  host.innerHTML = `
     <div class="panel-head">
       <div>
         <h3>My Student ID</h3>
@@ -1625,7 +1778,7 @@ function renderProfileIdCard(){
             <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="Paisley Studio" />
             </div>
             <div class="id-brand-divider"></div>
-                        <div class="id-brand-text">
+            <div class="id-brand-text">
               <div class="id-brand-name">Paisley Studio</div>
               <span class="id-brand-role">Student Identification Card</span>
             </div>
@@ -1643,7 +1796,7 @@ function renderProfileIdCard(){
 
         <div class="id-card-right">
           <div class="id-details">
-                        <div class="id-row"><span class="k">Reg No.</span><span class="v mono">${escapeHtml(profile.registrationNumber || profile.idNumber || '—')}</span></div>
+            <div class="id-row"><span class="k">Reg No.</span><span class="v mono">${escapeHtml(profile.registrationNumber || profile.idNumber || '—')}</span></div>
             <div class="id-row"><span class="k">Programme</span><span class="v">${escapeHtml(profileIdProgramme())}</span></div>
             <div class="id-row"><span class="k">Joined</span><span class="v">${escapeHtml(new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }))}</span></div>
             <div class="id-row"><span class="k">Renews</span><span class="v">${escapeHtml(new Date(new Date().getFullYear() + 1, 7, 31).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }))}</span></div>
@@ -1678,8 +1831,7 @@ function renderProfileIdCard(){
     </div>
   `;
 
-    const qrEl = document.getElementById('profileIdQr');
-  // QR encodes the site root — scanning opens paisleystudio.online in the phone browser.
+  const qrEl = document.getElementById('profileIdQr');
   const qrTarget = 'https://paisleystudio.online';
   qrEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&data=' + encodeURIComponent(qrTarget);
 
@@ -1723,6 +1875,9 @@ async function handleIdPhotoUpload(e){
     profile.photoUrl = url;
     profile.photoPath = path;
     profile.photoUpdatedAt = { seconds: Math.floor(Date.now() / 1000) };
+
+    // Refresh cache so the new photo persists across navigation.
+    if (profile) writeProfileCache(currentUser.uid, profile);
 
     renderProfileIdCard();
   } catch (err) {

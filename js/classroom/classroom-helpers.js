@@ -1320,34 +1320,36 @@
         root.innerHTML = '<div class="cr-panel"><div class="cr-empty">No classroom content is available yet.</div></div>';
         return;
       }
-      
+
+      // ============================================================
+      // PARALLELISED — every subject's badge data is fetched concurrently.
+      // Before: subjects.length × (findClassroom → loadTopics → loadLessons
+      //         → loadStudentWork) = up to 20 sequential round trips.
+      // After:  ~4 concurrent round trips regardless of subject count.
+      // ============================================================
       var badges = {};
-      for (var i = 0; i < subjects.length; i++) {
-        var k = subjects[i];
+      await Promise.all(subjects.map(async function (k) {
         try {
           var cls = await findClassroom(k, year, profile.keyStage);
-          if (cls) {
-            var topics = await loadTopics(cls.id);
-            var lessons = await loadLessons(cls.id, true, AUD);
-            
-            if (window.WorkUI && window.WorkUI.loadStudentWork) {
-              var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
-              var pLessons = work.lessons ? work.lessons.filter(function(l){ return !l.sub || l.sub.status === 'Corrections'; }).length : 0;
-              var pHomework = work.assignments ? work.assignments.filter(function(a){ return !a.sub || a.sub.status === 'Corrections'; }).length : 0;
-              var pExams = work.exams ? work.exams.filter(function(e){ return !e.sub || e.sub.status === 'Corrections'; }).length : 0;
-              
-              pExams = work.exams.filter(function(e) {
-                if (e.sub && e.sub.status === 'Submitted') return false;
-                if (e.sub && e.sub.status === 'Graded') return false;
-                if (e.flat && window.WorkUI && window.WorkUI._h && !window.WorkUI._h.isWindowOpen(e)) return false;
-                return true;
-              }).length;
+          if (!cls) return;
+          var topics = await loadTopics(cls.id);
+          var lessons = await loadLessons(cls.id, true, AUD);
 
-              badges[k] = pLessons + pHomework + pExams;
-            }
+          if (window.WorkUI && window.WorkUI.loadStudentWork) {
+            var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
+            var pLessons = work.lessons ? work.lessons.filter(function(l){ return !l.sub || l.sub.status === 'Corrections'; }).length : 0;
+            var pHomework = work.assignments ? work.assignments.filter(function(a){ return !a.sub || a.sub.status === 'Corrections'; }).length : 0;
+            var pExams = work.exams ? work.exams.filter(function(e) {
+              if (e.sub && e.sub.status === 'Submitted') return false;
+              if (e.sub && e.sub.status === 'Graded') return false;
+              if (e.flat && window.WorkUI && window.WorkUI._h && !window.WorkUI._h.isWindowOpen(e)) return false;
+              return true;
+            }).length : 0;
+
+            badges[k] = pLessons + pHomework + pExams;
           }
-        } catch(e) { console.warn('Could not load badges for', k); }
-      }
+        } catch(e) { console.warn('Could not load badges for', k, e); }
+      }));
 
       root.innerHTML = '<div class="cr-bar"><div><h3>My Classes</h3><div class="cr-sub">Lessons, notes and resources for the subjects you take.</div></div></div>' +
         '<div class="cr-grid">' + subjects.map(function (k) {
@@ -1444,7 +1446,7 @@
               '<div class="cr-player" data-p="' + k + '" style="flex-basis:100%"></div></div>';
           }).join('');
       }
-      
+
       var lWork = S.work.lessons ? S.work.lessons.find(function(x){ return x.id === l.id; }) : null;
       h += '<div class="cr-classwork-upload" style="margin-top:1.5rem; padding:1rem; border:1px solid var(--line); border-radius:12px; background:var(--paper);">';
       if (lWork && lWork.sub && lWork.sub.status === 'Graded') {
