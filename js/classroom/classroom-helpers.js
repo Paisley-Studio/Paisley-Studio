@@ -11,31 +11,6 @@
      ClassroomUI.mountStudent(el, { uid, profile });
 
    scope:'remote' is used by the Remote Students → Classwork tab.
-   It forces every lesson authored inside it to be posted to remote
-   students only, and (for tutors) filters the visible lesson list
-   to remote-posted lessons. Admin still sees the full lesson tree —
-   the audience filter never hides anything from admin, so Classwork
-   looks exactly like Classroom for them, with two exceptions:
-   the blue scope banner at the top, and the Set Audience shortcut
-   hidden so the audience cannot be flipped by accident. (The
-   Prepare Assignment button is still shown so remote assignments
-   can be created directly from Classwork.)
-
-   Data model (Firestore):
-     classrooms/{subjectId}_y{year}            subjectId, subjectName, keyStage, year
-       topics/{topicId}                        title, description, order
-       lessons/{lessonId}                      topicId, title, order, content (HTML),
-                                               attachments[], status, publishAt, author,
-                                               audiences { online, remote, tutors }
-       lessons/{lessonId}/submissions/{uid}    studentId, status, fileUrl, etc.
-   Subjects are the SAME ids used by students, tutors and the timetable
-   (see lmzSubjectKey in lms-helpers.js) — no separate subject list.
-   Files live in Firebase Storage under
-     classroom-files/{subjectId}/{classroomId}/{lessonId}/…
-   and only metadata + download URL is kept in Firestore.
-
-   Requires (loaded earlier on the page): firebase-config.js (global `db`),
-   lms-helpers.js. Staff pages also load the Storage SDK for uploads.
 ========================================================= */
 (function (global) {
   'use strict';
@@ -171,8 +146,6 @@
      Styles
   --------------------------------------------------------- */
   var AUD_NAMES = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
-  // Records created before the audience model carry no `audiences`: they were live to
-  // online students (when published) and visible to tutors; never to remote students.
   function effAud(l) {
     if (l && l.audiences && typeof l.audiences === 'object') return l.audiences;
     return { online: !!l && (l.status === 'published' || l.status === 'scheduled'), remote: false, tutors: true };
@@ -338,10 +311,6 @@
     return snapDocs(snap).sort(byOrder);
   }
 
-  /* Lessons are authored once and carry audiences { online, remote, tutors }.
-     aud: 'online' | 'remote' | 'tutors' restricts the read to lessons posted to
-     that audience (the Firestore rules require the same filter); omit it for the
-     admin who wants to see everything. */
   async function loadLessons(cid, publishedOnly, aud) {
     var topics = await loadTopics(cid);
     var out = [];
@@ -530,7 +499,7 @@
   function mountManager(root, opts) {
     injectStyle();
     var isAdmin = opts.role === 'admin';
-    var scope = opts.scope || null;   // 'remote' → Classwork inside Remote Students
+    var scope = opts.scope || null;
     var scopeBanner = scope === 'remote'
       ? '<div class="cr-scope-banner"><i class="fas fa-house-laptop"></i> <b>Classwork — Remote students only.</b> Everything saved here is posted to remote students. Online students and tutors will not see it.</div>'
       : '';
@@ -765,8 +734,6 @@
         var doc = await clsRef(cid).get();
         if (!doc.exists) throw new Error('Classroom not found.');
         S.cls = Object.assign({ id: doc.id }, doc.data());
-        // Admin always sees the full lesson tree, exactly like in the main
-        // Classroom tab. Only tutors are filtered by audience.
         var audForLoad = isAdmin ? null : 'tutors';
         var res = await Promise.all([loadTopics(cid), loadLessons(cid, false, audForLoad)]);
         S.topics = res[0]; S.lessons = res[1];
@@ -806,7 +773,7 @@
         ? (scope === 'remote'
             ? 'Everything you add here is posted to remote students only. Online students and tutors never see it.'
             : 'Topics and lessons appear to students in this order. Scheduled lessons are released automatically within a minute of their time.')
-        : 'Lessons and homework are prepared and posted to you by the Studio Desk. Open homework in the Homework tab to release it to your students and to mark their work.';
+        : 'Material posted to you by the Studio Desk. Open a lesson to release it to your students.';
       var h = scopeBanner +
         '<div class="cr-crumb"><a data-a="back">' + (isAdmin ? (scope === 'remote' ? 'Classwork (Remote)' : 'Classroom Management') : 'My Classrooms') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' +
         esc(name) + esc(yearTxt) + '</span></div>' +
@@ -843,14 +810,16 @@
         if (open) {
           if (!ls.length) h += '<div class="cr-empty">' + (isAdmin ? 'No lessons have been added to this topic yet.' : 'No lessons in this topic yet.') + '</div>';
           ls.forEach(function (l, li) {
+            // Admin sees full edit controls; tutor sees Release button + click-through.
             var lessonActions = isAdmin
               ? '<div class="cr-actions"><button type="button" class="cr-btn sm" title="Move up" data-a="lesson-up" data-id="' + esc(l.id) + '"' + (li === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>' +
                 '<button type="button" class="cr-btn sm" title="Move down" data-a="lesson-down" data-id="' + esc(l.id) + '"' + (li === ls.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>' +
                 '<button type="button" class="cr-btn sm" data-a="edit-lesson" data-id="' + esc(l.id) + '"><i class="fas fa-pen"></i> Edit</button>' +
                 '<button type="button" class="cr-btn sm" data-a="archive" data-id="' + esc(l.id) + '">' + (l.status === 'archived' ? '<i class="fas fa-box-open"></i> Restore' : '<i class="fas fa-box-archive"></i> Archive') + '</button>' +
                 '<button type="button" class="cr-btn sm danger" data-a="del-lesson" data-id="' + esc(l.id) + '"><i class="fas fa-trash"></i></button></div>'
-              : '';
-            h += '<div class="cr-lesson"><span class="n">' + pad2(numOf[l.id]) + '</span>' +
+              : '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="release" data-id="' + esc(l.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button></div>';
+            h += '<div class="cr-lesson" ' + (!isAdmin ? 'data-a="open-lesson" data-id="' + esc(l.id) + '" style="cursor:pointer"' : '') + '>' +
+              '<span class="n">' + pad2(numOf[l.id]) + '</span>' +
               '<span class="tt">' + esc(l.title) + '<small>' + esc(l.authorName || '') + (l.attachments && l.attachments.length ? ' · ' + l.attachments.length + ' resource' + (l.attachments.length === 1 ? '' : 's') : '') + '</small></span>' +
               statusBadge(l) + audBadges(l) +
               lessonActions + '</div>';
@@ -943,8 +912,6 @@
       var removedExisting = [];
       var dirty = false, busy = 0, editor;
 
-      // Tutors open the lesson editor only to post an assignment inside the
-      // lesson's topic. Everything else is read-only for them.
       var readOnly = !isAdmin;
 
       var m = openModal({
@@ -990,12 +957,12 @@
           '<button type="button" class="cr-btn" data-a="cancel">Close</button>' +
           (lesson ? '<button type="button" class="cr-btn primary" data-a="release"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '');
         m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(true); };
-        
+
         var relBtn = m.foot.querySelector('[data-a="release"]');
         if (relBtn) relBtn.onclick = function() {
-          if (window.WorkUI && WorkUI.openRelease) {
+          if (window.WorkUI && window.WorkUI.openRelease) {
             var item = Object.assign({}, lesson, { cid: cls.id, tid: lesson.topicId });
-            WorkUI.openRelease(item);
+            window.WorkUI.openRelease(item, user);
           } else {
             alert('Publishing mechanism not loaded.');
           }
@@ -1003,7 +970,6 @@
         return;
       }
 
-      // ---- Admin path: full lesson editor ----
       m.body.innerHTML =
         '<div class="cr-row2"><div class="cr-field"><label>Lesson title</label><input type="text" id="crLTitle" maxlength="200" placeholder="e.g. Linear Equations" value="' + esc(lesson ? lesson.title : '') + '"></div>' +
         '<div class="cr-field"><label>Topic</label><select id="crLTopic">' + topics.map(function (t) {
@@ -1021,7 +987,6 @@
         '<input type="date" id="crSchDate" value="' + defDate + '"><input type="time" id="crSchTime" value="' + defTime + '"></div>' +
         (lesson ? '<div class="cr-note" style="margin-top:.35rem;">Current status: ' + statusBadge(lesson) + '</div>' : '') + '</div>';
 
-      // In remote scope, the audience is forced to remote-only and the button is hidden.
       var audienceButton = (scope === 'remote')
         ? ''
         : '<button type="button" class="cr-btn" data-a="set-audience"><i class="fas fa-users-viewfinder"></i> Set Audience</button>';
@@ -1034,8 +999,6 @@
         (global.WorkUI ? '<button type="button" class="cr-btn" data-a="post-assignment"><i class="fas fa-clipboard-check"></i> Prepare Assignment</button>' : '') +
         '<button type="button" class="cr-btn primary" data-s="published" title="Marks the lesson ready."><i class="fas fa-circle-check"></i> Mark Ready</button>';
 
-      // ---- Audience state ----
-      // In remote scope, this is locked to remote-only.
       var pendingAudiences = (scope === 'remote')
         ? { online: false, remote: true, tutors: false }
         : ((lesson && lesson.audiences && typeof lesson.audiences === 'object')
@@ -1045,7 +1008,6 @@
       var errEl = m.foot.querySelector('#crLErr');
       var attsEl = m.body.querySelector('#crAtts');
 
-      // Set Audience modal
       var audBtn = m.foot.querySelector('[data-a="set-audience"]');
       if (audBtn) audBtn.onclick = function () {
         var am = openModal({ title: 'Set audience — where this lesson is posted' });
@@ -1329,6 +1291,16 @@
         }
         else if (a === 'edit-lesson') editLesson(id);
         else if (a === 'edit-any') editLesson(id, el.dataset.c);
+        else if (a === 'open-lesson') { if (!isAdmin) { var lesson = S.lessons.filter(function (x) { return x.id === id; })[0]; if (lesson) openLessonEditor(S.cls, S.topics, lesson, null, refreshClassroom); } }
+        else if (a === 'release') {
+          if (!isAdmin) {
+            var lessonRel = S.lessons.filter(function (x) { return x.id === id; })[0];
+            if (lessonRel && window.WorkUI && window.WorkUI.openRelease) {
+              var item = Object.assign({}, lessonRel, { cid: S.cls.id, tid: lessonRel.topicId });
+              window.WorkUI.openRelease(item, user);
+            }
+          }
+        }
         else if (a === 'archive') {
           if (!isAdmin) return;
           var ls = S.lessons.filter(function (x) { return x.id === id; })[0];
@@ -1388,7 +1360,6 @@
         return;
       }
       
-      // Fetch pending counts for badges
       var badges = {};
       for (var i = 0; i < subjects.length; i++) {
         var k = subjects[i];
@@ -1396,16 +1367,7 @@
           var cls = await findClassroom(k, year, profile.keyStage);
           if (cls) {
             var topics = await loadTopics(cls.id);
-            // We need a lightweight fetch to count pending lessons, homework, and exams.
-            // We can reuse loadStudentWork if it exists, but it loads subs too.
-            // For speed, let's just count published lessons and assignments that aren't submitted.
             var lessons = await loadLessons(cls.id, true, AUD);
-            var pending = lessons.filter(function(l) {
-              // We don't have submission status easily here without loading them.
-              // But wait, WorkUI.loadStudentWork loads EVERYTHING (assignments, exams, lessons).
-              // Let's just use WorkUI.loadStudentWork to be accurate, since it's cached by browser anyway.
-              return true; // Will filter below.
-            }).length;
             
             if (window.WorkUI && window.WorkUI.loadStudentWork) {
               var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
@@ -1413,11 +1375,10 @@
               var pHomework = work.assignments ? work.assignments.filter(function(a){ return !a.sub || a.sub.status === 'Corrections'; }).length : 0;
               var pExams = work.exams ? work.exams.filter(function(e){ return !e.sub || e.sub.status === 'Corrections'; }).length : 0;
               
-              // Also, we need to make sure the exam is actually open to count as "pending"
               pExams = work.exams.filter(function(e) {
                 if (e.sub && e.sub.status === 'Submitted') return false;
                 if (e.sub && e.sub.status === 'Graded') return false;
-                if (e.flat && !H.isWindowOpen(e)) return false;
+                if (e.flat && !window.WorkUI._h.isWindowOpen(e)) return false;
                 return true;
               }).length;
 
@@ -1473,7 +1434,6 @@
         if (!ls.length && !workRows) return;
         h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t">' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</span></div>' +
           ls.map(function (l) {
-            // We check if there's a submission attached to this lesson by looking in S.work.lessons
             var lWork = S.work.lessons ? S.work.lessons.find(function(x){ return x.id === l.id; }) : null;
             var badge = '';
             if (lWork && lWork.sub) {
@@ -1524,7 +1484,6 @@
           }).join('');
       }
       
-      // Add upload box for Classwork
       var lWork = S.work.lessons ? S.work.lessons.find(function(x){ return x.id === l.id; }) : null;
       h += '<div class="cr-classwork-upload" style="margin-top:1.5rem; padding:1rem; border:1px solid var(--line); border-radius:12px; background:var(--paper);">';
       if (lWork && lWork.sub && lWork.sub.status === 'Graded') {
