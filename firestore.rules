@@ -670,10 +670,14 @@ service cloud.firestore {
               classTutorSubject(classroomData(cid).subjectId) ||
               isOwner(sid) ||
               isParentOf(sid);
+              
+            // FIXED: Switched forMe() to postedToMyType() because Lessons 
+            // do not have an 'audience' or 'recipients' array, they use 'audiences'.
             allow create: if newStudentWork(sid) &&
               (!isRemoteStudent() || remoteActive()) &&
               classStudentMay(classroomData(cid)) &&
-              forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
+              postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
+              
             allow update: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
