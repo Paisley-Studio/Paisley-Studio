@@ -2,6 +2,7 @@
    Paisley Studio — Remote Students (admin callables)
 ========================================================= */
 const { onRequest } = require("firebase-functions/v2/https");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 
@@ -229,6 +230,45 @@ exports.setRemoteStudentStatus = onRequest(
       res.status(200).send(JSON.stringify({ result: { status } }));
     } catch (error) {
       sendError(res, 400, error.message);
+    }
+  }
+);
+
+/* ---------------------------------------------------------
+   ON REMOTE TICKET CREATED
+   Fires when a remote student raises a support ticket.
+   Sends a bell + email to every admin.
+--------------------------------------------------------- */
+exports.onRemoteTicketCreated = onDocumentCreated(
+  { document: "tickets/{ticketId}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const ticket = event.data.data() || {};
+    if (ticket.studentType !== "remote") return;
+    const db = admin.firestore();
+    const admins = await db.collection("admins").get();
+    for (const doc of admins.docs) {
+      const adminData = doc.data() || {};
+      const email = adminData.email;
+      try {
+        await db.collection("personalNotifications").add({
+          recipientId: doc.id,
+          recipientType: "admin",
+          type: "remote_ticket",
+          title: "New remote student ticket",
+          message: `${ticket.studentName || "A remote student"}: ${ticket.subject || ""}`,
+          relatedEntity: "tickets",
+          relatedEntityId: event.params.ticketId,
+          read: false,
+          emailSent: !!email,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (e) { /* ignore */ }
+      if (email) {
+        try {
+          const t = templates.adminNewRemoteTicket({ student: ticket, ticket });
+          await notifications.sendEmail(email, t.subject, t.html);
+        } catch (e) { console.warn("remote ticket email failed", e.message); }
+      }
     }
   }
 );

@@ -17,19 +17,6 @@
    Libraries (CDN only, loaded lazily, no build step):
      pdf.js 3.11.174  - renders the student's PDF
      pdf-lib 1.17.1   - burns the ink into a NEW PDF on Grade
-
-   Ink model (stored on the submission as inkData):
-     { version:1, pages:[ { pageNumber, strokes:[
-         { tool:'pen'|'highlighter', color:'#RRGGBB', width:n,
-           points:[ {x,y}, ... ] } ] } ] }
-   x and y are 0..1 fractions of the page as DISPLAYED (so ink is
-   resolution independent). width is in units of 1/1000 of the page
-   width. Eraser removes whole strokes it touches (like Edge).
-
-   Safety net: every change is also mirrored to localStorage within
-   half a second, and Firestore is written 3 s after the last change
-   and every 20 strokes. On open, whichever copy is newer wins, so a
-   power or network cut loses nothing.
 ========================================================= */
 (function (global) {
   'use strict';
@@ -47,7 +34,7 @@
   ];
   var AUTOSAVE_MS = 3000;
   var AUTOSAVE_STROKES = 20;
-  var MAX_INK_BYTES = 900 * 1024;      // Firestore documents are capped at 1 MiB
+  var MAX_INK_BYTES = 900 * 1024;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -89,9 +76,6 @@
   }
   function round4(n) { return Math.round(n * 10000) / 10000; }
 
-  /* ---------------------------------------------------------
-     Styles (page tokens; no new colours)
-  --------------------------------------------------------- */
   function injectStyle() {
     if (document.getElementById('ink-style')) return;
     var st = document.createElement('style');
@@ -112,6 +96,8 @@
       '.ink-btn:disabled{opacity:.45;cursor:not-allowed}',
       '.ink-btn.primary{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}',
       '.ink-btn.primary:hover{background:var(--brand,#55BFB3);border-color:var(--brand,#55BFB3)}',
+      '.ink-btn.correction{background:#F5C842;color:#263331;border-color:#F5C842}',
+      '.ink-btn.correction:hover{background:#e0b32e}',
       '.ink-sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--surface,#fff);box-shadow:0 0 0 1.5px var(--line,rgba(38,51,49,.25));cursor:pointer;padding:0}',
       '.ink-sw.on{box-shadow:0 0 0 2.5px var(--brand-deep,#245F5A)}',
       '.ink-width{display:inline-flex;align-items:center;gap:.4rem;color:var(--brand-deep,#245F5A)}',
@@ -129,9 +115,6 @@
     document.head.appendChild(st);
   }
 
-  /* =========================================================
-     open()
-  ========================================================= */
   function open(opts) {
     injectStyle();
     var data = opts.data || {};
@@ -146,7 +129,7 @@
       tool: 'pen', color: SWATCHES[0].hex, width: 4,
       undo: [], redo: [], selected: null,
       drawing: null, dirty: false, strokesSinceSave: 0, saving: false, saveTimer: null,
-      closed: false, renderToken: 0, dims: []   // dims[i] = {w,h} of page i at scale 1 as displayed
+      closed: false, renderToken: 0, dims: []
     };
 
     var root = document.createElement('div');
@@ -197,7 +180,6 @@
     }
     function now() { return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
 
-    /* ------------------------------ ink model ------------------------------ */
     function pageInk(i) {
       while (S.ink.pages.length <= i) S.ink.pages.push({ pageNumber: S.ink.pages.length + 1, strokes: [] });
       return S.ink.pages[i];
@@ -208,11 +190,9 @@
       while (out.pages.length && !out.pages[out.pages.length - 1].strokes.length) out.pages.pop();
       return out;
     }
-    function strokeCount() { return S.ink.pages.reduce(function (n, p) { return n + (p.strokes || []).length; }, 0); }
 
-    /* ------------------------------ saving ------------------------------ */
     function mirrorLocal() {
-      try { localStorage.setItem(localKey, JSON.stringify({ at: Date.now(), ink: cleanInk() })); } catch (e) { /* quota or private mode */ }
+      try { localStorage.setItem(localKey, JSON.stringify({ at: Date.now(), ink: cleanInk() })); } catch (e) { /* quota */ }
     }
     var mirrorTimer = null;
     function scheduleMirror() { clearTimeout(mirrorTimer); mirrorTimer = setTimeout(mirrorLocal, 400); }
@@ -227,7 +207,6 @@
       syncButtons();
     }
 
-    // Writes ONLY ink fields, so it can never release marks or change status.
     function saveInk() {
       clearTimeout(S.saveTimer);
       if (S.saving || !S.dirty) return Promise.resolve(true);
@@ -261,7 +240,6 @@
     function onBeforeUnload(e) { if (S.dirty) { mirrorLocal(); e.preventDefault(); e.returnValue = ''; } }
     window.addEventListener('beforeunload', onBeforeUnload);
 
-    /* ------------------------------ rendering ------------------------------ */
     function layout(dim) {
       var avail = Math.max(280, stage.clientWidth - 24);
       var w = Math.min(avail, 980);
@@ -349,7 +327,6 @@
       if (live) drawStroke(ctx, live, W, H, false);
     }
 
-    /* ------------------------------ pointer input ------------------------------ */
     function norm(e) {
       var r = overCanvas.getBoundingClientRect();
       return { x: round4(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))), y: round4(Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))) };
@@ -392,7 +369,7 @@
         var p = norm(e);
         if (S.drawing.erase) { eraseAt(p); return; }
         var pts = S.drawing.stroke.points, last = pts[pts.length - 1];
-        if (Math.abs(p.x - last.x) + Math.abs(p.y - last.y) < 0.0012) return;   // thin out the path
+        if (Math.abs(p.x - last.x) + Math.abs(p.y - last.y) < 0.0012) return;
         pts.push(p);
         redraw(S.drawing.stroke);
       });
@@ -422,7 +399,6 @@
       redraw(); markChanged(false);
     }
 
-    /* ------------------------------ actions ------------------------------ */
     function doUndo() {
       var a = S.undo.pop(); if (!a) return;
       var strokes = pageInk(a.page).strokes;
@@ -469,7 +445,6 @@
       root.querySelector('#inkTotal').textContent = String(S.pageCount || 1);
     }
 
-    /* ------------------------------ burn-in (pdf-lib) ------------------------------ */
     async function buildGradedPdf() {
       var L = global.PDFLib;
       var ink = cleanInk();
@@ -489,8 +464,7 @@
         var page = pages[idx]; if (!page || !pi.strokes.length) return;
         var size = page.getSize(), W = size.width, H = size.height;
         var rot = ((page.getRotation().angle % 360) + 360) % 360;
-        var dispW = (rot === 90 || rot === 270) ? H : W;       // width of the page as displayed
-        // displayed (u,v) -> unrotated PDF user space (origin bottom-left)
+        var dispW = (rot === 90 || rot === 270) ? H : W;
         function map(u, v) {
           if (rot === 90) return { x: v * W, y: u * H };
           if (rot === 180) return { x: W - u * W, y: v * H };
@@ -505,7 +479,6 @@
           var path = '';
           pts.forEach(function (p, k) {
             var m = map(p.x, p.y);
-            // drawSvgPath is y-down from its origin, so feed it (x, H - y) and set origin to the page top
             path += (k ? ' L ' : 'M ') + m.x.toFixed(2) + ' ' + (H - m.y).toFixed(2);
           });
           var o = { x: 0, y: H, borderColor: L.rgb(c.r, c.g, c.b), borderWidth: thick, borderLineCap: L.LineCapStyle.Round };
@@ -516,14 +489,13 @@
       return doc.save();
     }
 
-    /* ------------------------------ grade dialog ------------------------------ */
     function gradeDialog() {
       var wasGraded = data.status === 'Graded';
       var ov = document.createElement('div');
       ov.className = 'cr-overlay cr-root';
       ov.style.zIndex = '500';
       ov.innerHTML =
-        '<div class="cr-modal" role="dialog" aria-modal="true"><div class="cr-modal-head"><h3>' + (wasGraded ? 'Update and re-release marks' : 'Grade and release') + '</h3>' +
+        '<div class="cr-modal" role="dialog" aria-modal="true"><div class="cr-modal-head"><h3>' + (wasGraded ? 'Update marks' : 'Grade work') + '</h3>' +
         '<button type="button" class="cr-btn sm" data-x="close"><i class="fas fa-xmark"></i></button></div>' +
         '<div class="cr-modal-body">' +
           '<div class="cr-row2"><div class="cr-field"><label>Score</label><input type="number" id="gScore" min="0" step="any" value="' + (data.grade != null && !isNaN(Number(data.grade)) ? esc(data.grade) : '') + '"></div>' +
@@ -531,58 +503,106 @@
           '<div class="cr-field"><label>Feedback</label><textarea id="gFb" rows="5" style="width:100%" placeholder="Write feedback for the student">' + esc(data.feedback || '') + '</textarea></div>' +
           '<div class="cr-note">The student and parent will be emailed and notified. A copy of the work with your ink on it is generated for download.</div>' +
         '</div>' +
-        '<div class="cr-modal-foot"><span class="cr-err" id="gErr"></span>' +
+        '<div class="cr-modal-foot" style="justify-content:space-between; flex-wrap:wrap;"><div style="display:flex; gap:.5rem; flex-wrap:wrap;">' +
+          '<button type="button" class="ink-btn correction" data-a="correction" title="Require student to re-attempt"><i class="fas fa-rotate-left"></i> Request Corrections</button>' +
+          '<button type="button" class="ink-btn" data-a="no-result" title="Release feedback without a score">Grade without result</button>' +
+        '</div><div style="display:flex; gap:.5rem;">' +
           '<button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
-          '<button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-check"></i> ' + (wasGraded ? 'Re-release' : 'Grade') + '</button></div></div>';
+          '<button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-check"></i> Grade & Release</button>' +
+        '</div></div></div>';
       document.body.appendChild(ov);
       var errEl = ov.querySelector('#gErr');
       function close() { ov.remove(); }
       ov.querySelector('[data-x="close"]').onclick = close;
       ov.querySelector('[data-a="cancel"]').onclick = close;
+
+      // Grade with result
       ov.querySelector('[data-a="go"]').onclick = async function () {
         var btn = this;
         var score = parseFloat(ov.querySelector('#gScore').value), max = parseFloat(ov.querySelector('#gMax').value);
         var fb = ov.querySelector('#gFb').value.trim();
-        if (isNaN(score) || isNaN(max)) { errEl.textContent = 'Enter both the score and the maximum score.'; return; }
-        if (max <= 0 || score < 0 || score > max) { errEl.textContent = 'The score must be between 0 and the maximum.'; return; }
-        btn.disabled = true; errEl.textContent = '';
+        if (isNaN(score) || isNaN(max)) { alert('Enter both the score and the maximum score.'); return; }
+        if (max <= 0 || score < 0 || score > max) { alert('The score must be between 0 and the maximum.'); return; }
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Grading...';
         try {
-          await finalizeGrade(score, max, fb, function (m) { errEl.style.color = 'var(--muted,#5A6E6A)'; errEl.textContent = m; });
+          await finalizeGrade(score, max, fb, 'Graded');
           close();
           finish();
         } catch (e) {
           console.error('grade:', e);
-          errEl.style.color = '';
-          errEl.textContent = e.code === 'storage/unauthorized' ? 'You do not have permission to store the graded copy.' : ('Could not grade: ' + (e.message || e));
-          btn.disabled = false;
+          alert(e.code === 'storage/unauthorized' ? 'You do not have permission to store the graded copy.' : ('Could not grade: ' + (e.message || e)));
+          btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Grade & Release';
+        }
+      };
+
+      // Grade without result (no score)
+      ov.querySelector('[data-a="no-result"]').onclick = async function () {
+        var btn = this;
+        var fb = ov.querySelector('#gFb').value.trim();
+        if (!fb) { alert('Please write feedback when grading without a result.'); return; }
+        if (!confirm('Release this feedback without a score?')) return;
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Grading...';
+        try {
+          await finalizeGrade(null, null, fb, 'Graded');
+          close();
+          finish();
+        } catch (e) {
+          console.error('grade:', e);
+          alert(e.code === 'storage/unauthorized' ? 'You do not have permission to store the graded copy.' : ('Could not grade: ' + (e.message || e)));
+          btn.disabled = false; btn.innerHTML = 'Grade without result';
+        }
+      };
+
+      // Request Corrections
+      ov.querySelector('[data-a="correction"]').onclick = async function () {
+        var btn = this;
+        var fb = ov.querySelector('#gFb').value.trim();
+        if (!fb) { alert('Please write feedback explaining what needs to be corrected.'); return; }
+        if (!confirm('Send this back to the student for corrections?')) return;
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        try {
+          await finalizeGrade(null, null, fb, 'Corrections');
+          close();
+          finish();
+        } catch (e) {
+          console.error('correction:', e);
+          alert('Could not request corrections: ' + (e.message || e));
+          btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate-left"></i> Request Corrections';
         }
       };
     }
 
-    async function finalizeGrade(score, max, feedback, progress) {
+    async function finalizeGrade(score, max, feedback, status) {
       await saveInkNow();
       var inkNow = cleanInk();
       var gradedFileUrl = '', gradedFileName = '', gradedStoragePath = '';
       var hasInk = inkNow.pages.some(function (p) { return p.strokes.length; });
       var markable = S.pdf || S.isImage;
       if (markable) {
-        progress('Building the marked copy\u2026');
         var bytes = await buildGradedPdf();
-        gradedFileName = 'graded_' + safeName(data.studentName) + '_' + safeName(item.title) + '.pdf';
+        gradedFileName = (status === 'Corrections' ? 'corrections_' : 'graded_') + safeName(data.studentName) + '_' + safeName(item.title) + '.pdf';
         gradedStoragePath = 'graded-submissions/' + opts.cid + '/' + opts.itemId + '/' + (data.studentId || opts.docRef.id) + '/' + gradedFileName;
-        progress('Uploading\u2026');
         var ref = firebase.storage().ref(gradedStoragePath);
         await ref.put(new Blob([bytes], { type: 'application/pdf' }), { contentType: 'application/pdf' });
         gradedFileUrl = await ref.getDownloadURL();
       }
-      progress('Releasing marks\u2026');
+      
       var update = {
-        status: 'Graded', grade: score, maxScore: max, feedback: feedback,
+        status: status,
+        feedback: feedback,
         gradedBy: user.uid, gradedByName: user.name || '', gradedAt: FV.serverTimestamp(),
         released: true, releasedAt: FV.serverTimestamp(),
         inkData: hasInk ? inkNow : null, inkUpdatedAt: FV.serverTimestamp()
       };
+      if (status === 'Graded') {
+        update.grade = score;
+        update.maxScore = max;
+      } else if (status === 'Corrections') {
+        update.grade = null;
+        update.maxScore = null;
+      }
       if (markable) { update.gradedFileUrl = gradedFileUrl; update.gradedFileName = gradedFileName; update.gradedStoragePath = gradedStoragePath; }
+      
       await opts.docRef.set(update, { merge: true });
       try { localStorage.removeItem(localKey); } catch (e) { /* ignore */ }
       S.dirty = false;
@@ -598,7 +618,6 @@
       });
     }
 
-    /* ------------------------------ lifecycle ------------------------------ */
     function teardown() {
       S.closed = true;
       clearTimeout(S.saveTimer); clearTimeout(mirrorTimer);
@@ -663,9 +682,7 @@
     function onResize() { clearTimeout(resizeT); resizeT = setTimeout(function () { if (S.pageCount) renderPage(); }, 200); }
     window.addEventListener('resize', onResize);
 
-    /* ------------------------------ boot ------------------------------ */
     (async function boot() {
-      // 1. restore ink: newest of server copy and device copy
       var server = data.inkData && data.inkData.pages ? data.inkData : null;
       var serverAt = data.inkUpdatedAt && data.inkUpdatedAt.toMillis ? data.inkUpdatedAt.toMillis() : 0;
       var local = null;

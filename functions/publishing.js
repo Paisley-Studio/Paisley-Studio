@@ -19,7 +19,7 @@
                                                to the tutor's own students
      backfillAudiences        admin callable   safe, repeatable migration
      onAssignmentAudienceChanged, onNestedExamAudienceChanged,
-     onFlatExamAudienceChanged                 notifications when work
+     onLessonAudienceChanged                   notifications when work
                                                BECOMES visible to someone
 
    Notifications are idempotent: every in-app notice uses a
@@ -202,7 +202,7 @@ exports.tutorReleaseWork = onCall(
     const t = await db.collection("tutorAccounts").doc(request.auth.uid).get();
     if (!t.exists) throw new HttpsError("permission-denied", "Tutors only.");
     const parsed = parsePath((request.data || {}).path);
-    if (!parsed || ["assignment", "exam"].indexOf(parsed.type) === -1) throw new HttpsError("invalid-argument", "Only homework and exams can be released to students.");
+    if (!parsed || ["assignment", "exam", "lesson"].indexOf(parsed.type) === -1) throw new HttpsError("invalid-argument", "Only lessons, homework and exams can be released to students.");
     const ids = Array.from(new Set(((request.data || {}).studentIds || []).map(String))).slice(0, 200);
     if (!ids.length) throw new HttpsError("invalid-argument", "Choose at least one student.");
     return releaseWork(db, request.auth.uid, t.data() || {}, parsed, ids);
@@ -222,12 +222,24 @@ async function notifyStudentsOfWork({ kind, item, cid, entity, only, ids }) {
   if (ids) students = students.filter((s) => ids.indexOf(s.id) !== -1);
   const when = W.toDate(kind === "assignment" ? item.dueAt : item.examDate);
   const key = W.stableId(entity);
+
+  // Notification title/type varies by kind. Lessons don't have a
+  // due date, so we omit the date phrase and say "has been posted".
+  const isHomework = kind === "assignment";
+  const isLesson   = kind === "lesson";
+  const nType  = isHomework ? "homework_assigned" : (isLesson ? "lesson_posted" : "exam_posted");
+  const nTitle = isHomework ? "New homework posted"   : (isLesson ? "New lesson posted"   : "New exam available");
+  const rEnt   = isHomework ? "assignment"            : (isLesson ? "lesson"              : "exam");
+  const datePhrase = when
+    ? (isHomework ? " is due " : " on ") + fmt(when)
+    : " has been posted";
+
   for (const s of students) {
     const created = await W.notifyOnce(`work_${key}_${s.id}`, s.id, "student", {
-      type: kind === "assignment" ? "homework_assigned" : "exam_posted",
-      title: kind === "assignment" ? "New homework posted" : "New exam available",
-      message: `${item.title} (${item.subjectName || ""}${item.topicTitle ? ", " + item.topicTitle : ""})${when ? (kind === "assignment" ? " is due " : " on ") + fmt(when) : " has been posted"}.`,
-      relatedEntity: kind === "assignment" ? "assignment" : "exam", relatedEntityId: entity, emailSent: !!s.email
+      type: nType,
+      title: nTitle,
+      message: `${item.title} (${item.subjectName || ""}${item.topicTitle ? ", " + item.topicTitle : ""})${datePhrase}.`,
+      relatedEntity: rEnt, relatedEntityId: entity, emailSent: !!s.email
     });
     if (!created) continue; // already told — a retry must not email twice
     if (s.email) {
@@ -235,11 +247,14 @@ async function notifyStudentsOfWork({ kind, item, cid, entity, only, ids }) {
       await W.sendEmail(s.email, t.subject, t.html);
     }
     for (const p of await W.parentsOfStudent(s.id)) {
+      const pTitle = isHomework ? `New homework for ${s.name || "your child"}`
+                   : isLesson   ? `New lesson for ${s.name || "your child"}`
+                   :              `New exam for ${s.name || "your child"}`;
       await W.notifyOnce(`work_${key}_${p.id}_${s.id}`, p.id, "parent", {
-        type: kind === "assignment" ? "homework_assigned" : "exam_posted",
-        title: `New ${kind === "assignment" ? "homework" : "exam"} for ${s.name || "your child"}`,
-        message: `${item.title} (${item.subjectName || ""})${when ? (kind === "assignment" ? " is due " : " on ") + fmt(when) : ""}.`,
-        relatedEntity: kind === "assignment" ? "assignment" : "exam", relatedEntityId: entity, extra: { studentId: s.id }
+        type: nType,
+        title: pTitle,
+        message: `${item.title} (${item.subjectName || ""})${when ? (isHomework ? " is due " : " on ") + fmt(when) : ""}.`,
+        relatedEntity: rEnt, relatedEntityId: entity, extra: { studentId: s.id }
       });
     }
   }
@@ -271,7 +286,7 @@ async function handleWorkAudienceChange(event, kind, live) {
   const before = event.data.before.data() || {}, after = event.data.after.data() || {};
   if (after.migrated === true) return;
   const { cid, tid } = event.params;
-  const id = event.params.aid || event.params.eid;
+  const id = event.params.aid || event.params.eid || event.params.lid;
   const entity = `${cid}/${tid}/${id}`;
   for (const aud of ["online", "remote"]) {
     if (becameVisible(before, after, aud, live)) await notifyStudentsOfWork({ kind, item: after, cid, entity, only: aud });
@@ -290,6 +305,10 @@ exports.onAssignmentAudienceChanged = onDocumentUpdated(
 exports.onNestedExamAudienceChanged = onDocumentUpdated(
   Object.assign({ document: "classrooms/{cid}/topics/{tid}/exams/{eid}" }, TRIGGER),
   (event) => handleWorkAudienceChange(event, "exam", "Published")
+);
+exports.onLessonAudienceChanged = onDocumentUpdated(
+  Object.assign({ document: "classrooms/{cid}/topics/{tid}/lessons/{lid}" }, TRIGGER),
+  (event) => handleWorkAudienceChange(event, "lesson", "published")
 );
 
 /* =========================================================

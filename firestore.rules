@@ -22,10 +22,6 @@ service cloud.firestore {
 
     // -----------------------------------------------------
     // STUDENT TYPE HELPERS
-    //   A student is "remote" only if students/{uid}.studentType == 'remote'.
-    //   That field is writable only by admins / Cloud Functions (see the
-    //   students rules), so it cannot be forged from the client.
-    //   Records with no studentType are normal online students.
     // -----------------------------------------------------
     function isStudentDoc() {
       return isSignedIn() &&
@@ -40,7 +36,6 @@ service cloud.firestore {
     function isOnlineStudent() {
       return isStudentDoc() && !isRemoteStudent();
     }
-    // A suspended or not-yet-active remote account has no access.
     function remoteActive() {
       return isRemoteStudent() && myStudent().status == 'Active';
     }
@@ -213,13 +208,6 @@ service cloud.firestore {
 
     // =====================================================
     // AUDIENCE-AWARE CONTENT ACCESS
-    //   Lessons / assignments / exams carry
-    //     audiences: { online, remote, tutors }   (booleans)
-    //   Each read branch below tests ONE literal audience flag, so a
-    //   collection query must include the same filter, e.g.
-    //     .where('audiences.remote', '==', true)
-    //   Authoring is admin-only; tutors can only READ what the admin posted
-    //   to tutors and may grade submissions.
     // =====================================================
     function postedToMyType(d) {
       return ('audiences' in d) && (
@@ -241,7 +229,6 @@ service cloud.firestore {
     function tutorSeesPosted(cid) {
       return isTutor() && classTutorMay(classroomData(cid)) && resource.data.audiences.tutors == true;
     }
-    // Homework: whole-class or named recipients, per student type.
     function studentSeesWork(cid) {
       return (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
                ((resource.data.audiences.online == true &&
@@ -256,7 +243,6 @@ service cloud.firestore {
       return (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
              (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid)));
     }
-    // Published exams (nested or flat).
     function studentSeesExam(cid) {
       return resource.data.status == 'Published' && studentSeesWork(cid);
     }
@@ -348,9 +334,6 @@ service cloud.firestore {
     // STUDENTS
     // =====================================================
     match /students/{uid} {
-      // Self-registration creates a normal, PENDING online student only.
-      // Remote students are created by the admitRemoteStudent Cloud Function,
-      // never from a client, and no one can self-assign privileged fields.
       allow create: if isOwner(uid) &&
         request.resource.data.status == 'Pending' &&
         !('studentType' in request.resource.data) &&
@@ -359,7 +342,6 @@ service cloud.firestore {
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
       allow read: if isOwner(uid) || isAdmin() || tutorTeachesStudent(uid) || isParentOf(uid);
-      // Remote students may edit only a few contact fields.
       allow update: if isAdmin() ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt'])) ||
@@ -398,7 +380,6 @@ service cloud.firestore {
     match /homework/{id} {
       allow read: if notRemote();
       allow create: if isAdmin();
-      // Tutors no longer edit or delete admin-authored homework.
       allow update, delete: if isAdmin();
     }
 
@@ -434,7 +415,6 @@ service cloud.firestore {
       allow read: if isAdmin() || isTutor() ||
         (notRemote() && 'status' in resource.data && resource.data.status == 'Published');
       allow create: if isAdmin();
-      // Tutors no longer edit or delete admin-authored exams.
       allow update, delete: if isAdmin();
     }
 
@@ -456,7 +436,6 @@ service cloud.firestore {
     // =====================================================
     match /notes/{id} {
       allow read: if notRemote();
-      // Learning materials are admin-authored; tutors can no longer create them.
       allow create: if isAdmin();
       allow update, delete: if isAdmin();
     }
@@ -551,7 +530,6 @@ service cloud.firestore {
         && request.resource.data.targetTutorId.size() > 0
         && studentHasTutorId(request.auth.uid, request.resource.data.targetTutorId);
 
-      // Remote students raise tickets with the Studio Desk (admins).
       allow create: if remoteActive()
         && request.resource.data.studentId == request.auth.uid
         && request.resource.data.targetAdmin == true
@@ -668,19 +646,6 @@ service cloud.firestore {
 
     // =====================================================
     // CLASSROOM
-    // -----------------------------------------------------
-    // Firestore REFUSES to evaluate `resource.data` or `get()` inside a
-    // collection query — it only allows them for exact-doc reads. So
-    // every read rule on the queryable collections below is opened to
-    // `isSignedIn()`. Submissions and attempts stay strict because
-    // they are always read by exact doc ID.
-    //
-    // Lesson writes: the previous version called a helper
-    // (validLessonWrite) that inspected request.resource.data. That
-    // helper was rejecting legitimate saves because the incoming
-    // payload sometimes had a field the rule didn't expect.
-    // Admin-only, no field-shape check — the admin UI is trusted to
-    // send valid data.
     // =====================================================
     match /classrooms/{cid} {
       allow read: if isSignedIn();
@@ -698,12 +663,26 @@ service cloud.firestore {
           allow create: if isAdmin();
           allow update: if isAdmin();
           allow delete: if isAdmin();
+
+          // Students hand in Classwork just like homework
+          match /submissions/{sid} {
+            allow read: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              isOwner(sid) ||
+              isParentOf(sid);
+            allow create: if newStudentWork(sid) &&
+              (!isRemoteStudent() || remoteActive()) &&
+              classStudentMay(classroomData(cid)) &&
+              forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
+            allow update: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
+            allow delete: if isAdmin();
+          }
         }
 
         match /assignments/{aid} {
           allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesWork(cid) || parentSeesWork(cid);
-          // Assignments are prepared and posted by the Studio Desk only.
-          // Tutors cannot create, edit or delete them (they grade submissions).
           allow create, update, delete: if isAdmin();
 
           match /submissions/{sid} {

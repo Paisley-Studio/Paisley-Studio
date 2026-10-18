@@ -45,6 +45,7 @@
      • onExamPostedOrPublished    (nested legacy exams only)
      • onSubmissionWritten        (nested submissions)
      • onExamAttemptWritten       (nested PDF exam attempts)
+     • onLessonSubmissionWritten  (Classwork submissions)
      • migrateLegacyHomeworkAndExams
      • homeworkDeadlineReminder / grace / report
      • examReminderToParents      (patched separately to accept flat exams)
@@ -67,7 +68,11 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const { VertexAI } = require("@google-cloud/vertexai");
 
-admin.initializeApp();
+const { onInit } = require("firebase-functions/v2");
+
+onInit(() => {
+  admin.initializeApp();
+});
 
 /* ---------------------------------------------------------
    Shared email infrastructure
@@ -98,6 +103,7 @@ exports.tutorReleaseWork              = publishing.tutorReleaseWork;
 exports.backfillAudiences             = publishing.backfillAudiences;
 exports.onAssignmentAudienceChanged   = publishing.onAssignmentAudienceChanged;
 exports.onNestedExamAudienceChanged   = publishing.onNestedExamAudienceChanged;
+exports.onLessonAudienceChanged       = publishing.onLessonAudienceChanged;  // <--- NEW
 
 const remote = require("./remote");
 exports.admitRemoteStudent            = remote.admitRemoteStudent;
@@ -106,10 +112,11 @@ exports.setRemoteStudentStatus        = remote.setRemoteStudentStatus;
 exports.onRemoteTicketCreated         = remote.onRemoteTicketCreated;
 
 const work = require("./work");
-exports.onAssignmentPosted           = work.onAssignmentPosted;
-exports.onExamPostedOrPublished      = work.onExamPostedOrPublished;
-exports.onSubmissionWritten          = work.onSubmissionWritten;
-exports.onExamAttemptWritten         = work.onExamAttemptWritten;
+exports.onAssignmentPosted            = work.onAssignmentPosted;
+exports.onExamPostedOrPublished       = work.onExamPostedOrPublished;
+exports.onSubmissionWritten           = work.onSubmissionWritten;
+exports.onExamAttemptWritten          = work.onExamAttemptWritten;
+exports.onLessonSubmissionWritten     = work.onLessonSubmissionWritten;  // <--- NEW
 exports.migrateLegacyHomeworkAndExams = work.migrateLegacyHomeworkAndExams;
 
 /* ---------------------------------------------------------

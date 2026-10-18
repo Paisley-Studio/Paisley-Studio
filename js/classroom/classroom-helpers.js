@@ -27,6 +27,7 @@
        lessons/{lessonId}                      topicId, title, order, content (HTML),
                                                attachments[], status, publishAt, author,
                                                audiences { online, remote, tutors }
+       lessons/{lessonId}/submissions/{uid}    studentId, status, fileUrl, etc.
    Subjects are the SAME ids used by students, tutors and the timetable
    (see lmzSubjectKey in lms-helpers.js) — no separate subject list.
    Files live in Firebase Storage under
@@ -196,11 +197,12 @@
       '.cr-crumb a{color:var(--brand-deep,#245F5A);font-weight:700;cursor:pointer;text-decoration:none}',
       '.cr-crumb a:hover{text-decoration:underline}',
       '.cr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.9rem}',
-      '.cr-card{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:1.1rem 1.2rem;cursor:pointer;text-align:left;font-family:inherit;color:inherit;transition:border-color .15s,transform .15s}',
+      '.cr-card{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:1.1rem 1.2rem;cursor:pointer;text-align:left;font-family:inherit;color:inherit;transition:border-color .15s,transform .15s;position:relative}',
       '.cr-card:hover{border-color:var(--brand,#55BFB3);transform:translateY(-2px)}',
       '.cr-card .ic{width:40px;height:40px;border-radius:12px;background:rgba(85,191,179,.14);color:var(--brand-deep,#245F5A);display:flex;align-items:center;justify-content:center;margin-bottom:.7rem}',
       '.cr-card h4{margin:0 0 .15rem;font-size:.95rem;color:var(--brand-deep,#245F5A)}',
       '.cr-card .meta{font-size:.76rem;color:var(--muted,#5A6E6A)}',
+      '.cr-badge-red{position:absolute;top:-8px;right:-8px;background:#E74C3C;color:#fff;border-radius:50%;min-width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;box-shadow:0 2px 6px rgba(231,76,60,.4);border:2px solid #fff;padding:0 4px}',
       '.cr-panel{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:1.1rem 1.2rem;margin-bottom:.9rem}',
       '.cr-empty{padding:1.6rem 1rem;text-align:center;color:var(--muted,#5A6E6A);font-size:.86rem}',
       '.cr-filters{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem}',
@@ -986,8 +988,18 @@
           ) : '');
         m.foot.innerHTML = '<span class="cr-err" id="crLErr"></span>' +
           '<button type="button" class="cr-btn" data-a="cancel">Close</button>' +
-          '';
+          (lesson ? '<button type="button" class="cr-btn primary" data-a="release"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '');
         m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(true); };
+        
+        var relBtn = m.foot.querySelector('[data-a="release"]');
+        if (relBtn) relBtn.onclick = function() {
+          if (window.WorkUI && WorkUI.openRelease) {
+            var item = Object.assign({}, lesson, { cid: cls.id, tid: lesson.topicId });
+            WorkUI.openRelease(item);
+          } else {
+            alert('Publishing mechanism not loaded.');
+          }
+        };
         return;
       }
 
@@ -1367,17 +1379,60 @@
     var profile = opts.profile || {};
     var subjects = lmzSubjectKeys(profile.subjects);
     var year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
-    var S = { cls: null, topics: [], lessons: [], work: { assignments: [], exams: [] } };
+    var S = { cls: null, topics: [], lessons: [], work: { assignments: [], exams: [], lessons: [] } };
     var AUD = profile.studentType === 'remote' ? 'remote' : 'online';
 
-    function renderHome() {
+    async function renderHome() {
       if (!subjects.length) {
         root.innerHTML = '<div class="cr-panel"><div class="cr-empty">No classroom content is available yet.</div></div>';
         return;
       }
+      
+      // Fetch pending counts for badges
+      var badges = {};
+      for (var i = 0; i < subjects.length; i++) {
+        var k = subjects[i];
+        try {
+          var cls = await findClassroom(k, year, profile.keyStage);
+          if (cls) {
+            var topics = await loadTopics(cls.id);
+            // We need a lightweight fetch to count pending lessons, homework, and exams.
+            // We can reuse loadStudentWork if it exists, but it loads subs too.
+            // For speed, let's just count published lessons and assignments that aren't submitted.
+            var lessons = await loadLessons(cls.id, true, AUD);
+            var pending = lessons.filter(function(l) {
+              // We don't have submission status easily here without loading them.
+              // But wait, WorkUI.loadStudentWork loads EVERYTHING (assignments, exams, lessons).
+              // Let's just use WorkUI.loadStudentWork to be accurate, since it's cached by browser anyway.
+              return true; // Will filter below.
+            }).length;
+            
+            if (window.WorkUI && window.WorkUI.loadStudentWork) {
+              var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
+              var pLessons = work.lessons ? work.lessons.filter(function(l){ return !l.sub || l.sub.status === 'Corrections'; }).length : 0;
+              var pHomework = work.assignments ? work.assignments.filter(function(a){ return !a.sub || a.sub.status === 'Corrections'; }).length : 0;
+              var pExams = work.exams ? work.exams.filter(function(e){ return !e.sub || e.sub.status === 'Corrections'; }).length : 0;
+              
+              // Also, we need to make sure the exam is actually open to count as "pending"
+              pExams = work.exams.filter(function(e) {
+                if (e.sub && e.sub.status === 'Submitted') return false;
+                if (e.sub && e.sub.status === 'Graded') return false;
+                if (e.flat && !H.isWindowOpen(e)) return false;
+                return true;
+              }).length;
+
+              badges[k] = pLessons + pHomework + pExams;
+            }
+          }
+        } catch(e) { console.warn('Could not load badges for', k); }
+      }
+
       root.innerHTML = '<div class="cr-bar"><div><h3>My Classes</h3><div class="cr-sub">Lessons, notes and resources for the subjects you take.</div></div></div>' +
         '<div class="cr-grid">' + subjects.map(function (k) {
-          return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '"><div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' +
+          var count = badges[k] || 0;
+          return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '">' +
+            (count > 0 ? '<div class="cr-badge-red">' + count + '</div>' : '') +
+            '<div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' +
             esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(profile.keyStage))) + '</div></button>';
         }).join('') + '</div>';
     }
@@ -1389,7 +1444,7 @@
         if (!cls) { S.cls = { subjectName: lmzSubjectLabel(subjectId), year: year }; S.topics = []; S.lessons = []; return renderClass(); }
         var res = await Promise.all([loadTopics(cls.id), loadLessons(cls.id, true, AUD)]);
         S.cls = cls; S.topics = res[0]; S.lessons = res[1];
-        S.work = global.WorkUI ? await global.WorkUI.loadStudentWork(cls, S.topics, opts.uid, profile).catch(function () { return { assignments: [], exams: [] }; }) : { assignments: [], exams: [] };
+        S.work = global.WorkUI ? await global.WorkUI.loadStudentWork(cls, S.topics, opts.uid, profile).catch(function () { return { assignments: [], exams: [], lessons: [] }; }) : { assignments: [], exams: [], lessons: [] };
       } catch (e) {
         console.error('student classroom:', e);
         root.innerHTML = '<div class="cr-crumb"><a data-a="home">My Classes</a></div><div class="cr-panel"><div class="cr-empty">Could not load this class right now.</div></div>';
@@ -1418,8 +1473,18 @@
         if (!ls.length && !workRows) return;
         h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t">' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</span></div>' +
           ls.map(function (l) {
+            // We check if there's a submission attached to this lesson by looking in S.work.lessons
+            var lWork = S.work.lessons ? S.work.lessons.find(function(x){ return x.id === l.id; }) : null;
+            var badge = '';
+            if (lWork && lWork.sub) {
+              if (lWork.sub.status === 'Graded') badge = '<span class="cr-badge published" style="margin-left:.5rem">Graded</span>';
+              else if (lWork.sub.status === 'Corrections') badge = '<span class="cr-badge scheduled" style="margin-left:.5rem">Corrections</span>';
+              else badge = '<span class="cr-badge draft" style="margin-left:.5rem">Submitted</span>';
+            }
+
             return '<div class="cr-lesson student" data-a="lesson" data-id="' + esc(l.id) + '" tabindex="0" role="button"><span class="n">' + pad2(num[l.id]) + '</span>' +
               '<span class="tt">' + esc(l.title) + '<small>' + esc(fmtDate(l.publishedAt || l.createdAt)) + '</small></span>' +
+              badge +
               (l.attachments && l.attachments.length ? '<span class="cr-note"><i class="fas fa-paperclip"></i> ' + l.attachments.length + '</span>' : '') +
               '<i class="fas fa-chevron-right" style="font-size:.7rem;color:var(--muted,#5A6E6A)"></i></div>';
           }).join('') + workRows + '</div>';
@@ -1458,6 +1523,20 @@
               '<div class="cr-player" data-p="' + k + '" style="flex-basis:100%"></div></div>';
           }).join('');
       }
+      
+      // Add upload box for Classwork
+      var lWork = S.work.lessons ? S.work.lessons.find(function(x){ return x.id === l.id; }) : null;
+      h += '<div class="cr-classwork-upload" style="margin-top:1.5rem; padding:1rem; border:1px solid var(--line); border-radius:12px; background:var(--paper);">';
+      if (lWork && lWork.sub && lWork.sub.status === 'Graded') {
+        h += '<div class="cr-note" style="color:var(--brand-deep); font-weight:700;">Graded: ' + (lWork.sub.grade || 'View Feedback') + '</div>';
+        if (lWork.sub.gradedFileUrl) {
+          h += '<div style="margin-top:.5rem"><a href="' + esc(lWork.sub.gradedFileUrl) + '" target="_blank" class="cr-btn sm primary"><i class="fas fa-download"></i> Download Marked Work</a></div>';
+        }
+      } else {
+        h += '<button type="button" class="cr-btn primary" data-a="upload-classwork"><i class="fas fa-upload"></i> Submit Classwork Response</button>';
+      }
+      h += '</div>';
+
       h += '<div class="cr-nav">' +
         (i > 0 ? '<button type="button" class="cr-btn" data-a="lesson" data-id="' + esc(ordered[i - 1].id) + '"><i class="fas fa-arrow-left"></i> Previous Lesson</button>' : '<span></span>') +
         (i < ordered.length - 1 ? '<button type="button" class="cr-btn primary" data-a="lesson" data-id="' + esc(ordered[i + 1].id) + '">Next Lesson <i class="fas fa-arrow-right"></i></button>' : '<span></span>') +
@@ -1471,6 +1550,14 @@
       var el = e.target.closest('[data-a]'); if (!el) return;
       var a = el.dataset.a;
       if (a === 'work-open') { global.WorkUI.openStudentItem({ kind: el.dataset.k, cid: S.cls.id, tid: el.dataset.t, id: el.dataset.id, uid: opts.uid, profile: profile, onChange: function () { openSubject(S.cls.subjectId); } }); return; }
+      if (a === 'upload-classwork') {
+        if (window.WorkUI && window.WorkUI.openStudentLesson) {
+          window.WorkUI.openStudentLesson(S.cls, S.current, opts.uid, profile, function(){ openSubject(S.cls.subjectId); });
+        } else {
+          alert('Upload mechanism not loaded.');
+        }
+        return;
+      }
       if (a === 'home') renderHome();
       else if (a === 'open') openSubject(el.dataset.s);
       else if (a === 'class') renderClass();

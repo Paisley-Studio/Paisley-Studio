@@ -2,7 +2,7 @@
    WORK UI (student + parent) — Paisley Studio
    -----------------------------------------------------------
    Student
-     loadStudentWork / studentTopicRows / openStudentItem
+     loadStudentWork / studentTopicRows / openStudentItem / openStudentLesson
          -> homework appears INSIDE classroom topics (unchanged)
          -> legacy (nested) exams appear INSIDE classroom topics
          -> NEW flat exams (classrooms/{cid}/exams/{eid}) appear
@@ -10,21 +10,11 @@
             or not the submission window is open yet. When the
             window opens the upload box appears; when it hasn't
             opened, the exam shows a "not open yet" note.
+         -> lessons (Classwork) now allow students to upload a response.
      mountStudentHome(root, {kind:'homework'|'exams', uid, profile})
          -> the Homework / Exams nav tabs
    Parent (read-only; never writes)
      mountParentWork(root, {kind, child, filter})
-         -> filter is one of:
-              'all' | 'todo' | 'upcoming' | 'submitted' | 'graded'
-            ('todo' and 'upcoming' are treated the same on the parent side.)
-         -> homework: on-screen only, NO downloads
-         -> exams: the exam PDF may be downloaded, nothing else
-
-   Flat exam results are ink-graded by the tutor (same InkGrader as
-   homework) and released. The student sees "Results released" and
-   the score. There is no corrections step for exams.
-
-   Needs work-helpers.js (WorkUI._h) loaded first.
 ========================================================= */
 (function (global) {
   'use strict';
@@ -34,8 +24,7 @@
   var FV = function () { return firebase.firestore.FieldValue; };
 
   /* ---------------------------------------------------------
-     INLINE loader — placed inside the container the tab
-     mounts into (root), not a full-screen overlay.
+     INLINE loader
   --------------------------------------------------------- */
   function inlineLoaderHtml(msg) {
     return '<div class="wk-inline-loader" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:3rem 1rem;">' +
@@ -53,17 +42,36 @@
   /* ---------------------------------------------------------
      Data
   --------------------------------------------------------- */
-
-  // Which audience flag this viewer reads: remote students see only work posted to
-  // remote students; everyone else sees work posted to online students.
   function audOf(profileOrChild) { return profileOrChild && profileOrChild.studentType === 'remote' ? 'remote' : 'online'; }
   function noDocs() { return { docs: [] }; }
 
   async function loadStudentWork(cls, topics, uid, profile) {
-    var out = { assignments: [], exams: [], attempts: null };
+    var out = { assignments: [], exams: [], lessons: [] };
     var FLAG = 'audiences.' + audOf(profile);
 
-    // ---- homework (unchanged) ----
+    // ---- lessons (Classwork) ----
+    async function loadLessons() {
+      var res = [];
+      await Promise.all(topics.map(async function (t) {
+        var base = coll(cls.id, t.id, 'lesson');
+        var qs = [];
+        // Read what's published for me
+        var a = base.where('status', '==', 'published').where(FLAG, '==', true);
+        var b = base.where('releasedTo', 'array-contains', uid); // delivered by tutor
+        var snaps = await Promise.all([a.get(), b.get().catch(noDocs)]);
+        var seen = {};
+        snaps.forEach(function (sn) { sn.docs.forEach(function (d) { if (!seen[d.id]) { seen[d.id] = 1; qs.push(Object.assign({ id: d.id, tid: t.id, cid: cls.id }, d.data())); } }); });
+        
+        await Promise.all(qs.map(async function (it) {
+          var d = await base.doc(it.id).collection('submissions').doc(uid).get().catch(function () { return null; });
+          it.sub = d && d.exists ? Object.assign({ id: d.id }, d.data()) : null;
+        }));
+        res = res.concat(qs);
+      }));
+      return res;
+    }
+
+    // ---- homework ----
     async function loadAssignments() {
       var res = [];
       await Promise.all(topics.map(async function (t) {
@@ -71,7 +79,7 @@
         var qs = [];
         var a = base.where('audience', '==', 'class').where(FLAG, '==', true);
         var b = base.where('recipients', 'array-contains', uid).where(FLAG, '==', true);
-        var c = base.where('releasedTo', 'array-contains', uid);   // delivered by a tutor
+        var c = base.where('releasedTo', 'array-contains', uid);
         var snaps = await Promise.all([a.get(), b.get(), c.get().catch(noDocs)]);
         var seen = {};
         snaps.forEach(function (sn) { sn.docs.forEach(function (d) { if (!seen[d.id]) { seen[d.id] = 1; qs.push(Object.assign({ id: d.id, tid: t.id, cid: cls.id }, d.data())); } }); });
@@ -115,11 +123,6 @@
     }
 
     // ---- flat exams ----
-    // Show every Published exam, whether or not the submission window
-    // is currently open. The modal handles "not open yet" vs "closed"
-    // and hides the upload box when the window hasn't started. This
-    // keeps the Exams tab in sync with the notification bell, which
-    // already fires for upcoming exams.
     async function loadFlatExams() {
       var snap = await H.flatExamsRef(cls.id).where(FLAG, '==', true).where('status', '==', 'Published').get().catch(noDocs);
       var items = snap.docs.map(function (d) { return Object.assign({ id: d.id, cid: cls.id, flat: true }, d.data()); });
@@ -135,6 +138,7 @@
     }
 
     var allAttemptsCache = { value: null };
+    out.lessons = await loadLessons();
     out.assignments = await loadAssignments();
     var nested = await loadNestedExams(allAttemptsCache);
     var flat   = await loadFlatExams();
@@ -196,12 +200,11 @@
   }
 
   /* ---------------------------------------------------------
-     Student: open one item
+     Student: open Homework / Exam item
   --------------------------------------------------------- */
   async function openStudentItem(o) {
     H.injectStyle();
 
-    // ---- GUARD: refuse to open with an empty classroom id ----
     if (!o || !o.cid) {
       console.warn('openStudentItem: missing cid — cannot build a Firestore path.', o);
       alert('This item is no longer available. Please refresh the page.');
@@ -323,16 +326,13 @@
 
         if (!canHandIn) {
           if (isFlat && !H.isWindowOpen(it)) {
-            // Distinguish "not open yet" from "closed".
             var nowMs = Date.now();
             var startMs = 0, endMs = 0;
             if (it.examDate) {
-              startMs = it.examDate.toDate ? it.examDate.toDate().getTime()
-                      : (it.examDate.seconds ? it.examDate.seconds * 1000 : 0);
+              startMs = it.examDate.toDate ? it.examDate.toDate().getTime() : (it.examDate.seconds ? it.examDate.seconds * 1000 : 0);
             }
             if (it.submissionDeadline) {
-              endMs = it.submissionDeadline.toDate ? it.submissionDeadline.toDate().getTime()
-                    : (it.submissionDeadline.seconds ? it.submissionDeadline.seconds * 1000 : 0);
+              endMs = it.submissionDeadline.toDate ? it.submissionDeadline.toDate().getTime() : (it.submissionDeadline.seconds ? it.submissionDeadline.seconds * 1000 : 0);
             }
             if (startMs && nowMs < startMs) {
               h += '<div class="cr-note">This exam opens on ' + esc(U.fmtDateTime(U.toDate(it.examDate))) + '. Come back then to download the paper and upload your work.</div>';
@@ -345,9 +345,7 @@
             h += '<div class="cr-note">This exam is closed.</div>';
           }
         } else {
-          var promptLabel = sub
-            ? 'Replace your work'
-            : (kind === 'exam' ? 'Upload completed exam paper' : 'Upload completed work');
+          var promptLabel = sub ? 'Replace your work' : (kind === 'exam' ? 'Upload completed exam paper' : 'Upload completed work');
 
           h += '<h4 style="margin:1rem 0 .5rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-deep,#245F5A)">' + promptLabel + '</h4>' +
             '<div class="wk-drop" id="wkDrop"><i class="fas fa-cloud-arrow-up" style="font-size:1.6rem;color:var(--brand-deep,#245F5A)"></i><br><b>Choose a file</b> or drop it here<br><small>PDF, JPG or PNG up to 25 MB</small></div>' +
@@ -428,13 +426,8 @@
               });
             }
 
-                        if (o.onChange) o.onChange();
+            if (o.onChange) o.onChange();
 
-            // ---- Success modal ----------------------------------------
-            // Close the current modal, refresh the caller's list, and show
-            // a small confirmation with a Close button. The student sees
-            // "Handed in successfully" and knows the file is on the tutor's
-            // desk. No reason to auto-dismiss.
             m.close(true);
             if (o.onChange) { try { await o.onChange(); } catch (e) { /* ignore */ } }
 
@@ -473,6 +466,164 @@
       } else {
         m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="close">Close</button>';
         m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      }
+    }
+    paint();
+  }
+
+  /* ---------------------------------------------------------
+     Student: open Classwork Lesson item
+  --------------------------------------------------------- */
+  async function openStudentLesson(cls, lesson, uid, profile, onChange) {
+    H.injectStyle();
+    var base = U.clsRef(cls.id).collection('topics').doc(lesson.topicId).collection('lessons').doc(lesson.id);
+    var submissionCollRef = base.collection('submissions');
+
+    var m = U.openModal({ title: lesson.title, wide: true });
+    m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="close">Close</button>';
+    m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+
+    var sub = null;
+    async function load() {
+      var s = await submissionCollRef.doc(uid).get().catch(function () { return null; });
+      sub = s && s.exists ? Object.assign({ id: s.id }, s.data()) : null;
+    }
+
+    async function paint() {
+      try { await load(); } catch (e) { m.body.innerHTML = '<div class="cr-empty">' + esc(e.message || e) + '</div>'; return; }
+      
+      var st = H.workState(lesson, sub, 'lesson');
+      var h = '<div class="wk-chips" style="margin-bottom:.8rem">' +
+        pill(st.cls, st.text, st.icon) +
+        '<span class="wk-chip"><i class="fas fa-book"></i> ' + esc(cls.subjectName) + '</span>' +
+      '</div>';
+
+      if (sub && sub.status === 'Graded' && sub.released !== false) {
+        h += '<div class="wk-box"><b>Graded</b>' +
+          (sub.feedback ? '<br><br>' + esc(sub.feedback) : '') + '</div>';
+        if (sub.gradedFileUrl) {
+          h += '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(sub.gradedFileName || 'Marked copy') +
+            '<small>Your work with the tutor\u2019s marks</small></span>' +
+            '<a class="cr-btn sm primary" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer" download><i class="fas fa-download"></i> Download marked copy</a></div>';
+        }
+      } else if (sub && sub.status === 'Corrections') {
+        h += '<div class="wk-box" style="background:rgba(232,163,61,.14);border:1px solid rgba(232,163,61,.35);color:#96690f">' +
+          '<b>Corrections Requested</b><br>' + esc(sub.feedback || 'Please review and re-submit your work.') + '</div>';
+      }
+
+      if (sub && sub.fileUrl) {
+        h += '<div class="cr-res"><i class="fas fa-paperclip"></i><span class="nm">' + esc(sub.fileName || 'Your upload') +
+          '<small>Handed in' + (sub.submittedAt || sub.updatedAt ? ' ' + esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '') + '</small></span>' +
+          '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer">View</a></div>';
+      }
+
+      var canHandIn = (!sub || sub.status !== 'Graded');
+
+      if (!canHandIn) {
+        m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="close">Close</button>';
+        m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      } else {
+        var promptLabel = sub ? 'Replace your work' : 'Upload completed work';
+        h += '<h4 style="margin:1rem 0 .5rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-deep,#245F5A)">' + promptLabel + '</h4>' +
+          '<div class="wk-drop" id="wkDrop"><i class="fas fa-cloud-arrow-up" style="font-size:1.6rem;color:var(--brand-deep,#245F5A)"></i><br><b>Choose a file</b> or drop it here<br><small>PDF, JPG or PNG up to 25 MB</small></div>' +
+          '<input type="file" id="wkFile" accept="application/pdf,.pdf,image/jpeg,image/png,.jpg,.jpeg,.png" style="display:none">' +
+          '<div id="wkChosen" class="cr-note" style="margin-top:.5rem"></div><div class="cr-prog" id="wkProg" style="display:none"><div></div></div>' +
+          '<div class="cr-field" style="margin-top:.7rem"><label>Note to your tutor (optional)</label><textarea id="wkNote" rows="2" style="width:100%">' + esc(sub ? sub.note || '' : '') + '</textarea></div>';
+
+        m.body.innerHTML = h;
+
+        var drop = m.body.querySelector('#wkDrop'), fileIn = m.body.querySelector('#wkFile');
+        var chosen = null, chosenEl = m.body.querySelector('#wkChosen');
+        function pick(f) {
+          if (!f) return;
+          if (!/\.(pdf|jpe?g|png)$/i.test(f.name)) { chosenEl.innerHTML = '<span class="cr-err">Please choose a PDF, JPG or PNG.</span>'; return; }
+          if (f.size > 25 * 1024 * 1024) { chosenEl.innerHTML = '<span class="cr-err">That file is larger than 25 MB.</span>'; return; }
+          chosen = f; chosenEl.innerHTML = '<i class="fas fa-file"></i> ' + esc(f.name) + ' (' + U.fmtSize(f.size) + ')'; submitBtn.disabled = false;
+        }
+        drop.onclick = function () { fileIn.click(); };
+        fileIn.onchange = function () { pick(fileIn.files[0]); };
+        ['dragover', 'dragenter'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+        ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+        drop.addEventListener('drop', function (e) { pick(e.dataTransfer.files[0]); });
+
+        m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="close">Close</button>' +
+          '<button type="button" class="cr-btn primary" data-a="submit" disabled><i class="fas fa-paper-plane"></i> ' +
+            (sub ? 'Replace work' : 'Hand in') + '</button>';
+        m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+        var submitBtn = m.foot.querySelector('[data-a="submit"]'), errEl = m.foot.querySelector('#wkErr');
+
+        submitBtn.onclick = async function () {
+          if (!chosen) return;
+          errEl.textContent = ''; submitBtn.disabled = true;
+          var prog = m.body.querySelector('#wkProg'); prog.style.display = '';
+          try {
+            var path = 'classroom-files/' + cls.subjectId + '/' + cls.id + '/' + lesson.id + '/submissions/' + uid + '/' + H.cleanName(chosen.name);
+            var type = /\.pdf$/i.test(chosen.name) ? 'application/pdf' : (/\.png$/i.test(chosen.name) ? 'image/png' : 'image/jpeg');
+            var up = await H.uploadTo(path, chosen, type, function (p) { prog.firstChild.style.width = p + '%'; });
+            var ref = submissionCollRef.doc(uid);
+            var note = m.body.querySelector('#wkNote').value.trim();
+
+            if (sub) {
+              await ref.update({
+                fileUrl: up.url,
+                fileName: chosen.name,
+                fileType: type,
+                storagePath: path,
+                note: note,
+                textAnswer: '',
+                status: 'Submitted',
+                updatedAt: FV().serverTimestamp()
+              });
+              if (sub.storagePath) firebase.storage().ref(sub.storagePath).delete().catch(function () {});
+            } else {
+              var p = profile || {};
+              await ref.set({
+                studentId: uid,
+                studentName: p.name || '',
+                studentEmail: p.email || '',
+                fileUrl: up.url,
+                fileName: chosen.name,
+                fileType: type,
+                storagePath: path,
+                note: note,
+                textAnswer: '',
+                status: 'Submitted',
+                released: false,
+                createdAt: FV().serverTimestamp(),
+                updatedAt: FV().serverTimestamp(),
+                submittedAt: FV().serverTimestamp()
+              });
+            }
+
+            m.close(true);
+            if (onChange) { try { await onChange(); } catch (e) { /* ignore */ } }
+
+            const sm = U.openModal({ title: 'Work handed in' });
+            sm.body.innerHTML =
+              '<div style="text-align:center;padding:1rem 0 .5rem;">' +
+                '<div style="width:64px;height:64px;border-radius:50%;background:rgba(46,184,114,.14);color:#1d8b57;display:inline-flex;align-items:center;justify-content:center;font-size:1.8rem;margin-bottom:1rem;">' +
+                  '<i class="fas fa-circle-check"></i>' +
+                '</div>' +
+                '<div style="font-weight:800;font-size:1.05rem;color:var(--brand-deep,#245F5A);margin-bottom:.4rem;">' +
+                  esc(chosen.name || 'Your file') +
+                '</div>' +
+                '<div style="font-size:.86rem;color:var(--muted,#5A6E6A);line-height:1.6;">' +
+                  'Your Classwork response has been received. Your tutor will mark it and release the result when ready.' +
+                '</div>' +
+              '</div>';
+            sm.foot.innerHTML =
+              '<button type="button" class="cr-btn primary" data-a="ok" style="min-width:120px;justify-content:center;">' +
+                '<i class="fas fa-check"></i> Close' +
+              '</button>';
+            sm.foot.querySelector('[data-a="ok"]').onclick = function () { sm.close(true); };
+          } catch (e) {
+            console.error('hand in:', e);
+            errEl.textContent = e.code === 'permission-denied'
+              ? 'You cannot hand this in — it may be marked, or the submission window is closed.'
+              : (e.message || 'Could not hand in. Please try again.');
+            submitBtn.disabled = false; prog.style.display = 'none';
+          }
+        };
       }
     }
     paint();
@@ -575,9 +726,6 @@
       var el = e.target.closest('[data-a]'); if (!el) return;
       if (el.dataset.a === 'filter') { S.filter = el.dataset.v; render(); }
       else if (el.dataset.a === 'work-open') {
-        // Read cid straight off the DOM (stamped by rowHtml). Falls back
-        // to an S.groups search with the flat-comparison bug fixed
-        // (String(!!x.flat) === el.dataset.flat compared 'false' !== '0').
         var cid = el.dataset.cid || '';
         if (!cid) {
           var wantFlat = el.dataset.flat === '1';
@@ -613,8 +761,8 @@
   }
 
   /* ---------------------------------------------------------
-     Parent: strictly read-only  --------------------------------------------------------- */
-
+     Parent: strictly read-only
+  --------------------------------------------------------- */
   async function loadParentWork(child, kind) {
     var PFLAG = 'audiences.' + audOf(child);
     var year = child.year != null && child.year !== '' ? Number(child.year) : null;
@@ -832,6 +980,7 @@
     loadStudentWork: loadStudentWork,
     studentTopicRows: studentTopicRows,
     openStudentItem: openStudentItem,
+    openStudentLesson: openStudentLesson,
     mountStudentHome: mountStudentHome,
     mountParentWork: mountParentWork
   });

@@ -11,46 +11,8 @@
      classrooms/{cid}/exams/{eid}
      classrooms/{cid}/exams/{eid}/submissions/{studentId}
 
-   Flat exams are:
-     • Midterm OR End of Term
-     • simple: title, exam date, submission deadline, requirements, PDF
-     • not tied to a topic
-     • students never see the exam itself, only a heads-up email
-     • parents get the paper by email; students hand the paper in
-     • the submission window is open when the manual toggle is on
-       OR (examDate <= now <= submissionDeadline)
-     • graded with the SAME InkGrader used for homework.
-       InkGrader enforces mandatory score + max, and always
-       releases the marks. There is no "grade without marks"
-       and no "corrections" for exams.
-
-   Tutor restrictions (role === 'tutor'):
-     • No "New exam" button → tutors cannot create flat exams.
-     • No "Edit exam" / "Publish" / "Close" / "Open window" /
-       "Close window" / exam delete.
-     • No "Add Topic" button → tutors cannot create topics.
-     • No "Grant grading rights".
-     • The one write action tutors keep: the "Post Assignment"
-       button inside each topic, which opens WorkUI.openPostAssignment
-       for that topic.
-     • Tutors CAN still edit and delete assignments they themselves
-       posted (canEdit → it.tutorId === user.uid). They cannot touch
-       someone else's assignment.
-     • Tutors CAN still grade homework submissions and flat-exam
-       submissions via InkGrader for anything they posted or were
-       granted.
-
-   Admin behaviour is unchanged everywhere.
-
-   This file: shared helpers, the Homework Management / Exam
-   Management screens, the Post Assignment and Create Exam modals,
-   the flat-exam ink grading entry point, the admin Legacy view
-   and job triggers.
-   Student and parent screens are in work-learner.js.
-
-   Load order on a page:
-     firebase-config.js, lms-helpers.js, classroom-helpers.js,
-     work-helpers.js, work-learner.js (portal-dependent), ink-grader.js
+   CLASSWORK (Lessons):
+     classrooms/{cid}/topics/{tid}/lessons/{lid}/submissions/{studentId}
 ========================================================= */
 (function (global) {
   'use strict';
@@ -105,7 +67,7 @@
   function pill(cls, text, icon) {
     return '<span class="cr-badge ' + cls + '">' + (icon ? '<i class="fas ' + icon + '" style="margin-right:.3rem"></i>' : '') + esc(text) + '</span>';
   }
-  function collName(kind) { return kind === 'exam' ? 'exams' : 'assignments'; }
+  function collName(kind) { return kind === 'exam' ? 'exams' : (kind === 'lesson' ? 'lessons' : 'assignments'); }
   function subName(kind) { return kind === 'exam' ? 'attempts' : 'submissions'; }
   function coll(cid, tid, kind) { return U.clsRef(cid).collection('topics').doc(tid).collection(collName(kind)); }
   function flatExamsRef(cid) { return U.clsRef(cid).collection('exams'); }
@@ -119,10 +81,6 @@
   }
 
   // Flat-exam submission window state.
-  //   mode: 'manual-open'  (admin toggled open)
-  //         'auto-open'    (examDate <= now <= submissionDeadline)
-  //         'closed'       (manual toggle off AND outside the auto window)
-  //         'not-started'  (now < examDate and toggle off)
   function windowState(exam) {
     var now = Date.now();
     var examDate = exam.examDate ? U.toDate(exam.examDate) : null;
@@ -143,6 +101,7 @@
   function workState(item, sub, kind) {
     var now = Date.now();
     if (sub && sub.status === 'Graded') return { k: 'graded', cls: 'b-confirmed', icon: 'fa-circle-check', text: 'Graded: ' + (fmtScore(sub) || 'done') };
+    if (sub && sub.status === 'Corrections') return { k: 'corrections', cls: 'b-declined', icon: 'fa-rotate-left', text: 'Corrections requested' };
     if (sub && sub.status === 'Suspended') return { k: 'suspended', cls: 'b-declined', icon: 'fa-ban', text: 'Suspended' };
     if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
     if (sub) return { k: 'submitted', cls: 'b-pending', icon: 'fa-inbox', text: 'Submitted \u2013 awaiting grading' };
@@ -207,11 +166,9 @@
     return { items: items, subs: subs };
   }
 
-  /* ---- audiences: who may see an item (mirrors functions/work-shared.js) ---- */
+  /* ---- audiences: who may see an item ---- */
   var AUD_LABEL = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
   function studentAud(s) { return s && s.studentType === 'remote' ? 'remote' : 'online'; }
-  // Records created before the audience model have no `audiences`: they were live to
-  // online students and tutors, never to remote students.
   function effAudiences(it) { return it && it.audiences && typeof it.audiences === 'object' ? it.audiences : { online: true, remote: false, tutors: true }; }
   function studentSees(s, it) {
     return effAudiences(it)[studentAud(s)] === true || (Array.isArray(it.releasedTo) && it.releasedTo.indexOf(s.id) !== -1);
@@ -286,10 +243,7 @@
   }
 
   /* =========================================================
-     POST ASSIGNMENT (homework) — unchanged
-     Both admin and tutor use this. Tutors only post under
-     existing topics; the topic dropdown is limited to what
-     they see in the classroom.
+     POST ASSIGNMENT (homework)
   ========================================================= */
   function openPostAssignment(o) {
     injectStyle();
@@ -569,6 +523,68 @@
         if (ctx.onDone) await ctx.onDone();
       }
     });
+  }
+
+  /* =========================================================
+     TUTOR RELEASE — GLOBAL SCOPE (used by classroom-helpers.js)
+  ========================================================= */
+  async function openRelease(it, user) {
+    var m = U.openModal({ title: 'Release to my students \u2014 ' + it.title });
+    m.body.innerHTML = '<div class="cr-empty">Loading your students\u2026</div>';
+    m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
+    m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
+    
+    // Find students
+    var found = {};
+    var qs = [db.collection('students').where('tutorIds', 'array-contains', user.uid), db.collection('students').where('tutorId', '==', user.uid)];
+    var snaps = await Promise.all(qs.map(function (q) { return q.get().catch(function () { return { docs: [] }; }); }));
+    snaps.forEach(function (sn) { sn.docs.forEach(function (d) { found[d.id] = Object.assign({ id: d.id }, d.data()); }); });
+    
+    // Find classroom to get year/subject rules
+    var clsSnap = await U.clsRef(it.cid).get();
+    var cls = clsSnap.exists ? clsSnap.data() : {};
+    var want = lmzSubjectKey(it.subjectId || cls.subjectId);
+    
+    var list = Object.keys(found).map(function (k) { return found[k]; }).filter(function (st) {
+      if (['pending', 'suspended'].indexOf(String(st.status || '').toLowerCase()) !== -1) return false;
+      if (lmzSubjectKeys(st.subjects).indexOf(want) === -1) return false;
+      return !(st.year != null && cls.year != null && Number(st.year) !== Number(cls.year));
+    }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+    
+    if (!list.length) { m.body.innerHTML = '<div class="cr-empty">None of your students take this subject in this Year.</div>'; return; }
+    
+    m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.6rem">Choose the students you teach who should receive this now. You cannot change the work itself or who else receives it.</div><div class="wk-pick">' +
+      list.map(function (st) {
+        var already = (it.releasedTo || []).indexOf(st.id) !== -1 || studentSees(st, Object.assign({}, it, { releasedTo: [] }));
+        return '<label><input type="checkbox" value="' + esc(st.id) + '"' + (already ? ' checked disabled' : '') + '> ' + esc(st.name || st.email || st.id) +
+          (st.studentType === 'remote' ? ' <span class="cr-note">(remote)</span>' : '') + (already ? ' <span class="cr-note">\u2014 already has it</span>' : '') + '</label>';
+      }).join('') + '</div>';
+      
+    m.foot.innerHTML = '<span class="cr-err" id="rlErr"></span><button type="button" class="cr-btn" data-a="x">Cancel</button><button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-share-from-square"></i> Release</button>';
+    m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
+    
+    m.foot.querySelector('[data-a="go"]').onclick = async function () {
+      var ids = Array.prototype.map.call(m.body.querySelectorAll('input:checked:not(:disabled)'), function (c) { return c.value; });
+      var err = m.foot.querySelector('#rlErr');
+      if (!ids.length) { err.textContent = 'Tick at least one student.'; return; }
+      var btn = this; btn.disabled = true;
+      
+      // Build path correctly for lessons, homework, or exams
+      var typeCol = it.topicId ? (it.examDate ? 'exams' : (it.dueAt ? 'assignments' : 'lessons')) : 'exams';
+      var path = '';
+      if (typeCol === 'exams' && !it.topicId) {
+        path = 'classrooms/' + it.cid + '/exams/' + it.id;
+      } else {
+        path = 'classrooms/' + it.cid + '/topics/' + it.topicId + '/' + typeCol + '/' + it.id;
+      }
+      
+      try {
+        var r = await firebase.functions().httpsCallable('tutorReleaseWork')({ path: path, studentIds: ids });
+        m.close(); alert('Released to ' + ((r.data && r.data.released) || []).length + ' student(s).');
+        // Refresh parent caller if needed
+        if (window.ClassroomUI && window.ClassroomUI._refresh) window.ClassroomUI._refresh();
+      } catch (e2) { err.textContent = e2.message || 'Could not release.'; btn.disabled = false; }
+    };
   }
 
   /* =========================================================
@@ -1082,49 +1098,6 @@
       btn.disabled = false;
     }
 
-    /* ---------- events ---------- */
-    /* ---------- tutor: release prepared work to MY students ---------- */
-    async function myStudents(it) {
-      var found = {};
-      var qs = [db.collection('students').where('tutorIds', 'array-contains', user.uid), db.collection('students').where('tutorId', '==', user.uid)];
-      var snaps = await Promise.all(qs.map(function (q) { return q.get().catch(function () { return { docs: [] }; }); }));
-      snaps.forEach(function (sn) { sn.docs.forEach(function (d) { found[d.id] = Object.assign({ id: d.id }, d.data()); }); });
-      var want = lmzSubjectKey(it.subjectId || S.cls.subjectId);
-      return Object.keys(found).map(function (k) { return found[k]; }).filter(function (st) {
-        if (['pending', 'suspended'].indexOf(String(st.status || '').toLowerCase()) !== -1) return false;
-        if (lmzSubjectKeys(st.subjects).indexOf(want) === -1) return false;
-        return !(st.year != null && S.cls.year != null && Number(st.year) !== Number(S.cls.year));
-      }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
-    }
-    async function openRelease(it) {
-      var m = U.openModal({ title: 'Release to my students \u2014 ' + it.title });
-      m.body.innerHTML = '<div class="cr-empty">Loading your students\u2026</div>';
-      m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
-      m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
-      var list = [];
-      try { list = await myStudents(it); } catch (e) { m.body.innerHTML = '<div class="cr-empty">Could not load students: ' + esc(e.message || e) + '</div>'; return; }
-      if (!list.length) { m.body.innerHTML = '<div class="cr-empty">None of your students take this subject in this Year.</div>'; return; }
-      m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.6rem">Choose the students you teach who should receive this now. You cannot change the work itself or who else receives it.</div><div class="wk-pick">' +
-        list.map(function (st) {
-          var already = (it.releasedTo || []).indexOf(st.id) !== -1 || studentSees(st, Object.assign({}, it, { releasedTo: [] }));
-          return '<label><input type="checkbox" value="' + esc(st.id) + '"' + (already ? ' checked disabled' : '') + '> ' + esc(st.name || st.email || st.id) +
-            (st.studentType === 'remote' ? ' <span class="cr-note">(remote)</span>' : '') + (already ? ' <span class="cr-note">\u2014 already has it</span>' : '') + '</label>';
-        }).join('') + '</div>';
-      m.foot.innerHTML = '<span class="cr-err" id="rlErr"></span><button type="button" class="cr-btn" data-a="x">Cancel</button><button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-share-from-square"></i> Release</button>';
-      m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
-      m.foot.querySelector('[data-a="go"]').onclick = async function () {
-        var ids = Array.prototype.map.call(m.body.querySelectorAll('input:checked:not(:disabled)'), function (c) { return c.value; });
-        var err = m.foot.querySelector('#rlErr');
-        if (!ids.length) { err.textContent = 'Tick at least one student.'; return; }
-        var btn = this; btn.disabled = true;
-        var path = 'classrooms/' + it.cid + '/topics/' + it.tid + '/assignments/' + it.id;
-        try {
-          var r = await firebase.functions().httpsCallable('tutorReleaseWork')({ path: path, studentIds: ids });
-          m.close(); alert('Released to ' + ((r.data && r.data.released) || []).length + ' student(s).'); await refresh();
-        } catch (e2) { err.textContent = e2.message || 'Could not release.'; btn.disabled = false; }
-      };
-    }
-
     root.addEventListener('click', async function (e) {
       var el = e.target.closest('[data-a]'); if (!el) return;
       var a = el.dataset.a, id = el.dataset.id;
@@ -1147,7 +1120,7 @@
             openDetail(it2);
           }
         }
-        else if (a === 'release' && item) openRelease(item);
+        else if (a === 'release' && item) global.WorkUI.openRelease(item, user);
         else if (a === 'add-assignment') {
           if (!isAdmin) { alert('Assignments are prepared by the Studio Desk.'); return; }
           openPostAssignment({ cls: S.cls, topics: S.topics, topicId: id, user: user, afterSave: refresh });
@@ -1185,6 +1158,7 @@
     openPostAssignment: openPostAssignment,
     openCreateExam: openCreateExam,
     openGradeFlatExamInk: openGradeFlatExamInk,
+    openRelease: openRelease,
     _h: {
       U: U, esc: esc, pill: pill,
       coll: coll, collName: collName, subName: subName,
