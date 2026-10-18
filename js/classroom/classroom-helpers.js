@@ -288,20 +288,76 @@
     return snapDocs(snap).sort(byOrder);
   }
 
-  async function loadLessons(cid, publishedOnly, aud) {
-    var topics = await loadTopics(cid);
-    var out = [];
-    for (var i = 0; i < topics.length; i++) {
-      var t = topics[i];
+  // Fetch every topic's lessons CONCURRENTLY (was one awaited query per topic,
+  // one after another). Result order is still topic order.
+  async function loadLessonsForTopics(cid, topics, publishedOnly, aud) {
+    var parts = await Promise.all(topics.map(async function (t) {
       var q = lessonsRef(cid, t.id);
       if (publishedOnly) q = q.where('status', '==', 'published');
       if (aud) q = q.where('audiences.' + aud, '==', true);
       var snap = await q.get();
-      snap.docs.forEach(function (d) {
-        out.push(Object.assign({ id: d.id, topicId: t.id }, d.data()));
+      return snap.docs.map(function (d) {
+        return Object.assign({ id: d.id, topicId: t.id }, d.data());
       });
-    }
+    }));
+    var out = [];
+    parts.forEach(function (p) { out = out.concat(p); });
     return out;
+  }
+
+  async function loadLessons(cid, publishedOnly, aud) {
+    var topics = await loadTopics(cid);
+    return loadLessonsForTopics(cid, topics, publishedOnly, aud);
+  }
+
+  /* ---------------------------------------------------------
+     Short-lived in-memory cache (student/parent read paths only).
+     Identical requests made close together (login badge count,
+     Classroom, Homework, Exams) share ONE Firestore round trip.
+     In-flight requests are de-duplicated; failures are not cached.
+     Manager/tutor screens keep using the uncached loaders above.
+  --------------------------------------------------------- */
+  var MEMO_TTL = 60000;
+  var _memo = {};
+  function memo(key, fn, ttl) {
+    var now = Date.now(), hit = _memo[key];
+    if (hit && now - hit.t < (ttl || MEMO_TTL)) return hit.p;
+    var entry = { t: now, p: Promise.resolve().then(fn) };
+    _memo[key] = entry;
+    entry.p.catch(function () { if (_memo[key] === entry) delete _memo[key]; });
+    return entry.p;
+  }
+  function clearMemo(prefix) {
+    Object.keys(_memo).forEach(function (k) { if (!prefix || k.indexOf(prefix) === 0) delete _memo[k]; });
+  }
+  function copyArr(a) { return Array.isArray(a) ? a.slice() : a; }
+  function topicSig(topics) { return topics.map(function (t) { return t.id; }).join(','); }
+
+  function findClassroomCached(subjectId, year, keyStage) {
+    return memo('cls|' + subjectId + '|' + (year != null ? 'y' + Number(year) : 'k' + keyStage), function () {
+      return findClassroom(subjectId, year, keyStage);
+    });
+  }
+  function loadTopicsCached(cid) {
+    return memo('top|' + cid, function () { return loadTopics(cid); }).then(copyArr);
+  }
+  function loadLessonsCached(cid, topics, aud) {
+    return memo('les|' + cid + '|' + (aud || '') + '|' + topicSig(topics), function () {
+      return loadLessonsForTopics(cid, topics, true, aud);
+    }).then(copyArr);
+  }
+
+  // Same spinner look as the rest of the portal, usable inside any cr-root.
+  function loaderHtml(msg) {
+    if (!document.getElementById('cr-spin-keyframe')) {
+      var k = document.createElement('style');
+      k.id = 'cr-spin-keyframe';
+      k.textContent = '@keyframes cr-spin{to{transform:rotate(360deg)}}';
+      document.head.appendChild(k);
+    }
+    return '<div class="cr-loader" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:3rem 1rem;">' +
+      '<div style="width:42px;height:42px;border:4px solid rgba(38,51,49,.1);border-top-color:#55BFB3;border-radius:50%;animation:cr-spin .8s linear infinite"></div>' +
+      '<div style="color:#245F5A;font-weight:700;font-size:.9rem">' + esc(msg || 'Loading\u2026') + '</div></div>';
   }
 
   function orderedLessons(topics, lessons) {
@@ -1315,60 +1371,65 @@
     var S = { cls: null, topics: [], lessons: [], work: { assignments: [], exams: [], lessons: [] } };
     var AUD = profile.studentType === 'remote' ? 'remote' : 'online';
 
+    var homeToken = 0;
+
     async function renderHome() {
+      var token = ++homeToken;
       if (!subjects.length) {
         root.innerHTML = '<div class="cr-panel"><div class="cr-empty">No classroom content is available yet.</div></div>';
         return;
       }
 
-      // ============================================================
-      // PARALLELISED — every subject's badge data is fetched concurrently.
-      // Before: subjects.length × (findClassroom → loadTopics → loadLessons
-      //         → loadStudentWork) = up to 20 sequential round trips.
-      // After:  ~4 concurrent round trips regardless of subject count.
-      // ============================================================
-      var badges = {};
-      await Promise.all(subjects.map(async function (k) {
-        try {
-          var cls = await findClassroom(k, year, profile.keyStage);
-          if (!cls) return;
-          var topics = await loadTopics(cls.id);
-          var lessons = await loadLessons(cls.id, true, AUD);
+      // The class cards need nothing from Firestore, so they paint immediately
+      // (no blank tab) instead of waiting for the red pending-count badges.
+      root.innerHTML = '<div class="cr-bar"><div><h3>My Classes</h3><div class="cr-sub">Lessons, notes and resources for the subjects you take.</div></div></div>' +
+        '<div class="cr-grid">' + subjects.map(function (k) {
+          return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '">' +
+            '<div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' +
+            esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(profile.keyStage))) + '</div></button>';
+        }).join('') + '</div>';
 
-          if (window.WorkUI && window.WorkUI.loadStudentWork) {
+      // Badges are filled in per subject as each one resolves, using the shared
+      // cache so the login badge count and the Homework/Exams tabs reuse the data.
+      subjects.forEach(function (k) {
+        (async function () {
+          try {
+            var cls = await findClassroomCached(k, year, profile.keyStage);
+            if (!cls || !window.WorkUI || !window.WorkUI.loadStudentWork) return;
+            var topics = await loadTopicsCached(cls.id);
             var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
-            var pLessons = work.lessons ? work.lessons.filter(function(l){ return !l.sub || l.sub.status === 'Corrections'; }).length : 0;
-            var pHomework = work.assignments ? work.assignments.filter(function(a){ return !a.sub || a.sub.status === 'Corrections'; }).length : 0;
-            var pExams = work.exams ? work.exams.filter(function(e) {
+            var pLessons = work.lessons ? work.lessons.filter(function (l) { return !l.sub || l.sub.status === 'Corrections'; }).length : 0;
+            var pHomework = work.assignments ? work.assignments.filter(function (a) { return !a.sub || a.sub.status === 'Corrections'; }).length : 0;
+            var pExams = work.exams ? work.exams.filter(function (e) {
               if (e.sub && e.sub.status === 'Submitted') return false;
               if (e.sub && e.sub.status === 'Graded') return false;
               if (e.flat && window.WorkUI && window.WorkUI._h && !window.WorkUI._h.isWindowOpen(e)) return false;
               return true;
             }).length : 0;
-
-            badges[k] = pLessons + pHomework + pExams;
-          }
-        } catch(e) { console.warn('Could not load badges for', k, e); }
-      }));
-
-      root.innerHTML = '<div class="cr-bar"><div><h3>My Classes</h3><div class="cr-sub">Lessons, notes and resources for the subjects you take.</div></div></div>' +
-        '<div class="cr-grid">' + subjects.map(function (k) {
-          var count = badges[k] || 0;
-          return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '">' +
-            (count > 0 ? '<div class="cr-badge-red">' + count + '</div>' : '') +
-            '<div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' +
-            esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(profile.keyStage))) + '</div></button>';
-        }).join('') + '</div>';
+            var count = pLessons + pHomework + pExams;
+            if (token !== homeToken || !count) return; // user already navigated away / nothing pending
+            var card = null;
+            root.querySelectorAll('.cr-card[data-a="open"]').forEach(function (c) { if (c.dataset.s === k) card = c; });
+            if (card && !card.querySelector('.cr-badge-red')) card.insertAdjacentHTML('afterbegin', '<div class="cr-badge-red">' + count + '</div>');
+          } catch (e) { console.warn('Could not load badges for', k, e); }
+        })();
+      });
     }
 
     async function openSubject(subjectId) {
-      root.innerHTML = '<div class="cr-empty">Loading…</div>';
+      homeToken++; // cancel any badge fills still running for the home screen
+      root.innerHTML = loaderHtml('Loading\u2026');
       try {
-        var cls = await findClassroom(subjectId, year, profile.keyStage);
+        var cls = await findClassroomCached(subjectId, year, profile.keyStage);
         if (!cls) { S.cls = { subjectName: lmzSubjectLabel(subjectId), year: year }; S.topics = []; S.lessons = []; return renderClass(); }
-        var res = await Promise.all([loadTopics(cls.id), loadLessons(cls.id, true, AUD)]);
-        S.cls = cls; S.topics = res[0]; S.lessons = res[1];
-        S.work = global.WorkUI ? await global.WorkUI.loadStudentWork(cls, S.topics, opts.uid, profile).catch(function () { return { assignments: [], exams: [], lessons: [] }; }) : { assignments: [], exams: [], lessons: [] };
+        var topics = await loadTopicsCached(cls.id);
+        var emptyWork = { assignments: [], exams: [], lessons: [] };
+        // Lessons and the student's work are fetched together (both need only the topic list).
+        var res = await Promise.all([
+          loadLessonsCached(cls.id, topics, AUD),
+          global.WorkUI ? global.WorkUI.loadStudentWork(cls, topics, opts.uid, profile).catch(function () { return emptyWork; }) : emptyWork
+        ]);
+        S.cls = cls; S.topics = topics; S.lessons = res[0]; S.work = res[1];
       } catch (e) {
         console.error('student classroom:', e);
         root.innerHTML = '<div class="cr-crumb"><a data-a="home">My Classes</a></div><div class="cr-panel"><div class="cr-empty">Could not load this class right now.</div></div>';
@@ -1523,11 +1584,11 @@
         }).join('') + '</div>';
     }
     async function openSubject(k) {
-      root.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
+      root.innerHTML = loaderHtml('Loading\u2026');
       try {
-        var cls = await findClassroom(k, year, child.keyStage);
+        var cls = await findClassroomCached(k, year, child.keyStage);
         if (!cls) { S.cls = { subjectName: lmzSubjectLabel(k), year: year }; S.topics = []; S.lessons = []; }
-        else { var r = await Promise.all([loadTopics(cls.id), loadLessons(cls.id, true, AUD)]); S.cls = cls; S.topics = r[0]; S.lessons = r[1]; }
+        else { var pTopics = await loadTopicsCached(cls.id); var pLessons = await loadLessonsCached(cls.id, pTopics, AUD); S.cls = cls; S.topics = pTopics; S.lessons = pLessons; }
       } catch (e) { console.error('parent classroom:', e); root.innerHTML = '<div class="cr-crumb"><a data-a="home">Subjects</a></div><div class="cr-panel"><div class="cr-empty">Could not load this subject.</div></div>'; return; }
       list();
     }
@@ -1569,7 +1630,8 @@
     util: {
       esc: esc, toDate: toDate, fmtDate: fmtDate, fmtDateTime: fmtDateTime, pad2: pad2, ksShort: ksShort, byOrder: byOrder,
       displayName: displayName, snapDocs: snapDocs, clsRef: clsRef, injectStyle: injectStyle, openModal: openModal, confirmModal: confirmModal,
-      loadTopics: loadTopics, loadLessons: loadLessons, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
+      loadTopics: loadTopics, loadLessons: loadLessons, loadLessonsForTopics: loadLessonsForTopics,
+      findClassroomCached: findClassroomCached, loadTopicsCached: loadTopicsCached, loadLessonsCached: loadLessonsCached, memo: memo, clearMemo: clearMemo, loaderHtml: loaderHtml, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
       KEY_STAGES: KEY_STAGES
     }
   };

@@ -520,27 +520,24 @@ function withHostLoader(host, msg, mountFn){
 
 /* Classroom Badge Counter */
 async function calculateClassroomBadges() {
-  if (!window.ClassroomUI || !window.WorkUI) return;
+  if (!window.ClassroomUI || !window.WorkUI || !profile) return;
+  const U = ClassroomUI.util;
   const subjects = lmzSubjectKeys(profile.subjects);
   const year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
-  const AUD = profile.studentType === 'remote' ? 'remote' : 'online';
   let totalPending = 0;
 
+  // Only Classwork (lessons) feeds this badge, so only that section is fetched.
+  // Cached + shared with the Classroom/Homework tabs so nothing is loaded twice.
   await Promise.all(subjects.map(async function(k) {
     try {
-      const cls = await ClassroomUI.util.findClassroom(k, year, profile.keyStage);
+      const cls = await U.findClassroomCached(k, year, profile.keyStage);
       if (!cls) return;
-      const topics = await ClassroomUI.util.loadTopics(cls.id);
-      const lessons = await ClassroomUI.util.loadLessons(cls.id, true, AUD);
-      
-      if (window.WorkUI && window.WorkUI.loadStudentWork) {
-        const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile);
-        if (work.lessons) {
-          totalPending += work.lessons.filter(function(l){ 
-            return !l.sub || l.sub.status === 'Corrections'; 
-          }).length;
-        }
-      }
+      const topics = await U.loadTopicsCached(cls.id);
+      if (!topics.length) return;
+      const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile, ['lessons']);
+      totalPending += work.lessons.filter(function(l){
+        return !l.sub || l.sub.status === 'Corrections';
+      }).length;
     } catch(e) { console.warn('badge calc error for', k, e); }
   }));
 

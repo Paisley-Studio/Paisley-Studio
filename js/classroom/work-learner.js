@@ -45,9 +45,22 @@
   function audOf(profileOrChild) { return profileOrChild && profileOrChild.studentType === 'remote' ? 'remote' : 'online'; }
   function noDocs() { return { docs: [] }; }
 
-  async function loadStudentWork(cls, topics, uid, profile) {
+  // loadStudentWork(cls, topics, uid, profile [, only])
+  //   only (optional) = any of 'lessons' | 'assignments' | 'exams'. The Homework tab asks
+  //   for just 'assignments', Exams for just 'exams', the login badge for just 'lessons';
+  //   omit it to get everything (classroom home / class view).
+  async function loadStudentWork(cls, topics, uid, profile, only) {
     var out = { assignments: [], exams: [], lessons: [] };
     var FLAG = 'audiences.' + audOf(profile);
+    var want = { lessons: true, assignments: true, exams: true };
+    if (only && only.length) { want = {}; only.forEach(function (k) { want[k] = true; }); }
+    var tsig = topics.map(function (t) { return t.id; }).join(',');
+    // Each section is cached for a short time (and de-duplicated while in flight),
+    // so the badge count, Classroom, Homework and Exams share the same reads.
+    function cached(section, extra, fn) {
+      if (!U.memo) return fn();
+      return U.memo('wk|' + section + '|' + cls.id + '|' + uid + '|' + audOf(profile) + '|' + extra, fn);
+    }
 
     // ---- lessons (Classwork) ----
     async function loadLessons() {
@@ -137,12 +150,16 @@
       return out;
     }
 
-    var allAttemptsCache = { value: null };
-    out.lessons = await loadLessons();
-    out.assignments = await loadAssignments();
-    var nested = await loadNestedExams(allAttemptsCache);
-    var flat   = await loadFlatExams();
-    out.exams = nested.concat(flat);
+    // All requested sections run at the same time (they used to run one after another).
+    var parts = await Promise.all([
+      want.lessons     ? cached('lessons', tsig, loadLessons)      : [],
+      want.assignments ? cached('assign',  tsig, loadAssignments)  : [],
+      want.exams       ? cached('nested',  tsig, function () { return loadNestedExams({ value: null }); }) : [],
+      want.exams       ? cached('flat',    '',   loadFlatExams)    : []
+    ]);
+    out.lessons = parts[0].slice();
+    out.assignments = parts[1].slice();
+    out.exams = parts[2].concat(parts[3]);
     return out;
   }
 
@@ -426,6 +443,7 @@
               });
             }
 
+            if (U.clearMemo) U.clearMemo('wk|'); // fresh data after a hand-in
             if (o.onChange) o.onChange();
 
             m.close(true);
@@ -595,6 +613,7 @@
               });
             }
 
+            if (U.clearMemo) U.clearMemo('wk|'); // fresh data after a hand-in
             m.close(true);
             if (onChange) { try { await onChange(); } catch (e) { /* ignore */ } }
 
@@ -645,10 +664,10 @@
       
       var results = await Promise.all(subjects.map(async function (sub) {
         try {
-          var cls = await U.findClassroom(sub, year, profile.keyStage);
+          var cls = await (U.findClassroomCached || U.findClassroom)(sub, year, profile.keyStage);
           if (!cls) return null;
-          var topics = kind === 'exam' ? [] : await U.loadTopics(cls.id);
-          var work = await loadStudentWork(cls, topics, opts.uid, profile);
+          var topics = kind === 'exam' ? [] : await (U.loadTopicsCached || U.loadTopics)(cls.id);
+          var work = await loadStudentWork(cls, topics, opts.uid, profile, [kind === 'exam' ? 'exams' : 'assignments']);
           return {
             cls: cls,
             topics: topics,
