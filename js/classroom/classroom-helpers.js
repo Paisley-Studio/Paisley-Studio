@@ -756,8 +756,8 @@
         if (!doc.exists) throw new Error('Classroom not found.');
         S.cls = Object.assign({ id: doc.id }, doc.data());
         var audForLoad = isAdmin ? null : 'tutors';
-        var res = await Promise.all([loadTopics(cid), loadLessons(cid, false, audForLoad)]);
-        S.topics = res[0]; S.lessons = res[1];
+        var topicsOpen = await loadTopics(cid);
+        S.topics = topicsOpen; S.lessons = await loadLessonsForTopics(cid, topicsOpen, false, audForLoad); // topics fetched once, not twice
       } catch (e) {
         console.error('openClassroom:', e);
         root.innerHTML = '<div class="cr-empty">Could not open this classroom: ' + esc(e.message || e) + '</div>';
@@ -768,8 +768,8 @@
 
     async function refreshClassroom() {
       var audForLoad = isAdmin ? null : 'tutors';
-      var res = await Promise.all([loadTopics(S.cls.id), loadLessons(S.cls.id, false, audForLoad)]);
-      S.topics = res[0]; S.lessons = res[1];
+      var topicsRef2 = await loadTopics(S.cls.id);
+      S.topics = topicsRef2; S.lessons = await loadLessonsForTopics(S.cls.id, topicsRef2, false, audForLoad);
       S.allLessons = null;
       renderClassroom();
     }
@@ -1344,6 +1344,10 @@
     });
     root.addEventListener('change', function (e) {
       var f = e.target.dataset && e.target.dataset.f; if (!f) return;
+      // Only this manager's own filters (f-*, l-*) belong here. Other controls inside this root —
+      // e.g. the Publish tab's Key Stage / Year / Subject / Topic filters — manage themselves.
+      // Falling through to renderList() re-mounted the Publish tab on every change and wiped the filters.
+      if (f.indexOf('f-') !== 0 && f.indexOf('l-') !== 0) return;
       if (f === 'f-subject') S.filters.subject = e.target.value;
       else if (f === 'f-ks') S.filters.ks = e.target.value;
       else if (f === 'f-year') S.filters.year = e.target.value;

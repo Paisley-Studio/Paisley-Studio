@@ -52,7 +52,7 @@
   ];
   var TYPE_LABEL = { lesson: 'Lesson', assignment: 'Homework', exam: 'Exam', flatExam: 'Exam' };
   var TYPE_ICON = { lesson: 'fa-book-open', assignment: 'fa-clipboard-check', exam: 'fa-file-pen', flatExam: 'fa-file-pen' };
-  var MAX_CLASSROOMS = 12;
+  var MAX_CLASSROOMS = 24;
 
   function injectStyle() {
     if (document.getElementById('pb-style')) return;
@@ -113,6 +113,8 @@
   --------------------------------------------------------- */
   async function loadClassroomItems(cls) {
     var cid = cls.id, items = [];
+    // Flat exams are fetched at the same time as the topics (they don't depend on them).
+    var flatP = WH.flatExamsRef(cid).get().catch(function () { return { docs: [] }; });
     var topics = await CU.loadTopics(cid);
     var base = { cid: cid, ks: cls.keyStage, year: cls.year, subjectId: cls.subjectId, clsLabel: CU.displayName(cls) + ' · Year ' + cls.year };
     await Promise.all(topics.map(async function (t) {
@@ -128,7 +130,7 @@
         });
       });
     }));
-    var flat = await WH.flatExamsRef(cid).get().catch(function () { return { docs: [] }; });
+    var flat = await flatP;
     flat.docs.forEach(function (d) {
       var data = d.data();
       items.push(Object.assign({}, base, data, { id: d.id, type: 'flatExam', path: 'classrooms/' + cid + '/exams/' + d.id, tid: '', topicTitle: 'Midterm / End of Term exams', audiencesEff: effAud('flatExam', data) }));
@@ -234,7 +236,7 @@
           return '<button type="button" role="menuitem" data-a="choose" data-c="' + c.id + '"><span class="ic"><i class="fas ' + c.icon + '"></i></span><span><b>' + esc(c.label) + '</b><small>' + esc(c.desc) + '</small></span></button>';
         }).join('') + '</div>' : '') + '</div></div>';
 
-      if (S.loading) h += '<div class="cr-empty">Loading content…</div>';
+      if (S.loading) h += (CU.loaderHtml ? CU.loaderHtml('Loading content\u2026') : '<div class="cr-empty">Loading content…</div>');
       else if (S.hint) h += '<div class="cr-panel"><div class="cr-empty">' + esc(S.hint) + '</div></div>';
       else if (!S.loaded) h += '<div class="cr-panel"><div class="cr-empty">Choose a Key Stage, Year or subject, then “Load content”.</div></div>';
       else if (!rows.length) h += '<div class="cr-panel"><div class="cr-empty">Nothing matches these filters. Prepare lessons and homework in the classroom first, then come back to post them.</div></div>';
@@ -258,16 +260,20 @@
     async function countRecipients(clsIds) {
       var out = { online: 0, remote: 0 };
       var seen = {};
-      for (var i = 0; i < clsIds.length; i++) {
-        var cls = (S.classrooms || []).filter(function (c) { return c.id === clsIds[i]; })[0]; if (!cls) continue;
-        try {
-          var students = await WH.loadEnrolled(cls);
-          students.forEach(function (s) {
-            if (String(s.status || '').toLowerCase() === 'suspended' || seen[s.id + cls.id]) return; seen[s.id + cls.id] = 1;
-            if (s.studentType === 'remote') out.remote++; else out.online++;
-          });
-        } catch (e) { out.error = true; }
-      }
+      // All classrooms' enrolment lists are read together (was one after another).
+      var lists = await Promise.all(clsIds.map(function (id) {
+        var cls = (S.classrooms || []).filter(function (c) { return c.id === id; })[0];
+        if (!cls) return Promise.resolve(null);
+        return WH.loadEnrolled(cls).then(function (students) { return { cls: cls, students: students }; })
+          .catch(function () { out.error = true; return null; });
+      }));
+      lists.forEach(function (r) {
+        if (!r) return;
+        r.students.forEach(function (s) {
+          if (String(s.status || '').toLowerCase() === 'suspended' || seen[s.id + r.cls.id]) return; seen[s.id + r.cls.id] = 1;
+          if (s.studentType === 'remote') out.remote++; else out.online++;
+        });
+      });
       return out;
     }
 

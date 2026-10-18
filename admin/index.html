@@ -1236,9 +1236,9 @@ function initFirestore(){
       }
     }, err=>handleFirestoreError(err));
     db.collection('liveClasses').onSnapshot(snap=>{ DB.liveClasses = snap.docs.map(d=>({ id:d.id, ...d.data(), date: toDate(d.data().startAt) })); refreshAll(); }, err=>handleFirestoreError(err));
-    db.collection('parentStudentLinks').onSnapshot(snap=>{ DB.parentLinks = snap.docs.map(d=>({ id:d.id, ...d.data() })); renderParentMgmt(); }, err=>handleFirestoreError(err));
-    db.collection('parentAccounts').onSnapshot(snap=>{ DB.parentAccounts = snap.docs.map(d=>({ id:d.id, ...d.data() })); renderParentMgmt(); }, err=>handleFirestoreError(err));
-    db.collection('parentConversations').onSnapshot(snap=>{ DB.parentConversations = snap.docs.map(d=>({ id:d.id, ...d.data() })); renderParentMgmt(); }, err=>handleFirestoreError(err));
+    db.collection('parentStudentLinks').onSnapshot(snap=>{ DB.parentLinks = snap.docs.map(d=>({ id:d.id, ...d.data() })); scheduleParentMgmt(); }, err=>handleFirestoreError(err));
+    db.collection('parentAccounts').onSnapshot(snap=>{ DB.parentAccounts = snap.docs.map(d=>({ id:d.id, ...d.data() })); scheduleParentMgmt(); }, err=>handleFirestoreError(err));
+    db.collection('parentConversations').onSnapshot(snap=>{ DB.parentConversations = snap.docs.map(d=>({ id:d.id, ...d.data() })); scheduleParentMgmt(); }, err=>handleFirestoreError(err));
     db.collection('gradingGrants').onSnapshot(snap=>{ DB.gradingGrants = snap.docs.map(d=>({ id:d.id, ...d.data(), date: toDate(d.data().grantedAt) })); refreshAll(); }, err=>handleFirestoreError(err));
   }catch(e){ handleFirestoreError(e); }
 }
@@ -4535,7 +4535,20 @@ document.getElementById('globalSearch').addEventListener('input', (e)=>{
   else if(hitTicket) document.querySelector('.nav-item[data-view="tickets"]').click();
 });
 
+/* ~22 live listeners all call refreshAll() while the dashboard opens (and again on every
+   change anywhere). Each call re-renders 17 views + 3 charts, so the page used to rebuild
+   itself 20+ times before settling. Calls are now coalesced: one refresh per burst. */
+var _refreshTimer = null;
 function refreshAll(){
+  if(_refreshTimer) return;
+  _refreshTimer = setTimeout(function(){ _refreshTimer = null; refreshAllNow(); }, 150);
+}
+var _parentMgmtTimer = null;
+function scheduleParentMgmt(){
+  if(_parentMgmtTimer) return;
+  _parentMgmtTimer = setTimeout(function(){ _parentMgmtTimer = null; renderParentMgmt(); }, 150);
+}
+function refreshAllNow(){
   renderStats();
   renderActivity();
   renderGrowthChart();

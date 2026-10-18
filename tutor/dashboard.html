@@ -576,9 +576,19 @@ function initFirestore(){
 
   function mergeStudent(id, data){
     acc.students[id] = Object.assign({ id: id }, data, { date: toDate(data.createdAt) });
+  }
+  // Runs ONCE per snapshot (it used to run once per student document, re-subscribing every
+  // student's result/ticket listeners each time). Listeners are only re-attached when the
+  // set of students actually changes.
+  let studentSig = null;
+  function studentsChanged(){
     rebuild('students');
-    attachResultListeners();
-    attachTicketListeners();
+    const sig = DB.students.map(s=>s.id).sort().join(',');
+    if(sig !== studentSig){
+      studentSig = sig;
+      attachResultListeners();
+      attachTicketListeners();
+    }
     renderAll();
   }
 
@@ -586,10 +596,7 @@ function initFirestore(){
   listeners.students.push(
     db.collection('students').where('tutorIds','array-contains', tutor.id).onSnapshot(snap=>{
       snap.docs.forEach(d=> mergeStudent(d.id, d.data()));
-      rebuild('students');
-      attachResultListeners();
-      attachTicketListeners();
-      renderAll();
+      studentsChanged();
     }, (e)=>handleErr(e,'students-multi'))
   );
 
@@ -600,10 +607,7 @@ function initFirestore(){
   listeners.students.push(
     db.collection('students').where('tutorId','==',tutor.id).onSnapshot(snap=>{
       snap.docs.forEach(d=> mergeStudent(d.id, d.data()));
-      rebuild('students');
-      attachResultListeners();
-      attachTicketListeners();
-      renderAll();
+      studentsChanged();
     }, (e)=>{
       // A missing-index error here is harmless; the multi-tutor query
       // above already covers new-style students.
@@ -660,11 +664,24 @@ function initFirestore(){
 // see, and every flat-exam submission under each exam in the tutor's
 // subjects. Per-assignment / per-exam listeners — no collectionGroup.
 // ------------------------------------------------------------------
+// Startup used to call this three times (initial, tutor profile, grants) and each call
+// re-walked every classroom one at a time. Calls are coalesced, classrooms/topics are
+// fetched once per run and shared, and every classroom/topic is walked in parallel.
+// A generation counter stops a superseded run from attaching stray listeners.
+let _subTimer = null, subGen = 0, hwGen = 0, _runCache = null;
+function runCache(){ return _runCache || (_runCache = { scope: null, topics: {} }); }
+
 function attachSubmissionListeners(){
+  if(_subTimer) clearTimeout(_subTimer);
+  _subTimer = setTimeout(function(){ _subTimer = null; attachSubmissionListenersNow(); }, 250);
+}
+function attachSubmissionListenersNow(){
   detachAll('submissions');
   acc.submissions = {}; DB.submissions = [];
-  subscribeHomeworkSubmissions();
-  subscribeFlatExamSubmissions();
+  _runCache = null;
+  const gen = ++subGen;
+  subscribeHomeworkSubmissions(gen);
+  subscribeFlatExamSubmissions(gen);
 }
 
 // Index of the tutor's own homework posts. Reads each classroom's
@@ -675,14 +692,23 @@ function attachHomeworkIndexListener(){
   acc.homework = {}; DB.homework = [];
   subscribeHomeworkIndex();
 }
+
+function tutorTopicsOf(cls){
+  const c = runCache();
+  if(!c.topics[cls.id]){
+    c.topics[cls.id] = db.collection('classrooms').doc(cls.id).collection('topics').get()
+      .then(snap => snap.docs.map(d => Object.assign({ id: d.id }, d.data())))
+      .catch(() => []);
+  }
+  return c.topics[cls.id];
+}
+
 async function subscribeHomeworkIndex(){
+  const gen = ++hwGen;
   const classrooms = await tutorClassroomsInScope();
-  for (const cls of classrooms) {
-    let topics = [];
-    try {
-      const tSnap = await db.collection('classrooms').doc(cls.id).collection('topics').get();
-      topics = tSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-    } catch (e) { continue; }
+  await Promise.all(classrooms.map(async cls => {
+    const topics = await tutorTopicsOf(cls);
+    if(gen !== hwGen) return;
     for (const t of topics) {
       const unsub = db.collection('classrooms').doc(cls.id)
         .collection('topics').doc(t.id).collection('assignments')
@@ -703,10 +729,15 @@ async function subscribeHomeworkIndex(){
         }, (e) => handleErr(e, 'homework-index:' + t.id));
       listeners.homework.push(unsub);
     }
-  }
+  }));
 }
 
-async function tutorClassroomsInScope(){
+function tutorClassroomsInScope(){
+  const c = runCache();
+  if(!c.scope) c.scope = tutorClassroomsInScopeFetch();
+  return c.scope;
+}
+async function tutorClassroomsInScopeFetch(){
   const subjects = lmzSubjectKeys(tutor.subjects || []);
   if(!subjects.length) return [];
   let classrooms = [];
@@ -724,23 +755,19 @@ async function tutorClassroomsInScope(){
   return classrooms.filter(c => !ks.length || ks.indexOf(c.keyStage) !== -1);
 }
 
-async function subscribeHomeworkSubmissions(){
+async function subscribeHomeworkSubmissions(gen){
   const classrooms = await tutorClassroomsInScope();
-  for (const cls of classrooms) {
-    let topics = [];
-    try {
-      const tSnap = await db.collection('classrooms').doc(cls.id).collection('topics').get();
-      topics = tSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-    } catch (e) { continue; }
-
-    for (const t of topics) {
+  await Promise.all(classrooms.map(async cls => {
+    const topics = await tutorTopicsOf(cls);
+    await Promise.all(topics.map(async t => {
       let assignments = [];
       try {
         const aSnap = await db.collection('classrooms').doc(cls.id)
           .collection('topics').doc(t.id).collection('assignments')
           .where('audiences.tutors', '==', true).get();
         assignments = aSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-      } catch (e) { continue; }
+      } catch (e) { return; }
+      if(gen !== subGen) return;   // a newer run replaced this one
 
       for (const a of assignments) {
         const unsub = db.collection('classrooms').doc(cls.id)
@@ -767,19 +794,20 @@ async function subscribeHomeworkSubmissions(){
           }, (e) => handleErr(e, 'submissions:' + a.id));
         listeners.submissions.push(unsub);
       }
-    }
-  }
+    }));
+  }));
 }
 
-async function subscribeFlatExamSubmissions(){
+async function subscribeFlatExamSubmissions(gen){
   const classrooms = await tutorClassroomsInScope();
-  for (const cls of classrooms) {
+  await Promise.all(classrooms.map(async cls => {
     let exams = [];
     try {
       const eSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
         .where('audiences.tutors', '==', true).get();
       exams = eSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-    } catch (e) { continue; }
+    } catch (e) { return; }
+    if(gen !== subGen) return;
 
     for (const ex of exams) {
       const unsub = db.collection('classrooms').doc(cls.id)
@@ -806,7 +834,7 @@ async function subscribeFlatExamSubmissions(){
         }, (e) => handleErr(e, 'exam-submissions:' + ex.id));
       listeners.submissions.push(unsub);
     }
-  }
+  }));
 }
 
 function attachResultListeners(){
@@ -871,7 +899,13 @@ function handleErr(err, label){
     '<strong>Can\'t read some data.</strong> Check your Firestore rules allow tutors to read these collections. Console error: <code>' + escapeHtml(err.message||err) + '</code>';
 }
 
+/* Dozens of listeners call renderAll() while the portal opens; coalesce them into one render. */
+var _renderAllTimer = null;
 function renderAll(){
+  if(_renderAllTimer) return;
+  _renderAllTimer = setTimeout(function(){ _renderAllTimer = null; renderAllNow(); }, 80);
+}
+function renderAllNow(){
   renderOverview(); renderStudents();
   renderGranted(); renderNotices(); renderTts();
   renderTutorTeGrid(); renderTickets();

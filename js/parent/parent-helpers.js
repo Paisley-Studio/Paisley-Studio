@@ -119,17 +119,17 @@ const ParentHelpers = (function () {
     const seenC = {};
     classrooms = classrooms.filter(c => (seenC[c.id] ? false : (seenC[c.id] = true, true)));
 
-    // For each classroom, read the flat exams collection.
-    for (const cls of classrooms) {
+    // For each classroom, read the flat exams collection — all classrooms (and every
+    // exam's submission lookup) run at the same time instead of one after another.
+    await Promise.all(classrooms.map(async cls => {
       try {
         const examsSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
           .where('audiences.' + (child.studentType === 'remote' ? 'remote' : 'online'), '==', true)
           .where('status', '==', 'Published').get();
-        for (const examDoc of examsSnap.docs) {
+        await Promise.all(examsSnap.docs.map(async examDoc => {
           const exam = Object.assign({ id: examDoc.id, cid: cls.id }, examDoc.data());
           // Parents see Published exams. Drafts/Closed aren't visible.
-          if (String(exam.status || '') !== 'Published') continue;
-
+          if (String(exam.status || '') !== 'Published') return;
           let submission = null;
           try {
             const subSnap = await examDoc.ref.collection('submissions').doc(child.id).get();
@@ -138,12 +138,12 @@ const ParentHelpers = (function () {
             submission = null;
           }
           out.push({ exam, submission });
-        }
+        }));
       } catch (e) {
         // A single classroom failing shouldn't kill the whole bundle.
         console.warn('loadFlatExamsForChild: exam read failed for', cls.id, e);
       }
-    }
+    }));
 
     // Newest first by examDate (fallback to createdAt).
     out.sort((a, b) => {

@@ -263,9 +263,9 @@
     async function loadProgress(s) {
       var rows = [], year = s.year != null ? Number(s.year) : null;
       var subjects = lmzSubjectKeys(s.subjects);
-      for (var i = 0; i < subjects.length; i++) {
-        var cls = await CU.findClassroom(subjects[i], year, s.keyStage).catch(function () { return null; });
-        if (!cls) continue;
+      await Promise.all(subjects.map(async function (subj) {
+        var cls = await CU.findClassroom(subj, year, s.keyStage).catch(function () { return null; });
+        if (!cls) return;
         var topics = await CU.loadTopics(cls.id);
         await Promise.all(topics.map(async function (t) {
           var snap = await WH.coll(cls.id, t.id, 'assignment').where('audiences.remote', '==', true).get().catch(function () { return { docs: [] }; });
@@ -276,7 +276,7 @@
             it.sub = sd && sd.exists ? sd.data() : null; it.subject = CU.displayName(cls); rows.push(it);
           }));
         }));
-      }
+      }));
       return rows;
     }
     async function openProfile(s) {
@@ -426,8 +426,8 @@
         out.innerHTML = '<div class="cr-empty">Loading…</div>';
         try {
           var cls = CU.snapDocs(await db.collection('classrooms').where('keyStage', '==', S.pcKs).get()), rows = [];
-          for (var i = 0; i < cls.length; i++) {
-            var c = cls[i], topics = await CU.loadTopics(c.id);
+          await Promise.all(cls.map(async function (c) { // every classroom at once (was one at a time)
+            var topics = await CU.loadTopics(c.id);
             await Promise.all(topics.map(async function (t) {
               var r = await Promise.all([
                 CU.clsRef(c.id).collection('topics').doc(t.id).collection('lessons').where('audiences.remote', '==', true).get().catch(function () { return { docs: [] }; }),
@@ -437,7 +437,7 @@
             }));
             var fx = await db.collection('classrooms').doc(c.id).collection('exams').where('audiences.remote', '==', true).get().catch(function () { return { docs: [] }; });
             fx.docs.forEach(function (d) { var x = d.data(); rows.push({ k: 'Exam', title: x.title, cls: CU.displayName(c) + ' · Year ' + c.year, topic: x.examType || '', state: x.status, at: x.publication && x.publication.remote && x.publication.remote.publishedAt }); });
-          }
+          }));
           rows.sort(function (a, b) { return ts(b.at) - ts(a.at); });
           out.innerHTML = rows.length ? '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Type</th><th>Title</th><th>Classroom</th><th>Topic</th><th>State / deadline</th><th>Posted</th></tr></thead><tbody>' + rows.map(function (r) {
             return '<tr><td>' + esc(r.k) + '</td><td><b>' + esc(r.title) + '</b></td><td>' + esc(r.cls) + '</td><td>' + esc(r.topic) + '</td><td>' + esc(r.state || '') + '</td><td>' + esc(r.at ? CU.fmtDateTime(r.at) : '—') + '</td></tr>';

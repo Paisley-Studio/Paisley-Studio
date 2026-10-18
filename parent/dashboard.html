@@ -392,14 +392,29 @@ let chartInstance = null;
 // These are shared across child switches and preserved between renders.
 const parentFilters = { homework: 'all', exams: 'all' };
 
+// refreshParentAccess is a Cloud Function that can cold-start for several seconds. It now runs
+// ALONGSIDE the account check and the children lookup (it used to sit in front of them), and the
+// first load waits for it for at most a few seconds. If it is slower than that, the dashboard
+// opens anyway and quietly reloads the child once the refresh lands.
+let accessReady = Promise.resolve();
+
 auth.onAuthStateChanged(user => {
   if (!user) { window.location.href = 'index.html'; return; }
   currentUser = user;
-  db.collection('parentAccounts').doc(user.uid).get().then(doc => {
-    if (!doc.exists) { auth.signOut().then(()=>window.location.href='index.html'); return; }
-    return firebase.functions().httpsCallable('refreshParentAccess')()
-      .catch(() => null)
-      .then(() => ParentHelpers.getMyChildren(user.uid));
+
+  let refreshTimedOut = false;
+  const refreshP = firebase.functions().httpsCallable('refreshParentAccess')().catch(() => null);
+  accessReady = Promise.race([refreshP, new Promise(r => setTimeout(() => { refreshTimedOut = true; r(null); }, 3500))]);
+  refreshP.then(() => { if (refreshTimedOut && currentChild) selectChild(currentChild.id); });
+
+  Promise.all([
+    db.collection('parentAccounts').doc(user.uid).get(),
+    ParentHelpers.getMyChildren(user.uid).catch(e => ({ __err: e }))
+  ]).then(res => {
+    const doc = res[0];
+    if (!doc.exists) { auth.signOut().then(()=>window.location.href='index.html'); return undefined; }
+    if (res[1] && res[1].__err) throw res[1].__err;
+    return res[1];
   }).then(kids => {
     children = kids || [];
     if (!children.length) {
@@ -453,7 +468,7 @@ function selectChild(id){
   setChildHeader(currentChild);
   document.getElementById('gate').classList.remove('hidden');
   document.body.classList.remove('ready');
-  ParentHelpers.loadChildBundle(currentChild).then(b => {
+  accessReady.then(() => ParentHelpers.loadChildBundle(currentChild)).then(b => {
     bundle = b;
     bundle.results = bundle.results || [];
     bundle.activityAttempts = bundle.activityAttempts || [];

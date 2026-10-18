@@ -787,16 +787,25 @@
   async function loadParentWork(child, kind) {
     var PFLAG = 'audiences.' + audOf(child);
     var year = child.year != null && child.year !== '' ? Number(child.year) : null;
-    var groups = [];
     var subjects = lmzSubjectKeys(child.subjects);
+    var findCls = U.findClassroomCached || U.findClassroom;
+    var topicsOf = U.loadTopicsCached || U.loadTopics;
 
-    for (var i = 0; i < subjects.length; i++) {
+    // The child's AI-exam attempts are read ONCE and shared (was one read per exam).
+    var attemptsP = null;
+    function attemptsOnce() {
+      if (!attemptsP) attemptsP = db.collection('examAttempts').where('studentId', '==', child.id).get().catch(function () { return { docs: [] }; });
+      return attemptsP;
+    }
+
+    // Every subject is loaded at the same time (was one subject after another).
+    var perSubject = await Promise.all(subjects.map(async function (subj) {
       try {
-        var cls = await U.findClassroom(subjects[i], year, child.keyStage);
-        if (!cls) continue;
+        var cls = await findCls(subj, year, child.keyStage);
+        if (!cls) return null;
 
         if (kind === 'assignment') {
-          var topics = await U.loadTopics(cls.id), items = [];
+          var topics = await topicsOf(cls.id), items = [];
           await Promise.all(topics.map(async function (t) {
             var q = coll(cls.id, t.id, 'assignment').where(PFLAG, '==', true);
             var snap = await q.get();
@@ -809,46 +818,45 @@
               items.push(it);
             }));
           }));
-          groups.push({ cls: cls, topics: topics, items: items });
-        } else {
-          var items2 = [], flatItems = [];
-
-          var topics2 = await U.loadTopics(cls.id);
-          await Promise.all(topics2.map(async function (t) {
-            var q = coll(cls.id, t.id, 'exam').where('status', '==', 'Published').where(PFLAG, '==', true);
-            var snap = await q.get();
-            var mine = snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cls.id, flat: false }, d.data()); }).filter(function (x) {
-              return x.audience === 'class' || (x.recipients || []).indexOf(child.id) !== -1;
-            });
-            await Promise.all(mine.map(async function (it) {
-              if (it.examMode === 'ai') {
-                var q2 = await db.collection('examAttempts').where('studentId', '==', child.id).get().catch(function () { return { docs: [] }; });
-                var hit = q2.docs.filter(function (x) { return x.data().examId === it.legacyExamId; })[0];
-                it.sub = hit ? Object.assign({ id: hit.id }, hit.data(), { grade: hit.data().score }) : null;
-              } else {
-                var d = await coll(cls.id, t.id, 'exam').doc(it.id).collection('attempts').doc(child.id).get().catch(function () { return null; });
-                it.sub = d && d.exists ? Object.assign({ id: d.id }, d.data()) : null;
-              }
-              items2.push(it);
-            }));
-          }));
-
-          try {
-            var fSnap = await H.flatExamsRef(cls.id).where(PFLAG, '==', true).where('status', '==', 'Published').get();
-            await Promise.all(fSnap.docs.map(async function (d) {
-              var it = Object.assign({ id: d.id, cid: cls.id, flat: true }, d.data());
-              if (String(it.status || '') !== 'Published') return;
-              var s = await H.flatExamSubmissionsRef(cls.id, it.id).doc(child.id).get().catch(function () { return null; });
-              it.sub = s && s.exists ? Object.assign({ id: s.id }, s.data()) : null;
-              flatItems.push(it);
-            }));
-          } catch (e) { /* flat exams are optional */ }
-
-          groups.push({ cls: cls, topics: topics2, items: items2, flatItems: flatItems });
+          return { cls: cls, topics: topics, items: items };
         }
-      } catch (e) { console.warn('parent work for', subjects[i], e); }
-    }
-    return groups;
+
+        var items2 = [], flatItems = [];
+        var topics2 = await topicsOf(cls.id);
+        var flatP = H.flatExamsRef(cls.id).where(PFLAG, '==', true).where('status', '==', 'Published').get().catch(function () { return null; });
+        await Promise.all(topics2.map(async function (t) {
+          var q = coll(cls.id, t.id, 'exam').where('status', '==', 'Published').where(PFLAG, '==', true);
+          var snap = await q.get();
+          var mine = snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cls.id, flat: false }, d.data()); }).filter(function (x) {
+            return x.audience === 'class' || (x.recipients || []).indexOf(child.id) !== -1;
+          });
+          await Promise.all(mine.map(async function (it) {
+            if (it.examMode === 'ai') {
+              var q2 = await attemptsOnce();
+              var hit = q2.docs.filter(function (x) { return x.data().examId === it.legacyExamId; })[0];
+              it.sub = hit ? Object.assign({ id: hit.id }, hit.data(), { grade: hit.data().score }) : null;
+            } else {
+              var d = await coll(cls.id, t.id, 'exam').doc(it.id).collection('attempts').doc(child.id).get().catch(function () { return null; });
+              it.sub = d && d.exists ? Object.assign({ id: d.id }, d.data()) : null;
+            }
+            items2.push(it);
+          }));
+        }));
+
+        var fSnap = await flatP; // flat exams are optional
+        if (fSnap) {
+          await Promise.all(fSnap.docs.map(async function (d) {
+            var it = Object.assign({ id: d.id, cid: cls.id, flat: true }, d.data());
+            if (String(it.status || '') !== 'Published') return;
+            var s = await H.flatExamSubmissionsRef(cls.id, it.id).doc(child.id).get().catch(function () { return null; });
+            it.sub = s && s.exists ? Object.assign({ id: s.id }, s.data()) : null;
+            flatItems.push(it);
+          }));
+        }
+        return { cls: cls, topics: topics2, items: items2, flatItems: flatItems };
+      } catch (e) { console.warn('parent work for', subj, e); return null; }
+    }));
+    return perSubject.filter(Boolean);
   }
 
   /* ---------------------------------------------------------
