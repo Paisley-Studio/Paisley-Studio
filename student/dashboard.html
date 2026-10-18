@@ -775,12 +775,6 @@ function hostLoader(host, msg){
   host.innerHTML = '<div class="ps-host-loader"><div class="spin"></div><div class="msg">' + (msg || 'Loading…') + '</div></div>';
 }
 
-/* Mount `mountFn` into a detached node, paint a loader in `host` first so the
-   browser gets one frame, then swap the node into `host` when the mount API
-   resolves. The mount functions on this page (ClassroomUI.mountStudent and
-   WorkUI.mountStudentHome) write into the root they're given and return
-   synchronously — so we treat their return as "the node is ready" and, if it
-   ever returns a thenable, honour it too. */
 function withHostLoader(host, msg, mountFn){
   hostLoader(host, msg);
   return new Promise(function(resolve){
@@ -802,108 +796,44 @@ function withHostLoader(host, msg, mountFn){
 }
 
 /* ============================================================
-   PROFILE CACHE — shell paints instantly on repeat navigations
+   CLASSROOM BADGE COUNTER
+   Calculates total pending lessons across all subjects so the 
+   sidebar can show a red bubble (e.g. "3").
 ============================================================ */
-const PROFILE_CACHE_KEY = 'ps_profile_v1';
-function readProfileCache(uid){
-  try {
-    const raw = sessionStorage.getItem(PROFILE_CACHE_KEY);
-    if(!raw) return null;
-    const o = JSON.parse(raw);
-    return (o && o.uid === uid) ? o : null;
-  } catch(e){ return null; }
-}
-function writeProfileCache(uid, data){
-  try { sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ uid: uid, profile: data, ts: Date.now() })); } catch(e){}
-}
-function clearProfileCache(){
-  try { sessionStorage.removeItem(PROFILE_CACHE_KEY); } catch(e){}
-}
+async function calculateClassroomBadges() {
+  if (!window.ClassroomUI || !window.WorkUI) return;
+  const subjects = lmzSubjectKeys(profile.subjects);
+  const year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
+  const AUD = profile.studentType === 'remote' ? 'remote' : 'online';
+  let totalPending = 0;
 
-/* ============================================================
-   PREFETCH — build Classroom / Homework / Exams DOM nodes off-screen
-   so clicking the tab is an appendChild, not a network round trip.
-============================================================ */
-const prefetchCache = { classroom: null, homework: null, exams: null };
-const PREFETCH_MAX_AGE_MS = 5 * 60 * 1000; // refresh cached nodes older than 5 min
+  await Promise.all(subjects.map(async function(k) {
+    try {
+      const cls = await ClassroomUI.util.findClassroom(k, year, profile.keyStage);
+      if (!cls) return;
+      const topics = await ClassroomUI.util.loadTopics(cls.id);
+      const lessons = await ClassroomUI.util.loadLessons(cls.id, true, AUD);
+      
+      if (window.WorkUI && window.WorkUI.loadStudentWork) {
+        const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile);
+        if (work.lessons) {
+          totalPending += work.lessons.filter(function(l){ 
+            return !l.sub || l.sub.status === 'Corrections'; 
+          }).length;
+        }
+      }
+    } catch(e) { console.warn('badge calc error for', k, e); }
+  }));
 
-function buildClassroomNode(){
-  if(!currentUser || !profile) return null;
-  const box = document.createElement('div');
-  let api = null;
-  try { api = ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile: profile }); }
-  catch(e){ console.warn('classroom prefetch failed', e); return null; }
-  return { node: box, api: api, ts: Date.now() };
-}
-function buildWorkNode(kind){
-  if(!currentUser || !profile) return null;
-  const box = document.createElement('div');
-  let api = null;
-  try { api = WorkUI.mountStudentHome(box, { kind: kind, uid: currentUser.uid, profile: profile }); }
-  catch(e){ console.warn(kind + ' prefetch failed', e); return null; }
-  return { node: box, api: api, ts: Date.now() };
-}
-
-function prefetchAll(){
-  const go = function(){
-    if(!currentUser || !profile) return;
-    if(!prefetchCache.classroom) prefetchCache.classroom = buildClassroomNode();
-    if(!prefetchCache.homework)  prefetchCache.homework  = buildWorkNode('homework');
-    if(!prefetchCache.exams)     prefetchCache.exams     = buildWorkNode('exams');
-  };
-  if('requestIdleCallback' in window){
-    requestIdleCallback(go, { timeout: 2500 });
-  } else {
-    setTimeout(go, 600);
-  }
-}
-
-function mountClassroom(){
-  const host = document.getElementById('classroomHost');
-  if(!profile) return;
-
-  const cached = prefetchCache.classroom;
-  if(cached && cached.node && (Date.now() - cached.ts) < PREFETCH_MAX_AGE_MS){
-    host.innerHTML = '';
-    host.appendChild(cached.node);
-    // Silent background refresh so the node stays current.
-    if(cached.api && typeof cached.api.reload === 'function'){
-      setTimeout(function(){
-        try { cached.api.reload(); } catch(e){}
-      }, 200);
+  const badge = document.getElementById('navClassroomCount');
+  if (badge) {
+    if (totalPending > 0) {
+      badge.textContent = totalPending;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
     }
-    return;
   }
-
-  withHostLoader(host, 'Loading your classroom…', function(box){
-    return ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile: profile });
-  }).then(function(api){
-    if(api) prefetchCache.classroom = { node: host.firstChild, api: api, ts: Date.now() };
-  });
-}
-
-function mountWork(kind){
-  const host = document.getElementById(kind === 'exams' ? 'workExHost' : 'workHwHost');
-  const key = kind === 'exams' ? 'exams' : 'homework';
-  if(!profile) return;
-
-  const cached = prefetchCache[key];
-  if(cached && cached.node && (Date.now() - cached.ts) < PREFETCH_MAX_AGE_MS){
-    host.innerHTML = '';
-    host.appendChild(cached.node);
-    if(cached.api && typeof cached.api.reload === 'function'){
-      setTimeout(function(){
-        try { cached.api.reload(); } catch(e){}
-      }, 200);
-    }
-    return;
-  }
-
-  withHostLoader(host, kind === 'exams' ? 'Loading exams…' : 'Loading homework…', function(box){
-    return WorkUI.mountStudentHome(box, { kind: kind, uid: currentUser.uid, profile: profile });
-  }).then(function(api){
-    if(api) prefetchCache[key] = { node: host.firstChild, api: api, ts: Date.now() };
-  });
 }
 
 /* ============================================================
@@ -913,54 +843,30 @@ auth.onAuthStateChanged(user=>{
   if(!user){ window.location.href = 'index.html'; return; }
   currentUser = user;
 
-  const cached = readProfileCache(user.uid);
-  if(cached && cached.profile){
-    profile = cached.profile;
+  getStudentProfile(user.uid).then(doc=>{
+    if(!doc.exists){ window.location.href = 'index.html'; return; }
+    const data = doc.data();
+    profile = data;
+
     if(profile.studentType === 'remote'){ window.location.replace('/remote/dashboard.html'); return; }
     if(profile.status !== 'Active'){
       document.body.classList.add('pending');
       document.body.classList.add('ready');
       return;
     }
-    // Instant shell
+
     document.body.classList.add('ready');
     renderProfile();
     ensureStudentIdNumber().then(() => renderProfileIdCard());
     loadAllData();
     startWorkFeatures();
-    prefetchAll();
-  }
+    
+    // NEW: Calculate the red bubble count for Classroom tab
+    calculateClassroomBadges();
 
-  // Revalidate in the background (or do the first-time boot if nothing cached).
-  getStudentProfile(user.uid).then(doc=>{
-    if(!doc.exists){ window.location.href = 'index.html'; return; }
-    const data = doc.data();
-    const wasCached = !!(cached && cached.profile);
-    profile = data;
-    writeProfileCache(user.uid, data);
-
-    if(profile.studentType === 'remote'){ window.location.replace('/remote/dashboard.html'); return; }
-    if(profile.status !== 'Active'){
-      document.body.classList.add('pending');
-      document.body.classList.add('ready');
-      return;
-    }
-
-    if(!wasCached){
-      // No cache — this is the first paint for this session.
-      document.body.classList.add('ready');
-      renderProfile();
-      ensureStudentIdNumber().then(() => renderProfileIdCard());
-      loadAllData();
-      startWorkFeatures();
-      prefetchAll();
-    } else {
-      // Quiet re-render with any changes from the server.
-      renderProfile();
-    }
   }).catch(err=>{
     console.error('profile load failed:', err);
-    if(!cached){ window.location.href = 'index.html'; }
+    window.location.href = 'index.html';
   });
 });
 
@@ -994,14 +900,34 @@ function renderWorkNotices(){
   }
 }
 
-/* Route clicks through the prefetched mounters */
-document.querySelector('.nav-item[data-view="homework"]').addEventListener('click', ()=>{ if(currentUser && profile) mountWork('homework'); });
-document.querySelector('.nav-item[data-view="exams"]').addEventListener('click', ()=>{ if(currentUser && profile) mountWork('exams'); });
-document.querySelector('.nav-item[data-view="classroom"]').addEventListener('click', ()=>{ if(currentUser && profile) mountClassroom(); });
+/* Route clicks to the direct mounters (NO PREFETCH) */
+document.querySelector('.nav-item[data-view="homework"]').addEventListener('click', ()=>{ 
+  if(!currentUser || !profile) return;
+  const host = document.getElementById('workHwHost');
+  withHostLoader(host, 'Loading homework…', function(box){
+    return WorkUI.mountStudentHome(box, { kind: 'homework', uid: currentUser.uid, profile: profile });
+  });
+});
 
-document.getElementById('signOutBtn').addEventListener('click', ()=>{ clearProfileCache(); auth.signOut().then(()=>window.location.href='index.html'); });
-document.getElementById('topSignOutBtn').addEventListener('click', ()=>{ if(!confirm('Sign out of your student portal?')) return; clearProfileCache(); auth.signOut().then(()=>window.location.href='index.html'); });
-document.getElementById('pendingSignOut').addEventListener('click', ()=>{ clearProfileCache(); auth.signOut().then(()=>window.location.href='index.html'); });
+document.querySelector('.nav-item[data-view="exams"]').addEventListener('click', ()=>{ 
+  if(!currentUser || !profile) return;
+  const host = document.getElementById('workExHost');
+  withHostLoader(host, 'Loading exams…', function(box){
+    return WorkUI.mountStudentHome(box, { kind: 'exams', uid: currentUser.uid, profile: profile });
+  });
+});
+
+document.querySelector('.nav-item[data-view="classroom"]').addEventListener('click', ()=>{ 
+  if(!currentUser || !profile) return;
+  const host = document.getElementById('classroomHost');
+  withHostLoader(host, 'Loading your classroom…', function(box){
+    return ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile: profile });
+  });
+});
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut().then(()=>window.location.href='index.html'); });
+document.getElementById('topSignOutBtn').addEventListener('click', ()=>{ if(!confirm('Sign out of your student portal?')) return; auth.signOut().then(()=>window.location.href='index.html'); });
+document.getElementById('pendingSignOut').addEventListener('click', ()=>{ auth.signOut().then(()=>window.location.href='index.html'); });
 
 function renderProfile(){
   const initials = lmsInitials(profile.name);
@@ -1071,13 +997,11 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
 document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
 
 /* ============================================================
-   PROGRESSIVE loadAllData — five independent promises, each
-   renders its portion of the UI as soon as it lands.
+   PROGRESSIVE loadAllData
 ============================================================ */
 function loadAllData(){
   showInlineLoader('Loading your results…');
 
-  // 1) Results + submissions in parallel — cheapest, paints charts + tables.
   Promise.all([
     getResultsForStudent(currentUser.uid),
     getSubmissionsForStudent(currentUser.uid)
@@ -1095,27 +1019,23 @@ function loadAllData(){
     hideInlineLoader();
   });
 
-  // 2) Homework — paint the earlier-homework list + refresh stats as soon as it lands.
   getHomeworkForKeyStage(profile.keyStage).then(snap=>{
     allHomework = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderHomework();
     renderOverview();
   }).catch(err=>{ console.warn('homework load:', err); });
 
-  // 3) Exams — same.
   getExamsForKeyStage(profile.keyStage).then(snap=>{
     allExams = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderExams();
     renderOverview();
   }).catch(err=>{ console.warn('exams load:', err); });
 
-  // 4) Attempts — same.
   getAttemptsForStudent(currentUser.uid).then(snap=>{
     allAttempts = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderOverview();
   }).catch(err=>{ console.warn('attempts load:', err); });
 
-  // 5) Tickets, notices, timetable — all independent.
   loadTickets();
   loadNotesAndNotices();
 }
@@ -1164,7 +1084,6 @@ function populateSubjectFilters(){
     subs.forEach(s=>{
       const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt);
     });
-    // Avoid stacking listeners on repeat calls.
     if(!sel.dataset.wired){
       sel.dataset.wired = '1';
       sel.addEventListener('change', ()=>{
@@ -1875,9 +1794,6 @@ async function handleIdPhotoUpload(e){
     profile.photoUrl = url;
     profile.photoPath = path;
     profile.photoUpdatedAt = { seconds: Math.floor(Date.now() / 1000) };
-
-    // Refresh cache so the new photo persists across navigation.
-    if (profile) writeProfileCache(currentUser.uid, profile);
 
     renderProfileIdCard();
   } catch (err) {

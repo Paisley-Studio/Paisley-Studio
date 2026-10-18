@@ -183,7 +183,6 @@
     white-space: nowrap;
   }
 
-  /* My Tutors panel */
   .tutor-grid{display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin-top:.4rem;}
   .tutor-chip{display:flex; align-items:center; gap:.55rem; padding:.55rem .75rem; background:var(--sage); border-radius:10px;}
   .tutor-chip .t-ic{width:28px; height:28px; border-radius:50%; background:var(--brand); color:#04231f; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.72rem; flex-shrink:0;}
@@ -206,13 +205,11 @@
     .tutor-grid{grid-template-columns:1fr;}
   }
 
-    /* ====== PROFILE TAB LAYOUT ====== */
   .profile-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:1.2rem;}
   @media(min-width:1100px){
     .profile-grid{grid-template-columns:minmax(0,400px) minmax(0,1fr); align-items:start;}
   }
 
-  /* ====== STUDENT ID CARD — horizontal, matches brand inspo ====== */
   .id-card-wrap{display:flex; flex-direction:column; gap:1rem;}
 
   .id-card{
@@ -271,11 +268,11 @@
     overflow:hidden; flex-shrink:0;
     display:flex; align-items:center; justify-content:center;
   }
-    .id-brand-logo img{width:100%; height:100%; object-fit:contain; display:block; padding:5px;}
+  .id-brand-logo img{width:100%; height:100%; object-fit:contain; display:block; padding:5px;}
   .id-brand-divider{width:1px; height:32px; background:rgba(255,255,255,.18);}
   .id-brand-text{line-height:1.05;}
   .id-brand-name{font-weight:800; font-size:15px; letter-spacing:-.01em; color:#fff;}
-    .id-brand-role{
+  .id-brand-role{
     display:block; font-size:8.5px; font-weight:800;
     text-transform:uppercase; letter-spacing:.10em;
     color:#7BCBC2; margin-top:4px;
@@ -309,7 +306,7 @@
 
   .id-details{display:flex; flex-direction:column; gap:9px; padding-top:4px;}
   .id-row{display:flex; align-items:baseline; gap:10px;}
-    .id-row .k{
+  .id-row .k{
     font-size:9px; font-weight:800;
     text-transform:uppercase; letter-spacing:.16em;
     color:rgba(255,255,255,.72); min-width:78px; flex-shrink:0;
@@ -337,7 +334,7 @@
   }
   .id-qr img{width:100%; height:100%; display:block; border-radius:4px;}
   .id-verify-text{flex:1; min-width:0;}
-    .id-verify-text .lbl{
+  .id-verify-text .lbl{
     font-size:9px; font-weight:800;
     text-transform:uppercase; letter-spacing:.16em;
     color:rgba(255,255,255,.72);
@@ -391,6 +388,17 @@
   .rm-field input:focus,.rm-field textarea:focus{outline:none;border-color:var(--brand);}
   .rm-msg{font-size:.8rem;margin-top:.5rem;min-height:1.1rem;}
   @media (max-width:640px){.field-row{grid-template-columns:1fr;}}
+
+  /* ===== NEW: host-scoped loaders ===== */
+  .ps-host-loader{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1rem; padding:3rem 1rem;
+  }
+  .ps-host-loader .spin{
+    width:42px; height:42px; border:4px solid rgba(38,51,49,.1);
+    border-top-color:#55BFB3; border-radius:50%; animation:spin .8s linear infinite;
+  }
+  .ps-host-loader .msg{color:#245F5A; font-weight:700; font-size:.9rem;}
 </style>
 </head>
 <body>
@@ -484,6 +492,69 @@ function leave(reason){
   auth.signOut().finally(() => { window.location.href = '/remote/' + (reason ? '?r=' + reason : ''); });
 }
 
+/* Loader Helpers */
+function hostLoader(host, msg){
+  if(!host) return;
+  host.innerHTML = '<div class="ps-host-loader"><div class="spin"></div><div class="msg">' + (msg || 'Loading…') + '</div></div>';
+}
+
+function withHostLoader(host, msg, mountFn){
+  hostLoader(host, msg);
+  return new Promise(function(resolve){
+    requestAnimationFrame(function(){
+      const box = document.createElement('div');
+      let ret;
+      try { ret = mountFn(box); } catch(e){ ret = Promise.reject(e); }
+      Promise.resolve(ret).then(function(api){
+        host.innerHTML = '';
+        host.appendChild(box);
+        resolve(api || null);
+      }).catch(function(e){
+        console.error(e);
+        host.innerHTML = '<div class="panel"><div class="empty-row">Could not load: ' + esc(e && e.message ? e.message : e) + '</div></div>';
+        resolve(null);
+      });
+    });
+  });
+}
+
+/* Classroom Badge Counter */
+async function calculateClassroomBadges() {
+  if (!window.ClassroomUI || !window.WorkUI) return;
+  const subjects = lmzSubjectKeys(profile.subjects);
+  const year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
+  const AUD = profile.studentType === 'remote' ? 'remote' : 'online';
+  let totalPending = 0;
+
+  await Promise.all(subjects.map(async function(k) {
+    try {
+      const cls = await ClassroomUI.util.findClassroom(k, year, profile.keyStage);
+      if (!cls) return;
+      const topics = await ClassroomUI.util.loadTopics(cls.id);
+      const lessons = await ClassroomUI.util.loadLessons(cls.id, true, AUD);
+      
+      if (window.WorkUI && window.WorkUI.loadStudentWork) {
+        const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile);
+        if (work.lessons) {
+          totalPending += work.lessons.filter(function(l){ 
+            return !l.sub || l.sub.status === 'Corrections'; 
+          }).length;
+        }
+      }
+    } catch(e) { console.warn('badge calc error for', k, e); }
+  }));
+
+  const badge = document.getElementById('navClassroomCount');
+  if (badge) {
+    if (totalPending > 0) {
+      badge.textContent = totalPending;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
 /* Access is decided by the STORED studentType + status, nothing in the URL. */
 auth.onAuthStateChanged(async user => {
   if(!user){ window.location.href = '/remote/'; return; }
@@ -499,7 +570,7 @@ auth.onAuthStateChanged(async user => {
     if(s.status !== 'Active') return leave('inactive');
     currentUser = user; profile = Object.assign({ id: user.uid }, s);
     $('app').style.display = '';
-    renderProfile(); startFeatures(); mountClassroom(); loadTickets();
+    renderProfile(); startFeatures(); mountClassroom(); loadTickets(); calculateClassroomBadges();
   }catch(e){ console.error(e); leave('error'); }
 });
 
@@ -527,15 +598,21 @@ $('signOutBtn').addEventListener('click', () => leave());
 $('topSignOutBtn').addEventListener('click', () => { if(confirm('Sign out of the Remote Student portal?')) leave(); });
 
 function mountClassroom(){
-  const host = $('classroomHost'); host.innerHTML = '';
-  const box = document.createElement('div'); host.appendChild(box);
-  ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile });
+  const host = $('classroomHost');
+  if(!profile) return;
+  withHostLoader(host, 'Loading your classroom…', function(box){
+    return ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile: profile });
+  });
 }
+
 function mountWork(kind){
-  const host = $(kind === 'exams' ? 'workExHost' : 'workHwHost'); host.innerHTML = '';
-  const box = document.createElement('div'); host.appendChild(box);
-  WorkUI.mountStudentHome(box, { kind, uid: currentUser.uid, profile });
+  const host = $(kind === 'exams' ? 'workExHost' : 'workHwHost');
+  if(!profile) return;
+  withHostLoader(host, kind === 'exams' ? 'Loading exams…' : 'Loading homework…', function(box){
+    return WorkUI.mountStudentHome(box, { kind: kind, uid: currentUser.uid, profile: profile });
+  });
 }
+
 function startFeatures(){
   if(typeof mountNotificationBell === 'function'){
     mountNotificationBell($('bellHost'), currentUser.uid, 'student', {

@@ -642,21 +642,23 @@
 
     async function load() {
       root.innerHTML = inlineLoaderHtml(kind === 'exam' ? 'Loading your exams…' : 'Loading your homework…');
-      var groups = [];
-      for (var i = 0; i < subjects.length; i++) {
+      
+      var results = await Promise.all(subjects.map(async function (sub) {
         try {
-          var cls = await U.findClassroom(subjects[i], year, profile.keyStage);
-          if (!cls) continue;
+          var cls = await U.findClassroom(sub, year, profile.keyStage);
+          if (!cls) return null;
           var topics = kind === 'exam' ? [] : await U.loadTopics(cls.id);
           var work = await loadStudentWork(cls, topics, opts.uid, profile);
-          groups.push({
+          return {
             cls: cls,
             topics: topics,
             items: kind === 'exam' ? work.exams : work.assignments
-          });
-        } catch (e) { console.warn('student work for', subjects[i], e); }
-      }
-      S.groups = groups; render();
+          };
+        } catch (e) { console.warn('student work for', sub, e); return null; }
+      }));
+      
+      S.groups = results.filter(Boolean);
+      render();
     }
 
     function passes(it) {
