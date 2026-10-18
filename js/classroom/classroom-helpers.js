@@ -1,16 +1,5 @@
 /* =========================================================
    LMZ CLASSROOM — shared data layer + UI
-   -----------------------------------------------------------
-   Used by the Tutor portal, the Admin console and the Student
-   portal. Each page only adds a nav item, an empty <section>, and
-   one mount call:
-
-     ClassroomUI.mountManager(el, { role:'admin'|'tutor', uid, name,
-                                    subjects:[...], keyStages:[...],
-                                    scope:'remote' });   // optional
-     ClassroomUI.mountStudent(el, { uid, profile });
-
-   scope:'remote' is used by the Remote Students → Classwork tab.
 ========================================================= */
 (function (global) {
   'use strict';
@@ -36,9 +25,6 @@
     mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg'
   };
 
-  /* ---------------------------------------------------------
-     Small utilities
-  --------------------------------------------------------- */
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -93,9 +79,6 @@
     return c.subjectName || (c.subjectId ? lmzSubjectLabel(c.subjectId) : '') || 'Untitled classroom';
   }
 
-  /* ---------------------------------------------------------
-     HTML sanitiser
-  --------------------------------------------------------- */
   var ALLOWED_TAGS = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, STRONG: 1, B: 1, EM: 1, I: 1, U: 1, S: 1, UL: 1, OL: 1, LI: 1,
     A: 1, BLOCKQUOTE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1, IMG: 1, DIV: 1, SPAN: 1, HR: 1,
     CODE: 1, PRE: 1, SUB: 1, SUP: 1 };
@@ -142,9 +125,6 @@
     return out.innerHTML;
   }
 
-  /* ---------------------------------------------------------
-     Styles
-  --------------------------------------------------------- */
   var AUD_NAMES = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
   function effAud(l) {
     if (l && l.audiences && typeof l.audiences === 'object') return l.audiences;
@@ -272,9 +252,6 @@
     document.head.appendChild(st);
   }
 
-  /* ---------------------------------------------------------
-     Firestore data layer
-  --------------------------------------------------------- */
   function clsRef(cid) { return db.collection('classrooms').doc(cid); }
   function topicsRef(cid) { return clsRef(cid).collection('topics'); }
   function topicRef(cid, tid) { return topicsRef(cid).doc(tid); }
@@ -351,9 +328,6 @@
     if (changed) await batch.commit();
   }
 
-  /* ---------------------------------------------------------
-     Storage
-  --------------------------------------------------------- */
   function validateFile(file) {
     if (!file) return 'No file selected.';
     if (file.size > MAX_FILE_BYTES) return '“' + file.name + '” is larger than 100 MB.';
@@ -393,9 +367,6 @@
     });
   }
 
-  /* ---------------------------------------------------------
-     Modal helper
-  --------------------------------------------------------- */
   function openModal(opts) {
     var ov = document.createElement('div');
     ov.className = 'cr-overlay cr-root';
@@ -432,9 +403,6 @@
     });
   }
 
-  /* ---------------------------------------------------------
-     Rich-text editor
-  --------------------------------------------------------- */
   function createEditor(host, initialHtml, hooks) {
     host.innerHTML =
       '<div class="cr-tools" role="toolbar" aria-label="Formatting">' +
@@ -493,9 +461,6 @@
     };
   }
 
-  /* =========================================================
-     MANAGER (tutor + admin)
-  ========================================================= */
   function mountManager(root, opts) {
     injectStyle();
     var isAdmin = opts.role === 'admin';
@@ -810,7 +775,6 @@
         if (open) {
           if (!ls.length) h += '<div class="cr-empty">' + (isAdmin ? 'No lessons have been added to this topic yet.' : 'No lessons in this topic yet.') + '</div>';
           ls.forEach(function (l, li) {
-            // Admin sees full edit controls; tutor sees Release button + click-through.
             var lessonActions = isAdmin
               ? '<div class="cr-actions"><button type="button" class="cr-btn sm" title="Move up" data-a="lesson-up" data-id="' + esc(l.id) + '"' + (li === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>' +
                 '<button type="button" class="cr-btn sm" title="Move down" data-a="lesson-down" data-id="' + esc(l.id) + '"' + (li === ls.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>' +
@@ -1342,9 +1306,6 @@
     return { reload: loadClassrooms };
   }
 
-  /* =========================================================
-     STUDENT
-  ========================================================= */
   function mountStudent(root, opts) {
     injectStyle();
     root.classList.add('cr-root');
@@ -1378,7 +1339,7 @@
               pExams = work.exams.filter(function(e) {
                 if (e.sub && e.sub.status === 'Submitted') return false;
                 if (e.sub && e.sub.status === 'Graded') return false;
-                if (e.flat && !window.WorkUI._h.isWindowOpen(e)) return false;
+                if (e.flat && window.WorkUI && window.WorkUI._h && !window.WorkUI._h.isWindowOpen(e)) return false;
                 return true;
               }).length;
 
@@ -1542,9 +1503,6 @@
     return { reload: renderHome };
   }
 
-  /* =========================================================
-     PARENT (read-only)
-  ========================================================= */
   function mountParent(root, opts) {
     injectStyle();
     root.classList.add('cr-root');

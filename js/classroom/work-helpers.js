@@ -23,9 +23,6 @@
   var FV = function () { return firebase.firestore.FieldValue; };
   var DAY = 86400000;
 
-  /* ---------------------------------------------------------
-     Styles
-  --------------------------------------------------------- */
   function injectStyle() {
     U.injectStyle();
     if (document.getElementById('wk-style')) return;
@@ -61,9 +58,6 @@
     document.head.appendChild(st);
   }
 
-  /* ---------------------------------------------------------
-     Small helpers
-  --------------------------------------------------------- */
   function pill(cls, text, icon) {
     return '<span class="cr-badge ' + cls + '">' + (icon ? '<i class="fas ' + icon + '" style="margin-right:.3rem"></i>' : '') + esc(text) + '</span>';
   }
@@ -80,7 +74,6 @@
     return s.grade != null ? String(s.grade) : '';
   }
 
-  // Flat-exam submission window state.
   function windowState(exam) {
     var now = Date.now();
     var examDate = exam.examDate ? U.toDate(exam.examDate) : null;
@@ -97,7 +90,6 @@
     return w.mode === 'manual-open' || w.mode === 'auto-open';
   }
 
-  // One state per (item, student). `sub` is the submission / attempt doc or null.
   function workState(item, sub, kind) {
     var now = Date.now();
     if (sub && sub.status === 'Graded') return { k: 'graded', cls: 'b-confirmed', icon: 'fa-circle-check', text: 'Graded: ' + (fmtScore(sub) || 'done') };
@@ -110,9 +102,6 @@
     return { k: 'pending', cls: 'b-plain', icon: 'fa-circle', text: 'Not submitted' };
   }
 
-  /* ---------------------------------------------------------
-     Data layer
-  --------------------------------------------------------- */
   async function loadEnrolled(cls) {
     var snap = await db.collection('students').where('keyStage', '==', cls.keyStage).get();
     var want = lmzSubjectKey(cls.subjectId);
@@ -124,28 +113,49 @@
     }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
   }
 
-  // Homework only: assignments under topics + their submissions.
+  // Load both Homework and Classwork items for a classroom.
   async function loadClassHomework(cid, topics, tutorOnly) {
     var items = [];
+    
+    // 1. Load Assignments
     var parts = await Promise.all(topics.map(function (t) {
       var q = coll(cid, t.id, 'assignment');
-      if (tutorOnly) q = q.where('audiences.tutors', '==', true);   // tutors only read what the Studio Desk posted to them
+      if (tutorOnly) q = q.where('audiences.tutors', '==', true);
       return q.get().then(function (snap) {
-        return snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cid }, d.data()); });
+        return snap.docs.map(function (d) { return Object.assign({ id: d.id, tid: t.id, cid: cid, kind: 'assignment' }, d.data()); });
       });
     }));
     parts.forEach(function (p) { items = items.concat(p); });
+
+    // 2. Load Lessons (Classwork) - only those with submissions OR released to tutors
+    var lParts = await Promise.all(topics.map(function (t) {
+      var q = coll(cid, t.id, 'lesson');
+      // If tutor, only show lessons released to them. Admin sees all published.
+      if (tutorOnly) q = q.where('audiences.tutors', '==', true);
+      else q = q.where('status', '==', 'published');
+      
+      return q.get().then(function (snap) {
+        // We only want lessons that actually have submissions to grade,
+        // or (for tutors) lessons they have released.
+        return snap.docs.map(function (d) { 
+          return Object.assign({ id: d.id, tid: t.id, cid: cid, kind: 'lesson', isClasswork: true }, d.data()); 
+        });
+      });
+    }));
+    lParts.forEach(function (p) { items = items.concat(p); });
+
+    // 3. Load Submissions for everything
     var subs = {};
     await Promise.all(items.map(function (it) {
-      return coll(cid, it.tid, 'assignment').doc(it.id).collection('submissions').get().then(function (snap) {
+      return coll(cid, it.tid, it.kind).doc(it.id).collection('submissions').get().then(function (snap) {
         var m = {}; snap.docs.forEach(function (d) { m[d.id] = Object.assign({ id: d.id }, d.data()); });
         subs[it.id] = m;
       }).catch(function () { subs[it.id] = {}; });
     }));
+
     return { items: items, subs: subs };
   }
 
-  // Flat exams: classrooms/{cid}/exams/{eid} + their submissions subcollection.
   async function loadFlatExams(cid, tutorOnly) {
     var fq = flatExamsRef(cid);
     if (tutorOnly) fq = fq.where('audiences.tutors', '==', true);
@@ -166,7 +176,6 @@
     return { items: items, subs: subs };
   }
 
-  /* ---- audiences: who may see an item ---- */
   var AUD_LABEL = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
   function studentAud(s) { return s && s.studentType === 'remote' ? 'remote' : 'online'; }
   function effAudiences(it) { return it && it.audiences && typeof it.audiences === 'object' ? it.audiences : { online: true, remote: false, tutors: true }; }
@@ -207,9 +216,6 @@
     return firebase.firestore.Timestamp.fromDate(d);
   }
 
-  /* ---------------------------------------------------------
-     Recipient picker (whole class / select students)
-  --------------------------------------------------------- */
   function recipientsHtml(prefix) {
     return '<div class="cr-field"><label>Recipients</label>' +
       '<div class="wk-radio"><label><input type="radio" name="' + prefix + 'Aud" value="class" checked> Whole class</label>' +
@@ -242,9 +248,6 @@
     };
   }
 
-  /* =========================================================
-     POST ASSIGNMENT (homework)
-  ========================================================= */
   function openPostAssignment(o) {
     injectStyle();
     var cls = o.cls, topics = o.topics, user = o.user, ex = o.existing || null;
@@ -313,7 +316,6 @@
         data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
         
-        // Force audience based on scope
         if (o.scope === 'remote') {
           data.audiences = { online: false, remote: true, tutors: false };
         } else {
@@ -338,9 +340,6 @@
     };
   }
 
-  /* =========================================================
-     CREATE / EDIT FLAT EXAM (Midterm or End of Term)
-  ========================================================= */
   function openCreateExam(o) {
     injectStyle();
     var cls = o.cls, user = o.user, ex = o.existing || null;
@@ -469,14 +468,10 @@
           data.tutorName = user.name || '';
           data.createdBy = user.uid;
           data.createdAt = FV().serverTimestamp();
-          // The `onFlatExamPosted` trigger uses this to send one email
-          // per recipient per exam. It flips to true inside the trigger.
           data.notificationsSentAt = null;
         } else if (status === 'Published' && ex.status !== 'Published') {
-          // First time this exam becomes Published → let the trigger fire.
           data.notificationsSentAt = null;
         } else if (f.examTs.toDate().getTime() !== (ex.examDate ? U.toDate(ex.examDate).getTime() : 0)) {
-          // Exam date changed → the 48h reminder needs to run again.
           data.parentNoticeSent = false;
         }
 
@@ -494,16 +489,10 @@
     });
   }
 
-  /* ---------------------------------------------------------
-     Flat-exam status toggles
-  --------------------------------------------------------- */
   async function setFlatExamStatus(cid, eid, patch) {
     await flatExamRef(cid, eid).update(Object.assign({ updatedAt: FV().serverTimestamp() }, patch));
   }
 
-  /* ---------------------------------------------------------
-     GRADE A FLAT-EXAM SUBMISSION (via InkGrader)
-  --------------------------------------------------------- */
   function openGradeFlatExamInk(ctx) {
     if (!global.InkGrader) {
       alert('The grading workspace did not load. Refresh the page and try again.');
@@ -525,22 +514,17 @@
     });
   }
 
-  /* =========================================================
-     TUTOR RELEASE — GLOBAL SCOPE (used by classroom-helpers.js)
-  ========================================================= */
   async function openRelease(it, user) {
     var m = U.openModal({ title: 'Release to my students \u2014 ' + it.title });
     m.body.innerHTML = '<div class="cr-empty">Loading your students\u2026</div>';
     m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
     m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
     
-    // Find students
     var found = {};
     var qs = [db.collection('students').where('tutorIds', 'array-contains', user.uid), db.collection('students').where('tutorId', '==', user.uid)];
     var snaps = await Promise.all(qs.map(function (q) { return q.get().catch(function () { return { docs: [] }; }); }));
     snaps.forEach(function (sn) { sn.docs.forEach(function (d) { found[d.id] = Object.assign({ id: d.id }, d.data()); }); });
     
-    // Find classroom to get year/subject rules
     var clsSnap = await U.clsRef(it.cid).get();
     var cls = clsSnap.exists ? clsSnap.data() : {};
     var want = lmzSubjectKey(it.subjectId || cls.subjectId);
@@ -569,7 +553,6 @@
       if (!ids.length) { err.textContent = 'Tick at least one student.'; return; }
       var btn = this; btn.disabled = true;
       
-      // Build path correctly for lessons, homework, or exams
       var typeCol = it.topicId ? (it.examDate ? 'exams' : (it.dueAt ? 'assignments' : 'lessons')) : 'exams';
       var path = '';
       if (typeCol === 'exams' && !it.topicId) {
@@ -581,15 +564,11 @@
       try {
         var r = await firebase.functions().httpsCallable('tutorReleaseWork')({ path: path, studentIds: ids });
         m.close(); alert('Released to ' + ((r.data && r.data.released) || []).length + ' student(s).');
-        // Refresh parent caller if needed
         if (window.ClassroomUI && window.ClassroomUI._refresh) window.ClassroomUI._refresh();
       } catch (e2) { err.textContent = e2.message || 'Could not release.'; btn.disabled = false; }
     };
   }
 
-  /* =========================================================
-     STAFF MANAGEMENT SCREENS
-  ========================================================= */
   function mountManagement(root, opts) {
     injectStyle();
     var kind = opts.kind === 'exams' ? 'exam' : 'assignment';
@@ -601,7 +580,6 @@
     var S = { screen: 'list', tab: 'classes', classrooms: null, cls: null, topics: [], items: [], subs: {}, enrolled: [], collapsed: {}, filters: { subject: '', ks: '', year: '' }, granted: [], monitoringOnly: !!opts.monitoringOnly };
     root.classList.add('cr-root');
 
-    /* ---------- classroom list ---------- */
     async function loadClassrooms() {
       root.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
       try {
@@ -615,7 +593,6 @@
       renderList();
     }
 
-    // Load items another tutor was asked to help mark.
     async function loadGranted() {
       try {
         var snap = await db.collection('gradingGrants').where('tutorId', '==', user.uid).get();
@@ -701,7 +678,6 @@
         pairs.map(function (p) { return '<option value="' + esc(p[0]) + '"' + (String(cur) === String(p[0]) ? ' selected' : '') + '>' + esc(p[1]) + '</option>'; }).join('') + '</select>';
     }
 
-    /* ---------- one classroom ---------- */
     async function openClass(cid, focusItemId) {
       root.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
       try {
@@ -723,8 +699,6 @@
         var res2 = await Promise.all([loadClassHomework(S.cls.id, S.topics, !isAdmin), enrolledP]);
         S.items = res2[0].items; S.subs = res2[0].subs; S.enrolled = res2[1];
       }
-      // opts.audience ('remote' | 'online') narrows the whole view to one audience:
-      // only items posted to it, and only that audience's students.
       if (opts.audience) {
         S.items = S.items.filter(function (it) { return effAudiences(it)[opts.audience] === true; });
         S.enrolled = S.enrolled.filter(function (st) { return studentAud(st) === opts.audience; });
@@ -757,7 +731,7 @@
         var windowPill = '<span class="wk-pill-window ' + w.cls + '">' + (w.mode === 'auto-open' ? '<i class="fas fa-clock"></i> ' : (w.mode === 'manual-open' ? '<i class="fas fa-lock-open"></i> ' : '<i class="fas fa-lock"></i> ')) + esc(w.label) + '</span>';
         return statusPill + ' ' + typePill + ' ' + windowPill;
       }
-      // Homework:
+      
       var due = dueOf(it, 'assignment');
       if (c.total && c.graded === c.total) return pill('b-confirmed', 'All graded', 'fa-circle-check');
       if (due && due.getTime() < Date.now() && c.submitted < c.total) return pill('b-declined', 'Overdue', 'fa-triangle-exclamation');
@@ -767,7 +741,6 @@
 
     function canEdit(it) { return isAdmin; }
 
-    /* ---------- render main list ---------- */
     function render() {
       S.screen = 'class';
       var c = S.cls, name = U.displayName(c);
@@ -775,7 +748,6 @@
       if (kind === 'exam') {
         topBtn = isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-flat-exam"><i class="fas fa-plus"></i> New exam</button>' : '';
       } else {
-        // Hide "Add Topic" if we are inside the Remote Students view
         topBtn = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
       }
       var h = '<div class="cr-crumb"><a data-a="back">' + title + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</span></div>' +
@@ -783,7 +755,6 @@
         topBtn + '</div>';
 
       if (kind === 'exam') {
-        // Flat exam list, no topic accordion.
         if (!S.items.length) {
           h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin
             ? 'No exams in this subject yet. Click \u201cNew exam\u201d to create a Midterm or End-of-Term paper.'
@@ -822,7 +793,6 @@
           h += '</tbody></table></div></div>';
         }
       } else {
-        // Homework: keep the topic accordion.
         if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience
           ? 'No topics yet. Add a topic, then add assignments inside it.'
           : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
@@ -832,7 +802,6 @@
             return (da ? da.getTime() : 0) - (db2 ? db2.getTime() : 0);
           });
           var open = !S.collapsed[t.id];
-          // Hide Prepare assignment inside remote view
           var topicActions = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Prepare assignment</button></div>' : '';
           h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' +
             esc(t.title) + '<small>' + rows.length + ' assignment' + (rows.length === 1 ? '' : 's') + '</small></span>' +
@@ -841,15 +810,18 @@
             if (!rows.length) h += '<div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience ? 'No assignments in this topic yet. Use \u201cPrepare assignment\u201d above, then post it from Classroom \u2192 Publish.' : 'No assignments posted to this audience yet.') + '</div>';
             rows.forEach(function (it) {
               var cnt = counts(it), due = dueOf(it, 'assignment');
-              h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas fa-clipboard-check"></i></span>' +
-                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : 'No date') + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + '</small></span>' +
+              var isLesson = it.isClasswork === true;
+              var icon = isLesson ? 'fa-book-open' : 'fa-clipboard-check';
+              var typeLabel = isLesson ? ' · Classwork' : '';
+              h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + icon + '"></i></span>' +
+                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : typeLabel) + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + '</small></span>' +
                 '<span class="wk-chips" title="Posted to">' + audChips(it) + '</span>' +
                 '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
                 itemPill(it) +
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
-                (!isAdmin ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
-                (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
-                (canEdit(it) ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
+                (!isAdmin && !isLesson ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
+                (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
+                (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
             });
           }
           h += '</div>';
@@ -858,7 +830,6 @@
       root.innerHTML = h;
     }
 
-    /* ---------- item detail ---------- */
     async function openDetail(it) {
       var m = U.openModal({ title: it.title, wide: true });
       m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="close">Close</button>';
@@ -868,11 +839,11 @@
         var subs = {};
         try {
           if (kind === 'exam') {
-            // Flat exams only: exams/{eid}/submissions/{sid}
             var sn = await flatExamSubmissionsRef(it.cid, it.id).get();
             sn.docs.forEach(function (d) { subs[d.id] = Object.assign({ id: d.id }, d.data()); });
           } else {
-            var sn2 = await coll(it.cid, it.tid, 'assignment').doc(it.id).collection('submissions').get();
+            var k = it.isClasswork ? 'lesson' : 'assignment';
+            var sn2 = await coll(it.cid, it.tid, k).doc(it.id).collection('submissions').get();
             sn2.docs.forEach(function (d) { subs[d.id] = Object.assign({ id: d.id }, d.data()); });
           }
         } catch (e) { m.body.innerHTML = '<div class="cr-empty">Could not load: ' + esc(e.message || e) + '</div>'; return; }
@@ -889,11 +860,11 @@
           '</div>' +
           '<div class="wk-chips" style="margin-top:.5rem">' + itemPill(it) +
             (kind === 'exam' && it.examPdfUrl ? '<a class="cr-btn sm" href="' + esc(it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> ' + esc(it.examPdfName || 'Exam PDF') + '</a>' : '') +
-            (kind === 'assignment' && it.attachedPdfUrl ? '<a class="cr-btn sm" href="' + esc(it.attachedPdfUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> ' + esc(it.attachedPdfName || 'Attached PDF') + '</a>' : '') +
-            ((isAdmin) ? '<button type="button" class="cr-btn sm" data-a="grant"><i class="fas fa-user-shield"></i> Grant grading rights</button>' : '') +
+            (!it.isClasswork && it.attachedPdfUrl ? '<a class="cr-btn sm" href="' + esc(it.attachedPdfUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> ' + esc(it.attachedPdfName || 'Attached PDF') + '</a>' : '') +
+            ((isAdmin && !it.isClasswork) ? '<button type="button" class="cr-btn sm" data-a="grant"><i class="fas fa-user-shield"></i> Grant grading rights</button>' : '') +
           '</div>' +
           (it.requirements ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.requirements) + '</div>' : '') +
-          (it.description && kind === 'assignment' ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.description) + '</div>' : '') +
+          (it.description && !it.isClasswork ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.description) + '</div>' : '') +
         '</div>';
 
         var rows = aud.map(function (s) {
@@ -924,7 +895,6 @@
 
         var gb = m.body.querySelector('[data-a="grant"]'); if (gb) gb.onclick = function () { openGrant(it); };
 
-        // Flat exam grade button → InkGrader (identical to homework)
         Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-flat"]'), function (b) {
           b.onclick = function () {
             var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
@@ -935,14 +905,15 @@
           };
         });
 
-        // Homework grade button → InkGrader (unchanged)
         Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-ink"]'), function (b) {
           b.onclick = function () {
             var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
             if (!global.InkGrader) { alert('The grading workspace did not load. Refresh the page and try again.'); return; }
+            
+            var col = it.isClasswork ? 'lessons' : 'assignments';
             global.InkGrader.open({
-              docRef: coll(it.cid, it.tid, 'assignment').doc(it.id).collection('submissions').doc(sid),
-              data: Object.assign({ studentName: stu.name || sub.studentName }, sub), item: it, cid: it.cid, itemId: it.id, user: user, kind: 'assignment',
+              docRef: U.clsRef(it.cid).collection('topics').doc(it.tid).collection(col).doc(it.id).collection('submissions').doc(sid),
+              data: Object.assign({ studentName: stu.name || sub.studentName }, sub), item: it, cid: it.cid, itemId: it.id, user: user, kind: it.isClasswork ? 'lesson' : 'assignment',
               onDone: async function () { await refresh(); paint(); }
             });
           };
@@ -974,7 +945,6 @@
       };
     }
 
-    /* ---------- add classroom (same as Classroom tab; admin only) ---------- */
     function openAddClassroom() {
       if (!isAdmin) return;
       var m = U.openModal({ title: 'Add classroom' });
@@ -1028,20 +998,20 @@
           await flatExamRef(it.cid, it.id).delete();
           if (it.examPdfPath) firebase.storage().ref(it.examPdfPath).delete().catch(function () {});
         } else {
-          var sn2 = await coll(it.cid, it.tid, 'assignment').doc(it.id).collection('submissions').get();
+          var k = it.isClasswork ? 'lesson' : 'assignment';
+          var sn2 = await coll(it.cid, it.tid, k).doc(it.id).collection('submissions').get();
           for (var j = 0; j < sn2.docs.length; j += 400) {
             var b2 = db.batch();
             sn2.docs.slice(j, j + 400).forEach(function (d) { b2.delete(d.ref); });
             await b2.commit();
           }
-          await coll(it.cid, it.tid, 'assignment').doc(it.id).delete();
+          await coll(it.cid, it.tid, k).doc(it.id).delete();
           if (it.attachedPdfPath) firebase.storage().ref(it.attachedPdfPath).delete().catch(function () {});
         }
         await refresh();
       } catch (e) { alert('Could not delete: ' + (e.message || e)); }
     }
 
-    /* ---------- legacy view + migration (admin only) ---------- */
     async function renderLegacy() {
       if (!isAdmin) return;
       var host = root.querySelector('#wkLegacy');
@@ -1081,7 +1051,6 @@
       btn.disabled = false;
     }
 
-    /* ---------- manual triggers for scheduled jobs (admin only) ---------- */
     function renderJobs() {
       if (!isAdmin) return;
       var jobs = [['reminder', 'Deadline reminder (24h)', 'fa-bell'], ['grace', 'Overdue + 48h extension notice', 'fa-hourglass-half'], ['report', 'Unattended Work Report', 'fa-clipboard-list'], ['exam', 'Exam paper to parents (48h)', 'fa-file-pen']];
