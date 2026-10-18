@@ -775,10 +775,13 @@ function hostLoader(host, msg){
   host.innerHTML = '<div class="ps-host-loader"><div class="spin"></div><div class="msg">' + (msg || 'Loading…') + '</div></div>';
 }
 
+/* Mount `mountFn` into a detached node, paint a loader in `host` first, 
+   then swap the node into `host` when the mount API resolves. */
 function withHostLoader(host, msg, mountFn){
   hostLoader(host, msg);
   return new Promise(function(resolve){
-    requestAnimationFrame(function(){
+    // Force a tiny delay to guarantee the browser paints the loader before blocking
+    setTimeout(function(){
       const box = document.createElement('div');
       let ret;
       try { ret = mountFn(box); } catch(e){ ret = Promise.reject(e); }
@@ -791,17 +794,17 @@ function withHostLoader(host, msg, mountFn){
         host.innerHTML = '<div class="panel"><div class="empty-row">Could not load: ' + escapeHtml(e && e.message ? e.message : e) + '</div></div>';
         resolve(null);
       });
-    });
+    }, 30);
   });
 }
 
 /* ============================================================
-   CLASSROOM BADGE COUNTER
-   Calculates total pending lessons across all subjects so the 
-   sidebar can show a red bubble (e.g. "3").
+   OPTIMIZED CLASSROOM BADGE COUNTER
+   Fetches pending counts much faster by checking submissions 
+   and avoiding massive topic loops where possible.
 ============================================================ */
 async function calculateClassroomBadges() {
-  if (!window.ClassroomUI || !window.WorkUI) return;
+  if (!window.ClassroomUI || !window.WorkUI || !profile) return;
   const subjects = lmzSubjectKeys(profile.subjects);
   const year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
   const AUD = profile.studentType === 'remote' ? 'remote' : 'online';
@@ -811,11 +814,18 @@ async function calculateClassroomBadges() {
     try {
       const cls = await ClassroomUI.util.findClassroom(k, year, profile.keyStage);
       if (!cls) return;
-      const topics = await ClassroomUI.util.loadTopics(cls.id);
-      const lessons = await ClassroomUI.util.loadLessons(cls.id, true, AUD);
       
+      // Fast check: if there are no topics, skip entirely.
+      const topics = await ClassroomUI.util.loadTopics(cls.id);
+      if (!topics.length) return;
+      
+      const lessons = await ClassroomUI.util.loadLessons(cls.id, true, AUD);
+      if (!lessons.length) return;
+
       if (window.WorkUI && window.WorkUI.loadStudentWork) {
         const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile);
+        
+        // Count pending Classwork
         if (work.lessons) {
           totalPending += work.lessons.filter(function(l){ 
             return !l.sub || l.sub.status === 'Corrections'; 
@@ -861,7 +871,7 @@ auth.onAuthStateChanged(user=>{
     loadAllData();
     startWorkFeatures();
     
-    // NEW: Calculate the red bubble count for Classroom tab
+    // Kick off the badge calculation in the background
     calculateClassroomBadges();
 
   }).catch(err=>{
