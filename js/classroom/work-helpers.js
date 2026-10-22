@@ -1,8 +1,8 @@
 /* =========================================================
    WORK UI (core + staff) — Paisley Studio
-   AUTHORING writes audiences: {false, false, false, false}
-   and status: 'Draft'. The Publish Panel is the ONLY place
-   that flips audiences flags and status to Published.
+   AUTHORING writes audiences: {false,false,false,false}
+   and status: 'Draft'. The Publish Panel flips the flags.
+   The Release button appears for BOTH Classwork and Assignments.
    ========================================================= */
 (function (global) {
   'use strict';
@@ -269,7 +269,6 @@
         data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
         data.tutorId = user.uid; data.tutorName = user.name || ''; data.createdBy = user.uid; data.createdAt = FV().serverTimestamp();
-        // AUTHORING: invisible to everyone until Publish.
         data.status = 'Draft';
         data.audiences = { online: false, remote: false, tuition: false, tutors: false };
       }
@@ -413,7 +412,6 @@
         data.createdBy = user.uid;
         data.createdAt = FV().serverTimestamp();
         data.notificationsSentAt = null;
-        // AUTHORING: invisible to everyone until Publish.
         data.status = 'Draft';
         data.audiences = { online: false, remote: false, tuition: false, tutors: false };
         data.recipients = [];
@@ -756,6 +754,7 @@
               '<td><div class="cr-actions">' +
                 '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 adminControls +
+                (!isAdmin ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
               '</div></td>' +
             '</tr>';
@@ -789,7 +788,7 @@
                 '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
                 itemPill(it) +
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
-                (!isAdmin && !isLesson ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
+                (!isAdmin ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
             });
@@ -802,8 +801,15 @@
 
     async function openDetail(it) {
       var m = U.openModal({ title: it.title, wide: true });
-      m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="close">Close</button>';
+      
+      // ---- Release button in modal footer for tutors ----
+      m.foot.innerHTML = 
+        (!isAdmin ? '<button type="button" class="cr-btn primary" data-a="release-here" style="margin-right:auto;"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
+        '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      var relBtn = m.foot.querySelector('[data-a="release-here"]');
+      if (relBtn) relBtn.onclick = function () { global.WorkUI.openRelease(it, user); };
+
       async function paint() {
         m.body.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
         var subs = {};
