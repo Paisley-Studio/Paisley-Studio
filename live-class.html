@@ -231,9 +231,11 @@ async function joinMeeting(){
 
     const presetName = isHost ? 'group_call_host' : 'group_call_participant';
 
+    // The worker now requires a signed-in Firebase user and decides the preset itself.
+    const idToken = await currentUser.getIdToken();
     const tokenRes = await fetch(WORKER_URL + '/api/get-token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
       body: JSON.stringify({
         meetingId: liveClass.meetingId,
         userName: displayName,

@@ -125,10 +125,13 @@
     return out.innerHTML;
   }
 
-  var AUD_NAMES = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
+  var AUD_NAMES = { online: 'Online', remote: 'Remote', tuition: 'Tuition', tutors: 'Tutors' };
+  // Which audience a student record belongs to: online (default), remote, or tuition (CBC).
+  function audFor(p) { var t = p && p.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
+  function isCbcStage(ks) { return /^CBC\b/i.test(String(ks || '')); }
   function effAud(l) {
     if (l && l.audiences && typeof l.audiences === 'object') return l.audiences;
-    return { online: !!l && (l.status === 'published' || l.status === 'scheduled'), remote: false, tutors: true };
+    return { online: !!l && (l.status === 'published' || l.status === 'scheduled'), remote: false, tuition: false, tutors: true };
   }
   function audBadges(l) {
     var a = effAud(l);
@@ -521,8 +524,12 @@
     injectStyle();
     var isAdmin = opts.role === 'admin';
     var scope = opts.scope || null;
-    var scopeBanner = scope === 'remote'
-      ? '<div class="cr-scope-banner"><i class="fas fa-house-laptop"></i> <b>Classwork — Remote students only.</b> Everything saved here is posted to remote students. Online students and tutors will not see it.</div>'
+    var isScoped = scope === 'remote' || scope === 'tuition';
+    var scopeName = scope === 'tuition' ? 'Tuition' : 'Remote';
+    var scopeWho = scope === 'tuition' ? 'CBC tuition students' : 'remote students';
+    function stageList() { return scope === 'tuition' ? (typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : []) : KEY_STAGES; }
+    var scopeBanner = isScoped
+      ? '<div class="cr-scope-banner"><i class="fas ' + (scope === 'tuition' ? 'fa-graduation-cap' : 'fa-house-laptop') + '"></i> <b>Classwork — ' + scopeName + ' ' + (scope === 'tuition' ? 'students' : 'students') + ' only.</b> Everything saved here is posted to ' + scopeWho + '. ' + (scope === 'tuition' ? 'Online and remote students' : 'Online students') + ' and tutors will not see it.</div>'
       : '';
     var tutorSubjects = lmzSubjectKeys(opts.subjects || []);
     var tutorKS = opts.keyStages || [];
@@ -617,14 +624,17 @@
       return isAdmin ? LMZ_SUBJECTS.map(function (s) { return s.id; }) : tutorSubjects;
     }
     function allowedKeyStages() {
-      return isAdmin || !tutorKS.length ? KEY_STAGES : tutorKS;
+      return isAdmin || !tutorKS.length ? stageList() : tutorKS;
     }
 
     async function loadClassrooms() {
       root.innerHTML = '<div class="cr-empty">Loading classrooms…</div>';
       try {
         if (isAdmin) {
-          S.classrooms = snapDocs(await db.collection('classrooms').get());
+          // CBC classrooms live only in the Tuition panel; British ones never show there.
+          S.classrooms = snapDocs(await db.collection('classrooms').get()).filter(function (c) {
+            return scope === 'tuition' ? isCbcStage(c.keyStage) : !isCbcStage(c.keyStage);
+          });
         } else {
           var parts = await Promise.all(tutorSubjects.map(function (k) {
             return db.collection('classrooms').where('subjectId', '==', k).get().then(snapDocs);
@@ -649,20 +659,20 @@
         return;
       }
       h += scopeBanner;
-      h += '<div class="cr-bar"><div><h3>' + (isAdmin ? (scope === 'remote' ? 'Classwork (Remote)' : 'Classroom Management') : 'My Classrooms') + '</h3>' +
+      h += '<div class="cr-bar"><div><h3>' + (isAdmin ? (isScoped ? 'Classwork (' + scopeName + ')' : 'Classroom Management') : 'My Classrooms') + '</h3>' +
         '<div class="cr-sub">' + (isAdmin
-          ? (scope === 'remote'
-              ? 'Build lessons and materials for remote students. Every lesson you save is posted to Remote only.'
+          ? (isScoped
+              ? 'Build lessons and materials for ' + scopeWho + '. Every lesson you save is posted to ' + scopeName + ' only.'
               : 'Every subject and Year — prepare lessons and homework, then post them to the right audience from the Publish tab.')
           : 'The subjects you teach. Open one to view the material the Studio Desk has posted to you.') + '</div></div>' +
         (isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add classroom</button>' : '') + '</div>';
-      if (isAdmin && scope !== 'remote') {
+      if (isAdmin && !isScoped) {
         h += '<div class="cr-tabs"><button type="button" class="cr-btn ' + (S.tab === 'classrooms' ? 'on' : '') + '" data-a="tab" data-v="classrooms"><i class="fas fa-chalkboard"></i> Classrooms</button>' +
           '<button type="button" class="cr-btn ' + (S.tab === 'lessons' ? 'on' : '') + '" data-a="tab" data-v="lessons"><i class="fas fa-list"></i> All lessons</button>' +
           '<button type="button" class="cr-btn ' + (S.tab === 'publish' ? 'on' : '') + '" data-a="tab" data-v="publish"><i class="fas fa-paper-plane"></i> Publish</button></div>';
       }
-      if (isAdmin && scope !== 'remote' && S.tab === 'lessons') { root.innerHTML = h + '<div id="crLessonsHost"></div>'; renderAllLessons(); return; }
-      if (isAdmin && scope !== 'remote' && S.tab === 'publish') {
+      if (isAdmin && !isScoped && S.tab === 'lessons') { root.innerHTML = h + '<div id="crLessonsHost"></div>'; renderAllLessons(); return; }
+      if (isAdmin && !isScoped && S.tab === 'publish') {
         root.innerHTML = h + '<div id="crPublishHost"></div>';
         if (global.PublishUI) global.PublishUI.mount(document.getElementById('crPublishHost'), { user: user, classrooms: S.classrooms });
         else document.getElementById('crPublishHost').innerHTML = '<div class="cr-empty">Publishing is unavailable on this page.</div>';
@@ -676,7 +686,7 @@
       if (isAdmin) {
         h += '<div class="cr-filters">' +
           selectHtml('f-subject', 'All subjects', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), S.filters.subject) +
-          selectHtml('f-ks', 'All Key Stages', KEY_STAGES.map(function (k) { return [k, ksShort(k)]; }), S.filters.ks) +
+          selectHtml('f-ks', 'All Key Stages', stageList().map(function (k) { return [k, ksShort(k)]; }), S.filters.ks) +
           selectHtml('f-year', 'All Years', [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(function (y) { return [String(y), 'Year ' + y]; }), S.filters.year) + '</div>';
       }
       if (!list.length) {
@@ -785,18 +795,18 @@
       var pen = isAdmin ? '<i class="fas fa-pen cr-pen" aria-hidden="true"></i>' : '';
       var addTopicBtn = isAdmin
         ? '<div class="cr-actions">' +
-          (scope === 'remote'
+          (isScoped
             ? ''
             : '<button type="button" class="cr-btn" data-a="publish-class"><i class="fas fa-paper-plane"></i> Publish…</button>') +
           '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button></div>'
         : '';
       var tutorHint = isAdmin
-        ? (scope === 'remote'
-            ? 'Everything you add here is posted to remote students only. Online students and tutors never see it.'
+        ? (isScoped
+            ? 'Everything you add here is posted to ' + scopeWho + ' only. ' + (scope === 'tuition' ? 'Online and remote students' : 'Online students') + ' and tutors never see it.'
             : 'Topics and lessons appear to students in this order. Scheduled lessons are released automatically within a minute of their time.')
         : 'Material posted to you by the Studio Desk. Open a lesson to release it to your students.';
       var h = scopeBanner +
-        '<div class="cr-crumb"><a data-a="back">' + (isAdmin ? (scope === 'remote' ? 'Classwork (Remote)' : 'Classroom Management') : 'My Classrooms') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' +
+        '<div class="cr-crumb"><a data-a="back">' + (isAdmin ? (isScoped ? 'Classwork (' + scopeName + ')' : 'Classroom Management') : 'My Classrooms') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' +
         esc(name) + esc(yearTxt) + '</span></div>' +
         '<div class="cr-bar"><div>' +
         '<h3 id="crTitleHeading"' + headingAttr + '>' +
@@ -873,7 +883,7 @@
       m.foot.innerHTML = '<span class="cr-err" id="crNewErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button><button type="button" class="cr-btn primary" data-a="create">Open classroom</button>';
       var ksSel = m.body.querySelector('#crNewKs'), yearSel = m.body.querySelector('#crNewYear'), subSel = m.body.querySelector('#crNewSubject');
       function fill() {
-        yearSel.innerHTML = lmzYearsForKeyStage(ksSel.value).map(function (y) { return '<option value="' + y + '">Year ' + y + '</option>'; }).join('');
+        yearSel.innerHTML = lmzYearsForKeyStage(ksSel.value).map(function (y) { return '<option value="' + y + '">' + (isCbcStage(ksSel.value) ? 'Grade ' : 'Year ') + y + '</option>'; }).join('');
         var inKs = lmzSubjectsForKeyStage(ksSel.value).map(function (s) { return s.id; });
         var keys = allowedSubjectKeys().filter(function (k) { return !lmzIsCatalogueSubject(k) || inKs.indexOf(k) !== -1; });
         subSel.innerHTML = keys.map(function (k) { return '<option value="' + esc(k) + '">' + esc(lmzSubjectLabel(k)) + '</option>'; }).join('');
@@ -1007,7 +1017,7 @@
         '<input type="date" id="crSchDate" value="' + defDate + '"><input type="time" id="crSchTime" value="' + defTime + '"></div>' +
         (lesson ? '<div class="cr-note" style="margin-top:.35rem;">Current status: ' + statusBadge(lesson) + '</div>' : '') + '</div>';
 
-      var audienceButton = (scope === 'remote')
+      var audienceButton = isScoped
         ? ''
         : '<button type="button" class="cr-btn" data-a="set-audience"><i class="fas fa-users-viewfinder"></i> Set Audience</button>';
 
@@ -1019,11 +1029,11 @@
         (global.WorkUI ? '<button type="button" class="cr-btn" data-a="post-assignment"><i class="fas fa-clipboard-check"></i> Prepare Assignment</button>' : '') +
         '<button type="button" class="cr-btn primary" data-s="published" title="Marks the lesson ready."><i class="fas fa-circle-check"></i> Mark Ready</button>';
 
-      var pendingAudiences = (scope === 'remote')
-        ? { online: false, remote: true, tutors: false }
+      var pendingAudiences = isScoped
+        ? { online: false, remote: scope === 'remote', tuition: scope === 'tuition', tutors: scope === 'tuition' }
         : ((lesson && lesson.audiences && typeof lesson.audiences === 'object')
-            ? { online: !!lesson.audiences.online, remote: !!lesson.audiences.remote, tutors: !!lesson.audiences.tutors }
-            : { online: false, remote: false, tutors: false });
+            ? { online: !!lesson.audiences.online, remote: !!lesson.audiences.remote, tuition: !!lesson.audiences.tuition, tutors: !!lesson.audiences.tutors }
+            : { online: false, remote: false, tuition: false, tutors: false });
 
       var errEl = m.foot.querySelector('#crLErr');
       var attsEl = m.body.querySelector('#crAtts');
@@ -1068,6 +1078,7 @@
           pendingAudiences = {
             online: !!onlineBox.checked,
             remote: !!remoteBox.checked,
+            tuition: !!pendingAudiences.tuition,
             tutors: !!tutorsBox.checked
           };
           markDirty();
@@ -1290,7 +1301,7 @@
         else if (a === 'open') openClassroom(id);
         else if (a === 'back') { S.classrooms = null; loadClassrooms(); }
         else if (a === 'add-class') { if (isAdmin) openAddClassroom(); }
-        else if (a === 'publish-class') { if (isAdmin && scope !== 'remote' && global.PublishUI) global.PublishUI.openForClassroom(S.cls, user, refreshClassroom); }
+        else if (a === 'publish-class') { if (isAdmin && !isScoped && global.PublishUI) global.PublishUI.openForClassroom(S.cls, user, refreshClassroom); }
         else if (a === 'tab') { S.tab = el.dataset.v; renderList(); }
         else if (a === 'add-topic') { if (isAdmin) openTopicModal(null); }
         else if (a === 'edit-topic') { if (isAdmin) openTopicModal(S.topics.filter(function (t) { return t.id === id; })[0]); }
@@ -1373,7 +1384,7 @@
     var subjects = lmzSubjectKeys(profile.subjects);
     var year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
     var S = { cls: null, topics: [], lessons: [], work: { assignments: [], exams: [], lessons: [] } };
-    var AUD = profile.studentType === 'remote' ? 'remote' : 'online';
+    var AUD = audFor(profile);
 
     var homeToken = 0;
 
@@ -1574,7 +1585,7 @@
     injectStyle();
     root.classList.add('cr-root');
     var child = opts.child || {};
-    var AUD = child.studentType === 'remote' ? 'remote' : 'online';
+    var AUD = audFor(child);
     var subjects = lmzSubjectKeys(child.subjects);
     var year = child.year != null && child.year !== '' ? Number(child.year) : null;
     var S = { subject: null, cls: null, topics: [], lessons: [], open: null };
@@ -1636,7 +1647,7 @@
       displayName: displayName, snapDocs: snapDocs, clsRef: clsRef, injectStyle: injectStyle, openModal: openModal, confirmModal: confirmModal,
       loadTopics: loadTopics, loadLessons: loadLessons, loadLessonsForTopics: loadLessonsForTopics,
       findClassroomCached: findClassroomCached, loadTopicsCached: loadTopicsCached, loadLessonsCached: loadLessonsCached, memo: memo, clearMemo: clearMemo, loaderHtml: loaderHtml, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
-      KEY_STAGES: KEY_STAGES
+      KEY_STAGES: KEY_STAGES, audFor: audFor, isCbcStage: isCbcStage
     }
   };
 })(window);

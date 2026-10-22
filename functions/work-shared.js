@@ -98,10 +98,12 @@ async function addStudentNotice(recipientId, recipientType, fields) {
    online students and tutors only (never to remote students) until the
    backfillAudiences migration stamps them explicitly.
 --------------------------------------------------------- */
-const AUDIENCES = ["online", "remote", "tutors"];
+const AUDIENCES = ["online", "remote", "tuition", "tutors"];
 
 function studentAudience(student) {
-  return student && student.studentType === "remote" ? "remote" : "online";
+  if (student && student.studentType === "remote") return "remote";
+  if (student && student.studentType === "tuition") return "tuition";
+  return "online";
 }
 
 function itemPostedTo(item, audience) {

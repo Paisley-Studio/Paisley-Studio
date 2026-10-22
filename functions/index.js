@@ -111,6 +111,14 @@ exports.resendRemoteInvite            = remote.resendRemoteInvite;
 exports.setRemoteStudentStatus        = remote.setRemoteStudentStatus;
 exports.onRemoteTicketCreated         = remote.onRemoteTicketCreated;
 
+const tuition = require("./tuition");
+exports.onTuitionStudentActivated     = tuition.onTuitionStudentActivated;
+exports.onTuitionRequestCreated       = tuition.onTuitionRequestCreated;
+exports.onTuitionRequestUpdated       = tuition.onTuitionRequestUpdated;
+exports.onTuitionMessageCreated       = tuition.onTuitionMessageCreated;
+exports.onTuitionTimetableCreated     = tuition.onTuitionTimetableCreated;
+exports.onTuitionTicketCreated        = tuition.onTuitionTicketCreated;
+
 const work = require("./work");
 exports.onAssignmentPosted            = work.onAssignmentPosted;
 exports.onExamPostedOrPublished       = work.onExamPostedOrPublished;
@@ -624,7 +632,7 @@ exports.onFlatExamPosted = onDocumentWritten(
     // re-notifies people who were already told.
     const WS = require("./work-shared");
     const becameVisible = (aud) => WS.isVisibleTo(after, aud, "Published") && !WS.isVisibleTo(before, aud, "Published");
-    const wanted = ["online", "remote", "tutors"].filter(becameVisible);
+    const wanted = ["online", "remote", "tuition", "tutors"].filter(becameVisible);
     if (!wanted.length) return;
 
     const claimedAuds = await admin.firestore().runTransaction(async (tx) => {

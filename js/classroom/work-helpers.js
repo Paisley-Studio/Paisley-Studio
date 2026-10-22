@@ -176,9 +176,9 @@
     return { items: items, subs: subs };
   }
 
-  var AUD_LABEL = { online: 'Online', remote: 'Remote', tutors: 'Tutors' };
-  function studentAud(s) { return s && s.studentType === 'remote' ? 'remote' : 'online'; }
-  function effAudiences(it) { return it && it.audiences && typeof it.audiences === 'object' ? it.audiences : { online: true, remote: false, tutors: true }; }
+  var AUD_LABEL = { online: 'Online', remote: 'Remote', tuition: 'Tuition', tutors: 'Tutors' };
+  function studentAud(s) { var t = s && s.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
+  function effAudiences(it) { return it && it.audiences && typeof it.audiences === 'object' ? it.audiences : { online: true, remote: false, tuition: false, tutors: true }; }
   function studentSees(s, it) {
     return effAudiences(it)[studentAud(s)] === true || (Array.isArray(it.releasedTo) && it.releasedTo.indexOf(s.id) !== -1);
   }
@@ -316,10 +316,10 @@
         data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
         
-        if (o.scope === 'remote') {
-          data.audiences = { online: false, remote: true, tutors: false };
+        if (o.scope === 'remote' || o.scope === 'tuition') {
+          data.audiences = { online: false, remote: o.scope === 'remote', tuition: o.scope === 'tuition', tutors: o.scope === 'tuition' };
         } else {
-          data.audiences = { online: false, remote: false, tutors: false };
+          data.audiences = { online: false, remote: false, tuition: false, tutors: false };
         }
 
         data.tutorId = user.uid; data.tutorName = user.name || ''; data.createdBy = user.uid; data.createdAt = FV().serverTimestamp();
@@ -541,7 +541,7 @@
       list.map(function (st) {
         var already = (it.releasedTo || []).indexOf(st.id) !== -1 || studentSees(st, Object.assign({}, it, { releasedTo: [] }));
         return '<label><input type="checkbox" value="' + esc(st.id) + '"' + (already ? ' checked disabled' : '') + '> ' + esc(st.name || st.email || st.id) +
-          (st.studentType === 'remote' ? ' <span class="cr-note">(remote)</span>' : '') + (already ? ' <span class="cr-note">\u2014 already has it</span>' : '') + '</label>';
+          (st.studentType === 'remote' ? ' <span class="cr-note">(remote)</span>' : (st.studentType === 'tuition' ? ' <span class="cr-note">(CBC tuition)</span>' : '')) + (already ? ' <span class="cr-note">\u2014 already has it</span>' : '') + '</label>';
       }).join('') + '</div>';
       
     m.foot.innerHTML = '<span class="cr-err" id="rlErr"></span><button type="button" class="cr-btn" data-a="x">Cancel</button><button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-share-from-square"></i> Release</button>';
@@ -644,12 +644,14 @@
       }
       var list = (S.classrooms || []).filter(function (c) {
         var f = S.filters;
+        // CBC classrooms belong to the Tuition audience only (and never show in the others).
+        if ((opts.audience === 'tuition') !== /^CBC\b/i.test(String(c.keyStage || ''))) return false;
         return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year);
       });
       if (isAdmin) {
         h += '<div class="cr-filters">' + sel('f-subject', 'All subjects', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), S.filters.subject) +
-          sel('f-ks', 'All Key Stages', U.KEY_STAGES.map(function (k) { return [k, U.ksShort(k)]; }), S.filters.ks) +
-          sel('f-year', 'All Years', [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(function (y) { return [String(y), 'Year ' + y]; }), S.filters.year) + '</div>';
+          sel('f-ks', 'All Key Stages', (opts.audience === 'tuition' && typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : U.KEY_STAGES).map(function (k) { return [k, U.ksShort(k)]; }), S.filters.ks) +
+          sel('f-year', 'All Years', (opts.audience === 'tuition' ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]).map(function (y) { return [String(y), (opts.audience === 'tuition' ? 'Grade ' : 'Year ') + y]; }), S.filters.year) + '</div>';
       }
       if (!isAdmin && S.granted.length) {
         h += '<div class="cr-panel"><h4 style="margin:0 0 .5rem;color:var(--brand-deep,#245F5A)"><i class="fas fa-user-shield"></i> Granted to me</h4>' +

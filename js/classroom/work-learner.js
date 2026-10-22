@@ -42,7 +42,7 @@
   /* ---------------------------------------------------------
      Data
   --------------------------------------------------------- */
-  function audOf(profileOrChild) { return profileOrChild && profileOrChild.studentType === 'remote' ? 'remote' : 'online'; }
+  function audOf(profileOrChild) { var t = profileOrChild && profileOrChild.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
   function noDocs() { return { docs: [] }; }
 
   // loadStudentWork(cls, topics, uid, profile [, only])

@@ -63,6 +63,8 @@
 <script src="../js/classroom/publish-helpers.js"></script>
 <script src="../js/classroom/ink-grader.js"></script>
 <script src="../js/admin/remote-students.js"></script>
+<script src="../js/tuition/tuition-helpers.js"></script>
+<script src="../js/admin/tuition.js"></script>
 
 <style>
   :root{
@@ -407,6 +409,7 @@
       <div class="sidebar-section-label">Learning Management</div>
       <button class="nav-item" data-view="studentmgmt" type="button"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Student Management <span class="nav-badge" id="navCountStudents">0</span></button>
       <button class="nav-item" data-view="remotestudents" type="button"><i class="fas fa-house-laptop" aria-hidden="true"></i> Remote Students</button>
+      <button class="nav-item" data-view="tuition" type="button"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Tuition</button>
       <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard" aria-hidden="true"></i> Classroom <span class="nav-badge" id="navCountClassroom" style="display:none;">0</span></button>
       <button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open" aria-hidden="true"></i> Homework Management <span class="nav-badge" id="navCountHw" style="display:none;">0</span></button>
       <button class="nav-item" data-view="exmgmt" type="button"><i class="fas fa-file-pen" aria-hidden="true"></i> Exam Management <span class="nav-badge" id="navCountEx" style="display:none;">0</span></button>
@@ -653,15 +656,19 @@
 
       <section class="view" id="view-classroom"><div id="classroomHost"></div></section>
       <section class="view" id="view-remotestudents"><div id="remoteHost"></div></section>
+      <section class="view" id="view-tuition"><div id="tuitionHost"></div></section>
       <section class="view" id="view-hwmgmt"><div id="hwHost"></div></section>
       <section class="view" id="view-exmgmt"><div id="exHost"></div></section>
 
       <section class="view" id="view-studentmgmt">
         <div class="subtab-bar" id="smSubtabs">
           <button class="subtab-btn active" data-sub="accounts" type="button"><i class="fas fa-id-card"></i> Student Accounts</button>
-          <!-- Results & Grades, Exam Attempts and Submissions tabs have been removed from Student Management.
-               Homework and Exams live in the Homework Management / Exam Management tabs (nested Subject > Topic tree).
-               The old sub-homework / sub-exams panels below are kept in the DOM, unreachable, so their legacy code keeps working. -->
+          <button class="subtab-btn" data-sub="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results &amp; Grades</button>
+          <!-- Homework and Exams now live in the Homework Management / Exam Management tabs (nested Subject > Topic tree).
+               The old sub-homework / sub-exams panels below are kept in the DOM, unreachable, so their legacy code keeps working;
+               the old lists are shown read-only under Legacy inside the new tabs. -->
+          <button class="subtab-btn" data-sub="attempts" type="button"><i class="fas fa-file-circle-check"></i> Exam Attempts <span class="nav-badge" id="smCountAttempts">0</span></button>
+          <button class="subtab-btn" data-sub="submissions" type="button"><i class="fas fa-inbox"></i> Submissions</button>
           <button class="subtab-btn" data-sub="grants" type="button"><i class="fas fa-user-shield"></i> Grading Rights <span class="nav-badge" id="smCountGrants">0</span></button>
           <button class="subtab-btn" data-sub="parents" type="button"><i class="fas fa-people-roof"></i> Parent Management <span class="nav-badge" id="smCountParentMsgs">0</span></button>
         </div>
@@ -696,6 +703,31 @@
               </table>
             </div>
             <div class="pager"><span id="stuCountText">0 records</span><span>Live from Firestore</span></div>
+          </div>
+        </div>
+
+        <div class="subview" id="sub-results">
+          <div class="panel">
+            <div class="table-toolbar">
+              <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
+                <button class="btn btn-primary btn-sm" id="addResultBtn" type="button"><i class="fas fa-plus" aria-hidden="true"></i> Enter a result</button>
+                <button class="btn btn-ghost btn-sm" id="releaseAllBtn" type="button"><i class="fas fa-unlock" aria-hidden="true"></i> Release all held</button>
+              </div>
+              <div class="filter-chips" id="resultKS" style="margin-left:auto;">
+                <button class="chip-btn" data-filter="Key Stage 2 (Years 3-6)" type="button">KS2</button>
+                <button class="chip-btn" data-filter="Key Stage 3 (Years 7-9)" type="button">KS3</button>
+                <button class="chip-btn" data-filter="Key Stage 4 (Years 10-11) — IGCSE" type="button">KS4</button>
+                <button class="chip-btn" data-filter="Key Stage 5 (Years 12-13) — A-Level" type="button">KS5</button>
+                <button class="chip-btn active" data-filter="all" type="button">All</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Student</th><th>Subject</th><th>Exam / Assessment</th><th>Score</th><th>Key Stage</th><th>Status</th><th>Date</th><th></th></tr></thead>
+                <tbody id="resultsTableBody"></tbody>
+              </table>
+            </div>
+            <div class="pager"><span id="resultsCountText">0 records</span><span>Live from Firestore</span></div>
           </div>
         </div>
 
@@ -743,6 +775,70 @@
               </table>
             </div>
             <div class="pager"><span id="examCountText">0 records</span><span>Live from Firestore</span></div>
+          </div>
+        </div>
+
+        <div class="subview" id="sub-attempts">
+          <div class="panel">
+            <div class="table-toolbar">
+              <div class="filter-chips" id="attemptFilters">
+                <button class="chip-btn active" data-filter="Awaiting grading" type="button">Awaiting grading</button>
+                <button class="chip-btn" data-filter="Suspended" type="button">Suspended</button>
+                <button class="chip-btn" data-filter="Graded" type="button">Graded</button>
+                <button class="chip-btn" data-filter="Released" type="button">Released</button>
+                <button class="chip-btn" data-filter="all" type="button">All</button>
+              </div>
+              <div class="filter-chips" id="attemptKS" style="margin-left:auto;">
+                <button class="chip-btn" data-filter="Key Stage 2 (Years 3-6)" type="button">KS2</button>
+                <button class="chip-btn" data-filter="Key Stage 3 (Years 7-9)" type="button">KS3</button>
+                <button class="chip-btn" data-filter="Key Stage 4 (Years 10-11) — IGCSE" type="button">KS4</button>
+                <button class="chip-btn" data-filter="Key Stage 5 (Years 12-13) — A-Level" type="button">KS5</button>
+                <button class="chip-btn active" data-filter="all" type="button">All</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Student</th><th>Exam</th><th>Subject</th><th>Key Stage</th><th>Author</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
+                <tbody id="attemptTableBody"></tbody>
+              </table>
+            </div>
+            <div class="pager"><span id="attemptCountText">0 records</span><span>Live from Firestore</span></div>
+          </div>
+        </div>
+
+        <div class="subview" id="sub-submissions">
+          <div class="panel">
+            <div class="table-toolbar">
+              <div class="filter-chips" id="subFilters">
+                <button class="chip-btn active" data-filter="all" type="button">All</button>
+                <button class="chip-btn" data-filter="Submitted" type="button">Awaiting grading</button>
+                <button class="chip-btn" data-filter="Graded" type="button">Graded</button>
+              </div>
+              <div class="filter-chips" id="subKS" style="margin-left:auto;">
+                <button class="chip-btn" data-filter="Key Stage 2 (Years 3-6)" type="button">KS2</button>
+                <button class="chip-btn" data-filter="Key Stage 3 (Years 7-9)" type="button">KS3</button>
+                <button class="chip-btn" data-filter="Key Stage 4 (Years 10-11) — IGCSE" type="button">KS4</button>
+                <button class="chip-btn" data-filter="Key Stage 5 (Years 12-13) — A-Level" type="button">KS5</button>
+                <button class="chip-btn active" data-filter="all" type="button">All</button>
+              </div>
+            </div>
+            <div class="table-toolbar" style="margin-top:.6rem;">
+              <input type="text" id="subSearchInput" placeholder="Search by student name, ID or assessment…" style="flex:1; min-width:220px; padding:.5rem .8rem; border:1px solid var(--line); border-radius:9px; font-family:var(--font); font-size:.82rem;" />
+              <div class="filter-chips" style="margin-left:auto;">
+                <button class="chip-btn active" data-viewmode="grouped" type="button" id="subViewGroupedBtn">Grouped by student</button>
+                <button class="chip-btn" data-viewmode="flat" type="button" id="subViewFlatBtn">Flat list</button>
+              </div>
+            </div>
+
+            <div id="subGroupedWrap"></div>
+
+            <div class="table-wrap hidden" id="subFlatWrap">
+              <table>
+                <thead><tr><th>Student</th><th>Email</th><th>Key Stage</th><th>Subject</th><th>Homework</th><th>Author</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
+                <tbody id="subTableBody"></tbody>
+              </table>
+            </div>
+            <div class="pager"><span id="subCountText">0 records</span><span>Live from Firestore</span></div>
           </div>
         </div>
 
@@ -1030,9 +1126,8 @@ function attemptLogin(){
       loginPassword.disabled = false;
 
       let msg = 'Incorrect email or password. Please try again.';
-      if(err.code === 'auth/user-not-found')      msg = 'No admin account found with that email.';
-      else if(err.code === 'auth/wrong-password') msg = 'Incorrect password. Please try again.';
-      else if(err.code === 'auth/invalid-email')  msg = 'That email address is not valid.';
+      // Same message whether the email or the password was wrong — never reveal which accounts exist.
+      if(err.code === 'auth/invalid-email')  msg = 'That email address is not valid.';
       else if(err.code === 'auth/too-many-requests') msg = 'Too many attempts. Please wait a few minutes.';
       else if(err.code === 'auth/network-request-failed') msg = 'Network error. Check your internet connection.';
       showLoginError(msg);
@@ -1177,7 +1272,8 @@ const titles = {
   hwmgmt: ['Homework Management', 'Assignments by subject and topic, with ink grading'],
   exmgmt: ['Exam Management', 'AI-tracked and PDF-upload exams by subject and topic'],
   remotestudents: ['Remote Students', 'Admissions, parents, remote classroom delivery, submissions and grading'],
-  studentmgmt: ['Student Management', 'Student accounts, grading rights and parent management'],
+  tuition: ['Tuition', 'CBC tuition: applications, tutors, timetable, classroom delivery and marking'],
+  studentmgmt: ['Student Management', 'Accounts, results, homework, exams and submissions'],
   content: ['Timetable & Notices', 'Announcements and timetables by Key Stage'],
   liveclasses: ['Live Classes', 'Schedule and run Jitsi Meet sessions'],
   settings: ['Settings', 'Dashboard configuration'],
@@ -1215,6 +1311,26 @@ document.getElementById('menuToggle').addEventListener('click', ()=>{
   });
 })();
 
+// Tuition: CBC tuition applications, tutor pairing, timetable, delivery and marking.
+// Mounted fresh each time the tab opens so listeners never stack.
+(function(){
+  let tuitionInstance = null;
+  const navBtn = document.querySelector('.nav-item[data-view="tuition"]');
+  navBtn.addEventListener('click', ()=>{
+    const u = firebase.auth().currentUser; if(!u) return;
+    if(tuitionInstance && tuitionInstance.destroy) tuitionInstance.destroy();
+    const host = document.getElementById('tuitionHost');
+    host.innerHTML = '';
+    const box = document.createElement('div');
+    host.appendChild(box);
+    tuitionInstance = TuitionAdmin.mount(box, { uid: u.uid, name: 'Studio Desk' });
+  });
+  // Deep link from admin alert emails: /admin/#tuition
+  if(location.hash === '#tuition'){
+    const off = firebase.auth().onAuthStateChanged(u=>{ if(u){ off(); setTimeout(()=>navBtn.click(), 400); } });
+  }
+})();
+
 // Classroom: full admin control. Mounted each time the tab opens (fresh container
 // so listeners never stack).
 document.querySelector('.nav-item[data-view="classroom"]').addEventListener('click', ()=>{
@@ -1236,7 +1352,8 @@ function mountWorkManagement(kind, hostId){
   WorkUI.mountManagement(box, {
     kind, role:'admin', uid:u.uid, name:'Studio Desk',
     onOpenAttempts: ()=>{
-      /* The Exam Attempts tab was removed from Student Management; nothing to open. */
+      document.querySelector('.nav-item[data-view="studentmgmt"]').click();
+      const t = document.querySelector('#smSubtabs .subtab-btn[data-sub="attempts"]'); if(t) t.click();
     }
   });
 }
@@ -1493,7 +1610,7 @@ function renderTicketTable(){
     const status = t.status || 'Open';
     return `<tr>
       <td><div class="cell-name">${escapeHtml(t.studentName||'—')}</div><div class="cell-sub">${escapeHtml(t.studentEmail||'')}</div></td>
-      <td>${escapeHtml(t.subject||'—')}${t.studentType==='remote'?' <span class="badge b-plain">Remote</span>':''}</td>
+      <td>${escapeHtml(t.subject||'—')}${t.studentType==='remote'?' <span class="badge b-plain">Remote</span>':''}${t.studentType==='tuition'?' <span class="badge b-plain">CBC</span>':''}</td>
       <td style="max-width:260px;"><div class="cell-sub" style="color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.message||'')}</div></td>
       <td><span class="badge ${statusBadgeClass(status)}">${escapeHtml(status)}</span></td>
       <td>${fmtDate(t.date)}</td>
@@ -1555,8 +1672,8 @@ wireChips('msgFilters', v=>msgFilter=v, renderMsgTable);
 wireChips('ticketFilters', v=>ticketFilter=v, renderTicketTable);
 
 let tutorKSFilter = 'all', msgKSFilter = 'all', ticketKSFilter = 'all';
-let nlKSFilter = 'all', ksKSFilter = 'all', stuKSFilter = 'all';
-let hwKSFilter = 'all', examKSFilter = 'all';
+let nlKSFilter = 'all', ksKSFilter = 'all', stuKSFilter = 'all', resultKSFilter = 'all';
+let hwKSFilter = 'all', examKSFilter = 'all', subKSFilter = 'all', attemptKSFilter = 'all';
 
 function ksMatch(rec, filter){
   if(filter === 'all') return true;
@@ -1582,11 +1699,22 @@ wireChips('ticketKS',  v=>ticketKSFilter=v,   renderTicketTable);
 wireChips('nlKS',      v=>nlKSFilter=v,       renderNlTable);
 wireChips('ksKS',      v=>ksKSFilter=v,       renderKsTable);
 wireChips('stuKS',     v=>stuKSFilter=v,      renderStuTable);
+wireChips('resultKS',  v=>resultKSFilter=v,   renderResultsTable);
 wireChips('hwKS',      v=>hwKSFilter=v,       renderHwTable);
 wireChips('examKS',    v=>examKSFilter=v,     renderExamTable);
+wireChips('subKS',     v=>subKSFilter=v,      renderSubBoth);
+wireChips('attemptKS', v=>attemptKSFilter=v,  renderAttemptTable);
 
 let stuFilter = 'all';
+let subFilter = 'all';
+let subSearchTerm = '';
+let subViewMode = 'grouped';
+function renderSubBoth(){ renderSubTable(); renderSubGrouped(); }
+
 wireChips('stuFilters', v=>stuFilter=v, renderStuTable);
+wireChips('subFilters', v=>subFilter=v, renderSubBoth);
+let attemptFilter = 'Awaiting grading';
+wireChips('attemptFilters', v=>attemptFilter=v, renderAttemptTable);
 
 let grantFilter = 'active';
 wireChips('grantFilters', v=>grantFilter=v, renderGrantTable);
@@ -1594,7 +1722,7 @@ wireChips('grantFilters', v=>grantFilter=v, renderGrantTable);
 document.querySelectorAll('#smSubtabs .subtab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('#smSubtabs .subtab-btn').forEach(b=>b.classList.remove('active'));
-    document.querySelectorAll('#sub-accounts, #sub-homework, #sub-exams, #sub-grants, #sub-parents').forEach(v=>v.classList.remove('active'));
+    document.querySelectorAll('#sub-accounts, #sub-results, #sub-homework, #sub-exams, #sub-attempts, #sub-submissions, #sub-grants, #sub-parents').forEach(v=>v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('sub-'+btn.dataset.sub).classList.add('active');
   });
@@ -1623,8 +1751,12 @@ function authorTag(rec){
 
 function renderStudentMgmt(){
   renderStuTable();
+  renderResultsTable();
   renderHwTable();
   renderExamTable();
+  renderAttemptTable();
+  renderSubTable();
+  renderSubGrouped();
   renderGrantTable();
   renderParentMgmt();
 
@@ -1650,7 +1782,7 @@ function renderStudentMgmt(){
 }
 
 // Normal vs remote is decided by the stored studentType field, never by the page visited.
-const isRemoteStu = s => s && s.studentType === 'remote';
+const isRemoteStu = s => s && (s.studentType === 'remote' || s.studentType === 'tuition');   // remote + CBC tuition students have their own panels
 function renderStuTable(){
   const body = document.getElementById('stuTableBody');
   let list = DB.students.filter(s=>!isRemoteStu(s));
@@ -2100,6 +2232,96 @@ function openParentConversation(parentUid, studentUid){
   });
 }
 function closeParentConversation(){ if(adminConvUnsub){ adminConvUnsub(); adminConvUnsub=null; } closeModal(); }
+
+function renderResultsTable(){
+  const body = document.getElementById('resultsTableBody');
+  const list = DB.examResults.filter(r=>ksMatchByStudent(r, resultKSFilter)).slice().sort((a,b)=>(b.date||0)-(a.date||0));
+  document.getElementById('resultsCountText').textContent = list.length + ' record' + (list.length===1?'':'s');
+  if(!list.length){ body.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:1.4rem;">No results entered yet.</td></tr>'; return; }
+  body.innerHTML = list.map(r=>{
+    const released = r.released === true;
+    const statusPill = released
+      ? '<span class="badge b-confirmed">Released</span>'
+      : '<span class="badge b-pending">Held</span>';
+    const toggleBtn = released
+      ? `<button class="mini-btn" title="Hold (hide from student)" onclick="holdResult('${r.id}')"><i class="fas fa-lock" aria-hidden="true"></i></button>`
+      : `<button class="mini-btn success" title="Release to student" onclick="releaseResult('${r.id}')"><i class="fas fa-unlock" aria-hidden="true"></i></button>`;
+    return `<tr>
+      <td class="cell-name">${escapeHtml(studentName(r.studentId))}</td>
+      <td>${escapeHtml(r.subject||'—')}</td>
+      <td>${escapeHtml(r.examTitle||'—')}</td>
+      <td>${r.score}${r.maxScore?('/'+r.maxScore):''}</td>
+      <td>${escapeHtml((r.keyStage||'').replace(/\s*\(.*/, ''))}</td>
+      <td>${statusPill}</td>
+      <td>${fmtDate(r.date)}</td>
+      <td class="row-actions">
+        ${toggleBtn}
+        <button class="mini-btn danger" title="Delete" type="button" onclick="removeResult('${r.id}')"><i class="fas fa-trash" aria-hidden="true"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+function removeResult(id){ if(confirm('Delete this result?')) deleteExamResult(id); }
+
+window.releaseResult = async (id) => {
+  try { await db.collection('examResults').doc(id).update({ released: true, releasedAt: firebase.firestore.FieldValue.serverTimestamp() }); }
+  catch(e){ alert('Could not release: '+e.message); }
+};
+window.holdResult = async (id) => {
+  try { await db.collection('examResults').doc(id).update({ released: false }); }
+  catch(e){ alert('Could not hold: '+e.message); }
+};
+
+document.getElementById('releaseAllBtn').addEventListener('click', async () => {
+  const held = DB.examResults.filter(r => r.released !== true);
+  if (!held.length) { alert('No results are currently held.'); return; }
+  if (!confirm('Release ' + held.length + ' held result(s) to students?')) return;
+  const batch = db.batch();
+  held.forEach(r => batch.update(db.collection('examResults').doc(r.id), { released: true, releasedAt: firebase.firestore.FieldValue.serverTimestamp() }));
+  try { await batch.commit(); alert('Released ' + held.length + ' result(s).'); }
+  catch(e){ alert('Could not release: '+e.message); }
+});
+
+document.getElementById('addResultBtn').addEventListener('click', ()=>{
+  if(!DB.students.length){ alert('No student accounts yet — students need to sign up first.'); return; }
+  openModal('Enter a result', `
+    <div class="form-grid">
+      <div class="form-field full"><label>Student</label>
+        <select id="rStudent">${DB.students.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select>
+      </div>
+      <div class="form-field"><label>Subject</label><input type="text" id="rSubject" placeholder="Mathematics" /></div>
+      <div class="form-field"><label>Exam / assessment title</label><input type="text" id="rTitle" placeholder="Term 2 Test" /></div>
+      <div class="form-field"><label>Score</label><input type="number" id="rScore" placeholder="42" /></div>
+      <div class="form-field"><label>Max score</label><input type="number" id="rMax" placeholder="50" /></div>
+      <div class="form-field full"><label>Date</label><input type="date" id="rDate" /></div>
+      <div class="form-field full"><label>Release to student now?</label>
+        <select id="rReleased">
+          <option value="yes">Yes — show in student dashboard immediately</option>
+          <option value="no">No — keep held for review</option>
+        </select>
+      </div>
+    </div>
+  `, `<button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveNewResult()" type="button"><i class="fas fa-check" aria-hidden="true"></i> Save result</button>`);
+});
+
+function saveNewResult(){
+  const studentId = document.getElementById('rStudent').value;
+  const subject = document.getElementById('rSubject').value.trim();
+  const examTitle = document.getElementById('rTitle').value.trim();
+  const score = parseFloat(document.getElementById('rScore').value);
+  const maxScore = parseFloat(document.getElementById('rMax').value) || null;
+  const dateVal = document.getElementById('rDate').value;
+  const released = document.getElementById('rReleased').value === 'yes';
+  if(!subject || !examTitle || isNaN(score)){ alert('Please fill in subject, title and score.'); return; }
+  db.collection('examResults').add({
+    studentId, subject, examTitle, score, maxScore,
+    keyStage: studentKS(studentId),
+    date: dateVal ? new Date(dateVal) : new Date(),
+    released: released,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(closeModal).catch(err=>alert('Could not save: '+err.message));
+}
 
 /* ============================================================
    HOMEWORK BUILDER — same question types as exams
@@ -2896,6 +3118,631 @@ window.parseExamPdf = async () => {
 };
 
 /* =========================================================
+   EXAM ATTEMPTS + GRADING
+========================================================= */
+function examById(id){ return DB.exams.find(x=>x.id===id) || null; }
+function studentEmail(id){ const s = DB.students.find(x=>x.id===id); return s ? (s.email||'') : ''; }
+
+function attemptResultDoc(attemptId){
+  return DB.examResults.find(r => r.attemptId === attemptId) || null;
+}
+function attemptIsReleased(a){
+  const res = attemptResultDoc(a.id);
+  return !!(res && res.released === true);
+}
+
+function renderAttemptTable(){
+  const body = document.getElementById('attemptTableBody');
+  if(!body) return;
+
+  let list = DB.examAttempts.filter(a => a.status && a.status !== 'In progress')
+                            .filter(a => ksMatchByStudent(a, attemptKSFilter));
+
+  if(attemptFilter === 'Awaiting grading'){
+    list = list.filter(a => a.status === 'Awaiting grading');
+  } else if(attemptFilter === 'Suspended'){
+    list = list.filter(a =>
+      (a.integrity && a.integrity.status === 'suspended') || !!a.suspensionSubmittedAt
+    );
+  } else if(attemptFilter === 'Graded'){
+    list = list.filter(a => a.status === 'Graded' && !attemptIsReleased(a));
+  } else if(attemptFilter === 'Released'){
+    list = list.filter(a => attemptIsReleased(a));
+  }
+
+  list = list.slice().sort((a,b)=> (b.date||0) - (a.date||0));
+
+  const awaiting = DB.examAttempts.filter(a => a.status === 'Awaiting grading').length;
+  const badge = document.getElementById('smCountAttempts');
+  if(badge) badge.textContent = awaiting;
+
+  document.getElementById('attemptCountText').textContent = list.length + ' record' + (list.length===1?'':'s');
+
+  if(!list.length){
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:1.4rem;">Nothing here right now.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = list.map(a=>{
+    const ex = examById(a.examId);
+    const title   = a.examTitle || (ex ? ex.title : '(deleted exam)');
+    const subject = a.subject   || (ex ? ex.subject : '') || '—';
+    const ks      = a.keyStage  || studentKS(a.studentId) || '';
+    const email   = a.studentEmail || studentEmail(a.studentId);
+    const released = attemptIsReleased(a);
+    const wasSuspended = (a.integrity && a.integrity.status === 'suspended') || !!a.suspensionSubmittedAt;
+
+    let statusPill;
+    if(a.status === 'Awaiting grading'){
+      statusPill = wasSuspended
+        ? '<span class="badge b-declined">Suspended &middot; awaiting grading</span>'
+        : '<span class="badge b-pending">Awaiting grading</span>';
+    } else if(released){
+      statusPill = wasSuspended
+        ? '<span class="badge b-confirmed">Released &middot; was suspended</span>'
+        : '<span class="badge b-confirmed">Released</span>';
+    } else {
+      statusPill = wasSuspended
+        ? '<span class="badge b-declined">Graded &middot; was suspended</span>'
+        : '<span class="badge b-pending">Graded &middot; held</span>';
+    }
+
+    const scoreBit = (a.status === 'Graded' && a.score != null)
+      ? ` <span class="cell-sub">${escapeHtml(String(a.score))}${a.maxScore?('/'+escapeHtml(String(a.maxScore))):''}</span>`
+      : '';
+
+    const releaseBtn = (a.status === 'Graded' && !released)
+      ? `<button class="mini-btn success" title="Release result to student" type="button" onclick="releaseAttempt('${a.id}')"><i class="fas fa-unlock" aria-hidden="true"></i></button>`
+      : '';
+
+    return `<tr>
+      <td><div class="cell-name">${escapeHtml(a.studentName || studentName(a.studentId))}</div><div class="cell-sub">${escapeHtml(email)}</div></td>
+      <td>${escapeHtml(title)}</td>
+      <td>${escapeHtml(subject)}</td>
+      <td>${escapeHtml((ks||'').replace(/\s*\(.*/, ''))}</td>
+      <td>${authorTag(a)}</td>
+      <td>${fmtDate(a.date)}</td>
+      <td>${statusPill}${scoreBit}</td>
+      <td class="row-actions">
+        <button class="mini-btn" title="Grade" type="button" onclick="openGradeAttempt('${a.id}')"><i class="fas fa-pen" aria-hidden="true"></i></button>
+        ${releaseBtn}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function attemptAnswerHtml(q, i, answers){
+  const raw = answers ? (answers[i] !== undefined ? answers[i] : answers[String(i)]) : undefined;
+  const type = q.type || 'mcq';
+  const imgHtml = q.imageUrl ? `<img src="${escapeHtml(q.imageUrl)}" style="max-width:100%;max-height:220px;border-radius:8px;margin-bottom:.55rem;display:block;" />` : '';
+
+  if(type === 'mcq'){
+    const opts = q.options || [];
+    const pickedIdx = (raw === undefined || raw === null || raw === '') ? -1
+      : (typeof raw === 'number' ? raw : parseInt(raw, 10));
+    const hasKey = (typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < opts.length);
+    const correctIdx = hasKey ? q.correctIndex : -1;
+    const isRight = hasKey && pickedIdx === correctIdx;
+    const isWrong = hasKey && pickedIdx >= 0 && pickedIdx !== correctIdx;
+    const isSkipped = pickedIdx < 0;
+
+    const optList = opts.map((o,oi)=>{
+      const picked = (oi === pickedIdx);
+      const correct = (oi === correctIdx);
+      const rowBg = correct ? 'rgba(46,184,114,.10)'
+        : (picked && hasKey && !correct ? 'rgba(231,76,60,.08)' : 'transparent');
+      const rowColor = correct ? '#1d8b57'
+        : (picked && hasKey && !correct ? '#b8362a' : (picked ? 'var(--brand-deep)' : 'var(--muted)'));
+      const weight = (picked || correct) ? '700' : '500';
+      let badgeHtml = '';
+      if(correct && picked)       badgeHtml = '<i class="fas fa-circle-check" style="color:#1d8b57; margin-left:.4rem;" aria-hidden="true"></i>';
+      else if(correct && !picked) badgeHtml = '<i class="fas fa-check" style="color:#1d8b57; margin-left:.4rem;" aria-hidden="true"></i>';
+      else if(picked && !correct) badgeHtml = '<i class="fas fa-xmark" style="color:#b8362a; margin-left:.4rem;" aria-hidden="true"></i>';
+      const dot = picked ? '<i class="fas fa-circle-dot" aria-hidden="true"></i>' : '<i class="far fa-circle" aria-hidden="true"></i>';
+      const pickNote = picked ? ' <span style="font-size:.7rem; color:var(--muted);">— student chose this</span>' : '';
+      return `<div style="font-size:.8rem; padding:.35rem .55rem; border-radius:7px; background:${rowBg}; color:${rowColor}; font-weight:${weight}; display:flex; align-items:center; gap:.35rem;">
+        ${dot} <span>${escapeHtml(o)}</span>${pickNote}${badgeHtml}
+      </div>`;
+    }).join('');
+
+    let verdictHtml;
+    if(!hasKey)      verdictHtml = '<span style="color:#96690f;"><i class="fas fa-circle-info"></i> No answer key on file — grade this one by hand.</span>';
+    else if(isSkipped) verdictHtml = '<span style="color:#b8362a;"><i class="fas fa-circle-exclamation"></i> Student left this blank. Correct answer: <strong>' + escapeHtml(opts[correctIdx] || '') + '</strong>.</span>';
+    else if(isRight) verdictHtml = '<span style="color:#1d8b57;"><i class="fas fa-circle-check"></i> Correct.</span>';
+    else             verdictHtml = '<span style="color:#b8362a;"><i class="fas fa-circle-xmark"></i> Wrong. Correct answer: <strong>' + escapeHtml(opts[correctIdx] || '') + '</strong>.</span>';
+
+    return `<div class="detail-block" style="border-left:3px solid ${isRight ? '#2EB872' : (isWrong || isSkipped ? '#E74C3C' : 'var(--line)')}; padding-left:.9rem;">
+      <div class="k">Question ${i+1} &middot; Multiple choice</div>
+      <div class="v">
+        <div style="font-weight:700; margin-bottom:.55rem;">${escapeHtml(q.question||'')}</div>
+        ${imgHtml}
+        <div style="display:flex; flex-direction:column; gap:.3rem;">${optList}</div>
+        <div style="margin-top:.55rem; font-size:.82rem;">${verdictHtml}</div>
+      </div>
+    </div>`;
+  }
+
+  if(type === 'multi-row'){
+    const cols = q.columns || [];
+    const rows = q.rows || [];
+    const arr = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? raw : {});
+    let rightCount = 0, wrongCount = 0;
+    const tableRows = rows.map((r,ri)=>{
+      const got = arr[ri] !== undefined ? arr[ri] : arr[String(ri)];
+      const gotIdx = (got === undefined || got === null || got === '') ? -1 : parseInt(got, 10);
+      const isRight = gotIdx === r.correctIndex;
+      if(isRight) rightCount++; else wrongCount++;
+      return `<tr>
+        <td style="font-size:.82rem;">${escapeHtml(r.text||'')}</td>
+        ${cols.map((c,ci)=>{
+          const studentPicked = gotIdx === ci;
+          const isCorrect = r.correctIndex === ci;
+          const bg = isCorrect ? 'rgba(46,184,114,.12)'
+            : (studentPicked && !isCorrect ? 'rgba(231,76,60,.10)' : 'transparent');
+          return `<td style="text-align:center; background:${bg};">
+            ${studentPicked ? '<i class="fas fa-circle-dot" style="color:'+(isCorrect?'#1d8b57':'#b8362a')+';"></i>' : (isCorrect ? '<i class="fas fa-check" style="color:#1d8b57;"></i>' : '<i class="far fa-circle" style="color:var(--muted);"></i>')}
+          </td>`;
+        }).join('')}
+      </tr>`;
+    }).join('');
+
+    return `<div class="detail-block" style="border-left:3px solid ${wrongCount===0?'#2EB872':'#E74C3C'}; padding-left:.9rem;">
+      <div class="k">Question ${i+1} &middot; Tick-one-per-row</div>
+      <div class="v">
+        <div style="font-weight:700; margin-bottom:.55rem;">${escapeHtml(q.question||'')}</div>
+        ${imgHtml}
+        <table style="width:100%; border-collapse:collapse; font-size:.82rem;">
+          <thead><tr><th style="text-align:left; padding:.3rem .4rem; background:var(--sage);">Row</th>${cols.map(c=>`<th style="padding:.3rem .4rem; background:var(--sage); font-size:.72rem;">${escapeHtml(c)}</th>`).join('')}</tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+        <div style="margin-top:.55rem; font-size:.82rem;">
+          <span style="color:#1d8b57; font-weight:700;">${rightCount} correct</span> &middot;
+          <span style="color:#b8362a; font-weight:700;">${wrongCount} wrong</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  if(type === 'match'){
+    const left = q.leftItems || [];
+    const right = q.rightItems || [];
+    const picked = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? raw : {});
+    let rightCount = 0, wrongCount = 0;
+    const rows = left.map((l,li)=>{
+      const got = picked[li] !== undefined ? picked[li] : picked[String(li)];
+      const gotIdx = (got === undefined || got === null || got === '') ? -1 : parseInt(got, 10);
+      const correctIdx = (q.correctPairs||[])[li];
+      const isRight = gotIdx === correctIdx;
+      if(isRight) rightCount++; else wrongCount++;
+      return `<tr>
+        <td style="font-size:.82rem;">${escapeHtml(l)}</td>
+        <td style="font-size:.82rem; color:${isRight?'#1d8b57':'#b8362a'};">
+          ${gotIdx>=0 ? escapeHtml(right[gotIdx]||'') : '<em style="color:var(--muted);">Not answered</em>'}
+          ${isRight ? '<i class="fas fa-check" style="color:#1d8b57; margin-left:.3rem;"></i>' : '<i class="fas fa-xmark" style="color:#b8362a; margin-left:.3rem;"></i>'}
+        </td>
+      </tr>`;
+    }).join('');
+    return `<div class="detail-block" style="border-left:3px solid ${wrongCount===0?'#2EB872':'#E74C3C'}; padding-left:.9rem;">
+      <div class="k">Question ${i+1} &middot; Match</div>
+      <div class="v">
+        <div style="font-weight:700; margin-bottom:.55rem;">${escapeHtml(q.question||'')}</div>
+        ${imgHtml}
+        <table style="width:100%; border-collapse:collapse; font-size:.82rem;">
+          <thead><tr><th style="text-align:left; padding:.3rem .4rem; background:var(--sage);">Left</th><th style="text-align:left; padding:.3rem .4rem; background:var(--sage);">Student matched</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="margin-top:.55rem; font-size:.82rem;">
+          <span style="color:#1d8b57; font-weight:700;">${rightCount} correct</span> &middot;
+          <span style="color:#b8362a; font-weight:700;">${wrongCount} wrong</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  if(type === 'punctuate'){
+    const words = (q.sentence||'').split(/\s+/).filter(Boolean);
+    const pickedSlot = (raw === undefined || raw === null || raw === '') ? -1 : parseInt(raw, 10);
+    const correctSlot = q.correctSlot;
+    const isRight = pickedSlot === correctSlot;
+
+    const annotated = [];
+    annotated.push(`<span class="qb-gap ${pickedSlot===0?'active':''}" style="cursor:default;">${pickedSlot===0?escapeHtml(q.punctuation||','):'·'}</span>`);
+    for(let w=0; w<words.length; w++){
+      annotated.push(`<span>${escapeHtml(words[w])}</span>`);
+      const slot = w+1;
+      annotated.push(`<span class="qb-gap ${pickedSlot===slot?'active':''}" style="cursor:default; ${slot===correctSlot && !isRight ? 'border-color:#1d8b57;' : ''}">${pickedSlot===slot?escapeHtml(q.punctuation||','):(slot===correctSlot && !isRight ? '✓' : '·')}</span>`);
+    }
+
+    return `<div class="detail-block" style="border-left:3px solid ${isRight?'#2EB872':'#E74C3C'}; padding-left:.9rem;">
+      <div class="k">Question ${i+1} &middot; Insert punctuation</div>
+      <div class="v">
+        <div style="font-weight:700; margin-bottom:.55rem;">${escapeHtml(q.question||'')}</div>
+        ${imgHtml}
+        <div class="qb-gap-sentence">${annotated.join('')}</div>
+        <div style="margin-top:.55rem; font-size:.82rem; color:${isRight?'#1d8b57':'#b8362a'};">
+          ${isRight ? '<i class="fas fa-circle-check"></i> Correct.' : '<i class="fas fa-circle-xmark"></i> Wrong position. The correct spot is marked with ✓ above.'}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // written / essay
+  const answerHtml = (raw === undefined || raw === null || String(raw).trim() === '')
+    ? '<em style="color:var(--muted);">Not answered</em>'
+    : nl2br(String(raw));
+
+  return `<div class="detail-block" style="border-left:3px solid var(--brand-soft); padding-left:.9rem;">
+    <div class="k">Question ${i+1} &middot; ${type === 'essay' ? 'Essay' : 'Written answer'}</div>
+    <div class="v">
+      <div style="font-weight:700; margin-bottom:.55rem;">${escapeHtml(q.question||'')}</div>
+      ${imgHtml}
+      <div style="background:var(--sage); border-radius:9px; padding:.65rem .8rem; font-size:.82rem; line-height:1.5;">${answerHtml}</div>
+      <div style="margin-top:.55rem; font-size:.82rem; color:#96690f;"><i class="fas fa-circle-info"></i> Written answer — grade this one by hand.</div>
+    </div>
+  </div>`;
+}
+
+function openGradeAttempt(id){
+  const a = DB.examAttempts.find(x=>x.id===id); if(!a) return;
+  const ex = examById(a.examId);
+  const questions = (ex && ex.questions) ? ex.questions : [];
+  const title   = a.examTitle || (ex ? ex.title : '(deleted exam)');
+  const subject = a.subject   || (ex ? ex.subject : '') || '';
+  const ks      = a.keyStage  || studentKS(a.studentId) || '';
+  const email   = a.studentEmail || studentEmail(a.studentId);
+  const answers = a.answers || {};
+  const released = attemptIsReleased(a);
+  const wasSuspended = (a.integrity && a.integrity.status === 'suspended') || !!a.suspensionSubmittedAt;
+
+  let right = 0, wrong = 0, skipped = 0, noKey = 0, manual = 0;
+  const perQuestion = [];
+
+  questions.forEach((q, i) => {
+    const type = q.type || 'mcq';
+    const raw = answers[i] !== undefined ? answers[i] : answers[String(i)];
+
+    if(type === 'written' || type === 'essay'){
+      manual += 1; perQuestion.push({ i, mark: 'manual' }); return;
+    }
+
+    if(type === 'mcq'){
+      const opts = q.options || [];
+      const hasKey = (typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < opts.length);
+      if(!hasKey){ noKey += 1; perQuestion.push({ i, mark: 'nokey' }); return; }
+      const pickedIdx = (raw === undefined || raw === null || raw === '') ? -1
+        : (typeof raw === 'number' ? raw : parseInt(raw, 10));
+      if(pickedIdx < 0){ skipped += 1; perQuestion.push({ i, mark: 'skipped' }); }
+      else if(pickedIdx === q.correctIndex){ right += 1; perQuestion.push({ i, mark: 'right' }); }
+      else { wrong += 1; perQuestion.push({ i, mark: 'wrong' }); }
+      return;
+    }
+
+    if(type === 'multi-row'){
+      const rows = q.rows || [];
+      const arr = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? raw : {});
+      let qRight = 0, qWrong = 0;
+      rows.forEach((r, ri)=>{
+        const got = arr[ri] !== undefined ? arr[ri] : arr[String(ri)];
+        const gotIdx = (got === undefined || got === null || got === '') ? -1 : parseInt(got, 10);
+        if(gotIdx < 0) qWrong++; else if(gotIdx === r.correctIndex) qRight++; else qWrong++;
+      });
+      right += qRight; wrong += qWrong;
+      perQuestion.push({ i, mark: qWrong === 0 && qRight > 0 ? 'right' : (qRight > 0 ? 'mixed' : 'wrong') });
+      return;
+    }
+
+    if(type === 'match'){
+      const pairs = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? raw : {});
+      const correct = q.correctPairs || [];
+      let qRight = 0, qWrong = 0;
+      correct.forEach((ci, li)=>{
+        const got = pairs[li] !== undefined ? pairs[li] : pairs[String(li)];
+        const gotIdx = (got === undefined || got === null || got === '') ? -1 : parseInt(got, 10);
+        if(gotIdx < 0) qWrong++; else if(gotIdx === ci) qRight++; else qWrong++;
+      });
+      right += qRight; wrong += qWrong;
+      perQuestion.push({ i, mark: qWrong === 0 && qRight > 0 ? 'right' : (qRight > 0 ? 'mixed' : 'wrong') });
+      return;
+    }
+
+    if(type === 'punctuate'){
+      const picked = (raw === undefined || raw === null || raw === '') ? -1 : parseInt(raw, 10);
+      if(picked < 0){ skipped += 1; perQuestion.push({ i, mark: 'skipped' }); }
+      else if(picked === q.correctSlot){ right += 1; perQuestion.push({ i, mark: 'right' }); }
+      else { wrong += 1; perQuestion.push({ i, mark: 'wrong' }); }
+      return;
+    }
+  });
+
+  const autoScore = right;
+  const autoMax   = right + wrong + skipped;
+  const prefilledScore = (a.score != null) ? a.score : (autoMax > 0 ? autoScore : '');
+  const prefilledMax   = (a.maxScore != null) ? a.maxScore : (autoMax > 0 ? autoMax : (questions.length || ''));
+
+  const qHtml = questions.length
+    ? questions.map((q,i)=> attemptAnswerHtml(q, i, answers)).join('')
+    : '<div class="detail-block"><div class="k">Questions</div><div class="v"><em style="color:var(--muted);">The exam this attempt belongs to no longer has any questions on file.</em></div></div>';
+
+  const summaryItems = perQuestion.map(p => {
+    let icon, color, label;
+    if(p.mark === 'right'){        icon = 'fa-circle-check'; color = '#1d8b57'; label = 'Correct'; }
+    else if(p.mark === 'wrong'){   icon = 'fa-circle-xmark'; color = '#b8362a'; label = 'Wrong'; }
+    else if(p.mark === 'skipped'){ icon = 'fa-circle-minus'; color = '#b8362a'; label = 'Skipped'; }
+    else if(p.mark === 'nokey'){   icon = 'fa-circle-info';  color = '#96690f'; label = 'No answer key'; }
+    else if(p.mark === 'mixed'){   icon = 'fa-circle-half-stroke'; color = '#96690f'; label = 'Partial'; }
+    else {                         icon = 'fa-pen';          color = '#7c3f96'; label = 'Manual'; }
+    return `<div style="display:flex; align-items:center; gap:.5rem; padding:.25rem 0; font-size:.78rem;">
+      <i class="fas ${icon}" style="color:${color}; width:14px;" aria-hidden="true"></i>
+      <span style="color:var(--muted); min-width:42px;">Q${p.i+1}</span>
+      <span style="color:${color}; font-weight:700;">${label}</span>
+    </div>`;
+  }).join('');
+
+  const summaryHeader = autoMax > 0
+    ? `<div style="font-size:.9rem; font-weight:800; color:var(--brand-deep); margin-bottom:.5rem;">
+         Auto-computed: <span style="color:#1d8b57;">${autoScore}</span> / ${autoMax}
+       </div>
+       <div style="font-size:.75rem; color:var(--muted); margin-bottom:.6rem;">
+         ${right} correct &middot; ${wrong} wrong &middot; ${skipped} skipped ${noKey ? '&middot; ' + noKey + ' with no key' : ''} ${manual ? '&middot; ' + manual + ' to mark by hand' : ''}
+       </div>`
+    : `<div style="font-size:.85rem; font-weight:700; color:var(--muted); margin-bottom:.6rem;">
+         No auto-gradable questions on this exam — grade the whole paper by hand below.
+       </div>`;
+
+  const summaryPanel = `
+    <div class="detail-block" style="background:var(--sage); border:none; border-radius:12px; padding:.9rem 1rem; margin-top:1rem;">
+      <div class="k" style="color:var(--brand-deep);">Score summary</div>
+      ${summaryHeader}
+      <div style="border-top:1px solid var(--line-soft); padding-top:.5rem; margin-top:.4rem;">
+        ${summaryItems}
+      </div>
+      <div style="font-size:.74rem; color:var(--muted); margin-top:.7rem; line-height:1.5;">
+        <i class="fas fa-circle-info" aria-hidden="true"></i>
+        Every type with a stored answer is auto-scored. Written and essay answers are graded by hand in the Score field below.
+      </div>
+    </div>`;
+
+  openModal('Grade attempt — ' + title, `
+    ${row('Student', a.studentName || studentName(a.studentId))}
+    ${row('Email', email || '—')}
+    ${row('Exam', title)}
+    ${row('Subject', subject || '—')}
+    ${row('Key Stage', ks || '—')}
+    ${row('Submitted', fmtDate(a.date))}
+    ${row('Status', a.status || '—')}
+    ${wasSuspended ? row('Note', 'This attempt was auto-submitted because the student was suspended for examination violations.') : ''}
+    <div style="margin-top:1rem;">${qHtml}</div>
+    ${summaryPanel}
+    <div class="form-grid" style="margin-top:1rem;">
+      <div class="form-field"><label>Score</label><input type="number" id="aScore" value="${prefilledScore !== '' ? escapeHtml(String(prefilledScore)) : ''}" placeholder="42" /></div>
+      <div class="form-field"><label>Max score</label><input type="number" id="aMax" value="${prefilledMax !== '' ? escapeHtml(String(prefilledMax)) : ''}" placeholder="50" /></div>
+      <div class="form-field full"><label>Feedback for the student</label><textarea id="aFeedback" placeholder="What went well, what to work on…">${escapeHtml(a.feedback||'')}</textarea></div>
+    </div>
+    <div style="font-size:.76rem; color:var(--muted); margin-top:.6rem;">
+      <i class="fas fa-circle-info" aria-hidden="true"></i>
+      Score and Max are pre-filled from the auto-computation. Saving marks this attempt <strong>Graded</strong> and files the result as <strong>held</strong> — the student sees nothing until you press Release.
+    </div>
+  `, `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    ${(a.status === 'Graded' && !released) ? `<button class="btn btn-ghost btn-sm" onclick="releaseAttempt('${a.id}')" type="button"><i class="fas fa-unlock" aria-hidden="true"></i> Release</button>` : ''}
+    <button class="btn btn-primary btn-sm" onclick="saveAttemptGrade('${a.id}')" type="button"><i class="fas fa-check" aria-hidden="true"></i> Save grade</button>
+  `, true);
+}
+
+window.saveAttemptGrade = (id) => {
+  const a = DB.examAttempts.find(x=>x.id===id); if(!a) return;
+  const ex = examById(a.examId);
+  const score = parseFloat(document.getElementById('aScore').value);
+  const maxRaw = document.getElementById('aMax').value;
+  const maxScore = maxRaw === '' ? null : parseFloat(maxRaw);
+  const feedback = document.getElementById('aFeedback').value.trim();
+
+  if(isNaN(score)){ alert('Please enter a score.'); return; }
+  if(maxScore !== null && !isNaN(maxScore) && score > maxScore){
+    if(!confirm('The score is higher than the max score. Save anyway?')) return;
+  }
+
+  gradeExamAttempt(id, {
+    score: score,
+    maxScore: (maxScore === null || isNaN(maxScore)) ? null : maxScore,
+    feedback: feedback,
+    gradedBy: (auth.currentUser && auth.currentUser.email) || 'Studio Desk',
+    studentId: a.studentId,
+    studentName: a.studentName || studentName(a.studentId),
+    examId: a.examId || '',
+    examTitle: a.examTitle || (ex ? ex.title : ''),
+    subject: a.subject || (ex ? ex.subject : '') || '',
+    keyStage: a.keyStage || studentKS(a.studentId) || ''
+  }).then(closeModal).catch(err=>alert('Could not save the grade: ' + err.message));
+};
+
+window.releaseAttempt = (id) => {
+  const a = DB.examAttempts.find(x=>x.id===id); if(!a) return;
+  const ex = examById(a.examId);
+  if(!confirm('Release this result to the student? They will see the score and feedback immediately.')) return;
+  releaseExamAttempt(
+    a.id,
+    a.studentId,
+    a.keyStage  || studentKS(a.studentId) || '',
+    a.subject   || (ex ? ex.subject : '') || '',
+    a.examTitle || (ex ? ex.title   : '') || '',
+    (typeof a.score    === 'number') ? a.score    : null,
+    (typeof a.maxScore === 'number') ? a.maxScore : null
+  ).then(() => { closeModal(); })
+   .catch(err => alert('Could not release: ' + err.message));
+};
+
+/* =========================================================
+   SUBMISSIONS
+========================================================= */
+function renderSubTable(){
+  const body = document.getElementById('subTableBody');
+  let list = DB.submissions;
+  list = list.filter(r=>ksMatchByStudent(r, subKSFilter));
+  if(subFilter !== 'all') list = list.filter(s=>s.status===subFilter);
+  list = filterSubsBySearch(list);
+  document.getElementById('subCountText').textContent = list.length + ' record' + (list.length===1?'':'s');
+  if(!list.length){ body.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--muted); padding:1.4rem;">No submissions yet.</td></tr>'; return; }
+  body.innerHTML = list.map(s=>{
+    const hw = DB.homework.find(h=>h.id===s.homeworkId);
+    const title = s.homeworkTitle || (hw ? hw.title : '(deleted)');
+    const subj  = s.subject || (hw ? hw.subject : '') || '—';
+    const ks    = s.keyStage || studentKS(s.studentId) || '';
+    const email = s.studentEmail || studentEmail(s.studentId) || '—';
+    return `<tr>
+      <td class="cell-name">${escapeHtml(s.studentName||studentName(s.studentId))}</td>
+      <td>${escapeHtml(email)}</td>
+      <td>${escapeHtml((ks||'').replace(/\s*\(.*/, '')||'—')}</td>
+      <td>${escapeHtml(subj)}</td>
+      <td>${escapeHtml(title)}</td>
+      <td>${authorTag(s)}</td>
+      <td>${fmtDate(s.date)}</td>
+      <td><span class="badge ${s.status==='Graded'?'b-confirmed':'b-pending'}">${escapeHtml(s.status)}${s.status==='Graded'&&s.grade?': '+escapeHtml(String(s.grade)):''}</span></td>
+      <td class="row-actions">
+        <button class="mini-btn" title="Grade" type="button" onclick="openGrade('${s.id}')"><i class="fas fa-pen" aria-hidden="true"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterSubsBySearch(list){
+  const term = (subSearchTerm||'').trim().toLowerCase();
+  if(!term) return list;
+  return list.filter(s=>{
+    const name = (s.studentName||studentName(s.studentId)||'').toLowerCase();
+    const title = (s.homeworkTitle||'').toLowerCase();
+    return name.includes(term) || s.studentId.toLowerCase().includes(term) || title.includes(term);
+  });
+}
+
+function renderSubGrouped(){
+  const wrap = document.getElementById('subGroupedWrap');
+  if(!wrap) return;
+  const flatWrap = document.getElementById('subFlatWrap');
+  wrap.classList.toggle('hidden', subViewMode !== 'grouped');
+  if(flatWrap) flatWrap.classList.toggle('hidden', subViewMode !== 'flat');
+  if(subViewMode !== 'grouped') return;
+
+  let list = DB.submissions.filter(r=>ksMatchByStudent(r, subKSFilter));
+  if(subFilter !== 'all') list = list.filter(s=>s.status===subFilter);
+  list = filterSubsBySearch(list);
+
+  if(!list.length){
+    wrap.innerHTML = '<div style="text-align:center; color:var(--muted); padding:2rem;">No submissions match these filters.</div>';
+    return;
+  }
+
+  const byAssessment = {};
+  list.forEach(s=>{
+    const key = s.homeworkId || '(no assessment)';
+    if(!byAssessment[key]) byAssessment[key] = [];
+    byAssessment[key].push(s);
+  });
+
+  wrap.innerHTML = Object.keys(byAssessment).map(hwId=>{
+    const subs = byAssessment[hwId];
+    const hw = DB.homework.find(h=>h.id===hwId);
+    const title = subs[0].homeworkTitle || (hw ? hw.title : '(deleted homework)');
+    const subject = subs[0].subject || (hw ? hw.subject : '') || '—';
+    const ks = (hw ? hw.keyStage : subs[0].keyStage || '').replace(/\s*\(.*/, '');
+    const graded = subs.filter(s=>s.status==='Graded').length;
+
+    const studentRows = subs.map(s=>{
+      const email = s.studentEmail || studentEmail(s.studentId) || '—';
+      const fileLinks = [];
+      if(s.fileUrl) fileLinks.push(`<a href="${escapeHtml(s.fileUrl)}" target="_blank" rel="noopener"><i class="fas fa-file"></i> ${escapeHtml(s.fileName||'Uploaded file')}</a>`);
+      return `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:.8rem; padding:.6rem .2rem; border-top:1px solid var(--line-soft);">
+        <div style="min-width:0;">
+          <div style="font-weight:700; font-size:.85rem;">${escapeHtml(s.studentName||studentName(s.studentId))}</div>
+          <div style="font-size:.72rem; color:var(--muted);">${escapeHtml(email)} · ${fmtDate(s.date)}</div>
+          <div style="font-size:.78rem; margin-top:.2rem; display:flex; gap:.8rem;">${fileLinks.join('') || '<span style="color:var(--muted);">No file attached</span>'}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:.5rem; flex-shrink:0;">
+          <span class="badge ${s.status==='Graded'?'b-confirmed':'b-pending'}">${escapeHtml(s.status)}${s.status==='Graded'&&s.grade?': '+escapeHtml(String(s.grade)):''}</span>
+          <button class="mini-btn" title="Grade" type="button" onclick="openGrade('${s.id}')"><i class="fas fa-pen" aria-hidden="true"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="panel" style="margin-bottom:.9rem; padding:1rem 1.1rem;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:.4rem;">
+        <div>
+          <strong style="color:var(--brand-deep);">${escapeHtml(title)}</strong>
+          <span style="font-size:.76rem; color:var(--muted); margin-left:.5rem;">${escapeHtml(subject)} · ${escapeHtml(ks||'—')}</span>
+        </div>
+        <span style="font-size:.72rem; color:var(--muted);">${graded}/${subs.length} graded</span>
+      </div>
+      ${studentRows}
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('subSearchInput').addEventListener('input', (e)=>{
+  subSearchTerm = e.target.value;
+  renderSubTable();
+  renderSubGrouped();
+});
+document.getElementById('subViewGroupedBtn').addEventListener('click', ()=>{
+  subViewMode = 'grouped';
+  document.getElementById('subViewGroupedBtn').classList.add('active');
+  document.getElementById('subViewFlatBtn').classList.remove('active');
+  renderSubGrouped();
+});
+document.getElementById('subViewFlatBtn').addEventListener('click', ()=>{
+  subViewMode = 'flat';
+  document.getElementById('subViewFlatBtn').classList.add('active');
+  document.getElementById('subViewGroupedBtn').classList.remove('active');
+  renderSubGrouped();
+});
+
+/* =========================================================
+   GRADE MODAL — displays the student's written answer inline
+   above the grade field.
+========================================================= */
+function openGrade(id){
+  const s = DB.submissions.find(x=>x.id===id); if(!s) return;
+  const hwDoc = DB.homework.find(h=>h.id===s.homeworkId);
+
+  // Render the student's answer block. If they wrote nothing, say so.
+  const textAnswer = (s.textAnswer || '').trim();
+  const answerBlock = textAnswer
+    ? `<div class="detail-block" style="background:var(--sage); border-radius:10px; padding:.9rem 1rem;">
+        <div class="k" style="color:var(--brand-deep);">Student's written answer</div>
+        <div class="v" style="white-space:pre-wrap; line-height:1.6;">${escapeHtml(textAnswer)}</div>
+      </div>`
+    : `<div class="detail-block" style="background:rgba(232,163,61,.1); border:1px solid rgba(232,163,61,.3); border-radius:10px; padding:.9rem 1rem;">
+        <div class="v" style="color:#96690f; font-style:italic; font-size:.85rem;">
+          <i class="fas fa-circle-info"></i> The student did not write a text answer — check the attached file below.
+        </div>
+      </div>`;
+
+  openModal('Grade submission', `
+    ${row('Student', s.studentName || studentName(s.studentId))}
+    ${row('Email', s.studentEmail || studentEmail(s.studentId) || '—')}
+    ${row('Key Stage', s.keyStage || studentKS(s.studentId) || '—')}
+    ${row('Subject', s.subject || (hwDoc?hwDoc.subject:'') || '—')}
+    ${row('Homework', s.homeworkTitle || (hwDoc?hwDoc.title:'(deleted)'))}
+    ${row('Submitted', fmtDate(s.date))}
+
+    ${answerBlock}
+
+    <div class="detail-row" style="margin-top:.6rem;"><span class="k">Uploaded file</span><span class="v">${s.fileUrl?`<a href="${escapeHtml(s.fileUrl)}" target="_blank" rel="noopener"><i class="fas fa-file"></i> ${escapeHtml(s.fileName||'Open file')}</a>`:'—'}</span></div>
+    ${row('Note from student', s.note || '—')}
+
+    <div class="form-field full" style="margin-top:.8rem;"><label>Grade</label><input type="text" id="gGrade" value="${escapeHtml(s.grade||'')}" placeholder="e.g. 8/10 or A-" /></div>
+    <div class="form-field full"><label>Feedback</label><textarea id="gFeedback">${escapeHtml(s.feedback||'')}</textarea></div>
+  `, `<button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveGrade('${s.id}')" type="button"><i class="fas fa-check" aria-hidden="true"></i> Save grade</button>`);
+}
+function saveGrade(id){
+  const grade = document.getElementById('gGrade').value.trim();
+  const feedback = document.getElementById('gFeedback').value.trim();
+  if(!grade){ alert('Please enter a grade.'); return; }
+  gradeSubmission(id, grade, feedback).then(closeModal).catch(err=>alert('Could not save: '+err.message));
+}
+
+/* =========================================================
    GRADING GRANTS
 ========================================================= */
 function renderGrantTable(){
@@ -3000,7 +3847,7 @@ window.saveNewGrant = () => {
 window.openGrantForTask = (taskType, taskId) => {
   document.querySelector('.nav-item[data-view="studentmgmt"]').click();
   document.querySelectorAll('#smSubtabs .subtab-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('#sub-accounts, #sub-homework, #sub-exams, #sub-grants, #sub-parents').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('#sub-accounts, #sub-results, #sub-homework, #sub-exams, #sub-attempts, #sub-submissions, #sub-grants').forEach(v=>v.classList.remove('active'));
   document.querySelector('#smSubtabs .subtab-btn[data-sub="grants"]').classList.add('active');
   document.getElementById('sub-grants').classList.add('active');
 
@@ -3713,7 +4560,7 @@ document.getElementById('globalSearch').addEventListener('input', (e)=>{
 });
 
 /* ~22 live listeners all call refreshAll() while the dashboard opens (and again on every
-   change anywhere). Each call re-renders the views + 3 charts, so the page used to rebuild
+   change anywhere). Each call re-renders 17 views + 3 charts, so the page used to rebuild
    itself 20+ times before settling. Calls are now coalesced: one refresh per burst. */
 var _refreshTimer = null;
 function refreshAll(){

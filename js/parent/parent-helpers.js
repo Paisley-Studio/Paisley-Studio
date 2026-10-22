@@ -124,7 +124,7 @@ const ParentHelpers = (function () {
     await Promise.all(classrooms.map(async cls => {
       try {
         const examsSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
-          .where('audiences.' + (child.studentType === 'remote' ? 'remote' : 'online'), '==', true)
+          .where('audiences.' + (child.studentType === 'remote' ? 'remote' : (child.studentType === 'tuition' ? 'tuition' : 'online')), '==', true)
           .where('status', '==', 'Published').get();
         await Promise.all(examsSnap.docs.map(async examDoc => {
           const exam = Object.assign({ id: examDoc.id, cid: cls.id }, examDoc.data());
@@ -160,7 +160,8 @@ const ParentHelpers = (function () {
     // Legacy key-stage-wide lists (homework, exams, activities, live classes,
     // announcements) belong to the online programme. A remote child's parent
     // sees only that child's own classroom work, results and tickets.
-    const isRemote = child.studentType === 'remote';
+    // CBC tuition children behave like remote ones here: no key-stage-wide online lists.
+    const isRemote = child.studentType === 'remote' || child.studentType === 'tuition';
     const none = () => Promise.resolve({ docs: [] });
     return Promise.all([
       getResultsForStudent(child.id).catch(() => ({ docs: [] })),

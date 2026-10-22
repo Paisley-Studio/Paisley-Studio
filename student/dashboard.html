@@ -407,6 +407,7 @@
     <i class="fas fa-hourglass-half"></i>
     <h2>Almost there</h2>
     <p>Your account is being reviewed by the Studio Desk. Once your Key Stage and subjects are confirmed you'll get full access to results, homework and exams here.</p>
+    <p id="verifyNote" style="display:none;margin-top:-.4rem;"><strong>Please confirm your email.</strong> We sent a link to <span id="verifyEmail"></span>. <a href="#" id="verifyResend">Send it again</a></p>
     <button class="btn-sm primary" id="pendingSignOut" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
   </div>
 </div>
@@ -852,6 +853,15 @@ auth.onAuthStateChanged(user=>{
     if(profile.status !== 'Active'){
       document.body.classList.add('pending');
       document.body.classList.add('ready');
+      if(!user.emailVerified){
+        document.getElementById('verifyEmail').textContent = user.email || 'your email address';
+        document.getElementById('verifyNote').style.display = '';
+        document.getElementById('verifyResend').addEventListener('click', function(e){
+          e.preventDefault();
+          user.sendEmailVerification().then(function(){ e.target.textContent = 'Sent — check your inbox'; })
+            .catch(function(){ e.target.textContent = 'Please wait a few minutes before trying again'; });
+        });
+      }
       return;
     }
 

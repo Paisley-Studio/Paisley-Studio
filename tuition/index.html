@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CBC Tuition Portal — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.12);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:var(--font); background:linear-gradient(160deg,var(--paper) 0%, var(--sage) 100%);
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:2rem 1.2rem; color:var(--ink);
+  }
+  .card{
+    width:100%; max-width:420px; background:var(--surface); border-radius:22px;
+    box-shadow:0 30px 70px rgba(36,95,90,.14); border:1px solid var(--line); padding:2.6rem 2.2rem; position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:''; position:absolute; top:-60px; right:-60px; width:170px; height:170px;
+    background:radial-gradient(circle, var(--brand-soft) 0%, transparent 70%); opacity:.35; border-radius:50%;
+  }
+  .brand{display:flex; align-items:center; gap:.7rem; margin-bottom:1.8rem; position:relative;}
+  .brand img{width:42px; height:42px; border-radius:10px; object-fit:cover;}
+  .brand .word{font-weight:800; font-size:1.05rem; color:var(--brand-deep); line-height:1.2;}
+  .brand .word span{display:block; font-size:.66rem; font-weight:600; letter-spacing:.06em; color:var(--muted); text-transform:uppercase;}
+  h1{font-size:1.5rem; font-weight:800; color:var(--brand-deep); margin-bottom:.3rem;}
+  p.sub{color:var(--muted); font-size:.88rem; margin-bottom:1.8rem; line-height:1.5;}
+  .tabs{display:flex; background:var(--sage); border-radius:12px; padding:4px; margin-bottom:1.6rem;}
+  .tab{flex:1; text-align:center; padding:.6rem 0; border-radius:9px; font-weight:700; font-size:.82rem; color:var(--muted); cursor:pointer; transition:all .25s;}
+  .tab.active{background:var(--surface); color:var(--brand-deep); box-shadow:0 4px 14px rgba(36,95,90,.1);}
+  .field{margin-bottom:1.1rem;}
+  .field label{display:block; font-size:.76rem; font-weight:700; color:var(--brand-deep); margin-bottom:.4rem; text-transform:uppercase; letter-spacing:.03em;}
+  .field input, .field select{
+    width:100%; padding:.75rem .9rem; border:1.5px solid var(--line); border-radius:11px;
+    font-family:var(--font); font-size:.92rem; color:var(--ink); background:var(--paper); transition:border-color .2s;
+  }
+  .field input:focus, .field select:focus{outline:none; border-color:var(--brand);}
+  .btn{
+    width:100%; padding:.85rem 0; border:none; border-radius:12px; background:var(--brand-deep); color:#fff;
+    font-family:var(--font); font-weight:800; font-size:.94rem; cursor:pointer; transition:background .2s, transform .15s;
+    display:flex; align-items:center; justify-content:center; gap:.5rem; margin-top:.4rem;
+  }
+  .btn:hover{background:var(--brand);}
+  .btn:disabled{opacity:.6; cursor:not-allowed;}
+  .btn.loading .btn-text{opacity:0;}
+  .btn.loading::after{
+    content:''; position:absolute; width:18px; height:18px; border:2.5px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite;
+  }
+  .btn{position:relative;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .msg{
+    display:none; padding:.7rem .9rem; border-radius:10px; font-size:.82rem; margin-bottom:1.1rem; line-height:1.4;
+  }
+  .msg.show{display:block;}
+  .msg.error{background:rgba(231,76,60,.08); color:#B8362A; border:1px solid rgba(231,76,60,.25);}
+  .msg.success{background:rgba(46,184,114,.08); color:#1D8B57; border:1px solid rgba(46,184,114,.25);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .back-link{display:block; text-align:center; margin-top:1.4rem; font-size:.82rem; color:var(--muted); text-decoration:none;}
+  .back-link:hover{color:var(--brand-deep);}
+  .pending-note{
+    background:var(--sage); border-radius:12px; padding:1rem 1.1rem; font-size:.8rem; color:var(--muted);
+    line-height:1.5; margin-top:1.2rem; display:flex; gap:.6rem;
+  }
+  .pending-note i{color:var(--brand-deep); margin-top:.1rem;}
+  .group-title{font-size:.78rem; font-weight:800; color:var(--brand-deep); margin:1.3rem 0 .7rem; padding-top:1rem; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:.5rem; text-transform:uppercase; letter-spacing:.03em;}
+  .group-title:first-child{border-top:none; padding-top:0; margin-top:0;}
+  .check-grid{display:grid; grid-template-columns:1fr 1fr; gap:.45rem;}
+  .field .check-grid label{display:flex; align-items:center; gap:.5rem; margin:0; padding:.55rem .7rem; border:1.5px solid var(--line); border-radius:11px; background:var(--paper); font-size:.84rem; font-weight:600; color:var(--ink); text-transform:none; letter-spacing:0; cursor:pointer;}
+  .field .check-grid input{width:auto; padding:0; margin:0; accent-color:var(--brand-deep);}
+  .field small.hint{display:block; margin-top:.4rem; color:#6b7280; font-size:12px;}
+  .link-btn{width:100%; padding:.65rem 0; border:1.5px dashed var(--line); border-radius:11px; background:transparent; color:var(--brand-deep); font-family:var(--font); font-weight:700; font-size:.84rem; cursor:pointer; margin-bottom:1.1rem;}
+  .link-btn:hover{border-color:var(--brand); background:var(--sage);}
+  .mini-remove{border:none; background:none; color:var(--error); font-family:var(--font); font-weight:700; font-size:.74rem; cursor:pointer; text-transform:none; letter-spacing:0;}
+  @media (max-width:420px){ .check-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">
+    <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" />
+    <div class="word">Paisley Studio<span>CBC Tuition Portal</span></div>
+  </div>
+
+  <h1 id="titleText">Welcome back</h1>
+  <p class="sub" id="subText">Sign in to see your subjects, work, timetable and results.</p>
+
+  <a href="/tuition.html" style="display:inline-block;margin:-.4rem 0 .8rem;font-size:.78rem;font-weight:700;color:var(--brand-deep);text-decoration:none"><i class="fas fa-arrow-left"></i> Back to tuition</a>
+  <div class="tabs">
+    <div class="tab active" data-tab="login">Sign In</div>
+    <div class="tab" data-tab="signup">Create Account</div>
+  </div>
+
+  <div class="msg error" id="errMsg"></div>
+  <div class="msg success" id="okMsg"></div>
+
+  <!-- LOGIN -->
+  <div class="panel active" id="panel-login">
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button class="btn" id="loginBtn" type="button"><span class="btn-text"><i class="fas fa-arrow-right-to-bracket"></i> Sign In</span></button>
+  </div>
+
+  <!-- SIGNUP -->
+  <div class="panel" id="panel-signup">
+    <div class="field">
+      <label>Full Name</label>
+      <input type="text" id="suName" placeholder="Jane Wanjiru" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="suEmail" placeholder="you@example.com" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>Learning band</label>
+      <select id="suKeyStage">
+        <option value="CBC Lower Primary (Grades 1-3)">Lower Primary (Grades 1–3)</option>
+        <option value="CBC Upper Primary (Grades 4-6)">Upper Primary (Grades 4–6)</option>
+        <option value="CBC Junior School (Grades 7-9)" selected>Junior School (Grades 7–9)</option>
+        <option value="CBC Senior School (Grades 10-12)">Senior School (Grades 10–12)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Grade</label>
+      <select id="suYear"></select>
+    </div>
+    <div class="field">
+      <label>Subjects you take</label>
+      <div class="check-grid" id="suSubjects"></div>
+      <small class="hint" id="suSubjectsHint"></small>
+    </div>
+
+    <div class="group-title">Parent / Guardian 1</div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="suGuardianName" placeholder="e.g. Mary Wanjiru" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="suGuardianEmail" placeholder="guardian@example.com" />
+      <small class="hint">Used to set up their access to the Parent Portal, where they can follow your progress.</small>
+    </div>
+    <div class="field">
+      <label>Phone</label>
+      <input type="tel" id="suGuardianPhone" placeholder="e.g. 0712345678" />
+    </div>
+
+    <div id="guardian2" style="display:none;">
+      <div class="group-title">Parent / Guardian 2 <button type="button" class="mini-remove" id="removeGuardian2Btn"><i class="fas fa-xmark"></i> Remove</button></div>
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="suGuardian2Name" placeholder="e.g. John Wanjiru" />
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="suGuardian2Email" placeholder="guardian2@example.com" />
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="tel" id="suGuardian2Phone" placeholder="e.g. 0722345678" />
+      </div>
+    </div>
+    <button type="button" class="link-btn" id="addGuardian2Btn"><i class="fas fa-plus"></i> Add another parent</button>
+
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="suPassword" placeholder="At least 8 characters" autocomplete="new-password" />
+    </div>
+    <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><label>Leave this field empty<input type="text" id="suWebsite" tabindex="-1" autocomplete="off" /></label></div>
+    <button class="btn" id="signupBtn" type="button"><span class="btn-text"><i class="fas fa-user-plus"></i> Create Account</span></button>
+    <div class="pending-note"><i class="fas fa-circle-info"></i><div>New accounts start as <strong>Pending</strong> until the Studio Desk confirms your enrolment and activates your dashboard.</div></div>
+  </div>
+
+  <a href="../index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to paisleystudio.online</a>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script>
+const auth = firebase.auth();
+
+// Landing page links here with ?tab=signup
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{ if(new URLSearchParams(location.search).get('tab') === 'signup'){ const t=document.querySelector('.tab[data-tab="signup"]'); if(t) t.click(); } }catch(e){}
+});
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+    document.getElementById('titleText').textContent = t.dataset.tab === 'login' ? 'Welcome back' : 'Join CBC tuition';
+    document.getElementById('subText').textContent = t.dataset.tab === 'login'
+      ? 'Sign in to see your subjects, work, timetable and results.'
+      : 'Create your CBC tuition account. The Studio Desk will approve it.';
+    hideMsgs();
+  });
+});
+
+function hideMsgs(){
+  document.getElementById('errMsg').classList.remove('show');
+  document.getElementById('okMsg').classList.remove('show');
+}
+function showErr(msg){ hideMsgs(); const e=document.getElementById('errMsg'); e.textContent=msg; e.classList.add('show'); }
+function showOk(msg){ hideMsgs(); const o=document.getElementById('okMsg'); o.textContent=msg; o.classList.add('show'); }
+
+function setLoading(btn, on){
+  btn.disabled = on;
+  btn.classList.toggle('loading', on);
+}
+
+// Redirect signed-in users straight to the dashboard
+auth.onAuthStateChanged(user=>{
+  if(user && !window._justSignedUp){
+    window.location.href = '/tuition/dashboard.html';
+  }
+});
+
+// ---- LOGIN ----
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  if(!email || !pass){ showErr('Please enter your email and password.'); return; }
+  const btn = document.getElementById('loginBtn');
+  setLoading(btn, true);
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(()=>{ window.location.href = '/tuition/dashboard.html'; })
+    .catch(err=>{
+      setLoading(btn, false);
+      let m = 'Incorrect email or password.';
+      if(err.code === 'auth/too-many-requests') m = 'Too many attempts. Please wait a few minutes.';
+      showErr(m);
+    });
+});
+
+// ---- KEY STAGE → YEAR + SUBJECTS ----
+const suKeyStage = document.getElementById('suKeyStage');
+const suYear = document.getElementById('suYear');
+const suSubjects = document.getElementById('suSubjects');
+
+function refreshYearAndSubjects(){
+  const ks = suKeyStage.value;
+  suYear.innerHTML = '<option value="">Select grade</option>' +
+    lmzYearsForKeyStage(ks).map(y=>'<option value="'+y+'">Grade '+y+'</option>').join('');
+  const core = false;   // CBC: the student chooses the subjects they want
+  suSubjects.innerHTML = lmzSubjectsForKeyStage(ks).map(s=>
+    '<label><input type="checkbox" value="'+s.id+'"'+(core?' checked':'')+' /> '+s.name+'</label>').join('');
+  document.getElementById('suSubjectsHint').textContent = 'Select the subjects you will study. You can change these later from your dashboard.';
+}
+suKeyStage.addEventListener('change', refreshYearAndSubjects);
+refreshYearAndSubjects();
+
+// ---- SECOND PARENT / GUARDIAN ----
+const guardian2Box = document.getElementById('guardian2');
+const addGuardian2Btn = document.getElementById('addGuardian2Btn');
+addGuardian2Btn.addEventListener('click', ()=>{
+  guardian2Box.style.display = 'block';
+  addGuardian2Btn.style.display = 'none';
+});
+document.getElementById('removeGuardian2Btn').addEventListener('click', ()=>{
+  ['suGuardian2Name','suGuardian2Email','suGuardian2Phone'].forEach(id=>{ document.getElementById(id).value = ''; });
+  guardian2Box.style.display = 'none';
+  addGuardian2Btn.style.display = '';
+});
+
+// ---- SIGN-UP ABUSE GUARDS ----
+// Reserved / throw-away mail domains can never be a real student or parent. This is a
+// courtesy filter in the page; the real enforcement is server-side (Firestore rules,
+// App Check and the optional sign-up blocking function).
+const BLOCKED_MAIL_DOMAINS = [
+  'example.com','example.org','example.net','mailinator.com','guerrillamail.com','sharklasers.com',
+  '10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','trashmail.com','dispostable.com',
+  'getnada.com','maildrop.cc','throwawaymail.com','fakeinbox.com','mintemail.com','mohmal.com'
+];
+function isFakeMailbox(addr){
+  const m = String(addr||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/);
+  if(!m) return true;
+  const d = m[1];
+  if(/\.(test|invalid|localhost|local|example)$/.test(d)) return true;
+  return BLOCKED_MAIL_DOMAINS.some(b => d === b || d.endsWith('.' + b));
+}
+const _signupShownAt = Date.now();
+
+// ---- SIGN UP ----
+document.getElementById('signupBtn').addEventListener('click', ()=>{
+  // Bot traps: a filled hidden field, or a form completed faster than a person can type.
+  if(document.getElementById('suWebsite').value || (Date.now() - _signupShownAt) < 4000){
+    showErr('Please take a moment to check your details and try again.'); return;
+  }
+  const name = document.getElementById('suName').value.trim();
+  const email = document.getElementById('suEmail').value.trim();
+  const keyStage = suKeyStage.value;
+  const year = suYear.value;
+  const subjectIds = Array.from(suSubjects.querySelectorAll('input:checked')).map(cb=>cb.value);
+  const pass = document.getElementById('suPassword').value;
+
+  const guardians = [{
+    name: document.getElementById('suGuardianName').value.trim(),
+    email: document.getElementById('suGuardianEmail').value.trim(),
+    phone: document.getElementById('suGuardianPhone').value.trim()
+  }];
+  const hasSecond = guardian2Box.style.display !== 'none';
+  if(hasSecond){
+    guardians.push({
+      name: document.getElementById('suGuardian2Name').value.trim(),
+      email: document.getElementById('suGuardian2Email').value.trim(),
+      phone: document.getElementById('suGuardian2Phone').value.trim()
+    });
+  }
+
+  if(!name || !email || !pass){ showErr('Please fill in your name, email and password.'); return; }
+  if(name.length > 120){ showErr('Please enter a shorter name.'); return; }
+  if(isFakeMailbox(email)){ showErr('Please use your own real email address — we need to be able to reach you.'); return; }
+  if(pass.length < 8){ showErr('Password must be at least 8 characters.'); return; }
+  if(!keyStage){ showErr('Please select your learning band.'); return; }
+  if(!year){ showErr('Please select your Grade.'); return; }
+  if(!subjectIds.length){ showErr('Please select at least one subject you take.'); return; }
+  if(!guardians[0].email || !guardians[0].phone){ showErr('Please provide a parent/guardian email and phone number.'); return; }
+  for(let i=0;i<guardians.length;i++){
+    const g = guardians[i], label = 'Parent / Guardian ' + (i+1);
+    if(!g.name && i>0){ showErr('Please enter the name of ' + label + '.'); return; }
+    if(!/^\S+@\S+\.\S+$/.test(g.email) || isFakeMailbox(g.email)){ showErr('Please enter a real email address for ' + label + '.'); return; }
+    if(i>0 && !g.phone){ showErr('Please enter the phone number of ' + label + '.'); return; }
+    if(g.email.toLowerCase() === email.toLowerCase()){ showErr(label + ' needs their own email address — it cannot be the same as your student sign-in email.'); return; }
+  }
+  if(hasSecond && guardians[0].email.toLowerCase() === guardians[1].email.toLowerCase()){
+    showErr('Parent / Guardian 2 needs a different email address from Parent / Guardian 1.'); return;
+  }
+
+  const btn = document.getElementById('signupBtn');
+  setLoading(btn, true);
+  window._justSignedUp = true;
+
+  auth.createUserWithEmailAndPassword(email, pass)
+    .then(cred=>{
+      // Ask the new user to confirm their address (best effort — never blocks sign-up).
+      try { cred.user.sendEmailVerification().catch(function(){}); } catch(e) {}
+      return createStudentProfile(cred.user.uid, {
+        name, email, keyStage,
+        studentType: 'tuition', curriculum: 'CBC',
+        year: Number(year),
+        ...lmzSubjectWriteFields(subjectIds),
+        // Structured guardians are the source of truth (one entry each; the
+        // Parent Portal links each to its own account). The first guardian is
+        // also mirrored into the original guardianName/Email/Phone fields and
+        // a derived parentContact string, which older admin/tutor/student
+        // screens still read.
+        guardians,
+        guardianName: guardians[0].name,
+        guardianEmail: guardians[0].email,
+        guardianPhone: guardians[0].phone,
+        parentContact: guardians.map(g=>[g.name, g.email, g.phone].filter(Boolean).join(' · ')).join(' | ')
+      });
+    })
+    .then(()=>{
+      setLoading(btn, false);
+      showOk('Account created! Redirecting to your dashboard…');
+      setTimeout(()=>{ window.location.href = '/tuition/dashboard.html'; }, 1200);
+    })
+    .catch(err=>{
+      setLoading(btn, false);
+      window._justSignedUp = false;
+      let m = 'Could not create account.';
+      if(err.code === 'auth/email-already-in-use') m = 'That email already has an account. Try Sign In instead.';
+      else if(err.code === 'auth/too-many-requests') m = 'Too many attempts from this device. Please wait a few minutes and try again.';
+      else if(err.code === 'auth/invalid-email') m = 'That email address is not valid.';
+      else if(err.code === 'auth/weak-password') m = 'Please choose a stronger password.';
+      showErr(m);
+    });
+});
+
+document.querySelectorAll('input').forEach(inp=>{
+  inp.addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){
+      const activeTab = document.querySelector('.tab.active').dataset.tab;
+      document.getElementById(activeTab === 'login' ? 'loginBtn' : 'signupBtn').click();
+    }
+  });
+});
+
+/* ---------------------------------------------------------
+   SEAMLESS PASSWORD RESET HANDLER
+   Catches the link from the new emails, prompts for password,
+   logs them in, and routes to the dashboard.
+--------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const mode = urlParams.get('mode');
+  const oobCode = urlParams.get('oobCode');
+
+  if (mode === 'resetPassword' && oobCode) {
+    let email = "";
+    try {
+      email = await auth.verifyPasswordResetCode(oobCode);
+    } catch (err) {
+      showErr("This password reset link is invalid or has expired. Please request a new one from the admin.");
+      window.history.replaceState({}, document.title, "/tuition/index.html");
+      return;
+    }
+
+    const newPassword = prompt(`Welcome to Paisley Studio!\n\nPlease set a password for ${email}.\n(Must be at least 6 characters)`);
+
+    if (!newPassword || newPassword.length < 6) {
+      showErr("Password must be at least 6 characters. Please click the link in your email again.");
+      return;
+    }
+
+    try {
+      await auth.confirmPasswordReset(oobCode, newPassword);
+      const cred = await auth.signInWithEmailAndPassword(email, newPassword);
+      
+      showOk("Password set successfully! Taking you to your dashboard...");
+      window.history.replaceState({}, document.title, "/tuition/index.html");
+      
+      setTimeout(() => {
+        window.location.href = '/tuition/dashboard.html';
+      }, 1200);
+
+    } catch (err) {
+      showErr("Error setting password: " + err.message);
+    }
+  }
+});
+</script>
+</body>
+</html>

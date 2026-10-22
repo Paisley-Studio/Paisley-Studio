@@ -29,6 +29,7 @@ const APP_URL = String(process.env.APP_URL || 'https://www.paisleystudio.online'
 const PORTALS = {
   student: APP_URL + '/student/index.html',
   remote:  APP_URL + '/remote/index.html',
+  tuition: APP_URL + '/tuition/index.html',
   tutor:   APP_URL + '/tutor/login.html',
   parent:  APP_URL + '/parent/index.html',
   admin:   APP_URL + '/admin'
@@ -36,6 +37,7 @@ const PORTALS = {
 
 // Remote students sign in at their own portal; everyone else uses the normal one.
 function studentPortal(student) {
+  if (student && student.studentType === 'tuition') return PORTALS.tuition;
   return student && student.studentType === 'remote' ? PORTALS.remote : PORTALS.student;
 }
 

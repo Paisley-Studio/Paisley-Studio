@@ -33,14 +33,25 @@ service cloud.firestore {
     function isRemoteStudent() {
       return isStudentDoc() && ('studentType' in myStudent()) && myStudent().studentType == 'remote';
     }
+    function isTuitionStudent() {
+      return isStudentDoc() && ('studentType' in myStudent()) && myStudent().studentType == 'tuition';
+    }
     function isOnlineStudent() {
-      return isStudentDoc() && !isRemoteStudent();
+      return isStudentDoc() && !isRemoteStudent() && !isTuitionStudent();
     }
     function remoteActive() {
       return isRemoteStudent() && myStudent().status == 'Active';
     }
+    function tuitionActive() {
+      return isTuitionStudent() && myStudent().status == 'Active';
+    }
+    // true for online students (and for non-students); false for remote / tuition students
     function notRemote() {
-      return isSignedIn() && !isRemoteStudent();
+      return isSignedIn() && !isRemoteStudent() && !isTuitionStudent();
+    }
+    // remote / tuition students must be Active to submit work; online students are unaffected
+    function studentAccountOk() {
+      return (!isRemoteStudent() || remoteActive()) && (!isTuitionStudent() || tuitionActive());
     }
 
     // -----------------------------------------------------
@@ -122,6 +133,13 @@ service cloud.firestore {
         (((c.keyStage + '|' + c.subjectId) in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.remote) ||
          ((c.keyStage + '|*') in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.remote));
     }
+    function parentSlotTuition(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        ('tuition' in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data) &&
+        (((c.keyStage + '|' + c.subjectId) in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.tuition) ||
+         ((c.keyStage + '|*') in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.tuition));
+    }
     function parentMaySeeEntry() {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
@@ -139,7 +157,8 @@ service cloud.firestore {
     }
     function classTutorMay(c) {
       return classTutorSubject(c.subjectId) &&
-        (!('keyStages' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) ||
+        (c.keyStage.matches('CBC.*') ||
+         !('keyStages' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) ||
           get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages.size() == 0 ||
           c.keyStage in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages);
     }
@@ -212,19 +231,23 @@ service cloud.firestore {
     function postedToMyType(d) {
       return ('audiences' in d) && (
         (isRemoteStudent() && d.audiences.get('remote', false) == true) ||
-        (!isRemoteStudent() && d.audiences.get('online', false) == true) ||
+        (isTuitionStudent() && d.audiences.get('tuition', false) == true) ||
+        (!isRemoteStudent() && !isTuitionStudent() && d.audiences.get('online', false) == true) ||
         (('releasedTo' in d) && request.auth.uid in d.releasedTo));
     }
     function studentSeesLesson(cid) {
       return (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
                resource.data.status == 'published' && resource.data.audiences.online == true) ||
              (remoteActive() && classStudentMay(classroomData(cid)) &&
-               resource.data.status == 'published' && resource.data.audiences.remote == true);
+               resource.data.status == 'published' && resource.data.audiences.remote == true) ||
+             (tuitionActive() && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && resource.data.audiences.get('tuition', false) == true);
     }
     function parentSeesLesson(cid) {
       return resource.data.status == 'published' && (
         (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
-        (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))));
+        (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))) ||
+        (resource.data.audiences.get('tuition', false) == true && parentSlotTuition(classroomData(cid))));
     }
     function tutorSeesPosted(cid) {
       return isTutor() && classTutorMay(classroomData(cid)) && resource.data.audiences.tutors == true;
@@ -237,11 +260,16 @@ service cloud.firestore {
              (remoteActive() && classStudentMay(classroomData(cid)) &&
                ((resource.data.audiences.remote == true &&
                  (resource.data.audience == 'class' || request.auth.uid in resource.data.recipients)) ||
+                request.auth.uid in resource.data.releasedTo)) ||
+             (tuitionActive() && classStudentMay(classroomData(cid)) &&
+               ((resource.data.audiences.get('tuition', false) == true &&
+                 (resource.data.audience == 'class' || request.auth.uid in resource.data.recipients)) ||
                 request.auth.uid in resource.data.releasedTo));
     }
     function parentSeesWork(cid) {
       return (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
-             (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid)));
+             (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))) ||
+             (resource.data.audiences.get('tuition', false) == true && parentSlotTuition(classroomData(cid)));
     }
     function studentSeesExam(cid) {
       return resource.data.status == 'Published' && studentSeesWork(cid);
@@ -341,11 +369,25 @@ service cloud.firestore {
         !('tutorId' in request.resource.data) &&
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
+      // CBC tuition self-registration: always Pending, never pre-paired, mode set by admin only.
+      allow create: if isOwner(uid) &&
+        request.resource.data.status == 'Pending' &&
+        request.resource.data.studentType == 'tuition' &&
+        !('tuitionMode' in request.resource.data) &&
+        !('admittedBy' in request.resource.data) &&
+        !('tutorId' in request.resource.data) &&
+        !('tutorIds' in request.resource.data) &&
+        !('subjectTutors' in request.resource.data);
       allow read: if isOwner(uid) || isAdmin() || tutorTeachesStudent(uid) || isParentOf(uid);
       allow update: if isAdmin() ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt'])) ||
-        (isOwner(uid) && !(('studentType' in resource.data) && resource.data.studentType == 'remote') &&
+        // CBC tuition students may change their phone and choose their own subjects; everything else is admin-only.
+        (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'tuition' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt', 'subjects', 'subjectNames']) &&
+          (!('subjects' in request.resource.data.diff(resource.data).affectedKeys()) ||
+            (request.resource.data.subjects is list && request.resource.data.subjects.size() <= 14))) ||
+        (isOwner(uid) && !(('studentType' in resource.data) && resource.data.studentType in ['remote', 'tuition']) &&
         !('studentType' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('admittedBy' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('status' in request.resource.data.diff(resource.data).affectedKeys()) &&
@@ -530,7 +572,7 @@ service cloud.firestore {
         && request.resource.data.targetTutorId.size() > 0
         && studentHasTutorId(request.auth.uid, request.resource.data.targetTutorId);
 
-      allow create: if remoteActive()
+      allow create: if (remoteActive() || tuitionActive())
         && request.resource.data.studentId == request.auth.uid
         && request.resource.data.targetAdmin == true
         && request.resource.data.status == 'Open'
@@ -674,7 +716,7 @@ service cloud.firestore {
             // FIXED: Switched forMe() to postedToMyType() because Lessons 
             // do not have an 'audience' or 'recipients' array, they use 'audiences'.
             allow create: if newStudentWork(sid) &&
-              (!isRemoteStudent() || remoteActive()) &&
+              studentAccountOk() &&
               classStudentMay(classroomData(cid)) &&
               postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
               
@@ -696,7 +738,7 @@ service cloud.firestore {
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
-              (!isRemoteStudent() || remoteActive()) &&
+              studentAccountOk() &&
               classStudentMay(classroomData(cid)) &&
               forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/assignments/$(aid)).data);
             allow update: if isAdmin() ||
@@ -719,7 +761,7 @@ service cloud.firestore {
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
-              (!isRemoteStudent() || remoteActive()) &&
+              studentAccountOk() &&
               classStudentMay(classroomData(cid)) &&
               get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.status == 'Published' &&
               get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.examMode == 'pdf' &&
@@ -758,7 +800,7 @@ service cloud.firestore {
 
           allow create: if newFlatExamSubmission(studentId) &&
             classStudentMay(classroomData(cid)) &&
-            (!isRemoteStudent() || remoteActive()) &&
+            studentAccountOk() &&
             postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data) &&
             flatExamWindowOpen(
               get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
@@ -792,6 +834,74 @@ service cloud.firestore {
       allow update: if isSignedIn() && resource.data.recipientId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow create, delete: if false;
+    }
+
+    // =====================================================
+    // CBC TUITION — tutor requests, chat, timetable
+    // =====================================================
+    // A student asks the admin for a tutor; only the admin can approve / pair.
+    match /tuitionRequests/{id} {
+      allow create: if tuitionActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.status == 'Pending' &&
+        request.resource.data.keys().hasOnly(['studentId', 'studentName', 'grade', 'subjects', 'subjectNames', 'note', 'status', 'createdAt']) &&
+        request.resource.data.note is string && request.resource.data.note.size() <= 1000;
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isParentOf(resource.data.studentId);
+      allow update, delete: if isAdmin();
+    }
+
+    // One chat per student + tutor pair: chatId = studentUid_tutorId.
+    function chatMember(c) {
+      return isSignedIn() && (c.studentId == request.auth.uid || c.tutorId == request.auth.uid);
+    }
+    match /tuitionChats/{chatId} {
+      allow read: if isAdmin() || chatMember(resource.data) || isParentOf(resource.data.studentId);
+      allow create: if isAdmin() ||
+        (tuitionActive() &&
+          request.resource.data.studentId == request.auth.uid &&
+          chatId == request.auth.uid + '_' + request.resource.data.tutorId &&
+          studentHasTutorId(request.auth.uid, request.resource.data.tutorId) &&
+          request.resource.data.keys().hasOnly(['studentId', 'studentName', 'tutorId', 'tutorName', 'lastMessage', 'lastAt', 'createdAt'])) ||
+        (isTutor() &&
+          request.resource.data.tutorId == request.auth.uid &&
+          chatId == request.resource.data.studentId + '_' + request.auth.uid &&
+          studentHasTutorId(request.resource.data.studentId, request.auth.uid) &&
+          request.resource.data.keys().hasOnly(['studentId', 'studentName', 'tutorId', 'tutorName', 'lastMessage', 'lastAt', 'createdAt']));
+      allow update: if isAdmin() ||
+        (chatMember(resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt']));
+      allow delete: if isAdmin();
+
+      match /messages/{mid} {
+        allow read: if isAdmin() ||
+          chatMember(get(/databases/$(database)/documents/tuitionChats/$(chatId)).data) ||
+          isParentOf(get(/databases/$(database)/documents/tuitionChats/$(chatId)).data.studentId);
+        allow create: if isSignedIn() &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.keys().hasOnly(['senderId', 'senderRole', 'senderName', 'text', 'createdAt']) &&
+          request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 3000 &&
+          ((request.resource.data.senderRole == 'student' && tuitionActive() &&
+              get(/databases/$(database)/documents/tuitionChats/$(chatId)).data.studentId == request.auth.uid) ||
+           (request.resource.data.senderRole == 'tutor' && isTutor() &&
+              get(/databases/$(database)/documents/tuitionChats/$(chatId)).data.tutorId == request.auth.uid) ||
+           (request.resource.data.senderRole == 'admin' && isAdmin()));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Timetable for tuition students, set by the admin or by the student's own tutor.
+    match /tuitionTimetable/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && (resource.data.studentId == request.auth.uid ||
+                          ('tutorId' in resource.data && resource.data.tutorId == request.auth.uid))) ||
+        isParentOf(resource.data.studentId);
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.tutorId == request.auth.uid &&
+          studentHasTutorId(request.resource.data.studentId, request.auth.uid));
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.tutorId == request.auth.uid);
     }
 
     // =====================================================

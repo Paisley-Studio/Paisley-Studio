@@ -40,12 +40,12 @@ const { rebuildParentAccess } = require("./parent-access");
    Post to All = every audience listed for that type, nothing more.
 --------------------------------------------------------- */
 const TYPES = {
-  lesson:     { re: /^classrooms\/([^/]+)\/topics\/([^/]+)\/lessons\/([^/]+)$/,     live: "published", audiences: ["online", "remote", "tutors"] },
-  assignment: { re: /^classrooms\/([^/]+)\/topics\/([^/]+)\/assignments\/([^/]+)$/, live: null,        audiences: ["online", "remote", "tutors"] },
-  exam:       { re: /^classrooms\/([^/]+)\/topics\/([^/]+)\/exams\/([^/]+)$/,       live: "Published", audiences: ["online", "remote", "tutors"] },
-  flatExam:   { re: /^classrooms\/([^/]+)\/exams\/([^/]+)$/,                        live: "Published", audiences: ["online", "remote", "tutors"] }
+  lesson:     { re: /^classrooms\/([^/]+)\/topics\/([^/]+)\/lessons\/([^/]+)$/,     live: "published", audiences: ["online", "remote", "tuition", "tutors"] },
+  assignment: { re: /^classrooms\/([^/]+)\/topics\/([^/]+)\/assignments\/([^/]+)$/, live: null,        audiences: ["online", "remote", "tuition", "tutors"] },
+  exam:       { re: /^classrooms\/([^/]+)\/topics\/([^/]+)\/exams\/([^/]+)$/,       live: "Published", audiences: ["online", "remote", "tuition", "tutors"] },
+  flatExam:   { re: /^classrooms\/([^/]+)\/exams\/([^/]+)$/,                        live: "Published", audiences: ["online", "remote", "tuition", "tutors"] }
 };
-const CHOICES = ["all", "tutors", "online", "remote"];
+const CHOICES = ["all", "tutors", "online", "remote", "tuition"];
 
 function parsePath(path) {
   const p = String(path || "");
@@ -58,7 +58,10 @@ function parsePath(path) {
 
 function audiencesFor(choice, type) {
   const allowed = TYPES[type].audiences;
-  if (choice === "all") return allowed.slice();
+  // "Post to All" never includes tuition — CBC tuition content is posted to tuition students explicitly.
+  if (choice === "all") return allowed.filter((a) => a !== "tuition");
+  // Posting to tuition also lets the tutors who teach that CBC subject see the item and mark the submissions.
+  if (choice === "tuition") return allowed.filter((a) => a === "tuition" || a === "tutors");
   return allowed.indexOf(choice) !== -1 ? [choice] : [];
 }
 
@@ -91,7 +94,7 @@ async function publishOne(db, ctx, ref, parsed, audiences) {
     const want = audiences.filter((a) => current[a] !== true);
     if (!want.length) return { path: parsed.path, type: parsed.type, title, status: "already", audiences: [] };
 
-    const next = { online: current.online === true, remote: current.remote === true, tutors: current.tutors === true };
+    const next = { online: current.online === true, remote: current.remote === true, tuition: current.tuition === true, tutors: current.tutors === true };
     const publication = Object.assign({}, d.publication || {});
     want.forEach((a) => {
       next[a] = true;
@@ -216,7 +219,7 @@ function fmt(d) { return d ? d.toLocaleString("en-GB", { dateStyle: "medium", ti
 
 async function notifyStudentsOfWork({ kind, item, cid, entity, only, ids }) {
   const classroom = await W.classroomOf(cid);
-  const probe = Object.assign({}, item, { audiences: { online: true, remote: true, tutors: false } });
+  const probe = Object.assign({}, item, { audiences: { online: true, remote: true, tuition: true, tutors: false } });
   let students = await W.resolveStudents(classroom, item.recipients, probe);
   if (only) students = students.filter((s) => W.studentAudience(s) === only);
   if (ids) students = students.filter((s) => ids.indexOf(s.id) !== -1);
@@ -288,7 +291,7 @@ async function handleWorkAudienceChange(event, kind, live) {
   const { cid, tid } = event.params;
   const id = event.params.aid || event.params.eid || event.params.lid;
   const entity = `${cid}/${tid}/${id}`;
-  for (const aud of ["online", "remote"]) {
+  for (const aud of ["online", "remote", "tuition"]) {
     if (becameVisible(before, after, aud, live)) await notifyStudentsOfWork({ kind, item: after, cid, entity, only: aud });
   }
   // students a tutor has just released the work to

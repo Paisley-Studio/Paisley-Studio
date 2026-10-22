@@ -183,8 +183,9 @@
 
     <div class="field">
       <label>Password</label>
-      <input type="password" id="suPassword" placeholder="At least 6 characters" autocomplete="new-password" />
+      <input type="password" id="suPassword" placeholder="At least 8 characters" autocomplete="new-password" />
     </div>
+    <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><label>Leave this field empty<input type="text" id="suWebsite" tabindex="-1" autocomplete="off" /></label></div>
     <button class="btn" id="signupBtn" type="button"><span class="btn-text"><i class="fas fa-user-plus"></i> Create Account</span></button>
     <div class="pending-note"><i class="fas fa-circle-info"></i><div>New accounts start as <strong>Pending</strong> until the Studio Desk confirms your enrolment and activates your dashboard.</div></div>
   </div>
@@ -246,8 +247,7 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
     .catch(err=>{
       setLoading(btn, false);
       let m = 'Incorrect email or password.';
-      if(err.code === 'auth/user-not-found') m = 'No account found with that email. Try Create Account instead.';
-      else if(err.code === 'auth/too-many-requests') m = 'Too many attempts. Please wait a few minutes.';
+      if(err.code === 'auth/too-many-requests') m = 'Too many attempts. Please wait a few minutes.';
       showErr(m);
     });
 });
@@ -284,8 +284,30 @@ document.getElementById('removeGuardian2Btn').addEventListener('click', ()=>{
   addGuardian2Btn.style.display = '';
 });
 
+// ---- SIGN-UP ABUSE GUARDS ----
+// Reserved / throw-away mail domains can never be a real student or parent. This is a
+// courtesy filter in the page; the real enforcement is server-side (Firestore rules,
+// App Check and the optional sign-up blocking function).
+const BLOCKED_MAIL_DOMAINS = [
+  'example.com','example.org','example.net','mailinator.com','guerrillamail.com','sharklasers.com',
+  '10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','trashmail.com','dispostable.com',
+  'getnada.com','maildrop.cc','throwawaymail.com','fakeinbox.com','mintemail.com','mohmal.com'
+];
+function isFakeMailbox(addr){
+  const m = String(addr||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/);
+  if(!m) return true;
+  const d = m[1];
+  if(/\.(test|invalid|localhost|local|example)$/.test(d)) return true;
+  return BLOCKED_MAIL_DOMAINS.some(b => d === b || d.endsWith('.' + b));
+}
+const _signupShownAt = Date.now();
+
 // ---- SIGN UP ----
 document.getElementById('signupBtn').addEventListener('click', ()=>{
+  // Bot traps: a filled hidden field, or a form completed faster than a person can type.
+  if(document.getElementById('suWebsite').value || (Date.now() - _signupShownAt) < 4000){
+    showErr('Please take a moment to check your details and try again.'); return;
+  }
   const name = document.getElementById('suName').value.trim();
   const email = document.getElementById('suEmail').value.trim();
   const keyStage = suKeyStage.value;
@@ -308,7 +330,9 @@ document.getElementById('signupBtn').addEventListener('click', ()=>{
   }
 
   if(!name || !email || !pass){ showErr('Please fill in your name, email and password.'); return; }
-  if(pass.length < 6){ showErr('Password must be at least 6 characters.'); return; }
+  if(name.length > 120){ showErr('Please enter a shorter name.'); return; }
+  if(isFakeMailbox(email)){ showErr('Please use your own real email address — we need to be able to reach you.'); return; }
+  if(pass.length < 8){ showErr('Password must be at least 8 characters.'); return; }
   if(!keyStage){ showErr('Please select your Key Stage.'); return; }
   if(!year){ showErr('Please select your Year.'); return; }
   if(!subjectIds.length){ showErr('Please select at least one subject you take.'); return; }
@@ -316,7 +340,7 @@ document.getElementById('signupBtn').addEventListener('click', ()=>{
   for(let i=0;i<guardians.length;i++){
     const g = guardians[i], label = 'Parent / Guardian ' + (i+1);
     if(!g.name && i>0){ showErr('Please enter the name of ' + label + '.'); return; }
-    if(!/^\S+@\S+\.\S+$/.test(g.email)){ showErr('Please enter a valid email address for ' + label + '.'); return; }
+    if(!/^\S+@\S+\.\S+$/.test(g.email) || isFakeMailbox(g.email)){ showErr('Please enter a real email address for ' + label + '.'); return; }
     if(i>0 && !g.phone){ showErr('Please enter the phone number of ' + label + '.'); return; }
     if(g.email.toLowerCase() === email.toLowerCase()){ showErr(label + ' needs their own email address — it cannot be the same as your student sign-in email.'); return; }
   }
@@ -330,6 +354,8 @@ document.getElementById('signupBtn').addEventListener('click', ()=>{
 
   auth.createUserWithEmailAndPassword(email, pass)
     .then(cred=>{
+      // Ask the new user to confirm their address (best effort — never blocks sign-up).
+      try { cred.user.sendEmailVerification().catch(function(){}); } catch(e) {}
       return createStudentProfile(cred.user.uid, {
         name, email, keyStage,
         year: Number(year),
@@ -356,6 +382,7 @@ document.getElementById('signupBtn').addEventListener('click', ()=>{
       window._justSignedUp = false;
       let m = 'Could not create account.';
       if(err.code === 'auth/email-already-in-use') m = 'That email already has an account. Try Sign In instead.';
+      else if(err.code === 'auth/too-many-requests') m = 'Too many attempts from this device. Please wait a few minutes and try again.';
       else if(err.code === 'auth/invalid-email') m = 'That email address is not valid.';
       else if(err.code === 'auth/weak-password') m = 'Please choose a stronger password.';
       showErr(m);

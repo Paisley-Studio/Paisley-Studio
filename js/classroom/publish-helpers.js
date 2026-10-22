@@ -42,13 +42,15 @@
   var AUD = {
     online: { label: 'Online Students', icon: 'fa-laptop', desc: 'Normal online students in the matching Key Stage, Year and subject.' },
     remote: { label: 'Remote Students', icon: 'fa-house-laptop', desc: 'Admitted remote students in the matching Key Stage, Year and subject.' },
+    tuition: { label: 'CBC Tuition Students', icon: 'fa-graduation-cap', desc: 'Admitted CBC tuition students in the matching band, Grade and subject.' },
     tutors: { label: 'Tutors', icon: 'fa-chalkboard-user', desc: 'Authorised tutors for the subject; they deliver it to their own students.' }
   };
   var ALL_CHOICES = [
     { id: 'all', label: 'Post to All', icon: 'fa-bullhorn', desc: 'Online students, remote students and tutors.', auds: ['online', 'remote', 'tutors'] },
     { id: 'tutors', label: 'Post to Tutors', icon: 'fa-chalkboard-user', desc: 'Tutors only. They can then release it to their own students.', auds: ['tutors'] },
     { id: 'online', label: 'Post to Online Students', icon: 'fa-laptop', desc: 'Normal online students only. Not shown to remote students.', auds: ['online'] },
-    { id: 'remote', label: 'Post to Remote Students', icon: 'fa-house-laptop', desc: 'Remote students (and their parents) only. Not shown to online students.', auds: ['remote'] }
+    { id: 'remote', label: 'Post to Remote Students', icon: 'fa-house-laptop', desc: 'Remote students (and their parents) only. Not shown to online students.', auds: ['remote'] },
+    { id: 'tuition', label: 'Post to CBC Tuition Students', icon: 'fa-graduation-cap', desc: 'CBC tuition students (and their parents) only. Not shown to online or remote students.', auds: ['tuition', 'tutors'] }
   ];
   var TYPE_LABEL = { lesson: 'Lesson', assignment: 'Homework', exam: 'Exam', flatExam: 'Exam' };
   var TYPE_ICON = { lesson: 'fa-book-open', assignment: 'fa-clipboard-check', exam: 'fa-file-pen', flatExam: 'fa-file-pen' };
@@ -93,7 +95,7 @@
   function ksNum(ks) { var m = /Key Stage\s*(\d)/i.exec(String(ks || '')); return m ? m[1] : ''; }
   function legacyAud(type, d) {
     var live = type === 'lesson' ? (d.status === 'published' || d.status === 'scheduled') : (type === 'assignment' ? true : d.status === 'Published');
-    return { online: live, remote: false, tutors: true };
+    return { online: live, remote: false, tuition: false, tutors: true };
   }
   function effAud(type, d) { return d.audiences && typeof d.audiences === 'object' ? d.audiences : legacyAud(type, d); }
   function chips(a) {
@@ -148,9 +150,13 @@
     injectStyle(); CU.injectStyle(); WH.injectStyle && WH.injectStyle();
     root.classList.add('cr-root');
     var scope = opts.scope || null;
-    var CHOICES = scope === 'remote'
-      ? ALL_CHOICES.filter(function (c) { return c.id === 'remote'; })
-      : ALL_CHOICES;
+    var CHOICES = (scope === 'remote' || scope === 'tuition')
+      ? ALL_CHOICES.filter(function (c) { return c.id === scope; })
+      : ALL_CHOICES.filter(function (c) { return c.id !== 'tuition'; });
+    function isCbc(ks) { return /^CBC\b/i.test(String(ks || '')); }
+    var STAGES = scope === 'tuition' && typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : CU.KEY_STAGES;
+    var YEARS = scope === 'tuition' ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+    var YWORD = scope === 'tuition' ? 'Grade ' : 'Year ';
     var S = { classrooms: opts.classrooms || null, items: [], selected: {}, loaded: false,
       f: { ks: '', year: '', subject: '', topic: '', type: '', state: '', aud: '', q: '' }, menuOpen: false };
     if (opts.lockClassroom) S.lock = opts.lockClassroom;
@@ -164,9 +170,11 @@
       if (S.classrooms) return;
       S.classrooms = CU.snapDocs(await db.collection('classrooms').get());
     }
+    function inScope(c) { return (scope === 'tuition') === isCbc(c.keyStage); }
     function matchingClassrooms() {
       return (S.classrooms || []).filter(function (c) {
         if (S.lock) return c.id === S.lock;
+        if (!inScope(c)) return false;
         return (!S.f.ks || c.keyStage === S.f.ks) && (!S.f.year || String(c.year) === S.f.year) && (!S.f.subject || c.subjectId === S.f.subject);
       });
     }
@@ -183,6 +191,8 @@
         // scope:'remote' → only items already posted to remote, or authored in
         // the Classwork tab (which forces remote). Everything else is hidden so
         // a remote-only publisher cannot accidentally widen the audience.
+        // scope:'tuition' → every item in a CBC classroom is, by definition, tuition content,
+        // so nothing is hidden: the admin chooses what to post.
         if (scope === 'remote') S.items = S.items.filter(function (it) { return it.audiencesEff.remote === true; });
         S.loaded = true;
       } catch (e) { S.hint = 'Could not load content: ' + (e.message || e); S.items = []; }
@@ -211,13 +221,16 @@
       var f = S.f, rows = visible(), nSel = Object.keys(S.selected).length;
       var topics = {}; S.items.forEach(function (i) { topics[i.topicTitle] = 1; });
       var h = '<div class="cr-bar"><div><h3>Publish content</h3><div class="cr-sub">Select prepared lessons, homework and exams, then post them to the right audience. Content is prepared once (in the classroom) — posting never duplicates it.</div></div></div>';
+      if (scope === 'tuition') {
+        h += '<div class="pb-info"><i class="fas fa-graduation-cap"></i> <b>CBC tuition only.</b> Prepared CBC lessons, homework and exams are posted to CBC tuition students from here. Nothing here reaches online or remote students.</div>';
+      }
       if (scope === 'remote') {
         h += '<div class="pb-info"><i class="fas fa-house-laptop"></i> <b>Remote only.</b> This publisher posts content to remote students. Adding a Remote audience does not remove other audiences already set on an item.</div>';
       }
       if (!S.lock) {
         h += '<div class="cr-filters">' +
-          sel('ks', 'Key Stage', CU.KEY_STAGES.map(function (k) { return [k, CU.ksShort(k)]; }), f.ks) +
-          sel('year', 'Year', [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(function (y) { return [String(y), 'Year ' + y]; }), f.year) +
+          sel('ks', scope === 'tuition' ? 'Band' : 'Key Stage', STAGES.map(function (k) { return [k, CU.ksShort(k)]; }), f.ks) +
+          sel('year', scope === 'tuition' ? 'Grade' : 'Year', YEARS.map(function (y) { return [String(y), YWORD + y]; }), f.year) +
           sel('subject', 'Subject', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), f.subject) +
           '<button type="button" class="cr-btn primary" data-a="load"><i class="fas fa-magnifying-glass"></i> Load content</button></div>';
       }
@@ -225,7 +238,7 @@
         sel('topic', 'All topics', Object.keys(topics).sort().map(function (t) { return [t, t]; }), f.topic) +
         sel('type', 'All content types', [['lesson', 'Lessons'], ['assignment', 'Homework'], ['exam', 'Exams']], f.type) +
         sel('state', 'Any state', [['draft', 'Draft'], ['ready', 'Ready'], ['scheduled', 'Scheduled']], f.state) +
-        sel('aud', 'Any publication status', [['posted:online', 'Posted to Online'], ['not:online', 'Not posted to Online'], ['posted:remote', 'Posted to Remote'], ['not:remote', 'Not posted to Remote'], ['posted:tutors', 'Posted to Tutors'], ['not:tutors', 'Not posted to Tutors']], f.aud) +
+        sel('aud', 'Any publication status', [['posted:online', 'Posted to Online'], ['not:online', 'Not posted to Online'], ['posted:remote', 'Posted to Remote'], ['not:remote', 'Not posted to Remote'], ['posted:tuition', 'Posted to Tuition'], ['not:tuition', 'Not posted to Tuition'], ['posted:tutors', 'Posted to Tutors'], ['not:tutors', 'Not posted to Tutors']], f.aud) +
         '<input type="search" data-f="q" placeholder="Search title or topic…" value="' + esc(f.q) + '" aria-label="Search"></div>';
 
       h += '<div class="pb-bar" role="region" aria-label="Publishing actions"><span class="n">' + nSel + ' selected</span>' +
@@ -258,7 +271,7 @@
 
     /* -------------------- review + confirm -------------------- */
     async function countRecipients(clsIds) {
-      var out = { online: 0, remote: 0 };
+      var out = { online: 0, remote: 0, tuition: 0 };
       var seen = {};
       // All classrooms' enrolment lists are read together (was one after another).
       var lists = await Promise.all(clsIds.map(function (id) {
@@ -271,7 +284,7 @@
         if (!r) return;
         r.students.forEach(function (s) {
           if (String(s.status || '').toLowerCase() === 'suspended' || seen[s.id + r.cls.id]) return; seen[s.id + r.cls.id] = 1;
-          if (s.studentType === 'remote') out.remote++; else out.online++;
+          if (s.studentType === 'remote') out.remote++; else if (s.studentType === 'tuition') out.tuition++; else out.online++;
         });
       });
       return out;

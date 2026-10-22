@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CBC Tuition Portal — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C; --warn:#E8A33D;
+    --sidebar-w:240px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:50; flex-direction:column; gap:1rem;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #gate p{color:var(--muted); font-size:.9rem;}
+  body.ready #gate{display:none;}
+
+  #pendingScreen{position:fixed; inset:0; background:var(--paper); display:none; align-items:center; justify-content:center; z-index:40; padding:2rem;}
+  body.pending #pendingScreen{display:flex;}
+  body.pending #shell{display:none;}
+  .pending-card{max-width:420px; background:var(--surface); border-radius:20px; padding:2.4rem 2rem; text-align:center; box-shadow:0 20px 60px rgba(36,95,90,.12); border:1px solid var(--line);}
+  .pending-card i{font-size:2.2rem; color:var(--gold); margin-bottom:1rem;}
+  .pending-card h2{color:var(--brand-deep); margin-bottom:.6rem;}
+  .pending-card p{color:var(--muted); font-size:.9rem; line-height:1.6; margin-bottom:1.4rem;}
+
+  #shell{display:flex; min-height:100vh;}
+  .sidebar{width:var(--sidebar-w); background:var(--brand-deep); flex-shrink:0; display:flex; flex-direction:column; position:fixed; top:0; bottom:0; left:0; z-index:20; transition:transform .3s;}
+  .sidebar-brand{display:flex; align-items:center; gap:.6rem; padding:1.3rem 1.1rem; border-bottom:1px solid rgba(255,255,255,.08); flex-shrink:0;}
+  .sidebar-brand img{width:38px; height:38px; border-radius:9px;}
+  .sidebar-brand .name{color:#fff; font-weight:800; font-size:.95rem; line-height:1.2;}
+  .sidebar-brand .name span{display:block; font-size:.6rem; color:var(--brand-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .sidebar-nav{padding:1rem .8rem; flex:1; overflow-y:auto; min-height:0;}
+  .nav-item{display:flex; align-items:center; gap:.7rem; padding:.68rem .8rem; border-radius:10px; color:rgba(255,255,255,.72); font-weight:700; font-size:.84rem; cursor:pointer; margin-bottom:.2rem; border:none; background:none; width:100%; text-align:left; font-family:var(--font);}
+  .nav-item i{width:16px; text-align:center;}
+  .nav-item:hover{background:rgba(255,255,255,.05); color:#fff;}
+  .nav-item.active{background:rgba(85,191,179,.16); color:#fff;}
+  .nav-badge{margin-left:auto; background:var(--brand); color:#04231f; font-size:.6rem; font-weight:800; padding:.1rem .4rem; border-radius:20px;}
+  .sidebar-foot{padding:1rem .8rem; border-top:1px solid rgba(255,255,255,.08); flex-shrink:0;}
+  .studentchip{display:flex; align-items:center; gap:.6rem; margin-bottom:.7rem;}
+  .avatar{width:34px; height:34px; border-radius:50%; background:var(--brand); color:#0f1a14; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.78rem; flex-shrink:0;}
+  .studentchip .who{color:#fff; font-size:.8rem; font-weight:700; line-height:1.2;}
+  .studentchip .who span{display:block; font-size:.66rem; color:var(--brand-soft); font-weight:600;}
+  .signout{width:100%; padding:.55rem 0; border-radius:9px; border:1px solid rgba(255,255,255,.14); background:none; color:rgba(255,255,255,.75); font-family:var(--font); font-weight:700; font-size:.78rem; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:.4rem;}
+  .signout:hover{color:#fff; background:rgba(231,76,60,.18);}
+
+  .main{margin-left:var(--sidebar-w); flex:1; min-width:0;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:1.1rem 1.8rem; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; gap:.8rem;}
+  .topbar-title{font-size:1.15rem; font-weight:800; color:var(--brand-deep);}
+  .topbar-sub{font-size:.78rem; color:var(--muted);}
+  .topbar-right{display:flex; align-items:center; gap:.8rem; flex-shrink:0;}
+  .menu-toggle{display:none; background:none; border:none; font-size:1.1rem; color:var(--brand-deep); cursor:pointer;}
+  .content{padding:1.8rem;}
+  .view{display:none;}
+  .view.active{display:block; animation:fadeIn .3s;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  .stats-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+    gap:1rem;
+    margin-bottom:1.6rem;
+  }
+  @media(min-width:1200px){
+    .stats-row{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  }
+  .stat-card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.2rem 1.3rem;}
+  .stat-card .icon-wrap{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:.7rem; font-size:.95rem;}
+  .ic-1{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .ic-2{background:rgba(245,200,66,.16); color:#9c7912;}
+  .ic-3{background:rgba(46,184,114,.14); color:#1d8b57;}
+  .ic-4{background:rgba(231,76,60,.1); color:#b8362a;}
+  .stat-card .num{font-size:1.6rem; font-weight:800; color:var(--brand-deep); line-height:1;}
+  .stat-card .lbl{font-size:.76rem; color:var(--muted); margin-top:.3rem;}
+  .stat-card .trend{font-size:.72rem; font-weight:700; margin-top:.4rem; display:flex; align-items:center; gap:.3rem;}
+  .trend.up{color:var(--success);} .trend.down{color:var(--error);} .trend.flat{color:var(--muted);}
+
+  .grid-2{display:grid; grid-template-columns:1.4fr 1fr; gap:1.2rem; margin-bottom:1.2rem;}
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.4rem;}
+  .panel + .panel{margin-top:1.2rem;}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; gap:1rem; flex-wrap:wrap;}
+  .panel-head h3{font-size:1rem; color:var(--brand-deep); margin:0;}
+  .panel-head .sub{font-size:.76rem; color:var(--muted); margin-top:.1rem;}
+  .chart-wrap{height:260px; position:relative;}
+  select.subject-filter{border:1.5px solid var(--line); border-radius:9px; padding:.4rem .7rem; font-family:var(--font); font-size:.78rem; color:var(--ink); background:var(--paper);}
+
+  .table-wrap{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; font-size:.83rem;}
+  thead th{text-align:left; padding:.6rem .5rem; color:var(--muted); font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; border-bottom:1.5px solid var(--line); white-space:nowrap;}
+  tbody td{padding:.65rem .5rem; border-bottom:1px solid var(--line-soft);}
+  tbody tr:last-child td{border-bottom:none;}
+  .pill{display:inline-flex; align-items:center; gap:.3rem; padding:.22rem .6rem; border-radius:99px; font-size:.7rem; font-weight:800;}
+  .pill.up{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .pill.down{background:rgba(231,76,60,.1); color:#b8362a;}
+  .pill.flat{background:var(--sage); color:var(--muted);}
+  .pill.pending{background:rgba(232,163,61,.14); color:#96690f;}
+  .pill.graded{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .pill.open{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .pill.answered{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .pill.exam{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .pill.homework{background:rgba(232,163,61,.14); color:#96690f;}
+  .empty-row{text-align:center; color:var(--muted); padding:1.6rem 0; font-size:.85rem;}
+
+  .item-list{display:flex; flex-direction:column; gap:.8rem;}
+  @media(min-width:1200px){
+    .item-list.grid-wide{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.9rem; }
+  }
+  .item-card{border:1px solid var(--line); border-radius:14px; padding:1rem 1.1rem; display:flex; align-items:flex-start; gap:.9rem;}
+  .item-card .ic{width:38px; height:38px; border-radius:10px; background:var(--sage); color:var(--brand-deep); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .item-card .body{flex:1; min-width:0;}
+  .item-card .title{font-weight:700; font-size:.9rem; color:var(--ink);}
+  .item-card .meta{font-size:.74rem; color:var(--muted); margin-top:.2rem;}
+  .item-card .actions{display:flex; gap:.5rem; margin-top:.7rem; flex-wrap:wrap;}
+  .btn-sm{padding:.42rem .85rem; border-radius:9px; font-size:.76rem; font-weight:700; border:1.5px solid var(--line); background:var(--surface); color:var(--brand-deep); cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:.35rem; font-family:var(--font);}
+  .btn-sm.primary{background:var(--brand-deep); color:#fff; border-color:var(--brand-deep);}
+  .btn-sm.primary:hover{background:var(--brand);}
+  .btn-sm:hover{border-color:var(--brand);}
+  .btn-sm.download-btn {
+    background: var(--brand-deep) !important;
+    color: #fff !important;
+    border-color: var(--brand-deep) !important;
+  }
+  .btn-sm.download-btn i { color: #fff !important; }
+  .btn-sm.download-btn:hover {
+    background: var(--brand) !important;
+    border-color: var(--brand) !important;
+  }
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,26,20,.5); display:none; align-items:center; justify-content:center; z-index:60; padding:1rem;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--surface); border-radius:18px; max-width:520px; width:100%; max-height:88vh; overflow-y:auto; padding:1.6rem;}
+  .modal h3{color:var(--brand-deep); margin-bottom:1rem;}
+  .field{margin-bottom:1rem;}
+  .field label{display:block; font-size:.76rem; font-weight:700; color:var(--brand-deep); margin-bottom:.35rem;}
+  .field input, .field textarea, .field select{width:100%; padding:.65rem .8rem; border:1.5px solid var(--line); border-radius:10px; font-family:var(--font); font-size:.85rem; background:var(--paper); color:var(--ink);}
+  .field textarea{resize:vertical; min-height:80px;}
+  .modal-close{float:right; background:none; border:none; font-size:1rem; color:var(--muted); cursor:pointer;}
+  .field-readonly{background:var(--sage); padding:.6rem .8rem; border-radius:10px; font-size:.84rem; font-weight:700; color:var(--brand-deep); display:flex; align-items:center; gap:.5rem;}
+
+  .tutor-bar{font-size:.78rem; color:var(--muted); display:flex; align-items:center; gap:.4rem;}
+  .tutor-bar strong{color:var(--brand-deep);}
+  .tutor-bar i{color:var(--brand);}
+
+  .topbar-signout{
+    display:inline-flex; align-items:center; gap:.4rem;
+    padding:.5rem .9rem; border-radius:9px; border:1.5px solid var(--line);
+    background:var(--surface); color:var(--brand-deep);
+    font-family:var(--font); font-weight:800; font-size:.76rem;
+    cursor:pointer; text-decoration:none; white-space:nowrap;
+  }
+  .topbar-signout:hover{border-color:var(--error); color:var(--error); background:rgba(231,76,60,.05);}
+  .topbar-signout i{font-size:.72rem;}
+
+  .release-notice{background:rgba(232,163,61,.1); border:1px solid rgba(232,163,61,.3); color:#96690f; padding:.7rem 1rem; border-radius:10px; font-size:.82rem; margin-bottom:1rem; display:flex; align-items:center; gap:.6rem;}
+  .release-notice i{color:var(--warn);}
+
+  .item-card .meta a, .item-card .title a {
+    word-break: break-all;
+    overflow-wrap: break-word;
+  }
+  .file-link {
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    overflow: hidden;
+  }
+  .file-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tutor-grid{display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin-top:.4rem;}
+  .tutor-chip{display:flex; align-items:center; gap:.55rem; padding:.55rem .75rem; background:var(--sage); border-radius:10px;}
+  .tutor-chip .t-ic{width:28px; height:28px; border-radius:50%; background:var(--brand); color:#04231f; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.72rem; flex-shrink:0;}
+  .tutor-chip .t-body{min-width:0; flex:1;}
+  .tutor-chip .t-name{font-size:.82rem; font-weight:700; color:var(--brand-deep);}
+  .tutor-chip .t-subj{font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-weight:700;}
+
+  @media(max-width:1100px){ .grid-2{grid-template-columns:1fr;} }
+
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%);} .sidebar.open{transform:translateX(0);}
+    .main{margin-left:0;} .menu-toggle{display:block;}
+    .stats-row{grid-template-columns:repeat(2,1fr);}
+    .grid-2{grid-template-columns:1fr;}
+    .topbar{padding:.9rem 1.1rem;}
+    .content{padding:1.1rem;}
+    .tutor-bar{display:none;}
+    .topbar-signout span{display:none;}
+    .topbar-signout{padding:.5rem .6rem;}
+    .tutor-grid{grid-template-columns:1fr;}
+  }
+
+  .profile-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:1.2rem;}
+  @media(min-width:1100px){
+    .profile-grid{grid-template-columns:minmax(0,400px) minmax(0,1fr); align-items:start;}
+  }
+
+  .id-card-wrap{display:flex; flex-direction:column; gap:1rem;}
+
+  .id-card{
+    position:relative;
+    width:100%;
+    max-width:560px;
+    aspect-ratio:1.62 / 1;
+    border-radius:20px;
+    overflow:hidden;
+    color:#fff;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(85,191,179,.35), transparent 55%),
+      radial-gradient(circle at 90% 100%, rgba(85,191,179,.20), transparent 55%),
+      linear-gradient(135deg, #17433f 0%, #1d5a54 45%, #245F5A 100%);
+    box-shadow:
+      0 22px 55px rgba(15,26,20,.38),
+      0 0 0 1px rgba(85,191,179,.30),
+      inset 0 1px 0 rgba(255,255,255,.08);
+    display:grid;
+    grid-template-columns: 1.15fr 1fr;
+  }
+  .id-card::before{
+    content:'';
+    position:absolute; inset:0;
+    background-image:radial-gradient(rgba(85,191,179,.10) 1px, transparent 1px);
+    background-size:13px 13px;
+    opacity:.5;
+    pointer-events:none;
+  }
+  .id-card::after{
+    content:'';
+    position:absolute;
+    top:-120px; left:-80px;
+    width:340px; height:340px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(85,191,179,.28), transparent 62%);
+    pointer-events:none;
+  }
+  .id-card-left{
+    position:relative; z-index:2;
+    padding:22px 20px 20px 24px;
+    display:flex; flex-direction:column; justify-content:space-between;
+    border-right:1px solid rgba(85,191,179,.18);
+  }
+  .id-card-right{
+    position:relative; z-index:2;
+    padding:22px 24px 20px 20px;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+
+  .id-brand{display:flex; align-items:center; gap:11px;}
+  .id-brand-logo{
+    width:38px; height:38px; border-radius:50%;
+    background:rgba(85,191,179,.22);
+    box-shadow:inset 0 0 0 1.5px rgba(85,191,179,.55);
+    overflow:hidden; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .id-brand-logo img{width:100%; height:100%; object-fit:contain; display:block; padding:5px;}
+  .id-brand-divider{width:1px; height:32px; background:rgba(255,255,255,.18);}
+  .id-brand-text{line-height:1.05;}
+  .id-brand-name{font-weight:800; font-size:15px; letter-spacing:-.01em; color:#fff;}
+  .id-brand-role{
+    display:block; font-size:8.5px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.10em;
+    color:#7BCBC2; margin-top:4px;
+  }
+
+  .id-avatar-wrap{display:flex; justify-content:center; padding:6px 0 0;}
+  .id-avatar{
+    width:96px; height:96px; border-radius:50%;
+    background:linear-gradient(135deg, #7BCBC2, #55BFB3 55%, #245F5A);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:30px; letter-spacing:.02em; color:#04231f;
+    overflow:hidden;
+    box-shadow:
+      0 0 0 3px rgba(85,191,179,.45),
+      0 0 0 8px rgba(85,191,179,.12),
+      0 0 22px rgba(85,191,179,.55),
+      0 14px 28px rgba(0,0,0,.35);
+  }
+  .id-avatar img{width:100%; height:100%; object-fit:cover; display:block;}
+
+  .id-name-block{padding-top:6px;}
+  .id-name{
+    font-size:20px; font-weight:800; letter-spacing:-.01em; line-height:1.12;
+    color:#fff; word-break:break-word;
+  }
+  .id-meta{
+    font-size:10.5px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.14em;
+    color:#7BCBC2; margin-top:7px;
+  }
+
+  .id-details{display:flex; flex-direction:column; gap:9px; padding-top:4px;}
+  .id-row{display:flex; align-items:baseline; gap:10px;}
+  .id-row .k{
+    font-size:9px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.16em;
+    color:rgba(255,255,255,.72); min-width:78px; flex-shrink:0;
+  }
+  .id-row .v{
+    font-size:12.5px; font-weight:700; color:#fff;
+    word-break:break-word; flex:1; min-width:0;
+  }
+  .id-row .v.mono{
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    letter-spacing:.05em; font-size:12px;
+  }
+
+  .id-verify{
+    display:flex; align-items:center; gap:12px;
+    padding-top:8px;
+    border-top:1px solid rgba(85,191,179,.20);
+  }
+  .id-qr{
+    width:64px; height:64px; border-radius:10px;
+    background:#fff; padding:5px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+    box-shadow:0 6px 16px rgba(0,0,0,.32);
+  }
+  .id-qr img{width:100%; height:100%; display:block; border-radius:4px;}
+  .id-verify-text{flex:1; min-width:0;}
+  .id-verify-text .lbl{
+    font-size:9px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.16em;
+    color:rgba(255,255,255,.72);
+  }
+  .id-verify-text .val{
+    font-size:11.5px; font-weight:700; color:#fff;
+    margin-top:3px; word-break:break-all;
+  }
+  .id-verify-text .site{font-size:9px; color:#7BCBC2; margin-top:3px;}
+
+  .id-stripe{
+    position:absolute; left:0; right:0; bottom:0; height:5px;
+    background:linear-gradient(90deg, #55BFB3, #7BCBC2, #55BFB3);
+    z-index:3;
+  }
+
+  .id-controls{
+    display:flex; gap:.5rem; flex-wrap:wrap;
+    justify-content:center;
+    padding-top:.2rem;
+  }
+  .id-note{
+    text-align:center; font-size:.78rem; color:var(--muted);
+    line-height:1.55; margin-top:.4rem;
+  }
+  .id-note strong{color:var(--brand-deep);}
+
+  @media print {
+    @page { size: A4 landscape; margin: 0; }
+    body * { visibility: hidden !important; }
+    #profileIdCard, #profileIdCard * { visibility: visible !important; }
+    #profileIdCard{
+      position:absolute;
+      top:50%; left:50%;
+      transform:translate(-50%, -50%);
+      width:140mm;
+      height:auto;
+      aspect-ratio:1.62 / 1;
+      border-radius:4mm;
+      box-shadow:none;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    }
+  }
+
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;}
+  .kv .k{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-deep);}
+  .kv .v{font-size:.92rem;margin-top:.15rem;word-break:break-word;}
+  .rm-field{margin-bottom:1rem;} .rm-field label{display:block;font-size:.74rem;font-weight:800;color:var(--brand-deep);text-transform:uppercase;letter-spacing:.03em;margin-bottom:.35rem;}
+  .rm-field input,.rm-field textarea{width:100%;padding:.7rem .85rem;border:1.5px solid var(--line);border-radius:10px;font-family:var(--font);font-size:.9rem;background:var(--paper);color:var(--ink);}
+  .rm-field input:focus,.rm-field textarea:focus{outline:none;border-color:var(--brand);}
+  .rm-msg{font-size:.8rem;margin-top:.5rem;min-height:1.1rem;}
+  @media (max-width:640px){.field-row{grid-template-columns:1fr;}}
+
+  /* ===== NEW: host-scoped loaders ===== */
+  .ps-host-loader{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1rem; padding:3rem 1rem;
+  }
+  .ps-host-loader .spin{
+    width:42px; height:42px; border:4px solid rgba(38,51,49,.1);
+    border-top-color:#55BFB3; border-radius:50%; animation:spin .8s linear infinite;
+  }
+  .ps-host-loader .msg{color:#245F5A; font-weight:700; font-size:.9rem;}
+  .subj-checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.5rem;}
+  .subj-checks label{display:flex;gap:.55rem;align-items:center;padding:.6rem .8rem;border:1.5px solid var(--line);border-radius:12px;font-size:.88rem;font-weight:700;cursor:pointer;background:var(--paper);}
+  .subj-checks input{accent-color:var(--brand-deep);width:16px;height:16px;}
+  .res-tbl{width:100%;border-collapse:collapse;font-size:.88rem;} .res-tbl th{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-deep);text-align:left;padding:.5rem .6rem;border-bottom:2px solid var(--line);} .res-tbl td{padding:.65rem .6rem;border-bottom:1px solid var(--line);}
+  .res-bar{height:7px;border-radius:99px;background:var(--sage);overflow:hidden;min-width:70px;} .res-bar i{display:block;height:100%;background:var(--brand);}
+  .tab-chip{border:1.5px solid var(--line);background:var(--surface);border-radius:99px;padding:.45rem .95rem;font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;} .tab-chip.active{background:var(--brand);border-color:var(--brand);color:#04231f;}
+  .pending-banner{background:rgba(232,163,61,.14);color:#96690f;border-radius:12px;padding:.8rem 1rem;font-size:.86rem;margin-bottom:1rem;}
+</style>
+</head>
+<body>
+<div class="app" id="app" style="display:none;">
+  <aside class="sidebar" id="sidebar" aria-label="CBC tuition navigation">
+    <div class="sidebar-brand">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" />
+      <div class="name">Paisley Studio<span>CBC Tuition Portal</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-view="classroom" type="button"><i class="fas fa-chalkboard"></i> My Classroom <span class="nav-badge" id="navClassroomCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="homework" type="button"><i class="fas fa-book-open"></i> My Homework <span class="nav-badge" id="navHwCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="exams" type="button"><i class="fas fa-file-pen"></i> My Exams <span class="nav-badge" id="navExamCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="results" type="button"><i class="fas fa-chart-line"></i> My Results</button>
+      <button class="nav-item" data-view="timetable" type="button"><i class="fas fa-calendar-week"></i> Timetable</button>
+      <button class="nav-item" data-view="tutor" type="button"><i class="fas fa-comments" id="tutorNavIcon"></i> <span id="tutorNavLabel">My Tutor</span></button>
+      <button class="nav-item" data-view="subjects" type="button"><i class="fas fa-list-check"></i> My Subjects</button>
+      <button class="nav-item" data-view="tickets" type="button"><i class="fas fa-headset"></i> Support Tickets <span class="nav-badge" id="navTicketCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="profile" type="button"><i class="fas fa-id-card"></i> My Profile</button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="studentchip"><div class="avatar" id="sideAvatar">??</div><div class="who" id="sideWho">Loading…<span id="sideKeyStage"></span></div></div>
+      <button class="signout" id="signOutBtn" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:.8rem;">
+        <button class="menu-toggle" id="menuToggle" type="button" aria-label="Open menu"><i class="fas fa-bars"></i></button>
+        <div><div class="topbar-title" id="pageTitle">My Classroom</div><div class="topbar-sub" id="pageSub">Revision lessons and resources for your subjects</div></div>
+      </div>
+      <div class="topbar-right"><div id="bellHost"></div>
+        <button class="topbar-signout" id="topSignOutBtn" type="button" title="Sign out"><i class="fas fa-right-from-bracket"></i> <span>Sign out</span></button></div>
+    </div>
+
+    <div class="content">
+      <section class="view active" id="view-classroom"><div id="classroomHost"></div></section>
+      <section class="view" id="view-homework"><div id="workHwHost"></div></section>
+      <section class="view" id="view-exams"><div id="workExHost"></div></section>
+
+      <section class="view" id="view-results"><div id="resultsHost"></div></section>
+      <section class="view" id="view-timetable"><div id="timetableHost"></div></section>
+      <section class="view" id="view-tutor">
+        <div id="tutorTabs" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem"></div>
+        <div id="tutorHost"></div>
+      </section>
+      <section class="view" id="view-subjects">
+        <div class="panel">
+          <div class="panel-head"><div><h3>My subjects</h3><div class="sub">Choose the subjects you study. Your classroom, homework and exams follow this list.</div></div></div>
+          <div class="rm-field"><div id="subjChecks" class="subj-checks"></div></div>
+          <button class="btn-sm primary" id="saveSubjBtn" type="button">Save subjects</button>
+          <div class="rm-msg" id="subjMsg" role="status"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-tickets">
+        <div class="panel">
+          <div class="panel-head"><div><h3>Support tickets</h3><div class="sub">Ask the Paisley Studio team for help. Only you can see your tickets.</div></div>
+            <button class="btn-sm primary" id="newTicketBtn" type="button"><i class="fas fa-plus"></i> New ticket</button></div>
+          <div class="item-list" id="ticketsList"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-profile">
+        <div class="panel">
+          <div class="panel-head"><div><h3>My profile</h3><div class="sub">Your details as recorded by Paisley Studio admissions.</div></div></div>
+          <div class="field-row" id="profileGrid"></div>
+          <div class="rm-field" style="max-width:360px"><label for="profPhone">Phone (you can update this)</label>
+            <input type="text" id="profPhone" maxlength="40" /></div>
+          <button class="btn-sm primary" id="savePhoneBtn" type="button">Save phone</button>
+          <div class="rm-msg" id="profMsg" role="status"></div>
+          <p class="topbar-sub" style="margin-top:1rem">To change your name, band or Grade, please contact Paisley Studio. You can change your subjects yourself under My Subjects.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- New ticket -->
+<div class="modal-backdrop" id="ticketModal" role="dialog" aria-modal="true" aria-labelledby="ticketTitle" style="display:none;position:fixed;inset:0;background:rgba(15,26,20,.5);z-index:300;align-items:center;justify-content:center;padding:1rem;">
+  <div style="background:var(--surface);border-radius:18px;max-width:520px;width:100%;padding:1.4rem;max-height:92vh;overflow:auto;">
+    <h3 id="ticketTitle" style="color:var(--brand-deep);margin-bottom:1rem;">New support ticket</h3>
+    <div class="rm-field"><label for="tkSubject">Title</label><input type="text" id="tkSubject" maxlength="200" /></div>
+    <div class="rm-field"><label for="tkRef">Related lesson or homework (optional)</label><input type="text" id="tkRef" maxlength="200" /></div>
+    <div class="rm-field"><label for="tkMsg">Message</label><textarea id="tkMsg" rows="5" maxlength="5000"></textarea></div>
+    <div class="rm-msg" id="tkErr" role="alert" style="color:var(--error)"></div>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:.8rem;">
+      <button class="btn-sm" id="tkCancel" type="button">Cancel</button>
+      <button class="btn-sm primary" id="tkSend" type="button">Send ticket</button></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script src="../js/classroom/classroom-helpers.js"></script>
+<script src="../js/classroom/work-helpers.js"></script>
+<script src="../js/classroom/work-learner.js"></script>
+<script src="../js/tuition/tuition-helpers.js"></script>
+<script>
+const auth = firebase.auth();
+let currentUser = null, profile = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function leave(reason){
+  auth.signOut().finally(() => { window.location.href = '/tuition/index.html' + (reason ? '?r=' + reason : ''); });
+}
+
+/* Loader Helpers */
+function hostLoader(host, msg){
+  if(!host) return;
+  host.innerHTML = '<div class="ps-host-loader"><div class="spin"></div><div class="msg">' + (msg || 'Loading…') + '</div></div>';
+}
+
+function withHostLoader(host, msg, mountFn){
+  hostLoader(host, msg);
+  return new Promise(function(resolve){
+    requestAnimationFrame(function(){
+      const box = document.createElement('div');
+      let ret;
+      try { ret = mountFn(box); } catch(e){ ret = Promise.reject(e); }
+      Promise.resolve(ret).then(function(api){
+        host.innerHTML = '';
+        host.appendChild(box);
+        resolve(api || null);
+      }).catch(function(e){
+        console.error(e);
+        host.innerHTML = '<div class="panel"><div class="empty-row">Could not load: ' + esc(e && e.message ? e.message : e) + '</div></div>';
+        resolve(null);
+      });
+    });
+  });
+}
+
+/* Classroom Badge Counter */
+async function calculateClassroomBadges() {
+  if (!window.ClassroomUI || !window.WorkUI || !profile) return;
+  const U = ClassroomUI.util;
+  const subjects = lmzSubjectKeys(profile.subjects);
+  const year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
+  let totalPending = 0;
+
+  // Only Classwork (lessons) feeds this badge, so only that section is fetched.
+  // Cached + shared with the Classroom/Homework tabs so nothing is loaded twice.
+  await Promise.all(subjects.map(async function(k) {
+    try {
+      const cls = await U.findClassroomCached(k, year, profile.keyStage);
+      if (!cls) return;
+      const topics = await U.loadTopicsCached(cls.id);
+      if (!topics.length) return;
+      const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile, ['lessons']);
+      totalPending += work.lessons.filter(function(l){
+        return !l.sub || l.sub.status === 'Corrections';
+      }).length;
+    } catch(e) { console.warn('badge calc error for', k, e); }
+  }));
+
+  const badge = document.getElementById('navClassroomCount');
+  if (badge) {
+    if (totalPending > 0) {
+      badge.textContent = totalPending;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
+/* Access is decided by the STORED studentType + status, nothing in the URL. */
+auth.onAuthStateChanged(async user => {
+  if(!user){ window.location.href = '/tuition/index.html'; return; }
+  try{
+    const doc = await db.collection('students').doc(user.uid).get();
+    if(!doc.exists) return leave('role');
+    const s = doc.data();
+    if(s.studentType !== 'tuition') {
+      // Online and remote students belong in their own portals.
+      auth.signOut().finally(() => { window.location.href = s.studentType === 'remote' ? '/remote/' : '/student/'; });
+      return;
+    }
+    if(s.status !== 'Active') return leave('inactive');
+    currentUser = user; profile = Object.assign({ id: user.uid }, s);
+    $('app').style.display = '';
+    renderProfile(); setupTutorNav(); startFeatures(); mountClassroom(); loadTickets(); calculateClassroomBadges();
+  }catch(e){ console.error(e); leave('error'); }
+});
+
+const TITLES = {
+  classroom:['My Classroom','Revision lessons and resources for your subjects'],
+  homework:['My Homework','Set work, deadlines, submissions and feedback'],
+  exams:['My Exams','Exam papers and your results'],
+  results:['My Results','Marks from your assessed work and exams'],
+  timetable:['Timetable','Your weekly lessons'],
+  tutor:['My Tutor','Chat with your tutor or request one'],
+  subjects:['My Subjects','Choose what you study'],
+  tickets:['Support Tickets','Ask the Paisley Studio team for help'],
+  profile:['My Profile','Your details']
+};
+document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+  const v = btn.dataset.view;
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('active')); $('view-'+v).classList.add('active');
+  $('pageTitle').textContent = TITLES[v][0]; $('pageSub').textContent = TITLES[v][1];
+  if(window.innerWidth <= 900) $('sidebar').classList.remove('open');
+  if(!currentUser || !profile) return;
+  if(v === 'classroom') mountClassroom();
+  else if(v === 'homework') mountWork('homework');
+  else if(v === 'exams') mountWork('exams');
+  else if(v === 'results') loadResults();
+  else if(v === 'timetable') mountTimetableView();
+  else if(v === 'tutor') mountTutorView();
+  else if(v === 'subjects') renderSubjects();
+  else if(v === 'tickets') loadTickets();
+}));
+$('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
+$('signOutBtn').addEventListener('click', () => leave());
+$('topSignOutBtn').addEventListener('click', () => { if(confirm('Sign out of the CBC Tuition portal?')) leave(); });
+
+function mountClassroom(){
+  const host = $('classroomHost');
+  if(!profile) return;
+  withHostLoader(host, 'Loading your classroom…', function(box){
+    return ClassroomUI.mountStudent(box, { uid: currentUser.uid, profile: profile });
+  });
+}
+
+function mountWork(kind){
+  const host = $(kind === 'exams' ? 'workExHost' : 'workHwHost');
+  if(!profile) return;
+  withHostLoader(host, kind === 'exams' ? 'Loading exams…' : 'Loading homework…', function(box){
+    return WorkUI.mountStudentHome(box, { kind: kind, uid: currentUser.uid, profile: profile });
+  });
+}
+
+function startFeatures(){
+  if(typeof mountNotificationBell === 'function'){
+    mountNotificationBell($('bellHost'), currentUser.uid, 'student', {
+      navBadges: { classroom:'#navClassroomCount', homework:'#navHwCount', exams:'#navExamCount' },
+      navigate: cat => { const v = { homework:'homework', exams:'exams', classroom:'classroom', tickets:'tickets', tuition_message:'tutor', tuition_tutor_paired:'tutor', tuition_tutor_declined:'tutor', tuition_timetable:'timetable' }[cat];
+        const b = v && document.querySelector('.nav-item[data-view="'+v+'"]'); if(b) b.click(); }
+    });
+  }
+}
+
+/* ---------------- profile ---------------- */
+function renderProfile(){
+  const p = profile;
+  $('sideAvatar').textContent = lmsInitials(p.name);
+  $('sideWho').firstChild.textContent = p.name || 'Student';
+  $('sideKeyStage').textContent = (p.keyStage || '').replace(/\s*\(.*/, '') + (p.year ? ' · Grade ' + p.year : '');
+  const guard = (p.guardians && p.guardians.length ? p.guardians : []).map(g => esc(g.name || g.email)).join(', ') || '—';
+  const kv = (k, v) => '<div class="kv"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';
+  $('profileGrid').innerHTML =
+    kv('Name', esc(p.name || '—')) + kv('Email', esc(p.email || '—')) +
+    kv('Learning band', esc(p.keyStage || '—')) + kv('Grade', p.year ? 'Grade ' + esc(p.year) : '—') +
+    kv('Learning mode', esc(tuitionModeLabel())) +
+    kv('Subjects', esc(lmzSubjectLabels(p.subjects).join(', ') || 'None assigned yet')) +
+    kv('Parent / guardian', guard) + kv('Account status', esc(p.status || '—'));
+  $('profPhone').value = p.phone || '';
+}
+$('savePhoneBtn').addEventListener('click', async () => {
+  const msg = $('profMsg'); msg.style.color = 'var(--brand-deep)'; msg.textContent = 'Saving…';
+  try{
+    const phone = $('profPhone').value.trim().slice(0, 40);
+    // Tuition students may change only phone, subjects and timestamps (enforced by Firestore rules).
+    await db.collection('students').doc(currentUser.uid).update({ phone, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    profile.phone = phone; msg.textContent = 'Saved.';
+  }catch(e){ msg.style.color = 'var(--error)'; msg.textContent = 'Could not save: ' + (e.message || e); }
+});
+
+/* ---------------- support tickets (reuses the `tickets` collection) ---------------- */
+let tickets = [];
+async function loadTickets(){
+  const list = $('ticketsList');
+  try{
+    const snap = await db.collection('tickets').where('studentId', '==', currentUser.uid).get();
+    tickets = snap.docs.map(d => Object.assign({ id:d.id }, d.data())).sort((a,b) => ((b.createdAt && b.createdAt.seconds)||0) - ((a.createdAt && a.createdAt.seconds)||0));
+  }catch(e){ list.innerHTML = '<div class="empty-row">Could not load your tickets: ' + esc(e.message || e) + '</div>'; return; }
+  const open = tickets.filter(t => t.status === 'Open' || t.status === 'Replied' || t.status === 'Answered').length;
+  const badge = $('navTicketCount'); badge.textContent = open; badge.style.display = open ? '' : 'none';
+  if(!tickets.length){ list.innerHTML = '<div class="empty-row">No tickets yet. Choose “New ticket” to ask for help.</div>'; return; }
+  list.innerHTML = tickets.map(t => {
+    const cls = t.status === 'Answered' || t.status === 'Replied' ? 'answered' : (t.status === 'Closed' ? 'flat' : 'pending');
+    return '<div class="item-card"><div class="ic"><i class="fas fa-headset"></i></div><div class="body">' +
+      '<div class="title">' + esc(t.subject || 'Ticket') + '</div>' +
+      '<div class="meta">' + (t.createdAt ? lmsFmtDate(lmsToDate(t.createdAt)) : '') + ' · <span class="pill ' + cls + '">' + esc(t.status || 'Open') + '</span></div>' +
+      (t.reference ? '<div class="meta">Re: ' + esc(t.reference) + '</div>' : '') +
+      '<div class="meta" style="margin-top:.4rem;white-space:pre-wrap;">' + esc(t.message || '') + '</div>' +
+      (t.reply ? '<div class="meta" style="margin-top:.5rem;padding:.6rem;background:var(--sage);border-radius:8px;white-space:pre-wrap;"><strong style="color:var(--brand-deep);">Paisley Studio replied:</strong> ' + esc(t.reply) + '</div>' : '') +
+      '</div></div>';
+  }).join('');
+}
+const modal = $('ticketModal');
+$('newTicketBtn').addEventListener('click', () => { ['tkSubject','tkRef','tkMsg'].forEach(i => $(i).value = ''); $('tkErr').textContent = ''; modal.style.display = 'flex'; $('tkSubject').focus(); });
+$('tkCancel').addEventListener('click', () => modal.style.display = 'none');
+modal.addEventListener('keydown', e => { if(e.key === 'Escape') modal.style.display = 'none'; });
+let sending = false;
+$('tkSend').addEventListener('click', async () => {
+  if(sending) return;
+  const subject = $('tkSubject').value.trim(), message = $('tkMsg').value.trim();
+  if(!subject || !message){ $('tkErr').textContent = 'Please add a title and a message.'; return; }
+  sending = true; $('tkSend').disabled = true;
+  try{
+    await db.collection('tickets').add({
+      studentId: currentUser.uid, studentName: profile.name || '', studentEmail: profile.email || '', studentType: 'tuition',
+      keyStage: profile.keyStage || '', targetAdmin: true,
+      subject, reference: $('tkRef').value.trim(), message, status: 'Open', reply: '',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    modal.style.display = 'none'; loadTickets();
+  }catch(e){ $('tkErr').textContent = 'Could not send: ' + (e.message || e); }
+  sending = false; $('tkSend').disabled = false;
+});
+
+/* ===================================================================
+   CBC TUITION — mode, results, timetable, tutor chat / request, subjects
+=================================================================== */
+function myTutors(){
+  // [{id, name}] from the admin-set pairing (subjectTutors is the source of truth).
+  const out = {}, map = profile.subjectTutors || {};
+  Object.keys(map).forEach(k => { const e = map[k] || {}; if(e.tutorId) out[e.tutorId] = { id: e.tutorId, name: e.tutorName || 'Your tutor' }; });
+  (profile.tutorIds || []).forEach(id => { if(!out[id]) out[id] = { id: id, name: (id === profile.tutorId && profile.tutorName) || 'Your tutor' }; });
+  if(profile.tutorId && !out[profile.tutorId]) out[profile.tutorId] = { id: profile.tutorId, name: profile.tutorName || 'Your tutor' };
+  return Object.keys(out).map(k => out[k]);
+}
+function hasTutor(){ return myTutors().length > 0; }
+function tuitionModeLabel(){ return hasTutor() ? 'With a tutor' : 'Self-study (materials and assessment)'; }
+function setupTutorNav(){
+  $('tutorNavLabel').textContent = hasTutor() ? 'Chat with Tutor' : 'Request a Tutor';
+  $('tutorNavIcon').className = 'fas ' + (hasTutor() ? 'fa-comments' : 'fa-user-plus');
+  TITLES.tutor = hasTutor() ? ['Chat with Tutor','Message your tutor and share your progress'] : ['Request a Tutor','Ask for a tutor and the Studio Desk will pair you'];
+}
+
+/* ---- results (released exam results) ---- */
+async function loadResults(){
+  const host = $('resultsHost');
+  host.innerHTML = '<div class="panel"><div class="empty-row">Loading results…</div></div>';
+  try{
+    const snap = await db.collection('examResults').where('studentId', '==', currentUser.uid).get();
+    const rows = snap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(r => r.released === true)
+      .sort((a,b) => ((b.date && (b.date.seconds||0)) || 0) - ((a.date && (a.date.seconds||0)) || 0));
+    if(!rows.length){ host.innerHTML = '<div class="panel"><div class="panel-head"><div><h3>My results</h3><div class="sub">Released marks appear here. Marked homework is under My Homework.</div></div></div><div class="empty-row">No released results yet.</div></div>'; return; }
+    host.innerHTML = '<div class="panel"><div class="panel-head"><div><h3>My results</h3><div class="sub">Marks that your tutors have released to you.</div></div></div><div style="overflow:auto"><table class="res-tbl"><thead><tr><th>Subject</th><th>Assessment</th><th>Score</th><th></th><th>Date</th></tr></thead><tbody>' +
+      rows.map(r => {
+        const pct = r.maxScore ? Math.round(r.score / r.maxScore * 100) : null;
+        return '<tr><td>' + esc(r.subject || '—') + '</td><td>' + esc(r.examTitle || '—') + '</td><td><b>' + esc(r.score) + (r.maxScore ? ' / ' + esc(r.maxScore) : '') + '</b>' + (pct != null ? ' <span class="topbar-sub">(' + pct + '%)</span>' : '') + '</td>' +
+          '<td>' + (pct != null ? '<div class="res-bar"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></div>' : '') + '</td>' +
+          '<td>' + (r.date ? esc(lmsFmtDate(lmsToDate(r.date))) : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }catch(e){ host.innerHTML = '<div class="panel"><div class="empty-row">Could not load results: ' + esc(e.message || e) + '</div></div>'; }
+}
+
+/* ---- timetable ---- */
+function mountTimetableView(){
+  TuitionUI.mountTimetable($('timetableHost'), { mode: 'student', uid: currentUser.uid });
+}
+
+/* ---- tutor: chat when paired, request form otherwise ---- */
+let chatApi = null;
+function mountTutorView(){
+  const host = $('tutorHost'), tabs = $('tutorTabs');
+  if(chatApi){ chatApi.destroy(); chatApi = null; }
+  if(!hasTutor()){
+    tabs.innerHTML = '';
+    TuitionUI.mountRequestTutor(host, { uid: currentUser.uid, profile: profile, subjectName: lmzSubjectLabel });
+    return;
+  }
+  const tutors = myTutors();
+  let active = tutors[0];
+  const draw = () => {
+    tabs.innerHTML = tutors.length > 1 ? tutors.map(t => '<button type="button" class="tab-chip' + (t.id === active.id ? ' active' : '') + '" data-t="' + esc(t.id) + '">' + esc(t.name) + '</button>').join('') : '';
+    tabs.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => { active = tutors.find(t => t.id === b.dataset.t); draw(); }));
+    if(chatApi) chatApi.destroy();
+    chatApi = TuitionUI.mountChat(host, { studentId: currentUser.uid, studentName: profile.name, tutorId: active.id, tutorName: active.name,
+      me: { uid: currentUser.uid, role: 'student', name: profile.name } });
+  };
+  draw();
+}
+
+/* ---- subjects ---- */
+function renderSubjects(){
+  const mine = lmzSubjectKeys(profile.subjects);
+  const all = lmzSubjectsForKeyStage(profile.keyStage);
+  $('subjChecks').innerHTML = all.map(s => '<label><input type="checkbox" value="' + esc(s.id) + '"' + (mine.indexOf(s.id) !== -1 ? ' checked' : '') + ' /> ' + esc(s.name) + '</label>').join('') ||
+    '<div class="empty-row">No subjects are listed for your band yet.</div>';
+  $('subjMsg').textContent = '';
+}
+$('saveSubjBtn').addEventListener('click', async () => {
+  const msg = $('subjMsg'); msg.style.color = 'var(--brand-deep)';
+  const ids = Array.from(document.querySelectorAll('#subjChecks input:checked')).map(c => c.value);
+  if(!ids.length){ msg.style.color = 'var(--error)'; msg.textContent = 'Please choose at least one subject.'; return; }
+  msg.textContent = 'Saving…';
+  try{
+    const f = lmzSubjectWriteFields(ids);
+    await db.collection('students').doc(currentUser.uid).update(Object.assign({}, f, { updatedAt: firebase.firestore.FieldValue.serverTimestamp() }));
+    profile.subjects = f.subjects; profile.subjectNames = f.subjectNames;
+    msg.textContent = 'Saved. Your classroom now follows these subjects.';
+    renderProfile(); calculateClassroomBadges();
+  }catch(e){ msg.style.color = 'var(--error)'; msg.textContent = 'Could not save: ' + (e.message || e); }
+});
+</script>
+</body>
+</html>

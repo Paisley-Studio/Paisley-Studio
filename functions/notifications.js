@@ -207,7 +207,7 @@ exports.onLiveClassScheduled = onDocumentCreated(
 
     for (const doc of studentsSnap.docs) {
       const student = doc.data();
-      if (student.studentType === "remote") continue; // remote learners have no live-class feed
+      if (student.studentType === "remote" || student.studentType === "tuition") continue; // remote / tuition learners have no live-class feed
       if (!studentTakes(student, liveClass.subject)) continue;
 
       // In-app
@@ -275,7 +275,7 @@ exports.onHomeworkAssigned = onDocumentCreated(
 
     for (const doc of studentsSnap.docs) {
       const student = doc.data();
-      if (student.studentType === "remote") continue; // legacy homework is online-only
+      if (student.studentType === "remote" || student.studentType === "tuition") continue; // legacy homework is online-only
       if (!studentTakes(student, hw.subject)) continue;
 
       // In-app

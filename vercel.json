@@ -16,6 +16,9 @@
 
     { "source": "/remote",                  "destination": "/remote/index.html" },
     { "source": "/remote/dashboard",        "destination": "/remote/dashboard.html" },
+    { "source": "/tuition",                 "destination": "/tuition.html" },
+    { "source": "/tuition/login",           "destination": "/tuition/index.html" },
+    { "source": "/tuition/dashboard",       "destination": "/tuition/dashboard.html" },
 
     { "source": "/student",                 "destination": "/student/index.html" },
     { "source": "/student/dashboard",       "destination": "/student/dashboard.html" },

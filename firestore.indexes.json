@@ -175,6 +175,38 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipients",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "audiences.tuition",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "exams",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipients",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "audiences.tuition",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

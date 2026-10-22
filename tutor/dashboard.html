@@ -159,6 +159,7 @@
       <button class="nav-item" data-view="granted" type="button"><i class="fas fa-user-shield"></i> Granted to Me <span class="nav-badge" id="navGrantCount">0</span></button>
       <button class="nav-item" data-view="content" type="button"><i class="fas fa-calendar-days"></i> Timetable &amp; Notices</button>
       <button class="nav-item" data-view="mytimetable" type="button"><i class="fas fa-calendar-week"></i> My Timetable</button>
+      <button class="nav-item" data-view="tuition" type="button"><i class="fas fa-graduation-cap"></i> CBC Tuition</button>
       <button class="nav-item" data-view="tickets" type="button"><i class="fas fa-headset"></i> Student Tickets <span class="nav-badge" id="navTicketCount">0</span></button>
     </nav>
     <div class="sidebar-foot">
@@ -279,6 +280,8 @@
           <div id="tutorTeGrid"></div>
         </div>
       </section>
+      <section class="view" id="view-tuition"><div id="tuitionTutorHost"></div></section>
+
       <section class="view" id="view-tickets">
         <div class="panel">
           <div class="table-toolbar">
@@ -324,6 +327,7 @@
 <script src="../js/classroom/classroom-helpers.js"></script>
 <script src="../js/classroom/work-helpers.js"></script>
 <script src="../js/classroom/ink-grader.js"></script>
+<script src="../js/tuition/tuition-helpers.js"></script>
 <script>
 const auth = firebase.auth();
 
@@ -477,6 +481,7 @@ const titles = {
   granted:['Granted to Me','Tasks the Studio Desk has asked you to help mark'],
   content:['Timetable & Notices','Notices and timetables for your Key Stages'],
   mytimetable:['My Timetable','Sessions for the subjects you teach'],
+  tuition:['CBC Tuition','Chat with and schedule lessons for your CBC tuition students'],
   tickets:['Student Tickets','Questions raised by your students']
 };
 document.querySelectorAll('.nav-item').forEach(btn=>{
@@ -1275,6 +1280,56 @@ window.saveTicketReply = (id) => {
     repliedAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(closeModal).catch(e=>alert('Could not save: '+e.message));
 };
+
+/* ===================================================================
+   CBC TUITION — chat + timetable for the tutor's paired tuition students
+=================================================================== */
+(function(){
+  const navBtn = document.querySelector('.nav-item[data-view="tuition"]');
+  if(!navBtn) return;
+  let chatApi = null, activeId = null, sub = 'chat';
+  const host = () => document.getElementById('tuitionTutorHost');
+  const kids = () => (DB.students || []).filter(s => s.studentType === 'tuition' && s.status === 'Active')
+    .sort((a,b) => String(a.name||'').localeCompare(String(b.name||'')));
+
+  function draw(){
+    const list = kids(), h = host();
+    if(chatApi){ chatApi.destroy(); chatApi = null; }
+    if(!list.length){
+      h.innerHTML = '<div class="panel"><div class="empty-row">No CBC tuition students are paired with you yet. When the Studio Desk pairs a student with you, they appear here.</div></div>';
+      return;
+    }
+    if(!activeId || !list.some(s => s.id === activeId)) activeId = list[0].id;
+    const me = list.find(s => s.id === activeId);
+    h.innerHTML =
+      '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem">' +
+        '<button type="button" class="btn btn-sm ' + (sub === 'chat' ? 'btn-primary' : 'btn-ghost') + '" data-sub="chat"><i class="fas fa-comments"></i> Chat</button>' +
+        '<button type="button" class="btn btn-sm ' + (sub === 'tt' ? 'btn-primary' : 'btn-ghost') + '" data-sub="tt"><i class="fas fa-calendar-week"></i> Timetable</button></div>' +
+      (sub === 'chat'
+        ? '<div style="display:grid;grid-template-columns:240px 1fr;gap:1rem" class="tu-split-t"><div class="panel" style="padding:.8rem"><div class="sub" style="margin-bottom:.5rem">My CBC students</div>' +
+          list.map(s => '<button type="button" class="btn btn-sm ' + (s.id === activeId ? 'btn-primary' : 'btn-ghost') + '" data-stu="' + s.id + '" style="display:block;width:100%;text-align:left;margin-bottom:.35rem">' + escapeHtml(s.name || 'Student') + '<br><span style="font-weight:500;font-size:.7rem">' + escapeHtml((s.keyStage||'').replace(/\s*\(.*/, '')) + (s.year ? ' · Grade ' + escapeHtml(s.year) : '') + '</span></button>').join('') +
+          '</div><div id="tuChatHost"></div></div>'
+        : '<div id="tuTtHost"></div>');
+    h.querySelectorAll('[data-sub]').forEach(b => b.addEventListener('click', () => { sub = b.dataset.sub; draw(); }));
+    h.querySelectorAll('[data-stu]').forEach(b => b.addEventListener('click', () => { activeId = b.dataset.stu; draw(); }));
+    if(sub === 'chat'){
+      chatApi = TuitionUI.mountChat(h.querySelector('#tuChatHost'), {
+        studentId: me.id, studentName: me.name, tutorId: tutor.id, tutorName: tutor.name || 'Tutor',
+        me: { uid: auth.currentUser.uid, role: 'tutor', name: tutor.name || 'Tutor' }
+      });
+    } else {
+      TuitionUI.mountTimetable(h.querySelector('#tuTtHost'), {
+        mode: 'tutor', tutor: { id: tutor.id, name: tutor.name || 'Tutor' },
+        students: list.map(s => ({ id: s.id, name: s.name, subjects: lmzSubjectKeys(s.subjects).filter(k => ((s.subjectTutors||{})[k]||{}).tutorId === tutor.id) })),
+        subjectName: lmzSubjectLabel
+      });
+    }
+  }
+  navBtn.addEventListener('click', draw);
+  const st = document.createElement('style');
+  st.textContent = '@media(max-width:760px){.tu-split-t{grid-template-columns:1fr!important}}';
+  document.head.appendChild(st);
+})();
 </script>
 </body>
 </html>

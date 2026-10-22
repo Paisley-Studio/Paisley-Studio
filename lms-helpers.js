@@ -521,10 +521,15 @@ function makeJitsiRoom(title) {
 }
 
 function createRealtimeKitMeeting(title) {
-  return fetch(REALTIMEKIT_WORKER_URL + '/api/create-meeting', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: title || 'Live Class' })
+  // The worker now requires a signed-in staff user (Firebase ID token).
+  var cu = firebase.auth().currentUser;
+  if (!cu) return Promise.reject(new Error('Please sign in again to start a live class.'));
+  return cu.getIdToken().then(function (idToken) {
+    return fetch(REALTIMEKIT_WORKER_URL + '/api/create-meeting', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+      body: JSON.stringify({ title: title || 'Live Class' })
+    });
   }).then(function (res) {
     if (!res.ok) {
       return res.text().then(function (t) {
@@ -1091,7 +1096,20 @@ function getMyActiveAttemptForExam(examId) {
 // working and nothing has to be migrated destructively.
 // =========================================================
 
-var LMZ_KEY_STAGE_YEARS = { 2: [3, 4, 5, 6], 3: [7, 8, 9], 4: [10, 11], 5: [12, 13] };
+var LMZ_KEY_STAGE_YEARS = { 2: [3, 4, 5, 6], 3: [7, 8, 9], 4: [10, 11], 5: [12, 13],
+  // CBC (Kenya) bands — numbers 21-24 never collide with the British Key Stages.
+  21: [1, 2, 3], 22: [4, 5, 6], 23: [7, 8, 9], 24: [10, 11, 12] };
+
+// CBC learning bands. The band name is stored in `keyStage` and the Grade in
+// `year`, so the existing classroom / homework / exam machinery works unchanged.
+// Deliberately NOT part of KEY_STAGES, so CBC never appears in online / remote flows.
+var CBC_BANDS = [
+  'CBC Lower Primary (Grades 1-3)',
+  'CBC Upper Primary (Grades 4-6)',
+  'CBC Junior School (Grades 7-9)',
+  'CBC Senior School (Grades 10-12)'
+];
+function lmzIsCbcBand(ks) { return /^CBC\b/i.test(String(ks || '')); }
 
 var LMZ_SUBJECTS = [
   { id: 'english',            name: 'English',            keyStages: [2, 3, 4, 5] },
@@ -1109,10 +1127,34 @@ var LMZ_SUBJECTS = [
   { id: 'accounting',         name: 'Accounting',         keyStages: [4] },
   { id: 'psychology',         name: 'Psychology',         keyStages: [5] },
   { id: 'sociology',          name: 'Sociology',          keyStages: [5] },
-  { id: 'further-mathematics', name: 'Further Mathematics', keyStages: [5], aliases: ['further maths'] }
+  { id: 'further-mathematics', name: 'Further Mathematics', keyStages: [5], aliases: ['further maths'] },
+
+  // ---- CBC (tuition) subjects. Ids are prefixed `cbc-` and names start with "CBC"
+  // so they can never be confused with the British subjects of the same name. ----
+  { id: 'cbc-english',            name: 'CBC English',                    keyStages: [21, 22, 23, 24] },
+  { id: 'cbc-kiswahili',          name: 'CBC Kiswahili',                  keyStages: [21, 22, 23, 24] },
+  { id: 'cbc-mathematics',        name: 'CBC Mathematics',                keyStages: [21, 22, 23, 24] },
+  { id: 'cbc-environmental',      name: 'CBC Environmental Activities',   keyStages: [21] },
+  { id: 'cbc-creative-arts',      name: 'CBC Creative Arts',              keyStages: [21, 22, 23] },
+  { id: 'cbc-religious-edu',      name: 'CBC Religious Education',        keyStages: [21, 22, 23] },
+  { id: 'cbc-science-tech',       name: 'CBC Science and Technology',     keyStages: [22] },
+  { id: 'cbc-agri-nutrition',     name: 'CBC Agriculture and Nutrition',  keyStages: [22] },
+  { id: 'cbc-social-studies',     name: 'CBC Social Studies',             keyStages: [22, 23] },
+  { id: 'cbc-integrated-science', name: 'CBC Integrated Science',         keyStages: [23] },
+  { id: 'cbc-pretechnical',       name: 'CBC Pre-Technical Studies',      keyStages: [23] },
+  { id: 'cbc-agriculture',        name: 'CBC Agriculture',                keyStages: [23] },
+  { id: 'cbc-business-studies',   name: 'CBC Business Studies',           keyStages: [23, 24] },
+  { id: 'cbc-physics',            name: 'CBC Physics',                    keyStages: [24] },
+  { id: 'cbc-chemistry',          name: 'CBC Chemistry',                  keyStages: [24] },
+  { id: 'cbc-biology',            name: 'CBC Biology',                    keyStages: [24] },
+  { id: 'cbc-computer-science',   name: 'CBC Computer Science',           keyStages: [24] },
+  { id: 'cbc-history',            name: 'CBC History and Citizenship',    keyStages: [24] },
+  { id: 'cbc-geography',          name: 'CBC Geography',                  keyStages: [24] }
 ];
 
 function lmzKeyStageNumber(ks) {
+  var cbc = /^CBC\s+(Lower|Upper|Junior|Senior)/i.exec(String(ks || ''));
+  if (cbc) return { lower: 21, upper: 22, junior: 23, senior: 24 }[cbc[1].toLowerCase()];
   var m = /Key Stage\s*(\d)/i.exec(String(ks || ''));
   return m ? Number(m[1]) : 0;
 }
