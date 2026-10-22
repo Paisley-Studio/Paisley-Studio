@@ -675,7 +675,15 @@
     async function refresh() { await reload(); render(); }
 
     function counts(it) {
-      var aud = audienceOf(it, S.enrolled), subs = S.subs[it.id] || {};
+      var aud = audienceOf(it, S.enrolled);
+      // If a tutor released this to specific students, count them even if the audience flag is false
+      if (it.releasedTo && it.releasedTo.length) {
+        var releasedStudents = S.enrolled.filter(function(s){ return it.releasedTo.indexOf(s.id) !== -1; });
+        var seen = {};
+        aud.forEach(function(s){ seen[s.id] = true; });
+        releasedStudents.forEach(function(s){ if(!seen[s.id]) { aud.push(s); seen[s.id] = true; } });
+      }
+      var subs = S.subs[it.id] || {};
       var submitted = 0, graded = 0;
       aud.forEach(function (s) {
         var x = subs[s.id];
@@ -701,9 +709,13 @@
       }
       
       var due = dueOf(it, 'assignment');
+      var isReleased = it.releasedTo && it.releasedTo.length > 0;
+      
       if (c.total && c.graded === c.total) return pill('b-confirmed', 'All graded', 'fa-circle-check');
+      if (isReleased && c.submitted > c.graded) return pill('b-pending', (c.submitted - c.graded) + ' to grade', 'fa-inbox');
+      if (isReleased && c.total && c.submitted === c.total) return pill('b-confirmed', 'All submitted', 'fa-inbox');
       if (due && due.getTime() < Date.now() && c.submitted < c.total) return pill('b-declined', 'Overdue', 'fa-triangle-exclamation');
-      if (c.submitted > c.graded) return pill('b-pending', (c.submitted - c.graded) + ' to grade', 'fa-inbox');
+      if (isReleased) return pill('b-confirmed', 'Released', 'fa-share-from-square');
       return pill('b-plain', 'Open');
     }
 
