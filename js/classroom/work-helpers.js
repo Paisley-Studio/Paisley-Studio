@@ -1,6 +1,9 @@
 /* =========================================================
    WORK UI (core + staff) — Paisley Studio
-========================================================= */
+   AUTHORING writes audiences: {false, false, false, false}
+   and status: 'Draft'. The Publish Panel is the ONLY place
+   that flips audiences flags and status to Published.
+   ========================================================= */
 (function (global) {
   'use strict';
 
@@ -8,7 +11,6 @@
   if (!U) { console.error('work-helpers.js needs classroom-helpers.js loaded first.'); return; }
   var esc = U.esc;
   var FV = function () { return firebase.firestore.FieldValue; };
-  var DAY = 86400000;
 
   function injectStyle() {
     U.injectStyle();
@@ -196,38 +198,7 @@
     return firebase.firestore.Timestamp.fromDate(d);
   }
 
-  function recipientsHtml(prefix) {
-    return '<div class="cr-field"><label>Recipients</label>' +
-      '<div class="wk-radio"><label><input type="radio" name="' + prefix + 'Aud" value="class" checked> Whole class</label>' +
-      '<label><input type="radio" name="' + prefix + 'Aud" value="students"> Select students</label></div>' +
-      '<div id="' + prefix + 'Pick" style="display:none;margin-top:.5rem"><div class="wk-pick" id="' + prefix + 'List"><div class="cr-note" style="padding:.5rem">Loading students\u2026</div></div></div></div>';
-  }
-  function wireRecipients(m, prefix, cls, existing) {
-    var pick = m.body.querySelector('#' + prefix + 'Pick'), list = m.body.querySelector('#' + prefix + 'List');
-    var chosen = {}; (existing || []).forEach(function (id) { chosen[id] = true; });
-    var loaded = false;
-    function setAud(v) { pick.style.display = v === 'students' ? '' : 'none'; if (v === 'students' && !loaded) load(); }
-    Array.prototype.forEach.call(m.body.querySelectorAll('input[name="' + prefix + 'Aud"]'), function (r) {
-      r.addEventListener('change', function () { setAud(r.value); });
-    });
-    if (existing && existing.length) { m.body.querySelector('input[name="' + prefix + 'Aud"][value="students"]').checked = true; setAud('students'); }
-    async function load() {
-      loaded = true;
-      try {
-        var students = await loadEnrolled(cls);
-        list.innerHTML = students.length ? students.map(function (s) {
-          return '<label><input type="checkbox" value="' + esc(s.id) + '"' + (chosen[s.id] ? ' checked' : '') + '> ' + esc(s.name || s.email || s.id) + '</label>';
-        }).join('') : '<div class="cr-note" style="padding:.5rem">No students are enrolled in this classroom yet.</div>';
-      } catch (e) { list.innerHTML = '<div class="cr-err" style="padding:.5rem">Could not load students: ' + esc(e.message || e) + '</div>'; }
-    }
-    return function read() {
-      var aud = m.body.querySelector('input[name="' + prefix + 'Aud"]:checked').value;
-      if (aud === 'class') return { audience: 'class', recipients: [] };
-      var ids = Array.prototype.map.call(list.querySelectorAll('input[type=checkbox]:checked'), function (c) { return c.value; });
-      return { audience: 'students', recipients: ids };
-    };
-  }
-
+  /* ---- AUTHORING: no audience picker, status Draft, all-false audiences ---- */
   function openPostAssignment(o) {
     injectStyle();
     var cls = o.cls, topics = o.topics, user = o.user, ex = o.existing || null;
@@ -239,7 +210,6 @@
     var m = U.openModal({ title: ex ? 'Edit assignment' : 'Prepare assignment \u2014 ' + U.displayName(cls) + ' Year ' + cls.year, wide: true,
       beforeClose: function () { if (busy) { alert('An upload is still in progress.'); return false; } return true; } });
     
-    // NO AUDIENCE PICKER HERE. Authoring is just content.
     m.body.innerHTML =
       '<div class="cr-row2"><div class="cr-field"><label>Title</label><input type="text" id="wkTitle" maxlength="200" value="' + esc(ex ? ex.title : (o.lessonTitle ? 'Homework: ' + o.lessonTitle : '')) + '"></div>' +
       '<div class="cr-field"><label>Topic</label><select id="wkTopic"' + (ex ? ' disabled' : '') + '>' + topics.map(function (t) {
@@ -248,7 +218,8 @@
       '<div class="cr-field"><label>Deadline</label><div class="cr-actions"><input type="date" id="wkDate" value="' + dp.date + '"><input type="time" id="wkTime" value="' + dp.time + '"></div></div>' +
       '<div class="cr-field"><label>Attach PDF (optional)</label><div id="wkPdfNow">' + (ex && ex.attachedPdfName ? '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(ex.attachedPdfName) + '</span></div>' : '') + '</div>' +
       '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> ' + (ex && ex.attachedPdfName ? 'Replace PDF' : 'Choose PDF') + '</button>' +
-      '<input type="file" id="wkPdfIn" accept="application/pdf,.pdf" style="display:none"><div class="cr-prog" id="wkProg" style="display:none"><div></div></div></div>';
+      '<input type="file" id="wkPdfIn" accept="application/pdf,.pdf" style="display:none"><div class="cr-prog" id="wkProg" style="display:none"><div></div></div></div>' +
+      '<div class="cr-note" style="margin-top:.6rem; background:var(--sage); padding:.6rem .8rem; border-radius:8px;">Nothing is visible to anyone yet. After saving, open <strong>Publish</strong> to send it to Tutors or Students.</div>';
       
     m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
       '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Save assignment') + '</button>';
@@ -289,6 +260,7 @@
         title: title, description: m.body.querySelector('#wkDesc').value.trim(),
         subjectId: cls.subjectId, subjectName: U.displayName(cls), keyStage: cls.keyStage, year: cls.year,
         topicId: tid, topicTitle: topic ? topic.title : '',
+        recipients: [], audience: 'class',
         dueAt: firebase.firestore.Timestamp.fromDate(when), updatedAt: FV().serverTimestamp()
       };
       
@@ -297,11 +269,9 @@
         data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
         data.tutorId = user.uid; data.tutorName = user.name || ''; data.createdBy = user.uid; data.createdAt = FV().serverTimestamp();
-        // Default state for Authoring: Published to Tutors
-        data.status = 'Published';
-        data.audiences = { online: false, remote: false, tuition: false, tutors: true };
-        data.recipients = [];
-        data.audience = 'class';
+        // AUTHORING: invisible to everyone until Publish.
+        data.status = 'Draft';
+        data.audiences = { online: false, remote: false, tuition: false, tutors: false };
       }
       
       btn.disabled = true;
@@ -309,7 +279,6 @@
         await coll(cls.id, tid, 'assignment').doc(aid).set(data, { merge: true });
         m.close(true);
         if (o.afterSave) await o.afterSave();
-        else alert('Assignment saved.');
       } catch (e) {
         console.error('post assignment:', e);
         errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'you do not have permission.' : (e.message || e));
@@ -371,13 +340,13 @@
           '<label><input type="checkbox" id="xManualOpen"' + (manualOpen0 ? ' checked' : '') + '> Open submissions now (manual override)</label>' +
         '</div>' +
         '<div class="cr-note" style="margin-top:.4rem">If not overridden, submissions open automatically at the exam date.</div>' +
-      '</div>';
+      '</div>' +
+      '<div class="cr-note" style="margin-top:.6rem; background:var(--sage); padding:.6rem .8rem; border-radius:8px;">Nothing is visible to anyone yet. After saving, open <strong>Publish</strong> to send it to Tutors or Students.</div>';
 
     m.foot.innerHTML =
       '<span class="cr-err" id="xErr"></span>' +
       '<button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
-      '<button type="button" class="cr-btn" data-s="Draft"><i class="fas fa-floppy-disk"></i> Save draft</button>' +
-      '<button type="button" class="cr-btn primary" data-s="Published"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save &amp; publish' : 'Publish') + '</button>';
+      '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Save exam') + '</button>';
 
     var errEl = m.foot.querySelector('#xErr');
 
@@ -409,67 +378,61 @@
       return { type: type, title: title, examTs: tsFromLocal(d, t), deadlineTs: tsFromLocal(dd, dt), req: req, manualOpen: manualOpen };
     }
 
-    Array.prototype.forEach.call(m.foot.querySelectorAll('[data-s]'), function (btn) {
-      btn.onclick = async function () {
-        errEl.textContent = '';
-        if (busy) { errEl.textContent = 'Please wait for the upload to finish.'; return; }
-        var f = readForm();
-        if (!f.title) { errEl.textContent = 'Please enter the exam title.'; return; }
-        if (!f.examTs) { errEl.textContent = 'Choose the exam date and time.'; return; }
-        if (!f.deadlineTs) { errEl.textContent = 'Choose the submission deadline.'; return; }
-        if (f.deadlineTs.toDate().getTime() < f.examTs.toDate().getTime()) {
-          errEl.textContent = 'The submission deadline must be after the exam date.'; return;
-        }
-        if (!uploaded) { errEl.textContent = 'Upload the exam paper (PDF).'; return; }
-        var status = btn.dataset.s;
+    m.foot.querySelector('[data-a="save"]').onclick = async function () {
+      var btn = this; errEl.textContent = '';
+      if (busy) { errEl.textContent = 'Please wait for the upload to finish.'; return; }
+      var f = readForm();
+      if (!f.title) { errEl.textContent = 'Please enter the exam title.'; return; }
+      if (!f.examTs) { errEl.textContent = 'Choose the exam date and time.'; return; }
+      if (!f.deadlineTs) { errEl.textContent = 'Choose the submission deadline.'; return; }
+      if (f.deadlineTs.toDate().getTime() < f.examTs.toDate().getTime()) {
+        errEl.textContent = 'The submission deadline must be after the exam date.'; return;
+      }
+      if (!uploaded) { errEl.textContent = 'Upload the exam paper (PDF).'; return; }
 
-        var data = {
-          examType: f.type,
-          title: f.title,
-          subjectId: cls.subjectId,
-          subjectName: U.displayName(cls),
-          keyStage: cls.keyStage,
-          year: cls.year,
-          examDate: f.examTs,
-          submissionDeadline: f.deadlineTs,
-          requirements: f.req,
-          examPdfUrl: uploaded.url,
-          examPdfName: uploaded.name,
-          examPdfPath: uploaded.path,
-          submissionsOpen: f.manualOpen === true,
-          status: status,
-          updatedAt: FV().serverTimestamp()
-        };
-
-        if (!ex) {
-          data.tutorId = user.uid;
-          data.tutorName = user.name || '';
-          data.createdBy = user.uid;
-          data.createdAt = FV().serverTimestamp();
-          data.notificationsSentAt = null;
-          // Default state for Authoring: Published to Tutors
-          data.status = 'Published';
-          data.audiences = { online: false, remote: false, tuition: false, tutors: true };
-          data.recipients = [];
-          data.audience = 'class';
-        } else if (status === 'Published' && ex.status !== 'Published') {
-          data.notificationsSentAt = null;
-        } else if (f.examTs.toDate().getTime() !== (ex.examDate ? U.toDate(ex.examDate).getTime() : 0)) {
-          data.parentNoticeSent = false;
-        }
-
-        btn.disabled = true;
-        try {
-          await flatExamRef(cls.id, eid).set(data, { merge: true });
-          m.close(true);
-          if (o.afterSave) await o.afterSave();
-        } catch (e) {
-          console.error('save flat exam:', e);
-          errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'you do not have permission to post in this subject.' : (e.message || e));
-          btn.disabled = false;
-        }
+      var data = {
+        examType: f.type,
+        title: f.title,
+        subjectId: cls.subjectId,
+        subjectName: U.displayName(cls),
+        keyStage: cls.keyStage,
+        year: cls.year,
+        examDate: f.examTs,
+        submissionDeadline: f.deadlineTs,
+        requirements: f.req,
+        examPdfUrl: uploaded.url,
+        examPdfName: uploaded.name,
+        examPdfPath: uploaded.path,
+        submissionsOpen: f.manualOpen === true,
+        updatedAt: FV().serverTimestamp()
       };
-    });
+
+      if (!ex) {
+        data.tutorId = user.uid;
+        data.tutorName = user.name || '';
+        data.createdBy = user.uid;
+        data.createdAt = FV().serverTimestamp();
+        data.notificationsSentAt = null;
+        // AUTHORING: invisible to everyone until Publish.
+        data.status = 'Draft';
+        data.audiences = { online: false, remote: false, tuition: false, tutors: false };
+        data.recipients = [];
+        data.audience = 'class';
+      } else if (f.examTs.toDate().getTime() !== (ex.examDate ? U.toDate(ex.examDate).getTime() : 0)) {
+        data.parentNoticeSent = false;
+      }
+
+      btn.disabled = true;
+      try {
+        await flatExamRef(cls.id, eid).set(data, { merge: true });
+        m.close(true);
+        if (o.afterSave) await o.afterSave();
+      } catch (e) {
+        console.error('save flat exam:', e);
+        errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'you do not have permission to post in this subject.' : (e.message || e));
+        btn.disabled = false;
+      }
+    };
   }
 
   async function setFlatExamStatus(cid, eid, patch) {
@@ -497,6 +460,7 @@
     });
   }
 
+  /* ---- TUTOR RELEASE ---- */
   async function openRelease(it, user) {
     var m = U.openModal({ title: 'Release to my students \u2014 ' + it.title });
     m.body.innerHTML = '<div class="cr-empty">Loading your students\u2026</div>';
