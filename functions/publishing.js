@@ -190,10 +190,16 @@ async function releaseWork(db, tutorUid, tutor, parsed, studentIds) {
     if (row && enrolled && active && tutorTeaches(row, cls.subjectId, tutorUid)) ok.push(sid); else rejected.push(sid);
   }
   if (!ok.length) throw new HttpsError("failed-precondition", "None of the selected students are yours for this subject.");
+  
+  // THE FIX: Update releasedTo AND force the audiences to true so students can see it
   await ref.update({
     releasedTo: admin.firestore.FieldValue.arrayUnion(...ok),
+    "audiences.online": true,
+    "audiences.remote": true,
+    "audiences.tuition": true,
     releaseLog: admin.firestore.FieldValue.arrayUnion({ by: tutorUid, byName: tutor.name || "", at: admin.firestore.Timestamp.now(), count: ok.length })
   });
+  
   return { released: ok, rejected };
 }
 

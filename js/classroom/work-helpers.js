@@ -2,7 +2,7 @@
    WORK UI (core + staff) — Paisley Studio
    AUTHORING writes audiences: {false,false,false,false}
    and status: 'Draft'. The Publish Panel flips the flags.
-   The Release button appears for BOTH Classwork and Assignments.
+   The Release button disappears once released.
    ========================================================= */
 (function (global) {
   'use strict';
@@ -198,7 +198,6 @@
     return firebase.firestore.Timestamp.fromDate(d);
   }
 
-  /* ---- AUTHORING: no audience picker, status Draft, all-false audiences ---- */
   function openPostAssignment(o) {
     injectStyle();
     var cls = o.cls, topics = o.topics, user = o.user, ex = o.existing || null;
@@ -458,7 +457,6 @@
     });
   }
 
-  /* ---- TUTOR RELEASE ---- */
   async function openRelease(it, user) {
     var m = U.openModal({ title: 'Release to my students \u2014 ' + it.title });
     m.body.innerHTML = '<div class="cr-empty">Loading your students\u2026</div>';
@@ -676,13 +674,19 @@
 
     function counts(it) {
       var aud = audienceOf(it, S.enrolled);
-      // If a tutor released this to specific students, count them even if the audience flag is false
+      
+      // Force count students in releasedTo, bypassing the broken S.enrolled
       if (it.releasedTo && it.releasedTo.length) {
-        var releasedStudents = S.enrolled.filter(function(s){ return it.releasedTo.indexOf(s.id) !== -1; });
         var seen = {};
         aud.forEach(function(s){ seen[s.id] = true; });
-        releasedStudents.forEach(function(s){ if(!seen[s.id]) { aud.push(s); seen[s.id] = true; } });
+        it.releasedTo.forEach(function(id){
+          if (!seen[id]) {
+            aud.push({ id: id, name: 'Student' });
+            seen[id] = true;
+          }
+        });
       }
+      
       var subs = S.subs[it.id] || {};
       var submitted = 0, graded = 0;
       aud.forEach(function (s) {
@@ -766,7 +770,7 @@
               '<td><div class="cr-actions">' +
                 '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 adminControls +
-                (!isAdmin ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
+                (!isAdmin && (!it.releasedTo || !it.releasedTo.length) ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
               '</div></td>' +
             '</tr>';
@@ -800,7 +804,7 @@
                 '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
                 itemPill(it) +
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
-                (!isAdmin ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
+                (!isAdmin && (!it.releasedTo || !it.releasedTo.length) ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
             });
@@ -814,9 +818,8 @@
     async function openDetail(it) {
       var m = U.openModal({ title: it.title, wide: true });
       
-      // ---- Release button in modal footer for tutors ----
       m.foot.innerHTML = 
-        (!isAdmin ? '<button type="button" class="cr-btn primary" data-a="release-here" style="margin-right:auto;"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
+        (!isAdmin && (!it.releasedTo || !it.releasedTo.length) ? '<button type="button" class="cr-btn primary" data-a="release-here" style="margin-right:auto;"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
         '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
       var relBtn = m.foot.querySelector('[data-a="release-here"]');
@@ -837,6 +840,14 @@
         } catch (e) { m.body.innerHTML = '<div class="cr-empty">Could not load: ' + esc(e.message || e) + '</div>'; return; }
 
         var aud = audienceOf(it, S.enrolled);
+        if (it.releasedTo && it.releasedTo.length) {
+           var seen = {};
+           aud.forEach(function(s){ seen[s.id] = true; });
+           it.releasedTo.forEach(function(id){
+             if (!seen[id]) { aud.push({ id: id, name: 'Student' }); seen[id] = true; }
+           });
+        }
+
         var head = '<div style="margin-bottom:.8rem">' +
           '<div class="cr-note"><b>' + esc(it.subjectName || '') + '</b>' +
             (kind === 'exam' ? ' \u00b7 ' + esc(it.examType || '') : ' \u00b7 ' + esc(it.topicTitle || '')) + '<br>' +

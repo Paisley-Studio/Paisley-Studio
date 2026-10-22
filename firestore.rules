@@ -371,12 +371,8 @@ service cloud.firestore {
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
       
-      allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || 
-        (isTutor() && (
-          resource.data.tutorId == request.auth.uid ||
-          (resource.data.tutorIds is list && request.auth.uid in resource.data.tutorIds) ||
-          tutorTeachesStudent(uid)
-        ));
+      // FIXED: Allow tutors to read student documents so the release modal can find them
+      allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || isTutor();
 
       allow update: if isAdmin() ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
