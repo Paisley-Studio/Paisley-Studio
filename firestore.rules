@@ -45,11 +45,9 @@ service cloud.firestore {
     function tuitionActive() {
       return isTuitionStudent() && myStudent().status == 'Active';
     }
-    // true for online students (and for non-students); false for remote / tuition students
     function notRemote() {
       return isSignedIn() && !isRemoteStudent() && !isTuitionStudent();
     }
-    // remote / tuition students must be Active to submit work; online students are unaffected
     function studentAccountOk() {
       return (!isRemoteStudent() || remoteActive()) && (!isTuitionStudent() || tuitionActive());
     }
@@ -57,9 +55,6 @@ service cloud.firestore {
     // -----------------------------------------------------
     // MULTI-TUTOR HELPERS
     // -----------------------------------------------------
-    function studentTutorIds(studentId) {
-      return get(/databases/$(database)/documents/students/$(studentId)).data.tutorIds;
-    }
     function tutorTeachesStudent(studentId) {
       let s = get(/databases/$(database)/documents/students/$(studentId)).data;
       return isTutor() && (
@@ -79,8 +74,6 @@ service cloud.firestore {
       return (('tutorIds' in s) && tutorId in s.tutorIds) ||
              (('tutorId'  in s) && s.tutorId == tutorId);
     }
-    // ---- END multi-tutor helpers ----
-
     function tutorOwnsStudent(studentId) {
       return isTutor() &&
         get(/databases/$(database)/documents/students/$(studentId)).data.tutorId == request.auth.uid;
@@ -369,7 +362,6 @@ service cloud.firestore {
         !('tutorId' in request.resource.data) &&
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
-      // CBC tuition self-registration: always Pending, never pre-paired, mode set by admin only.
       allow create: if isOwner(uid) &&
         request.resource.data.status == 'Pending' &&
         request.resource.data.studentType == 'tuition' &&
@@ -378,11 +370,17 @@ service cloud.firestore {
         !('tutorId' in request.resource.data) &&
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
-      allow read: if isOwner(uid) || isAdmin() || tutorTeachesStudent(uid) || isParentOf(uid);
+      
+      allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || 
+        (isTutor() && (
+          resource.data.tutorId == request.auth.uid ||
+          (resource.data.tutorIds is list && request.auth.uid in resource.data.tutorIds) ||
+          tutorTeachesStudent(uid)
+        ));
+
       allow update: if isAdmin() ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt'])) ||
-        // CBC tuition students may change their phone and choose their own subjects; everything else is admin-only.
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'tuition' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt', 'subjects', 'subjectNames']) &&
           (!('subjects' in request.resource.data.diff(resource.data).affectedKeys()) ||
@@ -431,7 +429,12 @@ service cloud.firestore {
     match /submissions/{id} {
       allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
       allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
-      allow read: if isAdmin() || tutorTeachesStudent(resource.data.studentId) || isParentOf(resource.data.studentId);
+      allow read: if isAdmin() || isParentOf(resource.data.studentId) || 
+        (isTutor() && (
+          get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.tutorId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.tutorIds
+        ));
+
       allow update: if
         (isAdmin() ||
           tutorMayManageTask('homework', resource.data.authorTutorId, resource.data.homeworkId) ||
@@ -706,20 +709,15 @@ service cloud.firestore {
           allow update: if isAdmin();
           allow delete: if isAdmin();
 
-          // Students hand in Classwork just like homework
           match /submissions/{sid} {
             allow read: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               isOwner(sid) ||
               isParentOf(sid);
-              
-            // FIXED: Switched forMe() to postedToMyType() because Lessons 
-            // do not have an 'audience' or 'recipients' array, they use 'audiences'.
             allow create: if newStudentWork(sid) &&
               studentAccountOk() &&
               classStudentMay(classroomData(cid)) &&
               postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
-              
             allow update: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
@@ -775,7 +773,6 @@ service cloud.firestore {
         }
       }
 
-      // Flat exams (classrooms/{cid}/exams/{eid})
       match /exams/{eid} {
         allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesExam(cid) || parentSeesExam(cid);
 
@@ -837,9 +834,8 @@ service cloud.firestore {
     }
 
     // =====================================================
-    // CBC TUITION — tutor requests, chat, timetable
+    // CBC TUITION
     // =====================================================
-    // A student asks the admin for a tutor; only the admin can approve / pair.
     match /tuitionRequests/{id} {
       allow create: if tuitionActive() &&
         request.resource.data.studentId == request.auth.uid &&
@@ -852,7 +848,6 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // One chat per student + tutor pair: chatId = studentUid_tutorId.
     function chatMember(c) {
       return isSignedIn() && (c.studentId == request.auth.uid || c.tutorId == request.auth.uid);
     }
@@ -891,7 +886,6 @@ service cloud.firestore {
       }
     }
 
-    // Timetable for tuition students, set by the admin or by the student's own tutor.
     match /tuitionTimetable/{id} {
       allow read: if isAdmin() ||
         (isSignedIn() && (resource.data.studentId == request.auth.uid ||

@@ -1,36 +1,5 @@
 /* =========================================================
    PUBLISH UI — Paisley Studio (admin Classroom area)
-   -----------------------------------------------------------
-   The central place where the Studio Desk SELECTS prepared content and
-   POSTS it to an audience. It is mounted inside the existing admin
-   Classroom (a "Publish" tab and a per-classroom "Publish…" button) —
-   it is NOT a separate navigation item and it never authors content.
-
-   One Publish button → four explicit choices:
-     Post to All · Post to Tutors · Post to Online Students ·
-     Post to Remote Students
-   Every choice goes through a review step that lists the selected
-   items, the audiences that will receive them and the recipient counts,
-   and requires explicit confirmation. The write itself is done by the
-   publishClassroomContent Cloud Function (admin-only, idempotent).
-
-   IMPORTANT — audiences are ADDITIVE, never destructive.
-   The Cloud Function sets audiences[aud] = true on each posted item.
-   It never clears other flags. So a lesson already posted to Remote
-   stays posted to Remote even after you later post it to Online.
-   The review panel makes this explicit so admins aren't surprised.
-
-   SCOPE
-   When mounted with { scope:'remote' }, CHOICES is narrowed to
-   "Post to Remote Students" and the item list is filtered to remote-
-   posted content only. Not used by the main Classroom Publish tab.
-   Used by anything that wants a remote-only publisher.
-
-   Data written per item (see functions/publishing.js):
-     audiences:   { online, remote, tutors }
-     publication: { <audience>: { publishedAt, publishedBy, ... } }
-
-   Requires: classroom-helpers.js, work-helpers.js, firebase functions SDK.
 ========================================================= */
 (function (global) {
   'use strict';
@@ -142,9 +111,6 @@
 
   /* ---------------------------------------------------------
      Workspace
-     opts: { user, classrooms?, lockClassroom?, scope?, onChange? }
-       scope: 'remote'  → only "Post to Remote Students" is offered, and only
-                          remote-posted items are loaded. Optional.
   --------------------------------------------------------- */
   function mount(root, opts) {
     injectStyle(); CU.injectStyle(); WH.injectStyle && WH.injectStyle();
@@ -188,11 +154,6 @@
       try {
         var parts = await Promise.all(list.map(loadClassroomItems));
         S.items = [].concat.apply([], parts);
-        // scope:'remote' → only items already posted to remote, or authored in
-        // the Classwork tab (which forces remote). Everything else is hidden so
-        // a remote-only publisher cannot accidentally widen the audience.
-        // scope:'tuition' → every item in a CBC classroom is, by definition, tuition content,
-        // so nothing is hidden: the admin chooses what to post.
         if (scope === 'remote') S.items = S.items.filter(function (it) { return it.audiencesEff.remote === true; });
         S.loaded = true;
       } catch (e) { S.hint = 'Could not load content: ' + (e.message || e); S.items = []; }
@@ -273,7 +234,6 @@
     async function countRecipients(clsIds) {
       var out = { online: 0, remote: 0, tuition: 0 };
       var seen = {};
-      // All classrooms' enrolment lists are read together (was one after another).
       var lists = await Promise.all(clsIds.map(function (id) {
         var cls = (S.classrooms || []).filter(function (c) { return c.id === id; })[0];
         if (!cls) return Promise.resolve(null);
@@ -303,7 +263,7 @@
       var counts = await countRecipients(Array.from(new Set(picked.map(function (i) { return i.cid; }))));
 
       var already = [], fresh = [], drafts = [], skipped = [], scheduled = [];
-      var alreadyRemoteWidening = [];   // items that already had remote=true and now get a different audience added
+      var alreadyRemoteWidening = [];
       picked.forEach(function (it) {
         var need = choice.auds.filter(function (a) { return !it.audiencesEff[a]; });
         if (blocked(it)) skipped.push(it);
@@ -312,8 +272,6 @@
           fresh.push(it);
           if (it.status === 'draft' || it.status === 'Draft') drafts.push(it);
           if (it.status === 'scheduled') scheduled.push(it);
-          // If this item already carries remote=true and the current choice would
-          // add some other audience, flag it — the CF is additive, so Remote stays.
           var addsOther = choice.auds.some(function (a) { return a !== 'remote'; });
           if (it.audiencesEff.remote === true && addsOther) alreadyRemoteWidening.push(it);
         }
@@ -402,13 +360,11 @@
       
       S.f[f] = e.target.value;
       
-      // If changing the main filters, we need to reload the items from Firestore
       if (f === 'ks' || f === 'year' || f === 'subject') { 
         if (f === 'ks') S.f.year = ''; 
         render(); 
         loadItems(); 
       } else {
-        // Topic, Type, State, and Aud filters just re-render the existing items
         render(); 
       }
     });
