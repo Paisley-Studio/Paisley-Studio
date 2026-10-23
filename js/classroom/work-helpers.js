@@ -1112,32 +1112,74 @@
   }
 
   // =========================================================
-  // STUDENT SIDE FUNCTIONS
+  // STUDENT SIDE FUNCTIONS (API Matches dashboard.html)
   // =========================================================
 
-  async function loadStudentWork(cls) {
-    if (!cls) return { assignments: [], exams: [] };
-    var topics = await U.loadTopics(cls.id);
+  async function loadStudentWork(cls, topics, uid, profile, kinds) {
+    if (!cls) return { assignments: [], lessons: [], exams: [] };
     var items = [];
-    var aParts = await Promise.all(topics.map(function(t) {
-      return coll(cls.id, t.id, 'assignment').get().then(function(snap) {
-        return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'assignment', topicTitle: t.title }, d.data()); });
-      });
+    
+    // Default to all kinds if not specified
+    var k = kinds || ['assignments', 'lessons', 'exams'];
+    
+    if (k.indexOf('assignments') !== -1 || k.indexOf('lessons') !== -1) {
+      var aParts = await Promise.all(topics.map(function(t) {
+        var p = [];
+        if (k.indexOf('assignments') !== -1) {
+          p.push(coll(cls.id, t.id, 'assignment').get().then(function(snap) {
+            return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'assignment', topicTitle: t.title }, d.data()); });
+          }));
+        }
+        if (k.indexOf('lessons') !== -1) {
+          p.push(coll(cls.id, t.id, 'lesson').where('status', '==', 'published').get().then(function(snap) {
+            return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'lesson', isClasswork: true, topicTitle: t.title }, d.data()); });
+          }));
+        }
+        return Promise.all(p).then(function(arr){ return [].concat.apply([], arr); });
+      }));
+      aParts.forEach(function(p){ items = items.concat(p); });
+    }
+    
+    var exams = [];
+    if (k.indexOf('exams') !== -1) {
+      var eSnap = await flatExamsRef(cls.id).get();
+      exams = eSnap.docs.map(function(d){ return Object.assign({ id: d.id, cid: cls.id, kind: 'exam', flat: true }, d.data()); });
+      exams = exams.filter(function(it){ return it.status === 'Published'; });
+    }
+    
+    // Fetch submissions for everything found
+    var subs = {};
+    await Promise.all(items.concat(exams).map(function (it) {
+      var c = it.kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.kind).doc(it.id).collection('submissions');
+      return c.get().then(function (snap) {
+        var m = {}; snap.docs.forEach(function (d) { m[d.id] = Object.assign({ id: d.id }, d.data()); });
+        subs[it.id] = m;
+      }).catch(function () { subs[it.id] = {}; });
     }));
-    aParts.forEach(function(p){ items = items.concat(p); });
-    
-    var eSnap = await flatExamsRef(cls.id).get();
-    var exams = eSnap.docs.map(function(d){ return Object.assign({ id: d.id, cid: cls.id, kind: 'exam', flat: true }, d.data()); });
-    
-    items = items.filter(function(it){ return it.status !== 'Draft'; });
-    exams = exams.filter(function(it){ return it.status === 'Published'; });
-    
-    return { assignments: items, exams: exams };
+
+    // Filter and attach submissions
+    var out = { assignments: [], lessons: [], exams: [] };
+    items.forEach(function(it) {
+      if (it.kind === 'assignment') {
+        it.sub = subs[it.id] ? subs[it.id][uid] : null;
+        out.assignments.push(it);
+      } else if (it.kind === 'lesson') {
+        it.sub = subs[it.id] ? subs[it.id][uid] : null;
+        out.lessons.push(it);
+      }
+    });
+    exams.forEach(function(it) {
+      it.sub = subs[it.id] ? subs[it.id][uid] : null;
+      out.exams.push(it);
+    });
+
+    return out;
   }
 
-  function mountStudentHome(root, opts) {
+  async function mountStudentHome(root, opts) {
     injectStyle();
-    var student = opts.student || {};
+    var kind = opts.kind || 'homework';
+    var student = opts.profile || {};
     var uid = opts.uid;
     root.innerHTML = '<div class="cr-empty">Loading your work…</div>';
 
@@ -1151,18 +1193,24 @@
 
         var allWork = [];
         for (var i = 0; i < myClassrooms.length; i++) {
-          var w = await loadStudentWork(myClassrooms[i]);
-          w.assignments.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
-          w.exams.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
+          var w = await loadStudentWork(myClassrooms[i], await U.loadTopics(myClassrooms[i].id), uid, student);
+          // Only include the kinds requested by the dashboard
+          if (kind === 'homework') {
+            w.assignments.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
+            w.lessons.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
+          } else if (kind === 'exams') {
+            w.exams.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
+          }
         }
 
         allWork = allWork.filter(function(it) { return studentSees(student, it); });
 
         if (!allWork.length) {
-          root.innerHTML = '<div class="cr-empty">No homework or exams posted yet.</div>';
+          root.innerHTML = '<div class="cr-empty">No ' + kind + ' posted yet.</div>';
           return;
         }
 
+        var h = '';
         var bySubject = {};
         allWork.forEach(function(it) {
           var s = it._cls.subjectName || it._cls.subjectId;
@@ -1170,18 +1218,17 @@
           bySubject[s].push(it);
         });
 
-        var h = '';
         Object.keys(bySubject).forEach(function(sub) {
           h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(sub) + '</h4>';
           bySubject[sub].forEach(function(it) {
             var isExam = it.kind === 'exam';
             var due = dueOf(it, isExam ? 'exam' : 'assignment');
-            var state = workState(it, null, isExam ? 'exam' : 'assignment');
+            var state = workState(it, it.sub, isExam ? 'exam' : 'assignment');
             
-            h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : 'fa-clipboard-check') + '"></i></span>' +
+            h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : (it.isClasswork ? 'fa-book-open' : 'fa-clipboard-check')) + '"></i></span>' +
               '<span class="tt">' + esc(it.title) + '<small>' + (isExam ? 'Exam' : (it.isClasswork ? 'Classwork' : 'Homework')) + (due ? ' · Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
               '<span class="cr-badge ' + state.cls + '">' + esc(state.text) + '</span>' +
-              '<div class="cr-actions"><button type="button" class="cr-btn sm primary" onclick="window.WorkUI.openStudentDetail(\'' + it.cid + '\', \'' + it.tid + '\', \'' + it.id + '\', \'' + (isExam ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment')) + '\')"><i class="fas fa-eye"></i> Open</button></div></div>';
+              '<div class="cr-actions"><button type="button" class="cr-btn sm primary" onclick="window.WorkUI.openStudentDetail(\'' + it.cid + '\', \'' + (it.tid||'') + '\', \'' + it.id + '\', \'' + (isExam ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment')) + '\')"><i class="fas fa-eye"></i> Open</button></div></div>';
           });
           h += '</div>';
         });
@@ -1195,7 +1242,7 @@
   }
 
   // =========================================================
-  // THE MISSING UPLOAD MECHANISM
+  // THE MISSING UPLOAD MECHANISM (Direct ID Lookup)
   // =========================================================
   function openStudentDetail(cid, tid, id, kind) {
     injectStyle();
@@ -1259,7 +1306,7 @@
             fileData = { fileUrl: url, fileName: file.name, fileType: file.type, storagePath: path };
           }
           
-          var subRef = ref.collection('submissions').doc(firebase.auth().currentUser.uid);
+          var subRef = kind === 'exam' ? ref.collection('submissions').doc(firebase.auth().currentUser.uid) : ref.collection('submissions').doc(firebase.auth().currentUser.uid);
           var data = Object.assign({
             studentId: firebase.auth().currentUser.uid,
             studentName: firebase.auth().currentUser.displayName || 'Student',
@@ -1285,11 +1332,7 @@
     });
   }
 
-  // =========================================================
-  // EMERGENCY UI FIX FOR UPLOAD BUTTONS
-  // This intercepts any button that tries to trigger the old 
-  // dashboard upload and routes it to our working function.
-  // =========================================================
+  // Intercept the broken dashboard button and use our ID to open the modal
   document.addEventListener('click', function(e) {
     var btn = e.target.closest('button, a');
     if (!btn) return;
@@ -1297,8 +1340,9 @@
     var text = (btn.textContent || '').toLowerCase();
     if (text.includes('submit classwork') || text.includes('upload response') || text.includes('submit response') || text.includes('submit assignment')) {
       e.preventDefault();
-      e.stopPropagation(); // Stop the old dashboard listener from firing
+      e.stopPropagation(); 
       
+      // Extract IDs from the URL (the dashboard should now have them via the 'Open' button in the list)
       var urlParams = new URLSearchParams(window.location.search);
       var cid = urlParams.get('cid');
       var tid = urlParams.get('tid');
@@ -1308,38 +1352,16 @@
       if (cid && id) {
         openStudentDetail(cid, tid, id, kind);
       } else {
-        // If the URL is missing IDs, we try to extract them from the DOM
         var hash = window.location.hash;
         if (hash && hash.includes('id=')) {
            var hParams = new URLSearchParams(hash.substring(1));
            openStudentDetail(hParams.get('cid'), hParams.get('tid'), hParams.get('id'), hParams.get('kind') || 'assignment');
         } else {
-           // The URL is completely clean. We have to parse the DOM to figure out what assignment we are looking at.
-           var titleEl = document.querySelector('h1, h2, h3, .cr-panel h3');
-           var titleText = titleEl ? titleEl.textContent.trim() : '';
-           if (titleText) {
-              // Find the assignment in the database that matches this title
-              db.collectionGroup('assignments').where('title', '==', titleText).get().then(function(snap) {
-                 if (!snap.empty) {
-                    var doc = snap.docs[0];
-                    var pathParts = doc.ref.path.split('/');
-                    var cid = pathParts[1];
-                    var tid = pathParts[3];
-                    var id = doc.id;
-                    openStudentDetail(cid, tid, id, 'assignment');
-                 } else {
-                    alert("Could not find this assignment in the database. Please ensure it has been published.");
-                 }
-              }).catch(function(err) {
-                 alert("Database error: " + err.message);
-              });
-           } else {
-              alert("Could not determine which assignment this is. Please return to the list and click 'Open'.");
-           }
+           alert("Could not determine which assignment this is. Please return to the list and click 'Open'.");
         }
       }
     }
-  }, true); // Use capture phase to intercept before the dashboard code
+  }, true);
 
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
@@ -1351,7 +1373,7 @@
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
     openStudentDetail: openStudentDetail,
-    openSubmitWork: openStudentDetail, // Alias for old dashboard code
+    openSubmitWork: openStudentDetail, 
     _h: {
       U: U, esc: esc, pill: pill,
       coll: coll, collName: collName, subName: subName,

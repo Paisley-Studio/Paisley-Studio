@@ -3,7 +3,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =====================================================
-    // COLLECTION GROUP QUERY EXCEPTION (For Badge Calculations & Lookup)
+    // COLLECTION GROUP QUERY EXCEPTIONS
+    // Required for student dashboard badge calculations
+    // and direct ID lookups without index errors.
     // =====================================================
     match /{path=**}/assignments/{aid} {
       allow read: if isSignedIn();
