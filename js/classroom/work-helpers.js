@@ -1112,14 +1112,13 @@
   }
 
   // =========================================================
-  // STUDENT SIDE FUNCTIONS (API Matches dashboard.html)
+  // STUDENT SIDE FUNCTIONS
   // =========================================================
 
   async function loadStudentWork(cls, topics, uid, profile, kinds) {
     if (!cls) return { assignments: [], lessons: [], exams: [] };
     var items = [];
     
-    // Default to all kinds if not specified
     var k = kinds || ['assignments', 'lessons', 'exams'];
     
     if (k.indexOf('assignments') !== -1 || k.indexOf('lessons') !== -1) {
@@ -1147,7 +1146,6 @@
       exams = exams.filter(function(it){ return it.status === 'Published'; });
     }
     
-    // Fetch submissions for everything found
     var subs = {};
     await Promise.all(items.concat(exams).map(function (it) {
       var c = it.kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.kind).doc(it.id).collection('submissions');
@@ -1157,16 +1155,11 @@
       }).catch(function () { subs[it.id] = {}; });
     }));
 
-    // Filter and attach submissions
     var out = { assignments: [], lessons: [], exams: [] };
     items.forEach(function(it) {
-      if (it.kind === 'assignment') {
-        it.sub = subs[it.id] ? subs[it.id][uid] : null;
-        out.assignments.push(it);
-      } else if (it.kind === 'lesson') {
-        it.sub = subs[it.id] ? subs[it.id][uid] : null;
-        out.lessons.push(it);
-      }
+      it.sub = subs[it.id] ? subs[it.id][uid] : null;
+      if (it.kind === 'assignment') out.assignments.push(it);
+      else if (it.kind === 'lesson') out.lessons.push(it);
     });
     exams.forEach(function(it) {
       it.sub = subs[it.id] ? subs[it.id][uid] : null;
@@ -1194,7 +1187,6 @@
         var allWork = [];
         for (var i = 0; i < myClassrooms.length; i++) {
           var w = await loadStudentWork(myClassrooms[i], await U.loadTopics(myClassrooms[i].id), uid, student);
-          // Only include the kinds requested by the dashboard
           if (kind === 'homework') {
             w.assignments.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
             w.lessons.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
@@ -1242,7 +1234,7 @@
   }
 
   // =========================================================
-  // THE MISSING UPLOAD MECHANISM (Direct ID Lookup)
+  // THE MISSING UPLOAD MECHANISM
   // =========================================================
   function openStudentDetail(cid, tid, id, kind) {
     injectStyle();
@@ -1332,37 +1324,6 @@
     });
   }
 
-  // Intercept the broken dashboard button and use our ID to open the modal
-  document.addEventListener('click', function(e) {
-    var btn = e.target.closest('button, a');
-    if (!btn) return;
-    
-    var text = (btn.textContent || '').toLowerCase();
-    if (text.includes('submit classwork') || text.includes('upload response') || text.includes('submit response') || text.includes('submit assignment')) {
-      e.preventDefault();
-      e.stopPropagation(); 
-      
-      // Extract IDs from the URL (the dashboard should now have them via the 'Open' button in the list)
-      var urlParams = new URLSearchParams(window.location.search);
-      var cid = urlParams.get('cid');
-      var tid = urlParams.get('tid');
-      var id = urlParams.get('id');
-      var kind = urlParams.get('kind') || 'assignment';
-
-      if (cid && id) {
-        openStudentDetail(cid, tid, id, kind);
-      } else {
-        var hash = window.location.hash;
-        if (hash && hash.includes('id=')) {
-           var hParams = new URLSearchParams(hash.substring(1));
-           openStudentDetail(hParams.get('cid'), hParams.get('tid'), hParams.get('id'), hParams.get('kind') || 'assignment');
-        } else {
-           alert("Could not determine which assignment this is. Please return to the list and click 'Open'.");
-        }
-      }
-    }
-  }, true);
-
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
     mountManagement: mountManagement,
@@ -1373,7 +1334,7 @@
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
     openStudentDetail: openStudentDetail,
-    openSubmitWork: openStudentDetail, 
+    openSubmitWork: openStudentDetail, // Alias for old dashboard code
     _h: {
       U: U, esc: esc, pill: pill,
       coll: coll, collName: collName, subName: subName,
