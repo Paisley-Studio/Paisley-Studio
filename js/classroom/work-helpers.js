@@ -1285,6 +1285,62 @@
     });
   }
 
+  // =========================================================
+  // EMERGENCY UI FIX FOR UPLOAD BUTTONS
+  // This intercepts any button that tries to trigger the old 
+  // dashboard upload and routes it to our working function.
+  // =========================================================
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('button, a');
+    if (!btn) return;
+    
+    var text = (btn.textContent || '').toLowerCase();
+    if (text.includes('submit classwork') || text.includes('upload response') || text.includes('submit response') || text.includes('submit assignment')) {
+      e.preventDefault();
+      e.stopPropagation(); // Stop the old dashboard listener from firing
+      
+      var urlParams = new URLSearchParams(window.location.search);
+      var cid = urlParams.get('cid');
+      var tid = urlParams.get('tid');
+      var id = urlParams.get('id');
+      var kind = urlParams.get('kind') || 'assignment';
+
+      if (cid && id) {
+        openStudentDetail(cid, tid, id, kind);
+      } else {
+        // If the URL is missing IDs, we try to extract them from the DOM
+        var hash = window.location.hash;
+        if (hash && hash.includes('id=')) {
+           var hParams = new URLSearchParams(hash.substring(1));
+           openStudentDetail(hParams.get('cid'), hParams.get('tid'), hParams.get('id'), hParams.get('kind') || 'assignment');
+        } else {
+           // The URL is completely clean. We have to parse the DOM to figure out what assignment we are looking at.
+           var titleEl = document.querySelector('h1, h2, h3, .cr-panel h3');
+           var titleText = titleEl ? titleEl.textContent.trim() : '';
+           if (titleText) {
+              // Find the assignment in the database that matches this title
+              db.collectionGroup('assignments').where('title', '==', titleText).get().then(function(snap) {
+                 if (!snap.empty) {
+                    var doc = snap.docs[0];
+                    var pathParts = doc.ref.path.split('/');
+                    var cid = pathParts[1];
+                    var tid = pathParts[3];
+                    var id = doc.id;
+                    openStudentDetail(cid, tid, id, 'assignment');
+                 } else {
+                    alert("Could not find this assignment in the database. Please ensure it has been published.");
+                 }
+              }).catch(function(err) {
+                 alert("Database error: " + err.message);
+              });
+           } else {
+              alert("Could not determine which assignment this is. Please return to the list and click 'Open'.");
+           }
+        }
+      }
+    }
+  }, true); // Use capture phase to intercept before the dashboard code
+
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
     mountManagement: mountManagement,
