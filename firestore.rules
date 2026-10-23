@@ -729,6 +729,7 @@ service cloud.firestore {
             allow read: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               activeGrant('homework', aid) ||
+              (isSignedIn() && resource.data.studentId == request.auth.uid) || // FIXED
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
@@ -752,6 +753,7 @@ service cloud.firestore {
             allow read: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               activeGrant('exam', eid) ||
+              (isSignedIn() && resource.data.studentId == request.auth.uid) || // FIXED
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
@@ -788,6 +790,7 @@ service cloud.firestore {
           allow read: if isAdmin() ||
             classTutorSubject(classroomData(cid).subjectId) ||
             activeGrant('exam', eid) ||
+            (isSignedIn() && resource.data.studentId == request.auth.uid) || // FIXED
             isOwner(studentId) ||
             isParentOf(studentId);
 
