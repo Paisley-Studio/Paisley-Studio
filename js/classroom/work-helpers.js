@@ -1334,6 +1334,7 @@
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
     openStudentDetail: openStudentDetail,
+    openStudentLesson: openStudentDetail, // ADDED THIS LINE
     openSubmitWork: openStudentDetail, // Alias for old dashboard code
     _h: {
       U: U, esc: esc, pill: pill,
