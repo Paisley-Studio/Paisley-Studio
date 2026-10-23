@@ -1,8 +1,5 @@
 /* =========================================================
    WORK UI (core + staff + student) — Paisley Studio
-   AUTHORING writes audiences: {false,false,false,false}
-   and status: 'Draft'. The Publish Panel flips the flags.
-   The Release button disappears once released.
    ========================================================= */
 (function (global) {
   'use strict';
@@ -674,19 +671,13 @@
 
     function counts(it) {
       var aud = audienceOf(it, S.enrolled);
-      
-      // Force count students in releasedTo, bypassing the broken S.enrolled
       if (it.releasedTo && it.releasedTo.length) {
         var seen = {};
         aud.forEach(function(s){ seen[s.id] = true; });
         it.releasedTo.forEach(function(id){
-          if (!seen[id]) {
-            aud.push({ id: id, name: 'Student' });
-            seen[id] = true;
-          }
+          if (!seen[id]) { aud.push({ id: id, name: 'Student' }); seen[id] = true; }
         });
       }
-      
       var subs = S.subs[it.id] || {};
       var submitted = 0, graded = 0;
       aud.forEach(function (s) {
@@ -1121,14 +1112,13 @@
   }
 
   // =========================================================
-  // STUDENT SIDE FUNCTIONS (Restored to fix dashboard errors)
+  // STUDENT SIDE FUNCTIONS
   // =========================================================
 
   async function loadStudentWork(cls) {
     if (!cls) return { assignments: [], exams: [] };
     var topics = await U.loadTopics(cls.id);
     var items = [];
-    // Fetch assignments
     var aParts = await Promise.all(topics.map(function(t) {
       return coll(cls.id, t.id, 'assignment').get().then(function(snap) {
         return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'assignment', topicTitle: t.title }, d.data()); });
@@ -1136,12 +1126,9 @@
     }));
     aParts.forEach(function(p){ items = items.concat(p); });
     
-    // Fetch flat exams
     var eSnap = await flatExamsRef(cls.id).get();
     var exams = eSnap.docs.map(function(d){ return Object.assign({ id: d.id, cid: cls.id, kind: 'exam', flat: true }, d.data()); });
     
-    // Filter by what the student is allowed to see (relying on UI filter for now since rules handle it, 
-    // but we filter out Drafts to be safe)
     items = items.filter(function(it){ return it.status !== 'Draft'; });
     exams = exams.filter(function(it){ return it.status === 'Published'; });
     
@@ -1165,12 +1152,10 @@
         var allWork = [];
         for (var i = 0; i < myClassrooms.length; i++) {
           var w = await loadStudentWork(myClassrooms[i]);
-          // Combine and attach classroom info
           w.assignments.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
           w.exams.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
         }
 
-        // Filter to only what's visible to the student
         allWork = allWork.filter(function(it) { return studentSees(student, it); });
 
         if (!allWork.length) {
@@ -1178,7 +1163,6 @@
           return;
         }
 
-        // Group by subject
         var bySubject = {};
         allWork.forEach(function(it) {
           var s = it._cls.subjectName || it._cls.subjectId;
@@ -1210,14 +1194,96 @@
     load();
   }
 
-  // We need this so the inline onclick in mountStudentHome works
-  function openStudentDetail(cid, tid, id, kind) {
-    // For now, just route to the homework page with the ID.
-    // If your student dashboard handles the modal elsewhere, point it there.
-    window.location.href = 'homework.html?id=' + id + '&cid=' + cid + (tid ? '&tid=' + tid : '') + '&kind=' + kind;
-  }
-
   // =========================================================
+  // THE MISSING UPLOAD MECHANISM
+  // =========================================================
+  function openStudentDetail(cid, tid, id, kind) {
+    injectStyle();
+    var ref = U.clsRef(cid);
+    if (kind !== 'exam') ref = ref.collection('topics').doc(tid).collection(collName(kind)).doc(id);
+    else ref = ref.collection('exams').doc(id);
+
+    var m = U.openModal({ title: 'Submit Work', wide: true });
+    m.body.innerHTML = '<div class="cr-empty">Loading…</div>';
+    
+    ref.get().then(function(doc) {
+      if (!doc.exists) { m.body.innerHTML = '<div class="cr-empty">Item not found.</div>'; return; }
+      var it = Object.assign({ id: doc.id, cid: cid, tid: tid }, doc.data());
+      
+      m.body.innerHTML = '<div class="cr-panel"><h3>' + esc(it.title) + '</h3>' +
+        '<div class="cr-note">' + (it.description || it.requirements || 'No instructions provided.') + '</div>' +
+        (it.attachedPdfUrl || it.examPdfUrl ? '<div class="wk-box"><a href="' + esc(it.attachedPdfUrl || it.examPdfUrl) + '" target="_blank" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download Resource</a></div>' : '') +
+        '<div class="cr-field" style="margin-top:1rem"><label>Your Answer (Optional)</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here..."></textarea></div>' +
+        '<div class="cr-field"><label>Upload File (PDF/Image)</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" style="display:none"></div>' +
+        '<div class="cr-prog" id="subProg" style="display:none;height:4px;background:var(--line);margin-top:1rem;border-radius:2px"><div style="height:100%;background:var(--brand);width:0%;transition:width .2s"></div></div>' +
+        '</div>';
+      
+      m.foot.innerHTML = '<span class="cr-err" id="subErr"></span><button class="cr-btn" data-a="cancel">Cancel</button><button class="cr-btn primary" data-a="submit"><i class="fas fa-paper-plane"></i> Submit</button>';
+      
+      var fileIn = m.body.querySelector('#subFile');
+      var file = null;
+      
+      m.body.querySelector('#subDrop').onclick = function() { fileIn.click(); };
+      fileIn.onchange = function() {
+        file = fileIn.files[0];
+        if (file) m.body.querySelector('#subDrop').innerHTML = '<b>' + esc(file.name) + '</b><br><small>Ready to upload</small>';
+      };
+      
+      m.foot.querySelector('[data-a="cancel"]').onclick = function() { m.close(); };
+      
+      m.foot.querySelector('[data-a="submit"]').onclick = async function() {
+        var btn = this;
+        var text = m.body.querySelector('#subText').value.trim();
+        var err = m.foot.querySelector('#subErr');
+        
+        if (!text && !file) { err.textContent = 'Please type an answer or upload a file.'; return; }
+        
+        btn.disabled = true;
+        err.textContent = '';
+        
+        try {
+          var fileData = {};
+          if (file) {
+            var prog = m.body.querySelector('#subProg');
+            prog.style.display = 'block';
+            var path = 'student-submissions/' + cid + '/' + (tid || 'exams') + '/' + id + '/' + firebase.auth().currentUser.uid + '/' + cleanName(file.name);
+            
+            var task = firebase.storage().ref(path).put(file);
+            task.on('state_changed', function(s) {
+              prog.firstChild.style.width = Math.round((s.bytesTransferred / s.totalBytes) * 100) + '%';
+            });
+            
+            await new Promise(function(res, rej) { task.on('state_changed', null, rej, res); });
+            var url = await firebase.storage().ref(path).getDownloadURL();
+            
+            fileData = { fileUrl: url, fileName: file.name, fileType: file.type, storagePath: path };
+          }
+          
+          var subRef = ref.collection('submissions').doc(firebase.auth().currentUser.uid);
+          var data = Object.assign({
+            studentId: firebase.auth().currentUser.uid,
+            studentName: firebase.auth().currentUser.displayName || 'Student',
+            textAnswer: text,
+            status: 'Submitted',
+            released: false,
+            submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, fileData);
+          
+          await subRef.set(data);
+          m.close();
+          alert('Submission successful! Your tutor will be notified.');
+          
+        } catch (e) {
+          console.error(e);
+          err.textContent = 'Upload failed: ' + (e.message || e);
+          btn.disabled = false;
+        }
+      };
+    }).catch(function(e) {
+      m.body.innerHTML = '<div class="cr-empty">Error loading item: ' + esc(e.message) + '</div>';
+    });
+  }
 
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
@@ -1226,9 +1292,9 @@
     openCreateExam: openCreateExam,
     openGradeFlatExamInk: openGradeFlatExamInk,
     openRelease: openRelease,
-    loadStudentWork: loadStudentWork,        // RESTORED
-    mountStudentHome: mountStudentHome,      // RESTORED
-    openStudentDetail: openStudentDetail,    // RESTORED
+    loadStudentWork: loadStudentWork,
+    mountStudentHome: mountStudentHome,
+    openStudentDetail: openStudentDetail,
     _h: {
       U: U, esc: esc, pill: pill,
       coll: coll, collName: collName, subName: subName,

@@ -371,7 +371,7 @@ service cloud.firestore {
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
       
-      // FIXED: Allow tutors to read student documents so the release modal can find them
+      // Allow tutors to read student documents so the release modal can find them
       allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || isTutor();
 
       allow update: if isAdmin() ||
@@ -420,7 +420,7 @@ service cloud.firestore {
     }
 
     // =====================================================
-    // SUBMISSIONS
+    // SUBMISSIONS (LEGACY)
     // =====================================================
     match /submissions/{id} {
       allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
