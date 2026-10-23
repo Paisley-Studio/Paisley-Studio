@@ -1258,7 +1258,7 @@
   // =========================================================
   // THE MISSING UPLOAD MECHANISM
   // =========================================================
-  function openStudentDetail(cid, tid, id, kind) {
+  function openStudentDetail(cid, tid, id, kind, onDone) {
     injectStyle();
     var ref = U.clsRef(cid);
     if (kind !== 'exam') ref = ref.collection('topics').doc(tid).collection(collName(kind)).doc(id);
@@ -1352,6 +1352,7 @@
           }
           m.close();
           alert('Submission successful! Your tutor will be notified.');
+          if (typeof onDone === 'function') { try { onDone(); } catch (e3) { console.warn(e3); } }
           
         } catch (e) {
           console.error(e);
@@ -1387,9 +1388,18 @@
         '<span class="tt">' + esc(it.title || (isExam ? 'Exam' : 'Homework')) + '<small>' + (isExam ? 'Exam' : 'Homework') +
         (due ? ' \u00b7 Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
         '<span class="cr-badge ' + st.cls + '">' + esc(st.text) + '</span>' +
-        '<div class="cr-actions"><button type="button" class="cr-btn sm primary" onclick="window.WorkUI.openStudentDetail(\'' +
-        esc(it.cid) + '\', \'' + esc(it.tid || '') + '\', \'' + esc(it.id) + '\', \'' + k + '\')"><i class="fas fa-eye"></i> Open</button></div></div>';
+        '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="work-open" data-k="' + k + '" data-t="' + esc(it.tid || '') + '" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button></div></div>';
     }).join('');
+  }
+
+  // Entry points that classroom-helpers.js calls from the student Classroom view.
+  function openStudentItem(o) {
+    o = o || {};
+    openStudentDetail(o.cid, o.tid || '', o.id, o.kind === 'exam' ? 'exam' : 'assignment', o.onChange);
+  }
+  function openStudentLesson(cls, lesson, uid, profile, onDone) {
+    if (!cls || !lesson) return;
+    openStudentDetail(cls.id, lesson.topicId || lesson.tid || '', lesson.id, 'lesson', onDone);
   }
 
   global.WorkUI = global.WorkUI || {};
@@ -1403,6 +1413,8 @@
     mountStudentHome: mountStudentHome,
     studentTopicRows: studentTopicRows,
     openStudentDetail: openStudentDetail,
+    openStudentItem: openStudentItem,
+    openStudentLesson: openStudentLesson,
     openSubmitWork: openStudentDetail, // Alias for old dashboard code
     _h: {
       U: U, esc: esc, pill: pill,

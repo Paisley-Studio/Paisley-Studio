@@ -891,7 +891,7 @@ function attachTicketListeners(){
         });
         rebuild('tickets');
         renderAll();
-      }, (e)=>handleErr(e,'tickets:'+studentId));
+      }, (e)=>{ console.warn('legacy tickets listener skipped for', studentId, e && e.code); });
     listeners.tickets.push(unsub);
   });
 }

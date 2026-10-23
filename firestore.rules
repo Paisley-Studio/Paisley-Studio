@@ -4,7 +4,6 @@ service cloud.firestore {
 
     // =====================================================
     // COLLECTION GROUP QUERY EXCEPTIONS
-    // Allows students to read their own work and badges without permission errors.
     // =====================================================
     match /{path=**}/submissions/{sid} {
       allow read: if isSignedIn();
@@ -16,7 +15,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
     }
     match /{path=**}/lessons/{lid} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin() || isTutor();
     }
 
     // =====================================================
@@ -603,13 +602,13 @@ service cloud.firestore {
       allow read: if isAdmin()
         || (isSignedIn() && ('targetTutorId' in resource.data)
               && resource.data.targetTutorId == request.auth.uid)
-        || tutorOwnsStudent(resource.data.studentId)
+        || tutorTeachesStudent(resource.data.studentId)
         || isParentOf(resource.data.studentId);
 
       allow update: if isAdmin()
         || ((isSignedIn() && ('targetTutorId' in resource.data)
               && resource.data.targetTutorId == request.auth.uid))
-        || tutorOwnsStudent(resource.data.studentId);
+        || tutorTeachesStudent(resource.data.studentId);
 
       allow delete: if isAdmin();
     }
