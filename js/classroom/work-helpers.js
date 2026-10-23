@@ -1364,6 +1364,34 @@
     });
   }
 
+  // Rows of homework / exams shown under each topic in the student's Classroom view.
+  // Called by classroom-helpers.js renderClass() once per topic, in topic order.
+  function studentTopicRows(work, topicId, cls) {
+    if (!work) return '';
+    var rows = [];
+    (work.assignments || []).forEach(function (it) { if (it.tid === topicId) rows.push(it); });
+    var exams = work.exams || [];
+    var claimed = work._examsClaimed || (work._examsClaimed = {});
+    exams.forEach(function (it) {
+      if (claimed[it.id]) return;
+      // flat exams usually have no topic: show each one once, under the first topic rendered
+      if (!it.topicId || it.topicId === topicId) { claimed[it.id] = 1; rows.push(it); }
+    });
+    if (!rows.length) return '';
+    return rows.map(function (it) {
+      var isExam = it.kind === 'exam';
+      var due = dueOf(it, isExam ? 'exam' : 'assignment');
+      var st = workState(it, it.sub, isExam ? 'exam' : 'assignment');
+      var k = isExam ? 'exam' : 'assignment';
+      return '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : 'fa-clipboard-check') + '"></i></span>' +
+        '<span class="tt">' + esc(it.title || (isExam ? 'Exam' : 'Homework')) + '<small>' + (isExam ? 'Exam' : 'Homework') +
+        (due ? ' \u00b7 Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
+        '<span class="cr-badge ' + st.cls + '">' + esc(st.text) + '</span>' +
+        '<div class="cr-actions"><button type="button" class="cr-btn sm primary" onclick="window.WorkUI.openStudentDetail(\'' +
+        esc(it.cid) + '\', \'' + esc(it.tid || '') + '\', \'' + esc(it.id) + '\', \'' + k + '\')"><i class="fas fa-eye"></i> Open</button></div></div>';
+    }).join('');
+  }
+
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
     mountManagement: mountManagement,
@@ -1373,6 +1401,7 @@
     openRelease: openRelease,
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
+    studentTopicRows: studentTopicRows,
     openStudentDetail: openStudentDetail,
     openSubmitWork: openStudentDetail, // Alias for old dashboard code
     _h: {
