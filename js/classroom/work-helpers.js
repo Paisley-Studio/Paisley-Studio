@@ -1115,37 +1115,59 @@
   // STUDENT SIDE FUNCTIONS
   // =========================================================
 
+  // Firestore security rules are NOT filters: a list query is only allowed when
+  // its own constraints prove every possible result is readable by the student.
+  // So each query below repeats the rule conditions (published + audience + recipient).
+  function studentQuery(baseQuery, aud, uid, withRecipients) {
+    function run(q) {
+      return q.get().then(function (snap) { return snap.docs; }).catch(function (e) {
+        console.warn('student work query skipped:', e && e.code, e && e.message);
+        return [];
+      });
+    }
+    var A = 'audiences.' + aud;
+    var jobs = [run(baseQuery().where(A, '==', true).where('audience', '==', 'class'))];
+    if (withRecipients) {
+      jobs.push(run(baseQuery().where(A, '==', true).where('recipients', 'array-contains', uid)));
+      jobs.push(run(baseQuery().where('releasedTo', 'array-contains', uid)));
+    }
+    return Promise.all(jobs).then(function (parts) {
+      var seen = {}, out = [];
+      parts.forEach(function (docs) { docs.forEach(function (d) { if (!seen[d.id]) { seen[d.id] = 1; out.push(d); } }); });
+      return out;
+    });
+  }
+
   async function loadStudentWork(cls, topics, uid, profile, kinds) {
     if (!cls) return { assignments: [], lessons: [], exams: [] };
     var items = [];
-    
+    var aud = studentAud(profile || {});
     var k = kinds || ['assignments', 'lessons', 'exams'];
-    
+
     if (k.indexOf('assignments') !== -1 || k.indexOf('lessons') !== -1) {
       var aParts = await Promise.all(topics.map(function(t) {
         var p = [];
         if (k.indexOf('assignments') !== -1) {
-          p.push(coll(cls.id, t.id, 'assignment').get().then(function(snap) {
-            return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'assignment', topicTitle: t.title }, d.data()); });
+          p.push(studentQuery(function () { return coll(cls.id, t.id, 'assignment'); }, aud, uid, true).then(function(docs) {
+            return docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'assignment', topicTitle: t.title }, d.data()); });
           }));
         }
         if (k.indexOf('lessons') !== -1) {
-          p.push(coll(cls.id, t.id, 'lesson').where('status', '==', 'published').get().then(function(snap) {
+          p.push(coll(cls.id, t.id, 'lesson').where('status', '==', 'published').where('audiences.' + aud, '==', true).get().then(function(snap) {
             return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'lesson', isClasswork: true, topicTitle: t.title }, d.data()); });
-          }));
+          }).catch(function (e) { console.warn('lessons query skipped:', e && e.code, e && e.message); return []; }));
         }
         return Promise.all(p).then(function(arr){ return [].concat.apply([], arr); });
       }));
       aParts.forEach(function(p){ items = items.concat(p); });
     }
-    
+
     var exams = [];
     if (k.indexOf('exams') !== -1) {
-      var eSnap = await flatExamsRef(cls.id).get();
-      exams = eSnap.docs.map(function(d){ return Object.assign({ id: d.id, cid: cls.id, kind: 'exam', flat: true }, d.data()); });
-      exams = exams.filter(function(it){ return it.status === 'Published'; });
+      var eDocs = await studentQuery(function () { return flatExamsRef(cls.id).where('status', '==', 'Published'); }, aud, uid, true);
+      exams = eDocs.map(function(d){ return Object.assign({ id: d.id, cid: cls.id, kind: 'exam', flat: true }, d.data()); });
     }
-    
+
     var subs = {};
     await Promise.all(items.concat(exams).map(function (it) {
       var c = it.kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.kind).doc(it.id).collection('submissions');
@@ -1172,7 +1194,7 @@
   async function mountStudentHome(root, opts) {
     injectStyle();
     var kind = opts.kind || 'homework';
-    var student = opts.profile || {};
+    var student = Object.assign({ id: opts.uid }, opts.profile || {});
     var uid = opts.uid;
     root.innerHTML = '<div class="cr-empty">Loading your work…</div>';
 
@@ -1253,7 +1275,7 @@
         '<div class="cr-note">' + (it.description || it.requirements || 'No instructions provided.') + '</div>' +
         (it.attachedPdfUrl || it.examPdfUrl ? '<div class="wk-box"><a href="' + esc(it.attachedPdfUrl || it.examPdfUrl) + '" target="_blank" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download Resource</a></div>' : '') +
         '<div class="cr-field" style="margin-top:1rem"><label>Your Answer (Optional)</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here..."></textarea></div>' +
-        '<div class="cr-field"><label>Upload File (PDF/Image)</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" style="display:none"></div>' +
+        '<div class="cr-field"><label>Upload File (PDF/Image)</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none"></div>' +
         '<div class="cr-prog" id="subProg" style="display:none;height:4px;background:var(--line);margin-top:1rem;border-radius:2px"><div style="height:100%;background:var(--brand);width:0%;transition:width .2s"></div></div>' +
         '</div>';
       
@@ -1285,9 +1307,18 @@
           if (file) {
             var prog = m.body.querySelector('#subProg');
             prog.style.display = 'block';
-            var path = 'student-submissions/' + cid + '/' + (tid || 'exams') + '/' + id + '/' + firebase.auth().currentUser.uid + '/' + cleanName(file.name);
+            var okType = /^(image\/(jpeg|png|webp)|application\/pdf)$/.test(file.type);
+            if (!okType) throw new Error('Only PDF, JPG, PNG or WEBP files can be uploaded.');
+            if (file.size >= 25 * 1024 * 1024) throw new Error('That file is larger than 25MB.');
+            var uidNow = firebase.auth().currentUser.uid;
+            var clsDoc = await U.clsRef(cid).get();
+            var subjectId = clsDoc.exists ? clsDoc.data().subjectId : '';
+            if (!subjectId) throw new Error('Could not find this class. Please refresh and try again.');
+            // Must match storage.rules: classroom-files/{subject}/{classroom}/{itemId}/submissions/{uid}/{file}
+            // (flat exams: classroom-files/{subject}/{classroom}/exams/{examId}/submissions/{uid}/{file})
+            var path = 'classroom-files/' + subjectId + '/' + cid + '/' + (kind === 'exam' ? 'exams/' : '') + id + '/submissions/' + uidNow + '/' + cleanName(file.name);
             
-            var task = firebase.storage().ref(path).put(file);
+            var task = firebase.storage().ref(path).put(file, { contentType: file.type });
             task.on('state_changed', function(s) {
               prog.firstChild.style.width = Math.round((s.bytesTransferred / s.totalBytes) * 100) + '%';
             });
@@ -1298,18 +1329,27 @@
             fileData = { fileUrl: url, fileName: file.name, fileType: file.type, storagePath: path };
           }
           
-          var subRef = kind === 'exam' ? ref.collection('submissions').doc(firebase.auth().currentUser.uid) : ref.collection('submissions').doc(firebase.auth().currentUser.uid);
-          var data = Object.assign({
-            studentId: firebase.auth().currentUser.uid,
-            studentName: firebase.auth().currentUser.displayName || 'Student',
-            textAnswer: text,
-            status: 'Submitted',
-            released: false,
-            submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, fileData);
-          
-          await subRef.set(data);
+          var me = firebase.auth().currentUser;
+          var subRef = ref.collection('submissions').doc(me.uid);
+          var prev = await subRef.get().catch(function () { return null; });
+          var FVs = firebase.firestore.FieldValue;
+          if (prev && prev.exists) {
+            if (prev.data().status === 'Graded') throw new Error('This work has already been graded and can no longer be changed.');
+            // Re-submission: rules only let students touch these fields.
+            await subRef.update(Object.assign({ textAnswer: text, updatedAt: FVs.serverTimestamp() }, fileData));
+          } else {
+            await subRef.set(Object.assign({
+              studentId: me.uid,
+              studentName: me.displayName || 'Student',
+              studentEmail: me.email || '',
+              textAnswer: text,
+              status: 'Submitted',
+              released: false,
+              createdAt: FVs.serverTimestamp(),
+              submittedAt: FVs.serverTimestamp(),
+              updatedAt: FVs.serverTimestamp()
+            }, fileData));
+          }
           m.close();
           alert('Submission successful! Your tutor will be notified.');
           
@@ -1334,7 +1374,6 @@
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
     openStudentDetail: openStudentDetail,
-    openStudentLesson: openStudentDetail, // ADDED THIS LINE
     openSubmitWork: openStudentDetail, // Alias for old dashboard code
     _h: {
       U: U, esc: esc, pill: pill,
