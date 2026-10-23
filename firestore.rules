@@ -3,15 +3,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =====================================================
-    // COLLECTION GROUP QUERY EXCEPTION (For Badge Calculations)
+    // COLLECTION GROUP QUERY EXCEPTION (For Badge Calculations & Lookup)
     // =====================================================
+    match /{path=**}/assignments/{aid} {
+      allow read: if isSignedIn();
+    }
     match /{path=**}/submissions/{sid} {
-      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
-      allow read: if isAdmin() || isTutor();
+      allow read: if isSignedIn();
     }
     match /{path=**}/attempts/{sid} {
-      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
-      allow read: if isAdmin() || isTutor();
+      allow read: if isSignedIn();
     }
     match /{path=**}/lessons/{lid} {
       allow read: if isAdmin() || isTutor();
