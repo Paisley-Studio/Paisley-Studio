@@ -1285,41 +1285,6 @@
     });
   }
 
-  // =========================================================
-  // EMERGENCY UI FIX FOR UPLOAD BUTTONS
-  // This stops the "Upload mechanism not loaded" alert and
-  // forces the dashboard to use our working openStudentDetail modal.
-  // =========================================================
-  document.addEventListener('click', function(e) {
-    var btn = e.target.closest('button, a');
-    if (!btn) return;
-    
-    var text = (btn.textContent || '').toLowerCase();
-    if (text.includes('submit classwork') || text.includes('upload response') || text.includes('submit response') || text.includes('submit assignment')) {
-      e.preventDefault();
-      e.stopPropagation(); // Stop the old dashboard listener from firing
-      
-      var urlParams = new URLSearchParams(window.location.search);
-      var cid = urlParams.get('cid');
-      var tid = urlParams.get('tid');
-      var id = urlParams.get('id');
-      var kind = urlParams.get('kind') || 'assignment';
-
-      if (cid && id) {
-        openStudentDetail(cid, tid, id, kind);
-      } else {
-        // If the URL is missing IDs, we try to extract them from the DOM
-        var hash = window.location.hash;
-        if (hash && hash.includes('id=')) {
-           var hParams = new URLSearchParams(hash.substring(1));
-           openStudentDetail(hParams.get('cid'), hParams.get('tid'), hParams.get('id'), hParams.get('kind') || 'assignment');
-        } else {
-           alert("Could not determine which assignment this is. Please return to the list and click 'Open'.");
-        }
-      }
-    }
-  }, true); // Use capture phase to intercept before the dashboard code
-
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
     mountManagement: mountManagement,
