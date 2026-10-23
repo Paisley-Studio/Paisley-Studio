@@ -1,5 +1,5 @@
 /* =========================================================
-   WORK UI (core + staff) — Paisley Studio
+   WORK UI (core + staff + student) — Paisley Studio
    AUTHORING writes audiences: {false,false,false,false}
    and status: 'Draft'. The Publish Panel flips the flags.
    The Release button disappears once released.
@@ -1120,6 +1120,105 @@
     return { reload: loadClassrooms };
   }
 
+  // =========================================================
+  // STUDENT SIDE FUNCTIONS (Restored to fix dashboard errors)
+  // =========================================================
+
+  async function loadStudentWork(cls) {
+    if (!cls) return { assignments: [], exams: [] };
+    var topics = await U.loadTopics(cls.id);
+    var items = [];
+    // Fetch assignments
+    var aParts = await Promise.all(topics.map(function(t) {
+      return coll(cls.id, t.id, 'assignment').get().then(function(snap) {
+        return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'assignment', topicTitle: t.title }, d.data()); });
+      });
+    }));
+    aParts.forEach(function(p){ items = items.concat(p); });
+    
+    // Fetch flat exams
+    var eSnap = await flatExamsRef(cls.id).get();
+    var exams = eSnap.docs.map(function(d){ return Object.assign({ id: d.id, cid: cls.id, kind: 'exam', flat: true }, d.data()); });
+    
+    // Filter by what the student is allowed to see (relying on UI filter for now since rules handle it, 
+    // but we filter out Drafts to be safe)
+    items = items.filter(function(it){ return it.status !== 'Draft'; });
+    exams = exams.filter(function(it){ return it.status === 'Published'; });
+    
+    return { assignments: items, exams: exams };
+  }
+
+  function mountStudentHome(root, opts) {
+    injectStyle();
+    var student = opts.student || {};
+    var uid = opts.uid;
+    root.innerHTML = '<div class="cr-empty">Loading your work…</div>';
+
+    async function load() {
+      try {
+        var clsSnap = await db.collection('classrooms').get();
+        var myClassrooms = clsSnap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }).filter(function(c){
+          var subs = lmzSubjectKeys(student.subjects);
+          return subs.indexOf(c.subjectId) !== -1 && (student.year == null || Number(student.year) === Number(c.year));
+        });
+
+        var allWork = [];
+        for (var i = 0; i < myClassrooms.length; i++) {
+          var w = await loadStudentWork(myClassrooms[i]);
+          // Combine and attach classroom info
+          w.assignments.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
+          w.exams.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
+        }
+
+        // Filter to only what's visible to the student
+        allWork = allWork.filter(function(it) { return studentSees(student, it); });
+
+        if (!allWork.length) {
+          root.innerHTML = '<div class="cr-empty">No homework or exams posted yet.</div>';
+          return;
+        }
+
+        // Group by subject
+        var bySubject = {};
+        allWork.forEach(function(it) {
+          var s = it._cls.subjectName || it._cls.subjectId;
+          if (!bySubject[s]) bySubject[s] = [];
+          bySubject[s].push(it);
+        });
+
+        var h = '';
+        Object.keys(bySubject).forEach(function(sub) {
+          h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(sub) + '</h4>';
+          bySubject[sub].forEach(function(it) {
+            var isExam = it.kind === 'exam';
+            var due = dueOf(it, isExam ? 'exam' : 'assignment');
+            var state = workState(it, null, isExam ? 'exam' : 'assignment');
+            
+            h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : 'fa-clipboard-check') + '"></i></span>' +
+              '<span class="tt">' + esc(it.title) + '<small>' + (isExam ? 'Exam' : (it.isClasswork ? 'Classwork' : 'Homework')) + (due ? ' · Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
+              '<span class="cr-badge ' + state.cls + '">' + esc(state.text) + '</span>' +
+              '<div class="cr-actions"><button type="button" class="cr-btn sm primary" onclick="window.WorkUI.openStudentDetail(\'' + it.cid + '\', \'' + it.tid + '\', \'' + it.id + '\', \'' + (isExam ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment')) + '\')"><i class="fas fa-eye"></i> Open</button></div></div>';
+          });
+          h += '</div>';
+        });
+        root.innerHTML = h;
+      } catch (e) {
+        console.error(e);
+        root.innerHTML = '<div class="cr-empty">Error loading work: ' + esc(e.message || e) + '</div>';
+      }
+    }
+    load();
+  }
+
+  // We need this so the inline onclick in mountStudentHome works
+  function openStudentDetail(cid, tid, id, kind) {
+    // For now, just route to the homework page with the ID.
+    // If your student dashboard handles the modal elsewhere, point it there.
+    window.location.href = 'homework.html?id=' + id + '&cid=' + cid + (tid ? '&tid=' + tid : '') + '&kind=' + kind;
+  }
+
+  // =========================================================
+
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
     mountManagement: mountManagement,
@@ -1127,6 +1226,9 @@
     openCreateExam: openCreateExam,
     openGradeFlatExamInk: openGradeFlatExamInk,
     openRelease: openRelease,
+    loadStudentWork: loadStudentWork,        // RESTORED
+    mountStudentHome: mountStudentHome,      // RESTORED
+    openStudentDetail: openStudentDetail,    // RESTORED
     _h: {
       U: U, esc: esc, pill: pill,
       coll: coll, collName: collName, subName: subName,
