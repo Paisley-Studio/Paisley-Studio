@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =====================================================
-    // COLLECTION GROUP QUERY EXCEPTIONS (For Badge Calculations)
+    // COLLECTION GROUP QUERY EXCEPTIONS
     // =====================================================
     match /{path=**}/submissions/{sid} {
       allow read: if isSignedIn();
