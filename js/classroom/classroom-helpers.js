@@ -1346,6 +1346,17 @@
         if (isNew || (lesson && lesson.topicId !== topicId)) {
           data.order = siblings.reduce(function (a, l) { return Math.max(a, l.order || 0); }, 0) + 1;
         }
+        // CHANGED: set tutorId / tutorName so the cloud function's
+        // `handleWorkWrite` in functions/work.js can notify the right
+        // tutor when a student hands in or resubmits this lesson.
+        // Lessons previously had no `tutorId` at all, so the guard
+        //   `if (item.tutorId) { W.notify(...) }`
+        // silently did nothing for every classwork submission. Legacy
+        // lessons are backfilled on the next save.
+        if (isNew || !(lesson && lesson.tutorId)) {
+          data.tutorId = user.uid;
+          data.tutorName = user.name || '';
+        }
         if (isNew) {
           data.authorId = user.uid; data.authorName = user.name; data.createdAt = FV.serverTimestamp();
         }

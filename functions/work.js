@@ -6,6 +6,7 @@
      onSubmissionWritten        student submits -> tutor bell;
                                 grade released -> student + parent
      onExamAttemptWritten       same, for PDF-mode exam attempts
+     onLessonSubmissionWritten  same, for classwork (lessons)
      migrateLegacyHomeworkAndExams  idempotent admin callable
 
    All emailing exports list secrets: SMTP_SECRETS.
@@ -99,9 +100,12 @@ exports.onExamPostedOrPublished = onDocumentWritten(
 );
 
 /* ---------------------------------------------------------
-   Submissions and PDF-exam attempts share one handler:
-     created            -> tutor bell
-     released (or re-released) -> student + parent email, bell, notice
+   Submissions, PDF-exam attempts, and classwork submissions
+   share one handler:
+     created                                -> tutor bell
+     Corrections -> Submitted (resubmit)    -> tutor bell
+     released (or re-released)              -> student + parent
+                                               email, bell, notice
 --------------------------------------------------------- */
 async function handleWorkWrite(event, kind) {
   const before = event.data.before.exists ? event.data.before.data() : null;
@@ -117,10 +121,31 @@ async function handleWorkWrite(event, kind) {
   const relEntity = kind === "exam" ? "exam" : "assignment";
   const noun = kind === "exam" ? "Exam" : (kind === "lesson" ? "Classwork" : "Homework");
 
+  // CHANGED: resolve the tutor recipient once, up front, with a fallback chain.
+  // The old code read only `item.tutorId`, which is present on assignments and
+  // flat exams but was NEVER written on lessons created by the Studio Desk
+  // before the classroom-helpers.js fix. For those legacy lessons the notify
+  // call in the `if (item.tutorId)` branch below silently did nothing, so the
+  // tutor never saw the classwork hand-in or resubmission.
+  //
+  // Fallback order:
+  //   1. item.tutorId            — modern: the tutor who authored / owns the item
+  //   2. before.gradedBy         — legacy: the tutor who most recently graded it
+  //   3. item.authorId           — legacy lessons: the person who wrote the lesson
+  //   4. after.gradedBy          — anything ever set on the sub itself
+  // Whoever wins still has to be a real uid; empty strings are skipped.
+  const tutorRecipient = (
+    (item && item.tutorId) ||
+    (before && before.gradedBy) ||
+    (item && item.authorId) ||
+    (after && after.gradedBy) ||
+    ""
+  );
+
   // 1. Student handed work in (first creation only)
   if (!before) {
-    if (item.tutorId) {
-      await W.notify(item.tutorId, "tutor", {
+    if (tutorRecipient) {
+      await W.notify(tutorRecipient, "tutor", {
         type: kind === "exam" ? "exam_submitted" : "homework_submitted",
         title: `${noun} handed in`,
         message: `${after.studentName || "A student"} handed in ${item.title || "work"} (${item.subjectName || item.subject || ""}).`,
@@ -131,9 +156,14 @@ async function handleWorkWrite(event, kind) {
   }
 
   // 1b. Student re-handed-in after "Corrections" -> tutor is told it is ready again
+  // CHANGED: same fallback chain as above. This is the exact branch the tutor
+  // was complaining about ("I got told about the resubmission but I can't see
+  // the work"): the notification was created with `item.tutorId` which, for a
+  // legacy Studio Desk lesson, was empty — so nothing was written. Now the
+  // resubmission reaches whoever the fallback identifies.
   if (before.status === "Corrections" && after.status === "Submitted") {
-    if (item.tutorId) {
-      await W.notify(item.tutorId, "tutor", {
+    if (tutorRecipient) {
+      await W.notify(tutorRecipient, "tutor", {
         type: kind === "exam" ? "exam_submitted" : "homework_submitted",
         title: `${noun} resubmitted`,
         message: `${after.studentName || "A student"} resubmitted corrected work for ${item.title || "work"} (${item.subjectName || item.subject || ""}).`,

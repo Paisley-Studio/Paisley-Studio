@@ -326,7 +326,7 @@
 <script src="../lms-helpers.js"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
-<script src="../js/classroom/work-helpers.js?v=live2"></script>
+<script src="../js/classroom/work-helpers.js?v=live3"></script>
 <script src="../js/classroom/ink-grader.js?v=boards1"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script>
@@ -494,7 +494,7 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
   });
 });
-// Homework Management and Exam Management mount from work-helpers.js?v=live2.
+// Homework Management and Exam Management mount from work-helpers.js?v=live3.
 // Both are tutor-restricted there: no topic create, no exam create.
 // Tutors cannot create or edit assignments. What they keep: releasing
 // admin-posted homework to their own students, grading and feedback.
@@ -663,9 +663,8 @@ function initFirestore(){
 // ------------------------------------------------------------------
 // SUBMISSIONS LISTENER
 // ------------------------------------------------------------------
-// Reads every homework submission under each assignment the tutor can
-// see, and every flat-exam submission under each exam in the tutor's
-// subjects. Per-assignment / per-exam listeners — no collectionGroup.
+// Reads every homework / classwork / flat-exam submission under each
+// parent item the tutor can see. Per-item listeners — no collectionGroup.
 // ------------------------------------------------------------------
 // Startup used to call this three times (initial, tutor profile, grants) and each call
 // re-walked every classroom one at a time. Calls are coalesced, classrooms/topics are
@@ -758,16 +757,27 @@ async function tutorClassroomsInScopeFetch(){
   return classrooms.filter(c => !ks.length || ks.indexOf(c.keyStage) !== -1);
 }
 
+// CHANGED:
+//   • Removed `.where('audiences.tutors','==',true)` on the assignments query. That
+//     filter missed any assignment whose parent doc was not explicitly posted to
+//     tutors (e.g. posted to online students and then handed in). The tutor's read
+//     access is already enforced by `classTutorSubject(cid)` in the rules, so
+//     enumerating all assignments is safe and is what the tutor needs to grade.
+//   • Added a NEW lessons (classwork) branch. There was NO listener for classwork
+//     submissions in the portal, which is why a lesson resubmission never reached
+//     the tutor's Overview or Homework Management.
 async function subscribeHomeworkSubmissions(gen){
   const classrooms = await tutorClassroomsInScope();
   await Promise.all(classrooms.map(async cls => {
     const topics = await tutorTopicsOf(cls);
     await Promise.all(topics.map(async t => {
+
+      // ---- assignments (homework) ----
       let assignments = [];
       try {
         const aSnap = await db.collection('classrooms').doc(cls.id)
           .collection('topics').doc(t.id).collection('assignments')
-          .where('audiences.tutors', '==', true).get();
+          .get();
         assignments = aSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       } catch (e) { return; }
       if(gen !== subGen) return;   // a newer run replaced this one
@@ -797,17 +807,56 @@ async function subscribeHomeworkSubmissions(gen){
           }, (e) => handleErr(e, 'submissions:' + a.id));
         listeners.submissions.push(unsub);
       }
+
+      // ---- lessons (classwork) — NEW ----
+      let lessons = [];
+      try {
+        const lSnap = await db.collection('classrooms').doc(cls.id)
+          .collection('topics').doc(t.id).collection('lessons')
+          .get();
+        lessons = lSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      } catch (e) { /* not fatal, move on */ }
+      if(gen !== subGen) return;
+
+      for (const l of lessons) {
+        const unsub = db.collection('classrooms').doc(cls.id)
+          .collection('topics').doc(t.id)
+          .collection('lessons').doc(l.id)
+          .collection('submissions')
+          .onSnapshot(snap => {
+            snap.docs.forEach(d => {
+              acc.submissions[d.id] = Object.assign(
+                {
+                  id: d.id,
+                  kind: 'classwork',
+                  lessonId: l.id,
+                  homeworkTitle: l.title || '(untitled)',
+                  subject: l.subjectName || cls.subjectName || '',
+                  keyStage: l.keyStage || cls.keyStage || ''
+                },
+                d.data(),
+                { date: toDate(d.data().submittedAt) || toDate(d.data().updatedAt) }
+              );
+            });
+            rebuild('submissions');
+            renderAll();
+          }, (e) => handleErr(e, 'lesson-submissions:' + l.id));
+        listeners.submissions.push(unsub);
+      }
     }));
   }));
 }
 
+// CHANGED: removed `.where('audiences.tutors','==',true)` — same reasoning as above.
+// A flat exam the tutor can grade (activeGrant or classTutorSubject) must be enumerated
+// regardless of the parent's audiences flag.
 async function subscribeFlatExamSubmissions(gen){
   const classrooms = await tutorClassroomsInScope();
   await Promise.all(classrooms.map(async cls => {
     let exams = [];
     try {
       const eSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
-        .where('audiences.tutors', '==', true).get();
+        .get();
       exams = eSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     } catch (e) { return; }
     if(gen !== subGen) return;
@@ -916,23 +965,37 @@ function renderAllNow(){
 
 function myTickets(){ return DB.tickets.filter(t=>isMyStudent(t.studentId)); }
 
+// CHANGED:
+//   • "Needs your attention" now includes Corrections as well as Submitted.
+//     Corrections means the tutor already sent something back and is waiting on
+//     the student — but including it keeps that row visible before/after a
+//     resubmission, so the tutor knows the item is still theirs to action.
+//   • Handles kind === 'classwork' properly. Previously only 'exam' and
+//     'homework' were branched, so a classwork resubmission was invisible here.
+//   • statAwaitingAttempts now counts only exam submissions awaiting grading
+//     (was already correct in spirit, but the pool it filters on was empty for
+//     classwork; that is now populated by the new listener).
 function renderOverview(){
-  // Every submission the tutor can read that's from one of their students.
   const allSubs = DB.submissions.filter(s=> isMyStudent(s.studentId) );
-  const awaitingSubs = allSubs.filter(s=>s.status === 'Submitted');
+  const awaitingSubs = allSubs.filter(s=> s.status === 'Submitted' || s.status === 'Corrections');
   const grants       = myActiveGrants();
   document.getElementById('statStudents').textContent = DB.students.length;
   document.getElementById('statMyHomework').textContent = DB.homework.length;
   // Flat-exam submissions show up in the same pool, tagged kind: 'exam'.
-  document.getElementById('statAwaitingAttempts').textContent = awaitingSubs.filter(s=>s.kind === 'exam').length;
+  document.getElementById('statAwaitingAttempts').textContent = awaitingSubs.filter(s=> s.kind === 'exam').length;
   document.getElementById('statGranted').textContent = grants.length;
   document.getElementById('navGrantCount').textContent = grants.length;
   const rows = awaitingSubs.map(s=>({
-    what: s.kind === 'exam' ? 'Exam paper' : 'Homework',
-    icon: s.kind === 'exam' ? 'fa-file-pen' : 'fa-book-open',
+    what: s.kind === 'exam' ? 'Exam paper'
+         : (s.kind === 'classwork' ? 'Classwork' : 'Homework'),
+    icon: s.kind === 'exam' ? 'fa-file-pen'
+         : (s.kind === 'classwork' ? 'fa-book-open' : 'fa-clipboard-check'),
     who: s.studentName||studentName(s.studentId),
-    item: s.examTitle || s.homeworkTitle || (s.kind === 'exam' ? 'Exam' : 'Homework'),
+    item: s.examTitle || s.homeworkTitle || (s.kind === 'exam' ? 'Exam' : (s.kind === 'classwork' ? 'Classwork' : 'Homework')),
     when: s.date,
+    statusPill: s.status === 'Corrections'
+      ? '<span class="badge b-pending">Corrections sent — awaiting student</span>'
+      : '<span class="badge b-plain">Awaiting grading</span>',
     action: s.kind === 'exam'
       ? `<button class="btn btn-ghost btn-sm" type="button" onclick="openExamManagement()"><i class="fas fa-pen"></i> Mark</button>`
       : `<button class="btn btn-ghost btn-sm" type="button" onclick="openHomeworkManagement()"><i class="fas fa-pen"></i> Mark</button>`
@@ -946,7 +1009,7 @@ function renderOverview(){
     <td><i class="fas ${r.icon}" style="color:var(--brand); margin-right:.4rem;"></i>${escapeHtml(r.what)}</td>
     <td class="cell-name">${escapeHtml(r.who)}</td>
     <td>${escapeHtml(r.item)}</td>
-    <td>${fmtDate(r.when)}</td>
+    <td>${fmtDate(r.when)} ${r.statusPill}</td>
     <td class="row-actions">${r.action}</td>
   </tr>`).join('');
 }
