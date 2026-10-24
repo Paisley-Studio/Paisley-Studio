@@ -859,7 +859,7 @@
 
     // Admin-only. Rendered on EVERY assignment, classwork and exam row (and in the detail view): never conditional on state.
     function delBtnHtml(it) {
-      return isAdmin ? '<button type="button" class="cr-btn sm danger wk-del" data-a="del" data-id="' + esc(it.id) + '" title="Delete permanently"><i class="fas fa-trash"></i> Delete</button>' : '';
+      return isAdmin ? '<button type="button" class="cr-btn sm danger wk-del" data-a="del" data-id="' + esc(it.id) + '" title="Removes it from tutors and students only"><i class="fas fa-trash"></i> ' + (it.isClasswork ? 'Withdraw' : 'Delete') + '</button>' : '';
     }
 
     function render() {
@@ -972,7 +972,7 @@
       var m = U.openModal({ title: it.title, wide: true });
       
       m.foot.innerHTML = 
-        (isAdmin ? '<button type="button" class="cr-btn danger wk-del" data-a="del-here" style="margin-right:auto;"><i class="fas fa-trash"></i> Delete</button>' : '') +
+        (isAdmin ? '<button type="button" class="cr-btn danger wk-del" data-a="del-here" style="margin-right:auto;"><i class="fas fa-trash"></i> ' + (it.isClasswork ? 'Withdraw' : 'Delete') + '</button>' : '') +
         (!isAdmin && (!it.releasedTo || !it.releasedTo.length) ? '<button type="button" class="cr-btn primary" data-a="release-here" style="margin-right:auto;"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
         '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
@@ -1191,33 +1191,60 @@
       };
     }
 
+    // Delete from Homework / Exam Management removes ONLY what was pushed out: the posted
+    // homework or exam, its attached text/files, and the hand-ins. It never touches the
+    // classroom, its topics or the lesson notes. Classwork IS a lesson (the notes), so for
+    // classwork this only withdraws it from tutors and students and keeps the notes.
     async function deleteItem(it) {
       if (!isAdmin) { alert('Only the Studio Desk (admin) can delete work.'); return false; }
       var isFlat = kind === 'exam';
-      var k = isFlat ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment');
+      var isLesson = !isFlat && it.isClasswork === true;
+      var k = isFlat ? 'exam' : (isLesson ? 'lesson' : 'assignment');
       var itemRef = isFlat ? flatExamRef(it.cid, it.id) : coll(it.cid, it.tid, k).doc(it.id);
       var subCol = isFlat ? flatExamSubmissionsRef(it.cid, it.id) : itemRef.collection('submissions');
       var cnt = Object.keys(S.subs[it.id] || {}).length;
-      if (!await PaisleyUI.confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : (it.isClasswork ? 'classwork' : 'assignment')) + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors, students and parents will no longer see it anywhere, and its notifications are removed.\n\nThis cannot be undone.')) return false;
+      var handins = cnt ? (cnt + ' handed-in piece' + (cnt === 1 ? '' : 's') + ' of student work and their graded copies') : 'any student hand-ins';
+      var msg = isLesson
+        ? 'WITHDRAW \u201c' + it.title + '\u201d from tutors and students?\n\nIt disappears for tutors, students and parents, and ' + handins + ' are removed.\n\nYour lesson, its notes and files, the topic and the classroom are NOT deleted. You can post it again from Classroom \u2192 Publish.'
+        : 'DELETE \u201c' + it.title + '\u201d from tutors and students?\n\nThis removes the posted ' + (isFlat ? 'exam' : 'homework') + ', the text and files attached to it, and ' + handins + '.\n\nYour classroom, topics and lesson notes are NOT touched.\n\nThis cannot be undone.';
+      if (!await PaisleyUI.confirm(msg)) return false;
       try {
+        // Only files that live in THIS item's own folders may be deleted. Anything else (for
+        // example a path shared with lesson notes) is skipped on purpose.
+        var subj = (S.cls && S.cls.subjectId) || String((String(it.cid).match(/^(.*?)_y\d+/) || [])[1] || '');
+        var own = [
+          'classroom-files/' + subj + '/' + it.cid + '/' + (isFlat ? 'exams/' : '') + it.id + '/',
+          'graded-submissions/' + subj + '/' + it.cid + '/' + it.id + '/'
+        ];
+        function ownFile(p) { p = String(p || ''); return !!subj && own.some(function (pre) { return p.indexOf(pre) === 0; }); }
         var sn = await subCol.get();
         var paths = [];
         sn.docs.forEach(function (d) {
           var x = d.data() || {};
-          if (x.storagePath) paths.push(x.storagePath);
-          if (x.gradedStoragePath) paths.push(x.gradedStoragePath);
+          if (ownFile(x.storagePath)) paths.push(x.storagePath);
+          if (ownFile(x.gradedStoragePath)) paths.push(x.gradedStoragePath);
         });
-        if (it.attachedPdfPath) paths.push(it.attachedPdfPath);
-        if (it.examPdfPath) paths.push(it.examPdfPath);
-        (it.attachments || []).forEach(function (a) { if (a && a.storagePath) paths.push(a.storagePath); });
+        if (!isLesson) {
+          if (ownFile(it.attachedPdfPath)) paths.push(it.attachedPdfPath);
+          if (ownFile(it.examPdfPath)) paths.push(it.examPdfPath);
+          (it.attachments || []).forEach(function (a) { if (a && ownFile(a.storagePath)) paths.push(a.storagePath); });
+        }
         for (var i = 0; i < sn.docs.length; i += 400) {
           var b = db.batch();
           sn.docs.slice(i, i + 400).forEach(function (d) { b.delete(d.ref); });
           await b.commit();
         }
-        await itemRef.delete();
-        // Bell notifications that point at this item (students, parents, tutors): admin may delete these.
-        // Best effort: the item itself is already gone from every screen.
+        if (isLesson) {
+          // Keep the lesson and its notes; just stop it reaching anyone.
+          await itemRef.update({
+            audiences: { online: false, remote: false, tuition: false, tutors: false },
+            releasedTo: [], releasedParents: [],
+            withdrawnAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          await itemRef.delete();
+        }
+        // Bell notifications that point at this item (students, parents, tutors).
         try {
           var ids = [it.cid + '/' + (it.tid || '') + '/' + it.id, it.cid + '/' + it.id];
           for (var q = 0; q < ids.length; q++) {
@@ -1229,12 +1256,11 @@
             }
           }
         } catch (ne) { console.warn('notification cleanup skipped:', ne && (ne.code || ne.message)); }
-        // Files last, best effort.
         await Promise.all(paths.map(function (pth) { return firebase.storage().ref(pth).delete().catch(function () {}); }));
         S.view = 'active';
         await refresh();
         return true;
-      } catch (e) { alert('Could not delete: ' + (e.message || e)); return false; }
+      } catch (e) { alert('Could not ' + (isLesson ? 'withdraw' : 'delete') + ': ' + (e.message || e)); return false; }
     }
 
     async function renderLegacy() {
