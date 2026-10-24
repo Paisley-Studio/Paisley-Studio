@@ -187,7 +187,8 @@ async function handleWorkWrite(event, kind) {
     await W.addStudentNotice(studentId, "student", {
       type: isCorr ? "corrections" : "graded",
       title: isCorr ? `Corrections requested: ${item.title || ""}` : `${noun} graded: ${item.title || ""}`,
-      message: studentMsg, fileUrl, fileName, studentId, studentName: student.name
+      message: studentMsg, fileUrl, fileName, studentId, studentName: student.name,
+      entityId, entityKind: kind === "exam" ? "exam" : "homework"
     });
   } catch (e) { console.warn("graded: student notice failed", e.message || e); }
 
@@ -208,7 +209,8 @@ async function handleWorkWrite(event, kind) {
       await W.addStudentNotice(p.id, "parent", {
         type: isCorr ? "corrections" : "graded",
         title: isCorr ? `${student.name || "Your child"}: corrections requested` : `${student.name || "Your child"}: ${noun.toLowerCase()} graded`,
-        message: parentMsg, fileUrl, fileName, studentId, studentName: student.name
+        message: parentMsg, fileUrl, fileName, studentId, studentName: student.name,
+        entityId, entityKind: kind === "exam" ? "exam" : "homework"
       });
     } catch (e) { console.warn("graded: parent notice failed", e.message || e); }
   }

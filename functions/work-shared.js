@@ -78,6 +78,8 @@ async function addStudentNotice(recipientId, recipientType, fields) {
     fileName: fields.fileName || "",
     studentId: fields.studentId || "",
     studentName: fields.studentName || "",
+    entityId: fields.entityId || "",
+    entityKind: fields.entityKind || "",
     createdAt: FV().serverTimestamp()
   });
 }

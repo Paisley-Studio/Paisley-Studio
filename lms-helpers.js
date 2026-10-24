@@ -1615,6 +1615,7 @@ function mountNotificationBell(containerEl, uid, role, opts) {
     items = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
     items.sort(function (a, b) { var x = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : Date.now(); var y = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : Date.now(); return y - x; });
     paint();
+    if (typeof opts.onChange === 'function') { try { opts.onChange(items); } catch (e) { console.warn('bell onChange:', e); } }
   }
   function subscribe(withOrder) {
     var q = db.collection('personalNotifications').where('recipientId', '==', uid);
@@ -1635,6 +1636,14 @@ function mountNotificationBell(containerEl, uid, role, opts) {
     return batch.commit().catch(function (e) { console.error('mark read:', e); });
   }
   function markCategoryRead(cat) { return markRead(items.filter(function (n) { return lmzNotifCategory(n) === cat; })); }
+  // Mark every notification about one work item (its id is the last part of relatedEntityId) as read.
+  // kinds (optional): only those types, e.g. ['homework_assigned','exam_posted'] for "new work" alerts.
+  function markEntityRead(itemId, kinds) {
+    return markRead(items.filter(function (n) {
+      if (String(n.relatedEntityId || '').split('/').pop() !== String(itemId)) return false;
+      return !kinds || kinds.indexOf(n.type) !== -1;
+    }));
+  }
 
   btn.addEventListener('click', function (e) { e.stopPropagation(); menu.classList.toggle('open'); });
   document.addEventListener('click', function (e) { if (!containerEl.contains(e.target)) menu.classList.remove('open'); });
@@ -1653,7 +1662,7 @@ function mountNotificationBell(containerEl, uid, role, opts) {
     if (nav) nav.addEventListener('click', function () { markCategoryRead(cat); });
   });
 
-  return { unsubscribe: function () { if (unsub) unsub(); }, markCategoryRead: markCategoryRead };
+  return { unsubscribe: function () { if (unsub) unsub(); }, markCategoryRead: markCategoryRead, markEntityRead: markEntityRead, getItems: function () { return items; } };
 }
 
 // Notices addressed to one student or parent (unattended work reports, graded work, reminders).

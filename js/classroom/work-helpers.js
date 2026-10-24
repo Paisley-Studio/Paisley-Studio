@@ -44,6 +44,8 @@
       '.wk-radio{display:flex;gap:1rem;flex-wrap:wrap;font-size:.86rem}',
       '.wk-radio label{display:inline-flex;gap:.4rem;align-items:center;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:600;color:inherit}',
       '.wk-tbl td .cr-btn{margin-right:.25rem}',
+      '.cr-btn.wk-del{border-color:var(--error,#E74C3C);color:var(--error,#E74C3C);background:var(--surface,#fff);flex-shrink:0;white-space:nowrap}',
+      '.cr-btn.wk-del:hover{background:var(--error,#E74C3C);border-color:var(--error,#E74C3C);color:#fff}',
       '.wk-box{background:var(--sage,#E5F2EF);border-radius:12px;padding:.8rem 1rem;font-size:.84rem;margin-bottom:.9rem;white-space:pre-wrap}',
       '.wk-mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem}',
       '.wk-btn-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.7rem}',
@@ -805,6 +807,11 @@
 
     function canEdit(it) { return isAdmin; }
 
+    // Admin-only. Rendered on EVERY assignment, classwork and exam row (and in the detail view): never conditional on state.
+    function delBtnHtml(it) {
+      return isAdmin ? '<button type="button" class="cr-btn sm danger wk-del" data-a="del" data-id="' + esc(it.id) + '" title="Delete permanently"><i class="fas fa-trash"></i> Delete</button>' : '';
+    }
+
     function render() {
       S.screen = 'class';
       var c = S.cls, name = U.displayName(c);
@@ -845,7 +852,7 @@
                       ? '<button type="button" class="cr-btn sm" data-a="close-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close submissions</button>'
                       : '<button type="button" class="cr-btn sm" data-a="open-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock-open"></i> Open submissions</button>')
                   : '') +
-                (canEdit(it) ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '')
+                ''
               : '';
             h += '<tr>' +
               '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div></td>' +
@@ -856,6 +863,7 @@
               '<td><div class="cr-actions">' +
                 '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 adminControls +
+                delBtnHtml(it) +
                 (!isAdmin && (!it.releasedTo || !it.releasedTo.length) ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
               '</div></td>' +
@@ -893,7 +901,7 @@
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 (!isAdmin && (!it.releasedTo || !it.releasedTo.length) ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
-                (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
+                delBtnHtml(it) + '</div></div>';
             });
           }
           h += '</div>';
@@ -906,9 +914,12 @@
       var m = U.openModal({ title: it.title, wide: true });
       
       m.foot.innerHTML = 
+        (isAdmin ? '<button type="button" class="cr-btn danger wk-del" data-a="del-here" style="margin-right:auto;"><i class="fas fa-trash"></i> Delete</button>' : '') +
         (!isAdmin && (!it.releasedTo || !it.releasedTo.length) ? '<button type="button" class="cr-btn primary" data-a="release-here" style="margin-right:auto;"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
         '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      var delHere = m.foot.querySelector('[data-a="del-here"]');
+      if (delHere) delHere.onclick = async function () { var ok = await deleteItem(it); if (ok) m.close(); };
       var relBtn = m.foot.querySelector('[data-a="release-here"]');
       if (relBtn) relBtn.onclick = function () { global.WorkUI.openRelease(it, user); };
 
@@ -1063,14 +1074,15 @@
     }
 
     async function deleteItem(it) {
-      if (!isAdmin) { alert('Only the Studio Desk (admin) can delete work.'); return; }
+      if (!isAdmin) { alert('Only the Studio Desk (admin) can delete work.'); return false; }
       var isFlat = kind === 'exam';
       var k = isFlat ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment');
       var itemRef = isFlat ? flatExamRef(it.cid, it.id) : coll(it.cid, it.tid, k).doc(it.id);
+      var subCol = isFlat ? flatExamSubmissionsRef(it.cid, it.id) : itemRef.collection('submissions');
       var cnt = Object.keys(S.subs[it.id] || {}).length;
-      if (!await PaisleyUI.confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : 'assignment') + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors and students will no longer see it anywhere.\n\nThis cannot be undone.')) return;
+      if (!await PaisleyUI.confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : (it.isClasswork ? 'classwork' : 'assignment')) + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors, students and parents will no longer see it anywhere, and its notifications are removed.\n\nThis cannot be undone.')) return false;
       try {
-        var sn = await itemRef.collection('submissions').get();
+        var sn = await subCol.get();
         var paths = [];
         sn.docs.forEach(function (d) {
           var x = d.data() || {};
@@ -1079,17 +1091,32 @@
         });
         if (it.attachedPdfPath) paths.push(it.attachedPdfPath);
         if (it.examPdfPath) paths.push(it.examPdfPath);
+        (it.attachments || []).forEach(function (a) { if (a && a.storagePath) paths.push(a.storagePath); });
         for (var i = 0; i < sn.docs.length; i += 400) {
           var b = db.batch();
           sn.docs.slice(i, i + 400).forEach(function (d) { b.delete(d.ref); });
           await b.commit();
         }
         await itemRef.delete();
-        // Files last, best effort: the item is already gone from every screen.
+        // Bell notifications that point at this item (students, parents, tutors): admin may delete these.
+        // Best effort: the item itself is already gone from every screen.
+        try {
+          var ids = [it.cid + '/' + (it.tid || '') + '/' + it.id, it.cid + '/' + it.id];
+          for (var q = 0; q < ids.length; q++) {
+            var ns = await db.collection('personalNotifications').where('relatedEntityId', '==', ids[q]).get();
+            for (var j = 0; j < ns.docs.length; j += 400) {
+              var nb = db.batch();
+              ns.docs.slice(j, j + 400).forEach(function (d) { nb.delete(d.ref); });
+              await nb.commit();
+            }
+          }
+        } catch (ne) { console.warn('notification cleanup skipped:', ne && (ne.code || ne.message)); }
+        // Files last, best effort.
         await Promise.all(paths.map(function (pth) { return firebase.storage().ref(pth).delete().catch(function () {}); }));
         S.view = 'active';
         await refresh();
-      } catch (e) { alert('Could not delete: ' + (e.message || e)); }
+        return true;
+      } catch (e) { alert('Could not delete: ' + (e.message || e)); return false; }
     }
 
     async function renderLegacy() {
@@ -1429,21 +1456,43 @@
       }));
     }
 
-    var loading = null;
-    function load(silent) {
-      if (loading) return loading;
+    var loading = null, rerun = null;
+    function load(silent, force) {
+      if (loading) {
+        // A load is already in flight (it may have started before the student handed in): run once more right after it.
+        if (force) rerun = { silent: silent, force: force };
+        return loading;
+      }
       loading = fetchAll().then(function (per) {
         CACHE[uid] = { at: Date.now(), per: per };
         buildFrom(per);
+        try { global.dispatchEvent(new CustomEvent('wk:loaded', { detail: { kind: kind } })); } catch (e6) { /* ignore */ }
         if (!root.isConnected) { clearInterval(root._wkTimer); return; }
-        if (silent && document.querySelector('.cr-overlay, .pui-ov')) return; // never redraw under an open dialog
+        if (silent && !force && document.querySelector('.cr-overlay, .pui-ov')) return; // never redraw under an open dialog
         draw();
+        if (S.focusId) tryFocus();
       }).catch(function (e) {
         console.error(e);
         if (!S.loaded) root.innerHTML = '<div class="cr-empty">Error loading work: ' + esc(e.message || e) + '</div>';
-      }).then(function () { loading = null; });
+      }).then(function () {
+        loading = null;
+        if (rerun) { var r = rerun; rerun = null; load(r.silent, r.force); }
+      });
       return loading;
     }
+
+    // Deep link: jump straight to the subject that holds this item (used by "Check result" and the bell).
+    function tryFocus() {
+      if (!S.focusId || !S.loaded) return;
+      var it = S.items.filter(function (x) { return x.id === S.focusId; })[0];
+      if (!it) return;
+      var open = S.focusOpen;
+      S.focusId = null; S.focusOpen = false;
+      S.sel = it._cls.subjectId; draw(); window.scrollTo({ top: 0 });
+      if (open) openStudentDetail(it.cid, it.tid || '', it.id, it.kind === 'exam' ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment'), function () { load(true, true); });
+    }
+    root._wkFocus = function (itemId, openIt) { S.focusId = itemId; S.focusOpen = !!openIt; tryFocus(); };
+    root._wkReload = function () { return load(true, true); };
 
     root.addEventListener('click', function (e) {
       var el = e.target.closest('[data-a]'); if (!el || !root.contains(el)) return;
@@ -1453,7 +1502,7 @@
       if (a === 'wk-open') {
         var it = S.items.filter(function (x) { return x.id === el.dataset.id; })[0];
         if (!it) return;
-        openStudentDetail(it.cid, it.tid || '', it.id, it.kind === 'exam' ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment'), function () { load(true); });
+        openStudentDetail(it.cid, it.tid || '', it.id, it.kind === 'exam' ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment'), function () { load(true, true); });
       }
     });
 
@@ -1626,6 +1675,8 @@
             }, fileData));
           }
           m.close();
+          try { global.__wkStudentCache = {}; } catch (e4) { /* ignore */ }
+          try { global.dispatchEvent(new CustomEvent('wk:submitted', { detail: { cid: cid, id: id, kind: kind } })); } catch (e5) { /* ignore */ }
           alert('Submission successful! Your tutor will be notified.');
           if (typeof onDone === 'function') { try { onDone(); } catch (e3) { console.warn(e3); } }
         } catch (e) {
@@ -1767,8 +1818,21 @@
     openStudentDetail(cls.id, lesson.topicId || lesson.tid || '', lesson.id, 'lesson', onDone);
   }
 
+  // Same rule the Homework / Exams tabs use for the red bubble: does this still need the student?
+  function isStudentTodo(it, isEx) {
+    var st = it.sub && it.sub.status;
+    if (st === 'Corrections') return true;
+    if (isEx) {
+      if (st === 'Submitted' || st === 'Graded') return false;
+      if (it.flat && !isWindowOpen(it)) return false;
+      return true;
+    }
+    return !it.sub;
+  }
+
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
+    isStudentTodo: isStudentTodo,
     mountManagement: mountManagement,
     openPostAssignment: openPostAssignment,
     openCreateExam: openCreateExam,
