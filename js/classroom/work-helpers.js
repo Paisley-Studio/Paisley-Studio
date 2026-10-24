@@ -562,14 +562,17 @@
       }
       var btn = this; btn.disabled = true;
       
-      var typeCol = it.topicId ? (it.examDate ? 'exams' : (it.isClasswork ? 'lessons' : 'assignments')) : 'exams';
-      var path = '';
-      if (typeCol === 'exams' && !it.topicId) {
-        path = 'classrooms/' + it.cid + '/exams/' + it.id;
-      } else {
-        path = 'classrooms/' + it.cid + '/topics/' + it.topicId + '/' + typeCol + '/' + it.id;
-      }
-      
+      // Items carry their topic as `tid` (loaded from the topic's sub-collection); `topicId` only exists
+      // on some newer documents, and never on lessons. Using topicId alone built a wrong path and the
+      // server answered "That item no longer exists".
+      var topicRef = it.tid || it.topicId || '';
+      var typeCol = it.kind === 'lesson' || it.isClasswork === true ? 'lessons'
+        : (it.kind === 'assignment' ? 'assignments'
+        : (it.kind === 'exam' ? 'exams' : (it.examDate ? 'exams' : 'assignments')));
+      var path = (it.flat || !topicRef)
+        ? 'classrooms/' + it.cid + '/exams/' + it.id
+        : 'classrooms/' + it.cid + '/topics/' + topicRef + '/' + typeCol + '/' + it.id;
+
       var errEl = err;
       try {
         PaisleyUI.loader.show('Releasing to ' + ids.length + ' student' + (ids.length === 1 ? '' : 's'), 'Sending it out and notifying your students');
