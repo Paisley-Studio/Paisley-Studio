@@ -47,7 +47,38 @@
       d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
   }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
-  function classroomId(subjectId, year) { return subjectId + '_y' + year; }
+  // ---- Exam boards -------------------------------------------------
+  // Classrooms that existed before boards were introduced have NO `board`
+  // field. They are the Cambridge material, so a missing board means Cambridge.
+  var BOARDS = [
+    { id: 'cambridge', label: 'Cambridge', isNew: false },
+    { id: 'edexcel', label: 'Pearson Edexcel', isNew: true },
+    { id: 'oxford_aqa', label: 'Oxford AQA', isNew: true }
+  ];
+  var DEFAULT_BOARD = 'cambridge';
+  function boardOf(c) { var b = c && c.board; return b && BOARDS.some(function (x) { return x.id === b; }) ? b : DEFAULT_BOARD; }
+  function boardInfo(id) { return BOARDS.filter(function (b) { return b.id === (id || DEFAULT_BOARD); })[0] || BOARDS[0]; }
+  function boardLabel(c) { return boardInfo(boardOf(c)).label; }
+  function boardBadge(c) {
+    var b = boardInfo(boardOf(c));
+    return '<span class="cr-board b-' + esc(b.id) + '"><i class="fas fa-landmark"></i> ' + esc(b.label) + '</span>' +
+      (b.isNew ? '<span class="cr-board-new">NEW</span>' : '');
+  }
+  function boardOptionsHtml(cur, withAll) {
+    return (withAll ? '<option value="">All boards</option>' : '') + BOARDS.map(function (b) {
+      return '<option value="' + esc(b.id) + '"' + (b.id === cur ? ' selected' : '') + '>' + esc(b.label) + (b.isNew ? ' (NEW)' : '') + '</option>';
+    }).join('');
+  }
+  // Cambridge keeps the original id so every existing classroom, lesson and
+  // piece of work stays exactly where it is.
+  function classroomId(subjectId, year, board) {
+    return subjectId + '_y' + year + ((board && board !== DEFAULT_BOARD) ? '_' + board : '');
+  }
+  function boardPrefKey(uid, subjectId) { return 'paisley_board_' + (uid || 'x') + '_' + subjectId; }
+  function getBoardPref(uid, subjectId) {
+    try { var v = localStorage.getItem(boardPrefKey(uid, subjectId)); return BOARDS.some(function (b) { return b.id === v; }) ? v : null; } catch (e) { return null; }
+  }
+  function setBoardPref(uid, subjectId, v) { try { localStorage.setItem(boardPrefKey(uid, subjectId), v); } catch (e) {} }
   function ksShort(ks) { return String(ks || '').replace(/\s*\(.*/, ''); }
   function byOrder(a, b) {
     return ((a.order == null ? 1e9 : a.order) - (b.order == null ? 1e9 : b.order)) ||
@@ -189,6 +220,16 @@
       '.cr-lesson .tt small{display:block;font-weight:500;color:var(--muted,#5A6E6A);font-size:.72rem}',
       '.cr-lesson.student{cursor:pointer}',
       '.cr-lesson.student:hover{background:var(--paper,#F1F9F7)}',
+      '.cr-board{display:inline-flex;align-items:center;gap:.3rem;padding:.16rem .55rem;border-radius:99px;font-size:.68rem;font-weight:800;background:#E6F1EF;color:#245F5A;border:1px solid #BFD9D5}',
+      '.cr-board.b-edexcel{background:#FDECEC;color:#9B2C2C;border-color:#F2C4C4}',
+      '.cr-board.b-oxford_aqa{background:#EAF0FD;color:#2A4BA0;border-color:#C5D3F5}',
+      '.cr-board-new{display:inline-block;margin-left:.3rem;padding:.12rem .4rem;border-radius:5px;font-size:.6rem;font-weight:900;letter-spacing:.05em;background:#F5A524;color:#fff;vertical-align:middle}',
+      '.cr-board-row{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.35rem 0 .8rem}',
+      '.cr-pick{display:flex;flex-direction:column;gap:.6rem;max-width:460px}',
+      '.cr-pick .cr-card{text-align:left}',
+      '.cr-past{margin-top:1rem;border:1px dashed var(--line,#C9D8D5);border-radius:12px;padding:.2rem .8rem .6rem;background:rgba(36,95,90,.03)}',
+      '.cr-past>summary{cursor:pointer;font-weight:800;color:var(--brand-deep,#245F5A);padding:.6rem 0;list-style:none}',
+      '.cr-past>summary::-webkit-details-marker{display:none}',
       '.cr-badge{display:inline-flex;align-items:center;padding:.18rem .55rem;border-radius:99px;font-size:.68rem;font-weight:800}',
       '.cr-badge.draft{background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
       '.cr-badge.scheduled{background:rgba(232,163,61,.14);color:#96690f}',
@@ -263,25 +304,29 @@
 
   function snapDocs(snap) { return snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); }
 
-  async function findClassroom(subjectId, year, keyStage) {
+  async function findClassroom(subjectId, year, keyStage, board) {
     var q = db.collection('classrooms').where('subjectId', '==', subjectId);
     q = year != null ? q.where('year', '==', Number(year)) : q.where('keyStage', '==', keyStage);
-    var snap = await q.limit(1).get();
-    return snap.empty ? null : Object.assign({ id: snap.docs[0].id }, snap.docs[0].data());
+    var snap = await q.get();
+    var want = board || DEFAULT_BOARD;
+    var hit = snap.docs.filter(function (d) { return boardOf(d.data()) === want; })[0];
+    return hit ? Object.assign({ id: hit.id }, hit.data()) : null;
   }
 
-  async function ensureClassroom(subjectId, keyStage, year, user) {
-    var found = await findClassroom(subjectId, year);
+  async function ensureClassroom(subjectId, keyStage, year, user, board) {
+    board = board || DEFAULT_BOARD;
+    var found = await findClassroom(subjectId, year, null, board);
     if (found) return found;
     var data = {
       subjectId: subjectId,
       subjectName: lmzSubjectLabel(subjectId) || subjectId,
       keyStage: keyStage,
       year: Number(year),
+      board: board,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       createdBy: user.uid
     };
-    var id = classroomId(subjectId, year);
+    var id = classroomId(subjectId, year, board);
     await clsRef(id).set(data);
     return Object.assign({ id: id }, data);
   }
@@ -336,9 +381,9 @@
   function copyArr(a) { return Array.isArray(a) ? a.slice() : a; }
   function topicSig(topics) { return topics.map(function (t) { return t.id; }).join(','); }
 
-  function findClassroomCached(subjectId, year, keyStage) {
-    return memo('cls|' + subjectId + '|' + (year != null ? 'y' + Number(year) : 'k' + keyStage), function () {
-      return findClassroom(subjectId, year, keyStage);
+  function findClassroomCached(subjectId, year, keyStage, board) {
+    return memo('cls|' + subjectId + '|' + (board || DEFAULT_BOARD) + '|' + (year != null ? 'y' + Number(year) : 'k' + keyStage), function () {
+      return findClassroom(subjectId, year, keyStage, board);
     });
   }
   function loadTopicsCached(cid) {
@@ -536,7 +581,7 @@
     var user = { uid: opts.uid, name: opts.name || (isAdmin ? 'Studio Desk' : 'Tutor') };
 
     var S = { screen: 'list', tab: 'classrooms', classrooms: null, allLessons: null, cls: null, topics: [], lessons: [], collapsed: {},
-      filters: { subject: '', ks: '', year: '' }, lf: { subject: '', year: '', tutor: '', status: '', q: '' } };
+      filters: { subject: '', ks: '', year: '', board: '' }, lf: { subject: '', year: '', tutor: '', status: '', q: '' } };
 
     root.classList.add('cr-root');
 
@@ -681,10 +726,11 @@
 
       var list = (S.classrooms || []).filter(function (c) {
         var f = S.filters;
-        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year);
+        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year) && (!f.board || boardOf(c) === f.board);
       });
       if (isAdmin) {
         h += '<div class="cr-filters">' +
+          '<select data-f="f-board" aria-label="Exam board">' + boardOptionsHtml(S.filters.board, true) + '</select>' +
           selectHtml('f-subject', 'All subjects', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), S.filters.subject) +
           selectHtml('f-ks', 'All Key Stages', stageList().map(function (k) { return [k, ksShort(k)]; }), S.filters.ks) +
           selectHtml('f-year', 'All Years', [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(function (y) { return [String(y), 'Year ' + y]; }), S.filters.year) + '</div>';
@@ -694,10 +740,10 @@
           ? 'No classrooms match these filters.'
           : (isAdmin ? 'No classrooms yet. Use “Add classroom” to start one for a subject and Year.' : 'No classroom exists yet for your subjects. The Studio Desk creates classrooms.')) + '</div></div>';
       } else {
-        list.sort(function (a, b) { return displayName(a).localeCompare(displayName(b)) || (a.year || 0) - (b.year || 0); });
+        list.sort(function (a, b) { return displayName(a).localeCompare(displayName(b)) || (a.year || 0) - (b.year || 0) || boardOf(a).localeCompare(boardOf(b)); });
         h += '<div class="cr-grid">' + list.map(function (c) {
           return '<button type="button" class="cr-card" data-a="open" data-id="' + esc(c.id) + '"><div class="ic"><i class="fas fa-chalkboard"></i></div>' +
-            '<h4>' + esc(displayName(c)) + '</h4><div class="meta">Year ' + esc(c.year) + ' · ' + esc(ksShort(c.keyStage)) + '</div></button>';
+            '<h4>' + esc(displayName(c)) + '</h4><div class="meta">Year ' + esc(c.year) + ' · ' + esc(ksShort(c.keyStage)) + '</div><div style="margin-top:.4rem">' + boardBadge(c) + '</div></button>';
         }).join('') + '</div>';
       }
       root.innerHTML = h;
@@ -789,6 +835,7 @@
       var c = S.cls;
       var name = displayName(c);
       var yearTxt = (c.year != null) ? ' — Year ' + c.year : '';
+      var boardChip = boardBadge(c);
       var headingAttr = isAdmin
         ? ' class="cr-title-edit" data-a="rename-subject" role="button" tabindex="0" title="Click to rename this classroom"'
         : ' class="cr-title-edit" style="cursor:default"';
@@ -814,6 +861,7 @@
         (yearTxt ? '<span class="cr-year-suffix">' + esc(yearTxt) + '</span>' : '') +
         pen +
         '</h3>' +
+        '<div class="cr-board-row">' + boardChip + '</div>' +
         '<div class="cr-sub">' + esc(ksShort(c.keyStage)) + ' · ' + esc(tutorHint) + '</div></div>' +
         addTopicBtn + '</div>';
 
@@ -879,7 +927,8 @@
         allowedKS.map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + '</option>'; }).join('') + '</select></div>' +
         '<div class="cr-row2"><div class="cr-field"><label>Year</label><select id="crNewYear"></select></div>' +
         '<div class="cr-field"><label>Subject</label><select id="crNewSubject"></select></div></div>' +
-        '<div class="cr-note">A classroom is one subject for one Year. If it already exists you will simply be taken to it.</div>';
+        '<div class="cr-field"><label>Exam board</label><select id="crNewBoard">' + boardOptionsHtml(DEFAULT_BOARD, false) + '</select></div>' +
+        '<div class="cr-note">A classroom is one subject for one Year on one exam board. If it already exists you will simply be taken to it.</div>';
       m.foot.innerHTML = '<span class="cr-err" id="crNewErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button><button type="button" class="cr-btn primary" data-a="create">Open classroom</button>';
       var ksSel = m.body.querySelector('#crNewKs'), yearSel = m.body.querySelector('#crNewYear'), subSel = m.body.querySelector('#crNewSubject');
       function fill() {
@@ -893,7 +942,7 @@
       m.foot.querySelector('[data-a="create"]').onclick = async function () {
         var b = this; b.disabled = true;
         try {
-          var c = await ensureClassroom(subSel.value, ksSel.value, yearSel.value, user);
+          var c = await ensureClassroom(subSel.value, ksSel.value, yearSel.value, user, m.body.querySelector('#crNewBoard').value);
           m.close(true);
           S.classrooms = null;
           await openClassroom(c.id);
@@ -1362,6 +1411,7 @@
       if (f === 'f-subject') S.filters.subject = e.target.value;
       else if (f === 'f-ks') S.filters.ks = e.target.value;
       else if (f === 'f-year') S.filters.year = e.target.value;
+      else if (f === 'f-board') S.filters.board = e.target.value;
       else if (f.indexOf('l-') === 0) { S.lf[f.slice(2)] = e.target.value; renderAllLessons(); return; }
       renderList();
     });
@@ -1383,7 +1433,7 @@
     var profile = opts.profile || {};
     var subjects = lmzSubjectKeys(profile.subjects);
     var year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
-    var S = { cls: null, topics: [], lessons: [], work: { assignments: [], exams: [], lessons: [] } };
+    var S = { cls: null, topics: [], lessons: [], board: DEFAULT_BOARD, work: { assignments: [], exams: [], lessons: [] } };
     var AUD = audFor(profile);
 
     var homeToken = 0;
@@ -1409,7 +1459,9 @@
       subjects.forEach(function (k) {
         (async function () {
           try {
-            var cls = await findClassroomCached(k, year, profile.keyStage);
+            var bPref = getBoardPref(opts.uid, k);
+            if (!bPref) return; // board not chosen yet: badge appears once they pick one
+            var cls = await findClassroomCached(k, year, profile.keyStage, bPref);
             if (!cls || !window.WorkUI || !window.WorkUI.loadStudentWork) return;
             var topics = await loadTopicsCached(cls.id);
             var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
@@ -1431,12 +1483,24 @@
       });
     }
 
-    async function openSubject(subjectId) {
+    function renderBoardPicker(subjectId) {
+      homeToken++;
+      root.innerHTML = '<div class="cr-crumb"><a data-a="home">My Classes</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(lmzSubjectLabel(subjectId)) + '</span></div>' +
+        '<div class="cr-bar"><div><h3>Which exam board?</h3><div class="cr-sub">Choose the board you are studying ' + esc(lmzSubjectLabel(subjectId)) + ' with. You can change this at any time.</div></div></div>' +
+        '<div class="cr-pick">' + BOARDS.map(function (b) {
+          return '<button type="button" class="cr-card" data-a="pick-board" data-s="' + esc(subjectId) + '" data-b="' + esc(b.id) + '"><div class="ic"><i class="fas fa-landmark"></i></div><h4>' + esc(b.label) + (b.isNew ? ' <span class="cr-board-new">NEW</span>' : '') + '</h4></button>';
+        }).join('') + '</div>';
+    }
+
+    async function openSubject(subjectId, forcePick) {
       homeToken++; // cancel any badge fills still running for the home screen
+      var board = getBoardPref(opts.uid, subjectId);
+      if (!board || forcePick) return renderBoardPicker(subjectId);
+      S.board = board;
       root.innerHTML = loaderHtml('Loading\u2026');
       try {
-        var cls = await findClassroomCached(subjectId, year, profile.keyStage);
-        if (!cls) { S.cls = { subjectName: lmzSubjectLabel(subjectId), year: year }; S.topics = []; S.lessons = []; return renderClass(); }
+        var cls = await findClassroomCached(subjectId, year, profile.keyStage, board);
+        if (!cls) { S.cls = { subjectId: subjectId, subjectName: lmzSubjectLabel(subjectId), year: year, board: board }; S.topics = []; S.lessons = []; S.work = { assignments: [], exams: [], lessons: [] }; return renderClass(); }
         var topics = await loadTopicsCached(cls.id);
         var emptyWork = { assignments: [], exams: [], lessons: [] };
         // Lessons and the student's work are fetched together (both need only the topic list).
@@ -1459,11 +1523,12 @@
       var c = S.cls;
       var name = displayName(c);
       var h = '<div class="cr-crumb"><a data-a="home">My Classes</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + esc(name) + (c.year ? ' — Year ' + esc(c.year) : '') + '</h3></div></div>';
+        '<div class="cr-bar"><div><h3>' + esc(name) + (c.year ? ' — Year ' + esc(c.year) : '') + '</h3>' +
+        '<div class="cr-board-row">' + boardBadge({ board: S.board }) + '<button type="button" class="cr-btn sm" data-a="change-board" data-s="' + esc(c.subjectId || '') + '"><i class="fas fa-repeat"></i> Change board</button></div></div></div>';
       var ordered = visibleOrdered();
       var hasWork = S.work && (S.work.assignments.length || S.work.exams.length);
       if (!ordered.length && !hasWork) {
-        root.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No classroom content is available yet.</div></div>';
+        root.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No ' + esc(boardLabel({ board: S.board })) + ' content is available for this subject yet.</div></div>';
         return;
       }
       var num = {}; ordered.forEach(function (l, i) { num[l.id] = i + 1; });
@@ -1494,6 +1559,7 @@
           return '<div class="cr-lesson student" data-a="lesson" data-id="' + esc(l.id) + '" tabindex="0" role="button"><span class="n">' + pad2(num[l.id]) + '</span><span class="tt">' + esc(l.title) + '</span></div>';
         }).join('') + '</div>';
       }
+      if (global.WorkUI && global.WorkUI.studentPastWork && hasWork) h += global.WorkUI.studentPastWork(S.work);
       root.innerHTML = h;
     }
 
@@ -1556,6 +1622,8 @@
         }
         return;
       }
+      if (a === 'pick-board') { setBoardPref(opts.uid, el.dataset.s, el.dataset.b); openSubject(el.dataset.s); return; }
+      if (a === 'change-board') { openSubject(el.dataset.s || (S.cls && S.cls.subjectId), true); return; }
       if (a === 'home') renderHome();
       else if (a === 'open') openSubject(el.dataset.s);
       else if (a === 'class') renderClass();
@@ -1598,18 +1666,29 @@
           return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '"><div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' + esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(child.keyStage))) + '</div></button>';
         }).join('') + '</div>';
     }
-    async function openSubject(k) {
+    var PUID = 'parent_' + (child.id || child.uid || child.name || 'child');
+    function parentPicker(k) {
+      root.innerHTML = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(lmzSubjectLabel(k)) + '</span></div>' +
+        '<div class="cr-bar"><div><h3>Which exam board?</h3><div class="cr-sub">Choose the board ' + esc(child.name || 'your child') + ' studies ' + esc(lmzSubjectLabel(k)) + ' with.</div></div></div>' +
+        '<div class="cr-pick">' + BOARDS.map(function (b) {
+          return '<button type="button" class="cr-card" data-a="pick-board" data-s="' + esc(k) + '" data-b="' + esc(b.id) + '"><div class="ic"><i class="fas fa-landmark"></i></div><h4>' + esc(b.label) + (b.isNew ? ' <span class="cr-board-new">NEW</span>' : '') + '</h4></button>';
+        }).join('') + '</div>';
+    }
+    async function openSubject(k, forcePick) {
+      var pboard = getBoardPref(PUID, k);
+      if (!pboard || forcePick) return parentPicker(k);
       root.innerHTML = loaderHtml('Loading\u2026');
       try {
-        var cls = await findClassroomCached(k, year, child.keyStage);
-        if (!cls) { S.cls = { subjectName: lmzSubjectLabel(k), year: year }; S.topics = []; S.lessons = []; }
+        var cls = await findClassroomCached(k, year, child.keyStage, pboard);
+        if (!cls) { S.cls = { subjectId: k, subjectName: lmzSubjectLabel(k), year: year, board: pboard }; S.topics = []; S.lessons = []; }
         else { var pTopics = await loadTopicsCached(cls.id); var pLessons = await loadLessonsCached(cls.id, pTopics, AUD); S.cls = cls; S.topics = pTopics; S.lessons = pLessons; }
       } catch (e) { console.error('parent classroom:', e); root.innerHTML = '<div class="cr-crumb"><a data-a="home">Subjects</a></div><div class="cr-panel"><div class="cr-empty">Could not load this subject.</div></div>'; return; }
       list();
     }
     function list() {
       S.open = null;
-      var h = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(displayName(S.cls)) + '</span></div>';
+      var h = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(displayName(S.cls)) + '</span></div>' +
+        '<div class="cr-board-row">' + boardBadge(S.cls) + '<button type="button" class="cr-btn sm" data-a="change-board" data-s="' + esc(S.cls.subjectId || '') + '"><i class="fas fa-repeat"></i> Change board</button></div>';
       var any = false;
       S.topics.forEach(function (t) {
         var ls = S.lessons.filter(function (l) { return l.topicId === t.id; }).sort(byOrder);
@@ -1634,7 +1713,7 @@
     }
     root.addEventListener('click', function (e) {
       var el = e.target.closest('[data-a]'); if (!el) return; var a = el.dataset.a;
-      if (a === 'home') home(); else if (a === 'open') openSubject(el.dataset.s); else if (a === 'list') list(); else if (a === 'lesson') lesson(el.dataset.id);
+      if (a === 'pick-board') { setBoardPref(PUID, el.dataset.s, el.dataset.b); openSubject(el.dataset.s); } else if (a === 'change-board') openSubject(el.dataset.s, true); else if (a === 'home') home(); else if (a === 'open') openSubject(el.dataset.s); else if (a === 'list') list(); else if (a === 'lesson') lesson(el.dataset.id);
     });
     home();
     return { reload: home };
@@ -1647,7 +1726,8 @@
       displayName: displayName, snapDocs: snapDocs, clsRef: clsRef, injectStyle: injectStyle, openModal: openModal, confirmModal: confirmModal,
       loadTopics: loadTopics, loadLessons: loadLessons, loadLessonsForTopics: loadLessonsForTopics,
       findClassroomCached: findClassroomCached, loadTopicsCached: loadTopicsCached, loadLessonsCached: loadLessonsCached, memo: memo, clearMemo: clearMemo, loaderHtml: loaderHtml, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
-      KEY_STAGES: KEY_STAGES, audFor: audFor, isCbcStage: isCbcStage
+      KEY_STAGES: KEY_STAGES, audFor: audFor, isCbcStage: isCbcStage,
+      BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, getBoardPref: getBoardPref
     }
   };
 })(window);

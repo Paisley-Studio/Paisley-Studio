@@ -607,7 +607,7 @@
     var tutorSubjects = lmzSubjectKeys(opts.subjects || []);
     var tutorKS = opts.keyStages || [];
     var user = { uid: opts.uid, name: opts.name || (isAdmin ? 'Studio Desk' : 'Tutor') };
-    var S = { screen: 'list', tab: 'classes', classrooms: null, cls: null, topics: [], items: [], subs: {}, enrolled: [], collapsed: {}, filters: { subject: '', ks: '', year: '' }, granted: [], monitoringOnly: !!opts.monitoringOnly };
+    var S = { screen: 'list', tab: 'classes', classrooms: null, cls: null, topics: [], items: [], subs: {}, enrolled: [], collapsed: {}, filters: { subject: '', ks: '', year: '', board: '' }, view: 'active', granted: [], monitoringOnly: !!opts.monitoringOnly };
     root.classList.add('cr-root');
 
     async function loadClassrooms() {
@@ -675,10 +675,10 @@
       var list = (S.classrooms || []).filter(function (c) {
         var f = S.filters;
         if ((opts.audience === 'tuition') !== /^CBC\b/i.test(String(c.keyStage || ''))) return false;
-        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year);
+        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year) && (!f.board || U.boardOf(c) === f.board);
       });
       if (isAdmin) {
-        h += '<div class="cr-filters">' + sel('f-subject', 'All subjects', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), S.filters.subject) +
+        h += '<div class="cr-filters"><select data-f="f-board" aria-label="Exam board">' + U.boardOptionsHtml(S.filters.board, true) + '</select>' + sel('f-subject', 'All subjects', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), S.filters.subject) +
           sel('f-ks', 'All Key Stages', (opts.audience === 'tuition' && typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : U.KEY_STAGES).map(function (k) { return [k, U.ksShort(k)]; }), S.filters.ks) +
           sel('f-year', 'All Years', (opts.audience === 'tuition' ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]).map(function (y) { return [String(y), (opts.audience === 'tuition' ? 'Grade ' : 'Year ') + y]; }), S.filters.year) + '</div>';
       }
@@ -699,7 +699,7 @@
         list.sort(function (a, b) { return U.displayName(a).localeCompare(U.displayName(b)) || (a.year || 0) - (b.year || 0); });
         h += '<div class="cr-grid">' + list.map(function (c) {
           return '<button type="button" class="cr-card" data-a="open" data-id="' + esc(c.id) + '"><div class="ic"><i class="fas ' + (kind === 'exam' ? 'fa-file-pen' : 'fa-book-open') + '"></i></div><h4>' + esc(U.displayName(c)) +
-            '</h4><div class="meta">Year ' + esc(c.year) + ' \u00b7 ' + esc(U.ksShort(c.keyStage)) + '</div></button>';
+            '</h4><div class="meta">Year ' + esc(c.year) + ' \u00b7 ' + esc(U.ksShort(c.keyStage)) + '</div><div style="margin-top:.4rem">' + U.boardBadge(c) + '</div></button>';
         }).join('') + '</div>';
       }
       root.innerHTML = h;
@@ -715,6 +715,7 @@
         var doc = await U.clsRef(cid).get();
         if (!doc.exists) throw new Error('Classroom not found.');
         S.cls = Object.assign({ id: doc.id }, doc.data());
+        S.view = 'active';
         await reload();
       } catch (e) { root.innerHTML = '<div class="cr-empty">Could not open: ' + esc(e.message || e) + '</div>'; return; }
       render();
@@ -749,6 +750,12 @@
       return { total: aud.length, submitted: submitted, graded: graded };
     }
 
+    // Past Work = every recipient has handed in AND every piece is graded.
+    function isPast(it) {
+      var c = counts(it);
+      return c.total > 0 && c.graded === c.total;
+    }
+
     function itemPill(it) {
       var c = counts(it);
       if (kind === 'exam') {
@@ -775,6 +782,9 @@
     function render() {
       S.screen = 'class';
       var c = S.cls, name = U.displayName(c);
+      var pastCount = S.items.filter(isPast).length;
+      if (S.view === 'past' && !pastCount) S.view = 'active';
+      var ITEMS = S.items.filter(function (it) { return isPast(it) === (S.view === 'past'); });
       var topBtn;
       if (kind === 'exam') {
         topBtn = isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-flat-exam"><i class="fas fa-plus"></i> New exam</button>' : '';
@@ -782,17 +792,20 @@
         topBtn = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
       }
       var h = '<div class="cr-crumb"><a data-a="back">' + title + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !S.monitoringOnly && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
-        topBtn + '</div>';
+        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-board-row">' + U.boardBadge(c) + '</div><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !S.monitoringOnly && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
+        topBtn + '</div>' +
+        '<div class="cr-tabs"><button type="button" class="cr-btn ' + (S.view === 'active' ? 'on' : '') + '" data-a="view" data-v="active"><i class="fas fa-inbox"></i> Current</button>' +
+        '<button type="button" class="cr-btn ' + (S.view === 'past' ? 'on' : '') + '" data-a="view" data-v="past"><i class="fas fa-box-archive"></i> Past Work (' + pastCount + ')</button></div>' +
+        (S.view === 'past' ? '<div class="cr-note" style="margin-bottom:.6rem">Past Work holds only work that every student has handed in and that has been fully graded.' + (isAdmin ? ' Use the bin button to wipe an item completely \u2014 tutors and students will no longer see it.' : '') + '</div>' : '');
 
       if (kind === 'exam') {
-        if (!S.items.length) {
-          h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin
+        if (!ITEMS.length) {
+          h += '<div class="cr-panel"><div class="cr-empty">' + (S.view === 'past' ? 'Nothing in Past Work yet.' : isAdmin
             ? 'No exams in this subject yet. Click \u201cNew exam\u201d to create a Midterm or End-of-Term paper.'
             : 'No exams posted for this subject yet. The Studio Desk sets exams — check back soon.') + '</div></div>';
         } else {
           h += '<div class="cr-panel"><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Title</th><th>Type</th><th>Exam date</th><th>Submissions by</th><th>Students</th><th></th></tr></thead><tbody>';
-          S.items.forEach(function (it) {
+          ITEMS.forEach(function (it) {
             var cnt = counts(it);
             var examDate = it.examDate ? U.fmtDateTime(U.toDate(it.examDate)) : '—';
             var deadline = it.submissionDeadline ? U.fmtDateTime(U.toDate(it.submissionDeadline)) : '—';
@@ -828,10 +841,11 @@
           ? 'No topics yet. Add a topic, then add assignments inside it.'
           : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
         S.topics.forEach(function (t) {
-          var rows = S.items.filter(function (x) { return x.tid === t.id; }).sort(function (a, b) {
+          var rows = ITEMS.filter(function (x) { return x.tid === t.id; }).sort(function (a, b) {
             var da = dueOf(a, 'assignment'), db2 = dueOf(b, 'assignment');
             return (da ? da.getTime() : 0) - (db2 ? db2.getTime() : 0);
           });
+          if (S.view === 'past' && !rows.length) return;
           var open = !S.collapsed[t.id];
           var topicActions = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Prepare assignment</button></div>' : '';
           h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' +
@@ -981,7 +995,8 @@
       var m = U.openModal({ title: 'Add classroom' });
       m.body.innerHTML = '<div class="cr-field"><label>Key Stage</label><select id="nKs">' + U.KEY_STAGES.map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + '</option>'; }).join('') + '</select></div>' +
         '<div class="cr-row2"><div class="cr-field"><label>Year</label><select id="nYear"></select></div><div class="cr-field"><label>Subject</label><select id="nSub"></select></div></div>' +
-        '<div class="cr-note">A classroom is one subject for one Year.</div>';
+        '<div class="cr-field"><label>Exam board</label><select id="nBoard">' + U.boardOptionsHtml(U.DEFAULT_BOARD, false) + '</select></div>' +
+        '<div class="cr-note">A classroom is one subject for one Year on one exam board.</div>';
       m.foot.innerHTML = '<span class="cr-err" id="nErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button><button type="button" class="cr-btn primary" data-a="create">Open classroom</button>';
       var ks = m.body.querySelector('#nKs'), yr = m.body.querySelector('#nYear'), sb = m.body.querySelector('#nSub');
       function fill() {
@@ -992,7 +1007,7 @@
       m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
       m.foot.querySelector('[data-a="create"]').onclick = async function () {
         this.disabled = true;
-        try { var c = await U.ensureClassroom(sb.value, ks.value, yr.value, user); m.close(true); S.classrooms = null; await openClass(c.id); }
+        try { var c = await U.ensureClassroom(sb.value, ks.value, yr.value, user, m.body.querySelector('#nBoard').value); m.close(true); S.classrooms = null; await openClass(c.id); }
         catch (e) { m.foot.querySelector('#nErr').textContent = 'Could not create: ' + (e.message || e); this.disabled = false; }
       };
     }
@@ -1014,31 +1029,31 @@
     }
 
     async function deleteItem(it) {
-      if (!canEdit(it)) { alert('Only the Studio Desk or the tutor who posted this can delete it.'); return; }
+      if (!isAdmin) { alert('Only the Studio Desk (admin) can delete work.'); return; }
+      var isFlat = kind === 'exam';
+      var k = isFlat ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment');
+      var itemRef = isFlat ? flatExamRef(it.cid, it.id) : coll(it.cid, it.tid, k).doc(it.id);
       var cnt = Object.keys(S.subs[it.id] || {}).length;
-      if (cnt && !isAdmin) { alert('This already has handed-in work, so only the Studio Desk can delete it.'); return; }
-      if (!confirm('Delete \u201c' + it.title + '\u201d' + (cnt ? ' and its ' + cnt + ' handed-in piece(s) of work' : '') + '? This cannot be undone.')) return;
+      if (!confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : 'assignment') + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors and students will no longer see it anywhere.\n\nThis cannot be undone.')) return;
       try {
-        if (kind === 'exam') {
-          var sn = await flatExamSubmissionsRef(it.cid, it.id).get();
-          for (var i = 0; i < sn.docs.length; i += 400) {
-            var b = db.batch();
-            sn.docs.slice(i, i + 400).forEach(function (d) { b.delete(d.ref); });
-            await b.commit();
-          }
-          await flatExamRef(it.cid, it.id).delete();
-          if (it.examPdfPath) firebase.storage().ref(it.examPdfPath).delete().catch(function () {});
-        } else {
-          var k = it.isClasswork ? 'lesson' : 'assignment';
-          var sn2 = await coll(it.cid, it.tid, k).doc(it.id).collection('submissions').get();
-          for (var j = 0; j < sn2.docs.length; j += 400) {
-            var b2 = db.batch();
-            sn2.docs.slice(j, j + 400).forEach(function (d) { b2.delete(d.ref); });
-            await b2.commit();
-          }
-          await coll(it.cid, it.tid, k).doc(it.id).delete();
-          if (it.attachedPdfPath) firebase.storage().ref(it.attachedPdfPath).delete().catch(function () {});
+        var sn = await itemRef.collection('submissions').get();
+        var paths = [];
+        sn.docs.forEach(function (d) {
+          var x = d.data() || {};
+          if (x.storagePath) paths.push(x.storagePath);
+          if (x.gradedStoragePath) paths.push(x.gradedStoragePath);
+        });
+        if (it.attachedPdfPath) paths.push(it.attachedPdfPath);
+        if (it.examPdfPath) paths.push(it.examPdfPath);
+        for (var i = 0; i < sn.docs.length; i += 400) {
+          var b = db.batch();
+          sn.docs.slice(i, i + 400).forEach(function (d) { b.delete(d.ref); });
+          await b.commit();
         }
+        await itemRef.delete();
+        // Files last, best effort: the item is already gone from every screen.
+        await Promise.all(paths.map(function (pth) { return firebase.storage().ref(pth).delete().catch(function () {}); }));
+        S.view = 'active';
         await refresh();
       } catch (e) { alert('Could not delete: ' + (e.message || e)); }
     }
@@ -1106,6 +1121,7 @@
         if (a === 'open') openClass(id);
         else if (a === 'back') { S.classrooms = null; loadClassrooms(); }
         else if (a === 'tab') { S.tab = el.dataset.v; renderList(); }
+        else if (a === 'view') { S.view = el.dataset.v; render(); }
         else if (a === 'add-class') { if (isAdmin) openAddClassroom(); }
         else if (a === 'add-topic') { if (isAdmin) openTopicModal(); }
         else if (a === 'toggle') { S.collapsed[id] = !S.collapsed[id]; render(); }
@@ -1145,6 +1161,7 @@
       if (f === 'f-subject') S.filters.subject = e.target.value;
       if (f === 'f-ks') S.filters.ks = e.target.value;
       if (f === 'f-year') S.filters.year = e.target.value;
+      if (f === 'f-board') S.filters.board = e.target.value;
       renderList();
     });
 

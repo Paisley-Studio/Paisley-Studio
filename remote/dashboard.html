@@ -530,7 +530,7 @@ async function calculateClassroomBadges() {
   // Cached + shared with the Classroom/Homework tabs so nothing is loaded twice.
   await Promise.all(subjects.map(async function(k) {
     try {
-      const cls = await U.findClassroomCached(k, year, profile.keyStage);
+      const cls = await U.findClassroomCached(k, year, profile.keyStage, U.getBoardPref(currentUser.uid, k) || U.DEFAULT_BOARD);
       if (!cls) return;
       const topics = await U.loadTopicsCached(cls.id);
       if (!topics.length) return;
