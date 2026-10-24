@@ -805,6 +805,11 @@
 
     function canEdit(it) { return isAdmin; }
 
+    // Admin-only. Rendered on EVERY assignment, classwork and exam row (and in the detail view): never conditional on state.
+    function delBtnHtml(it) {
+      return isAdmin ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '" title="Delete permanently" style="border-color:#E74C3C;color:#E74C3C;background:#fff;flex-shrink:0;white-space:nowrap"><i class="fas fa-trash"></i> Delete</button>' : '';
+    }
+
     function render() {
       S.screen = 'class';
       var c = S.cls, name = U.displayName(c);
@@ -845,7 +850,7 @@
                       ? '<button type="button" class="cr-btn sm" data-a="close-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close submissions</button>'
                       : '<button type="button" class="cr-btn sm" data-a="open-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock-open"></i> Open submissions</button>')
                   : '') +
-                (canEdit(it) ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '')
+                ''
               : '';
             h += '<tr>' +
               '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div></td>' +
@@ -856,6 +861,7 @@
               '<td><div class="cr-actions">' +
                 '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 adminControls +
+                delBtnHtml(it) +
                 '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
               '</div></td>' +
             '</tr>';
@@ -892,7 +898,7 @@
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 (!isAdmin && !isLesson ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
-                (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm danger" data-a="del" data-id="' + esc(it.id) + '"><i class="fas fa-trash"></i></button>' : '') + '</div></div>';
+                delBtnHtml(it) + '</div></div>';
             });
           }
           h += '</div>';
@@ -903,8 +909,11 @@
 
     async function openDetail(it) {
       var m = U.openModal({ title: it.title, wide: true });
-      m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="close">Close</button>';
+      m.foot.innerHTML = (isAdmin ? '<button type="button" class="cr-btn danger" data-a="del-here" style="margin-right:auto;border-color:#E74C3C;color:#E74C3C;background:#fff"><i class="fas fa-trash"></i> Delete</button>' : '') +
+        '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      var delHere = m.foot.querySelector('[data-a="del-here"]');
+      if (delHere) delHere.onclick = async function () { var ok = await deleteItem(it); if (ok) m.close(); };
       async function paint() {
         m.body.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
         var subs = {};
@@ -1055,14 +1064,15 @@
     }
 
     async function deleteItem(it) {
-      if (!isAdmin) { alert('Only the Studio Desk (admin) can delete work.'); return; }
+      if (!isAdmin) { alert('Only the Studio Desk (admin) can delete work.'); return false; }
       var isFlat = kind === 'exam';
       var k = isFlat ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment');
       var itemRef = isFlat ? flatExamRef(it.cid, it.id) : coll(it.cid, it.tid, k).doc(it.id);
+      var subCol = isFlat ? flatExamSubmissionsRef(it.cid, it.id) : itemRef.collection('submissions');
       var cnt = Object.keys(S.subs[it.id] || {}).length;
-      if (!await PaisleyUI.confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : 'assignment') + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors and students will no longer see it anywhere.\n\nThis cannot be undone.')) return;
+      if (!await PaisleyUI.confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : (it.isClasswork ? 'classwork' : 'assignment')) + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors, students and parents will no longer see it anywhere, and its notifications are removed.\n\nThis cannot be undone.')) return false;
       try {
-        var sn = await itemRef.collection('submissions').get();
+        var sn = await subCol.get();
         var paths = [];
         sn.docs.forEach(function (d) {
           var x = d.data() || {};
@@ -1071,17 +1081,29 @@
         });
         if (it.attachedPdfPath) paths.push(it.attachedPdfPath);
         if (it.examPdfPath) paths.push(it.examPdfPath);
+        (it.attachments || []).forEach(function (a) { if (a && a.storagePath) paths.push(a.storagePath); });
         for (var i = 0; i < sn.docs.length; i += 400) {
           var b = db.batch();
           sn.docs.slice(i, i + 400).forEach(function (d) { b.delete(d.ref); });
           await b.commit();
         }
         await itemRef.delete();
-        // Files last, best effort: the item is already gone from every screen.
+        try {
+          var ids = [it.cid + '/' + (it.tid || '') + '/' + it.id, it.cid + '/' + it.id];
+          for (var q = 0; q < ids.length; q++) {
+            var ns = await db.collection('personalNotifications').where('relatedEntityId', '==', ids[q]).get();
+            for (var j = 0; j < ns.docs.length; j += 400) {
+              var nb = db.batch();
+              ns.docs.slice(j, j + 400).forEach(function (d) { nb.delete(d.ref); });
+              await nb.commit();
+            }
+          }
+        } catch (ne) { console.warn('notification cleanup skipped:', ne && (ne.code || ne.message)); }
         await Promise.all(paths.map(function (pth) { return firebase.storage().ref(pth).delete().catch(function () {}); }));
         S.view = 'active';
         await refresh();
-      } catch (e) { alert('Could not delete: ' + (e.message || e)); }
+        return true;
+      } catch (e) { alert('Could not delete: ' + (e.message || e)); return false; }
     }
 
     async function renderLegacy() {
