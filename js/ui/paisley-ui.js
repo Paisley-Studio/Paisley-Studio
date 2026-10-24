@@ -22,29 +22,25 @@
 .pui-ov.in .pui-card{transform:none}\
 .pui-ico{width:64px;height:64px;border-radius:50%;margin:0 auto .9rem;display:flex;align-items:center;justify-content:center;font-size:1.7rem}\
 .pui-ico svg{width:34px;height:34px}\
-.pui-success .pui-ico{background:#e3f6ea;color:#1e9d57}\
+.pui-success .pui-ico{background:#E5F2EF;color:#245F5A}\
 .pui-error .pui-ico{background:#fde8e8;color:#d33d3d}\
-.pui-warning .pui-ico{background:#fff2d9;color:#d98a00}\
-.pui-info .pui-ico{background:#e6eefb;color:#2f6fd6}\
-.pui-question .pui-ico{background:#eef0fb;color:#5b5fd1}\
+.pui-warning .pui-ico{background:#FFF6D6;color:#9a7400}\
+.pui-info .pui-ico{background:#E5F2EF;color:#245F5A}\
+.pui-question .pui-ico{background:#E5F2EF;color:#245F5A}\
 .pui-title{margin:0 0 .4rem;font-size:1.2rem;font-weight:800}\
 .pui-msg{margin:0 0 1.2rem;font-size:.93rem;line-height:1.55;color:#4b5563;white-space:pre-line;word-break:break-word}\
 .pui-input{width:100%;box-sizing:border-box;margin:0 0 1.1rem;padding:.7rem .85rem;border:1.5px solid #d6dbe1;border-radius:12px;font:inherit;font-size:.95rem;outline:none;transition:border-color .15s,box-shadow .15s}\
-.pui-input:focus{border-color:#5b5fd1;box-shadow:0 0 0 3px rgba(91,95,209,.18)}\
+.pui-input:focus{border-color:#55BFB3;box-shadow:0 0 0 3px rgba(85,191,179,.22)}\
 .pui-btns{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap}\
 .pui-btn{flex:1 1 120px;border:0;border-radius:12px;padding:.72rem 1.1rem;font:inherit;font-weight:800;font-size:.92rem;cursor:pointer;transition:transform .1s,filter .15s}\
 .pui-btn:hover{filter:brightness(1.06)}.pui-btn:active{transform:scale(.97)}\
 .pui-btn.ghost{background:#eef0f3;color:#374151}\
-.pui-btn.main{background:#5b5fd1;color:#fff}\
-.pui-success .pui-btn.main{background:#1e9d57}\
+.pui-btn.main{background:#55BFB3;color:#fff}\
+.pui-success .pui-btn.main{background:#55BFB3}\
 .pui-error .pui-btn.main,.pui-btn.main.danger{background:#d33d3d}\
-.pui-warning .pui-btn.main{background:#d98a00}\
+.pui-warning .pui-btn.main{background:#245F5A}\
 .pui-loader-card{max-width:300px;padding:2rem 1.5rem}\
-.pui-spin{position:relative;width:78px;height:78px;margin:0 auto 1.1rem}\
-.pui-spin i{position:absolute;inset:0;border-radius:50%;border:5px solid transparent}\
-.pui-spin i:nth-child(1){border-top-color:#5b5fd1;animation:puispin 1s linear infinite}\
-.pui-spin i:nth-child(2){inset:11px;border-right-color:#1e9d57;animation:puispin .8s linear infinite reverse}\
-.pui-spin i:nth-child(3){inset:22px;border-bottom-color:#d98a00;animation:puispin .6s linear infinite}\
+.pui-spin{width:44px;height:44px;margin:0 auto 1rem;border-radius:50%;border:4px solid #E5F2EF;border-top-color:#55BFB3;animation:puispin .8s linear infinite}\
 .pui-lt{font-weight:800;font-size:1rem;margin:0}\
 .pui-ls{font-size:.82rem;color:#6b7280;margin:.3rem 0 0}\
 .pui-dots:after{content:"";animation:puidots 1.4s steps(4,end) infinite}\
@@ -53,8 +49,8 @@
 .pui-check path{stroke-dasharray:40;stroke-dashoffset:40;animation:puidraw .5s .15s ease forwards}\
 @keyframes puidraw{to{stroke-dashoffset:0}}\
 .pui-toasts{position:fixed;top:1rem;right:1rem;z-index:100001;display:flex;flex-direction:column;gap:.5rem;pointer-events:none}\
-.pui-toast{pointer-events:auto;min-width:230px;max-width:340px;background:#1f2933;color:#fff;border-radius:12px;padding:.75rem 1rem;font-size:.88rem;box-shadow:0 10px 30px rgba(0,0,0,.25);border-left:5px solid #5b5fd1;transform:translateX(120%);transition:transform .25s ease}\
-.pui-toast.in{transform:none}.pui-toast.success{border-color:#1e9d57}.pui-toast.error{border-color:#d33d3d}.pui-toast.warning{border-color:#d98a00}\
+.pui-toast{pointer-events:auto;min-width:230px;max-width:340px;background:#1f2933;color:#fff;border-radius:12px;padding:.75rem 1rem;font-size:.88rem;box-shadow:0 10px 30px rgba(0,0,0,.25);border-left:5px solid #55BFB3;transform:translateX(120%);transition:transform .25s ease}\
+.pui-toast.in{transform:none}.pui-toast.success{border-color:#55BFB3}.pui-toast.error{border-color:#d33d3d}.pui-toast.warning{border-color:#F5C842}\
 @media (prefers-color-scheme:dark){.pui-card{background:#252a31;color:#f1f3f5}.pui-msg,.pui-ls{color:#aab2bd}.pui-btn.ghost{background:#363d46;color:#e5e7eb}.pui-input{background:#1c2026;color:#fff;border-color:#454d58}}\
 ';
 
@@ -146,7 +142,7 @@
     show: function (text, sub) {
       loaderCount++;
       if (loaderEl) { loader.update(text, sub); return; }
-      loaderEl = openOverlay('<div class="pui-spin"><i></i><i></i><i></i></div><p class="pui-lt">' + esc(text || 'Working') + '<span class="pui-dots"></span></p><p class="pui-ls">' + esc(sub || 'Please wait, this will only take a moment.') + '</p>', 'pui-loader-card', 'info');
+      loaderEl = openOverlay('<div class="pui-spin"></div><p class="pui-lt">' + esc(text || 'Working') + '<span class="pui-dots"></span></p><p class="pui-ls">' + esc(sub || 'Please wait, this will only take a moment.') + '</p>', 'pui-loader-card', 'info');
     },
     update: function (text, sub) {
       if (!loaderEl) return;

@@ -265,7 +265,9 @@
       '.cr-card .ic{width:40px;height:40px;border-radius:12px;background:rgba(85,191,179,.14);color:var(--brand-deep,#245F5A);display:flex;align-items:center;justify-content:center;margin-bottom:.7rem}',
       '.cr-card h4{margin:0 0 .15rem;font-size:.95rem;color:var(--brand-deep,#245F5A)}',
       '.cr-card .meta{font-size:.76rem;color:var(--muted,#5A6E6A)}',
-      '.cr-badge-red{position:absolute;top:-8px;right:-8px;background:#E74C3C;color:#fff;border-radius:50%;min-width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;box-shadow:0 2px 6px rgba(231,76,60,.4);border:2px solid #fff;padding:0 4px}',
+      '.cr-badge-red{position:absolute;top:-8px;right:-8px;background:#E74C3C;color:#fff;border-radius:50%;min-width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;box-shadow:0 2px 6px rgba(231,76,60,.4);border:2px solid #fff;padding:0 4px;animation:cr-bubble 2.4s ease-in-out infinite}',
+      '@keyframes cr-bubble{0%,100%{transform:scale(1);box-shadow:0 2px 6px rgba(231,76,60,.4)}50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(231,76,60,.14)}}',
+      '@media (prefers-reduced-motion:reduce){.cr-badge-red{animation:none}}',
       '.cr-panel{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:1.1rem 1.2rem;margin-bottom:.9rem}',
       '.cr-empty{padding:1.6rem 1rem;text-align:center;color:var(--muted,#5A6E6A);font-size:.86rem}',
       '.cr-filters{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem}',
@@ -824,6 +826,14 @@
         }).join('') + '</div>';
       }
       root.innerHTML = h;
+      if (!isAdmin && window.WorkUI && window.WorkUI.tutorPendingCount) {
+        Array.prototype.forEach.call(root.querySelectorAll('.cr-card[data-a="open"]'), function (card) {
+          window.WorkUI.tutorPendingCount(card.dataset.id, 'classwork').then(function (n) {
+            if (!n || !card.isConnected || card.querySelector('.cr-badge-red')) return;
+            card.insertAdjacentHTML('afterbegin', '<div class="cr-badge-red">' + n + '</div>');
+          }).catch(function () { /* badge is best-effort */ });
+        });
+      }
     }
 
     function selectHtml(id, allLabel, pairs, cur) {

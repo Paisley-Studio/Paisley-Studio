@@ -169,7 +169,7 @@ function tutorTeaches(student, subjectId, tutorUid) {
   return !!(direct || bySubject);
 }
 
-async function releaseWork(db, tutorUid, tutor, parsed, studentIds) {
+async function releaseWork(db, tutorUid, tutor, parsed, studentIds, dueAtIso) {
   const ref = db.doc(parsed.path);
   const [itemSnap, clsSnap] = await Promise.all([ref.get(), db.doc("classrooms/" + parsed.cid).get()]);
   if (!itemSnap.exists || !clsSnap.exists) throw new HttpsError("not-found", "That item no longer exists.");
@@ -191,8 +191,26 @@ async function releaseWork(db, tutorUid, tutor, parsed, studentIds) {
   }
   if (!ok.length) throw new HttpsError("failed-precondition", "None of the selected students are yours for this subject.");
   
+  // Deadline: the tutor sets it when releasing homework / classwork (exams keep
+  // their own exam date + submission deadline). It becomes the date we track.
+  let dueUpdate = {};
+  if (parsed.type === "assignment" || parsed.type === "lesson") {
+    const when = dueAtIso ? new Date(dueAtIso) : null;
+    const valid = when && !isNaN(when.getTime());
+    if (!valid && !item.dueAt) throw new HttpsError("invalid-argument", "Please set a deadline before releasing this work.");
+    if (valid) {
+      if (when.getTime() <= Date.now()) throw new HttpsError("invalid-argument", "The deadline must be in the future.");
+      dueUpdate = {
+        dueAt: admin.firestore.Timestamp.fromDate(when),
+        dueSetBy: tutorUid,
+        reminderSent: false, graceNoticeSent: false, reportSent: false
+      };
+    }
+  }
+
   // THE FIX: Update releasedTo AND force the audiences to true so students can see it
   await ref.update({
+    ...dueUpdate,
     releasedTo: admin.firestore.FieldValue.arrayUnion(...ok),
     "audiences.online": true,
     "audiences.remote": true,
@@ -214,7 +232,7 @@ exports.tutorReleaseWork = onCall(
     if (!parsed || ["assignment", "exam", "lesson"].indexOf(parsed.type) === -1) throw new HttpsError("invalid-argument", "Only lessons, homework and exams can be released to students.");
     const ids = Array.from(new Set(((request.data || {}).studentIds || []).map(String))).slice(0, 200);
     if (!ids.length) throw new HttpsError("invalid-argument", "Choose at least one student.");
-    return releaseWork(db, request.auth.uid, t.data() || {}, parsed, ids);
+    return releaseWork(db, request.auth.uid, t.data() || {}, parsed, ids, (request.data || {}).dueAt);
   }
 );
 

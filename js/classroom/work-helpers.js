@@ -211,7 +211,7 @@
       '<div class="cr-field"><label>Topic</label><select id="wkTopic"' + (ex ? ' disabled' : '') + '>' + topics.map(function (t) {
         return '<option value="' + esc(t.id) + '"' + (t.id === topicId0 ? ' selected' : '') + '>' + esc(t.title) + '</option>'; }).join('') + '</select></div></div>' +
       '<div class="cr-field"><label>Description / instructions</label><textarea id="wkDesc" rows="4" style="width:100%">' + esc(ex ? ex.description : '') + '</textarea></div>' +
-      '<div class="cr-field"><label>Deadline</label><div class="cr-actions"><input type="date" id="wkDate" value="' + dp.date + '"><input type="time" id="wkTime" value="' + dp.time + '"></div></div>' +
+      '<div class="cr-field"><label>Deadline <span class="cr-note" style="font-weight:600">(optional)</span></label><div class="cr-actions"><input type="date" id="wkDate" value="' + dp.date + '"><input type="time" id="wkTime" value="' + dp.time + '"></div></div>' +
       '<div class="cr-field"><label>Attach PDF (optional)</label><div id="wkPdfNow">' + (ex && ex.attachedPdfName ? '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(ex.attachedPdfName) + '</span></div>' : '') + '</div>' +
       '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> ' + (ex && ex.attachedPdfName ? 'Replace PDF' : 'Choose PDF') + '</button>' +
       '<input type="file" id="wkPdfIn" accept="application/pdf,.pdf" style="display:none"><div class="cr-prog" id="wkProg" style="display:none"><div></div></div></div>' +
@@ -246,10 +246,13 @@
       var d = m.body.querySelector('#wkDate').value, t = m.body.querySelector('#wkTime').value;
       if (!title) { errEl.textContent = 'Please enter a title.'; return; }
       if (!tid) { errEl.textContent = 'Choose a topic.'; return; }
-      if (!d || !t) { errEl.textContent = 'Choose the deadline date and time.'; return; }
-      var when = new Date(d + 'T' + t);
-      if (isNaN(when.getTime())) { errEl.textContent = 'That deadline is not valid.'; return; }
-      if (!ex && when.getTime() <= Date.now()) { errEl.textContent = 'The deadline must be in the future.'; return; }
+      var when = null;
+      if (d || t) {
+        if (!d || !t) { errEl.textContent = 'Set both a date and a time for the deadline, or leave both empty.'; return; }
+        when = new Date(d + 'T' + t);
+        if (isNaN(when.getTime())) { errEl.textContent = 'That deadline is not valid.'; return; }
+        if (!ex && when.getTime() <= Date.now()) { errEl.textContent = 'The deadline must be in the future.'; return; }
+      }
       
       var topic = topics.filter(function (x) { return x.id === tid; })[0];
       var data = {
@@ -257,8 +260,9 @@
         subjectId: cls.subjectId, subjectName: U.displayName(cls), keyStage: cls.keyStage, year: cls.year,
         topicId: tid, topicTitle: topic ? topic.title : '',
         recipients: [], audience: 'class',
-        dueAt: firebase.firestore.Timestamp.fromDate(when), updatedAt: FV().serverTimestamp()
+        updatedAt: FV().serverTimestamp()
       };
+      if (when) data.dueAt = firebase.firestore.Timestamp.fromDate(when);
       
       if (uploaded) { data.attachedPdfUrl = uploaded.url; data.attachedPdfName = uploaded.name; data.attachedPdfPath = uploaded.path; }
       if (!ex) {
@@ -477,7 +481,10 @@
     
     if (!list.length) { m.body.innerHTML = '<div class="cr-empty">None of your students take this subject in this Year.</div>'; return; }
     
-    m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.6rem">Choose the students you teach who should receive this now.</div>' +
+    var rdp = dtParts(it.dueAt ? U.toDate(it.dueAt) : null);
+    var needsDue = !it.examDate;
+    m.body.innerHTML = (needsDue ? '<div class="cr-field" style="margin-bottom:.8rem"><label>Deadline <span style="color:#c0392b">*</span></label><div class="cr-actions"><input type="date" id="rlDate" value="' + rdp.date + '"><input type="time" id="rlTime" value="' + (rdp.time || '17:00') + '"></div><div class="cr-note" style="margin-top:.3rem">Set the deadline for your students. This is the date we track for this work.</div></div>' : '') +
+      '<div class="cr-note" style="margin-bottom:.6rem">Choose the students you teach who should receive this now.</div>' +
       '<label style="display:flex; align-items:center; gap:.5rem; margin-bottom:.8rem; font-weight:800; color:var(--brand-deep); cursor:pointer; padding:.5rem; background:var(--sage); border-radius:8px;">' +
         '<input type="checkbox" id="rlSelectAll" checked> Select All Students' +
       '</label>' +
@@ -513,9 +520,18 @@
       var ids = Array.prototype.map.call(m.body.querySelectorAll('.wk-pick input:checked'), function (c) { return c.value; });
       var err = m.foot.querySelector('#rlErr');
       if (!ids.length) { err.textContent = 'Tick at least one student.'; return; }
+      var dueIso = null;
+      if (needsDue) {
+        var rd = m.body.querySelector('#rlDate').value, rt = m.body.querySelector('#rlTime').value;
+        if (!rd || !rt) { err.textContent = 'Please set the deadline before releasing.'; return; }
+        var rw = new Date(rd + 'T' + rt);
+        if (isNaN(rw.getTime())) { err.textContent = 'That deadline is not valid.'; return; }
+        if (rw.getTime() <= Date.now()) { err.textContent = 'The deadline must be in the future.'; return; }
+        dueIso = rw.toISOString();
+      }
       var btn = this; btn.disabled = true;
       
-      var typeCol = it.topicId ? (it.examDate ? 'exams' : (it.dueAt ? 'assignments' : 'lessons')) : 'exams';
+      var typeCol = it.topicId ? (it.examDate ? 'exams' : (it.isClasswork ? 'lessons' : 'assignments')) : 'exams';
       var path = '';
       if (typeCol === 'exams' && !it.topicId) {
         path = 'classrooms/' + it.cid + '/exams/' + it.id;
@@ -526,7 +542,7 @@
       var errEl = err;
       try {
         PaisleyUI.loader.show('Releasing to ' + ids.length + ' student' + (ids.length === 1 ? '' : 's'), 'Sending it out and notifying your students');
-        var r = await firebase.functions().httpsCallable('tutorReleaseWork')({ path: path, studentIds: ids });
+        var r = await firebase.functions().httpsCallable('tutorReleaseWork')({ path: path, studentIds: ids, dueAt: dueIso });
         var n = ((r.data && r.data.released) || []).length;
         PaisleyUI.loader.hide(true);
         m.close(true);
@@ -539,6 +555,28 @@
         PaisleyUI.alert((e2 && e2.message) || 'Could not release.', { type: 'error', title: 'Release failed' });
       }
     };
+  }
+
+  // Tutor red-bubble count for one classroom. "Unattended" =
+  //   (a) work the Studio Desk posted to tutors that this tutor has not yet released, plus
+  //   (b) student hand-ins still waiting to be graded.
+  // what: 'homework' | 'exams' | 'classwork'
+  async function tutorPendingCount(cid, what) {
+    var topics = await U.loadTopics(cid);
+    var res, items;
+    if (what === 'exams') { res = await loadFlatExams(cid, true); items = res.items; }
+    else {
+      res = await loadClassHomework(cid, topics, true);
+      items = res.items.filter(function (it) { return what === 'classwork' ? it.isClasswork === true : !it.isClasswork; });
+    }
+    var n = 0;
+    items.forEach(function (it) {
+      if (it.status === 'Draft' || it.status === 'draft') return;
+      if (!it.releasedTo || !it.releasedTo.length) n++;
+      var subs = res.subs[it.id] || {};
+      Object.keys(subs).forEach(function (k) { if (subs[k] && subs[k].status === 'Submitted') n++; });
+    });
+    return n;
   }
 
   function mountManagement(root, opts) {
@@ -646,6 +684,18 @@
         }).join('') + '</div>';
       }
       root.innerHTML = h;
+      if (!isAdmin) fillTutorBubbles();
+    }
+    var bubbleToken = 0;
+    function fillTutorBubbles() {
+      var token = ++bubbleToken;
+      Array.prototype.forEach.call(root.querySelectorAll('.cr-card[data-a="open"]'), function (card) {
+        var cid = card.dataset.id;
+        tutorPendingCount(cid, kind === 'exam' ? 'exams' : 'homework').then(function (n) {
+          if (token !== bubbleToken || !n || !card.isConnected || card.querySelector('.cr-badge-red')) return;
+          card.insertAdjacentHTML('afterbegin', '<div class="cr-badge-red">' + n + '</div>');
+        }).catch(function (e) { console.warn('tutor bubble skipped', cid, e && e.code); });
+      });
     }
     function sel(id, all, pairs, cur) {
       return '<select data-f="' + id + '" aria-label="' + esc(all) + '"><option value="">' + esc(all) + '</option>' +
@@ -1477,6 +1527,7 @@
     openCreateExam: openCreateExam,
     openGradeFlatExamInk: openGradeFlatExamInk,
     openRelease: openRelease,
+    tutorPendingCount: tutorPendingCount,
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
     studentTopicRows: studentTopicRows, studentPastWork: studentPastWork,

@@ -317,6 +317,11 @@ exports.onHomeworkAssigned = onDocumentCreated(
    admin callable below and by remote admission). Never creates a duplicate
    Auth user for an email that already has one; deterministic link ids make
    re-running safe. Returns one result row per guardian. */
+function normalizePhonePassword(phone) {
+  const p = String(phone || "").replace(/[\s\-().]/g, "");
+  return p.length >= 6 ? p : "";
+}
+
 async function linkGuardians(db, studentId, student, guardians) {
   const studentEmail = String(student.email || "").trim().toLowerCase();
   const results = [];
@@ -334,14 +339,17 @@ async function linkGuardians(db, studentId, student, guardians) {
     const name = g.name || "Parent/Guardian";
     let parentUid;
     let created = false;
+    let phonePassword = "";
     try {
       parentUid = (await admin.auth().getUserByEmail(email)).uid;
     } catch (e) {
       if (e && e.code && e.code !== "auth/user-not-found") throw e;
-      // Random initial password — never derived from personal data and never
-      // stored. The parent sets their own through the emailed link.
+      // New parents sign in with their email and the guardian phone number the
+      // student gave at sign-up (spaces/dashes removed). Too-short or missing
+      // numbers fall back to a random password + emailed reset link.
+      phonePassword = normalizePhonePassword(g.phone);
       const createdUser = await admin.auth().createUser({
-        email, password: crypto.randomBytes(18).toString("base64url"), displayName: name
+        email, password: phonePassword || crypto.randomBytes(18).toString("base64url"), displayName: name
       });
       parentUid = createdUser.uid;
       created = true;
@@ -365,7 +373,10 @@ async function linkGuardians(db, studentId, student, guardians) {
     }
 
     let emailSent = false;
-    if (created) {
+    if (created && phonePassword) {
+      const t = templates.parentWelcomePhone({ parentName: name, student, phone: phonePassword });
+      emailSent = !!(await sendEmail(email, t.subject, t.html)).sent;
+    } else if (created) {
       let resetLink = null;
       try { resetLink = await admin.auth().generatePasswordResetLink(email, actionSettings("parent")); }
       catch (e) { console.error("Could not generate password reset link:", e); }

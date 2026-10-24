@@ -348,6 +348,25 @@ function parentWelcomeNew({ parentName, student, resetLink }) {
   };
 }
 
+/* 6b. Parent — brand-new account, password is the guardian phone number */
+function parentWelcomePhone({ parentName, student, phone }) {
+  return {
+    subject: `Your Paisley Studio Parent Portal login \u2014 password: ${phone}`,
+    html: render({
+      preheader: `Sign in with this email and the phone number ${phone} as your password.`,
+      heading: 'Parent portal',
+      intro: `Hi ${esc(firstName(parentName))},`,
+      body: `
+        <p style="margin:0 0 14px;">An account has been set up so you can follow <strong>${esc(student.name || 'your child')}</strong>'s progress at Paisley Studio \u2014 results, homework, exams, attendance and messages from the Studio Desk.</p>
+        <p style="margin:0 0 14px;">Sign in with this email address and your <strong>phone number</strong> as the password: <strong>${esc(phone)}</strong></p>
+        <p style="margin:0 0 14px;">This is the guardian phone number ${esc(student.name || 'your child')} gave when signing up. You can change your password any time using \u201cForgot your password?\u201d on the sign-in page.</p>
+        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">If you weren't expecting this, please contact the Studio Desk.</p>
+      `,
+      cta: { label: 'Open the Parent Portal', url: PORTALS.parent }
+    })
+  };
+}
+
 /* 7. Parent — existing parent, new child linked */
 function parentNewChild({ parentName, student }) {
   return {
@@ -733,6 +752,7 @@ module.exports = {
     studentApproved,
     tutorWelcome,
     parentWelcomeNew,
+    parentWelcomePhone,
     remoteStudentInvite,
     adminNewRemoteTicket,
     parentNewChild,

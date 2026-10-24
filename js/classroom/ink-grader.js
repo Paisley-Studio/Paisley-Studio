@@ -581,7 +581,8 @@
       if (markable) {
         var bytes = await buildGradedPdf();
         gradedFileName = (status === 'Corrections' ? 'corrections_' : 'graded_') + safeName(data.studentName) + '_' + safeName(item.title) + '.pdf';
-        gradedStoragePath = 'graded-submissions/' + opts.cid + '/' + opts.itemId + '/' + (data.studentId || opts.docRef.id) + '/' + gradedFileName;
+        var gradedSubject = String((opts.cid.match(/^(.*?)_y\d+/) || [])[1] || (item && item.subjectId) || opts.cid.split('_')[0]);
+        gradedStoragePath = 'graded-submissions/' + gradedSubject + '/' + opts.cid + '/' + opts.itemId + '/' + (data.studentId || opts.docRef.id) + '/' + gradedFileName;
         var ref = firebase.storage().ref(gradedStoragePath);
         await ref.put(new Blob([bytes], { type: 'application/pdf' }), { contentType: 'application/pdf' });
         gradedFileUrl = await ref.getDownloadURL();
