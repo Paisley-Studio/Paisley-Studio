@@ -257,6 +257,7 @@
   </div>
 </div>
 
+<script src="../js/ui/paisley-ui.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -302,13 +303,11 @@ auth.onAuthStateChanged(function(user){
     .then(doc=>{
       if(doc.exists && doc.data().role === 'admin'){ grantAdminAccess(); }
       else {
-        alert('Access denied. This area is for Studio Desk administrators only.');
-        auth.signOut().then(()=>location.reload());
+        PaisleyUI.alert('Access denied. This area is for Studio Desk administrators only.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>location.reload()));
       }
     })
     .catch(()=>{
-      alert('Access denied.');
-      auth.signOut().then(()=>location.reload());
+      PaisleyUI.alert('Access denied.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>location.reload()));
     });
 });
 
@@ -339,8 +338,8 @@ document.getElementById('loginBtn').addEventListener('click', attemptLogin);
 document.getElementById('loginEmail').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginPassword').focus(); });
 document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') attemptLogin(); });
 
-document.getElementById('signOutBtn').addEventListener('click', ()=>{
-  if(!confirm('Sign out of Studio Desk?')) return;
+document.getElementById('signOutBtn').addEventListener('click', async () => {
+  if(!await PaisleyUI.confirm('Sign out of Studio Desk?')) return;
   auth.signOut().then(()=>location.reload());
 });
 document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
@@ -471,9 +470,9 @@ function renderTutorAccounts(){
 
 window.copyUrl = (url) => {
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(url).then(()=>alert('Login URL copied:\n' + url)).catch(()=>prompt('Copy this login URL:', url));
+    navigator.clipboard.writeText(url).then(()=>alert('Login URL copied:\n' + url)).catch(()=>PaisleyUI.prompt('Copy this login URL:', {value:url, title:'Login URL'}));
   } else {
-    prompt('Copy this login URL:', url);
+    PaisleyUI.prompt('Copy this login URL:', {value:url, title:'Login URL'});
   }
 };
 
@@ -734,7 +733,7 @@ function readTutorForm(){
   };
 }
 
-function createTutor(){
+async function createTutor(){
   const d = readTutorForm();
   const password = document.getElementById('tPassword').value;
   const btn = document.getElementById('createTutorConfirm');
@@ -779,7 +778,7 @@ function createTutor(){
       'the tutor will receive a link by email to set a new one.';
 
     // Show the alert
-    alert(message);
+    PaisleyUI.alert(message, { type:'success', title:'Tutor account created', sticky:true, okLabel:'I have copied it' });
 
     // Also try to copy the whole message so the admin has a second
     // chance if they forget before dismissing the alert.
@@ -788,12 +787,12 @@ function createTutor(){
         navigator.clipboard.writeText(message).catch(()=>{});
       }
     } catch(e) { /* clipboard not available — no problem */ }
-  }).catch(err=>{
+  }).catch(async err=>{
     if(err && err.code === 'auth/email-already-in-use'){
       // The same person can hold several roles (admin + tutor + parent) on ONE
       // sign-in. Don't try to make a second Auth user — attach the tutor role to
       // the existing one, which keeps their current password.
-      const ok = confirm('That email already has a sign-in account (for example an admin or parent account).\n\nAdd the tutor role to that existing account? They will sign in to the Tutor Portal with their current password, and the password you typed here will not be used.');
+      const ok = await PaisleyUI.confirm('That email already has a sign-in account (for example an admin or parent account).\n\nAdd the tutor role to that existing account? They will sign in to the Tutor Portal with their current password, and the password you typed here will not be used.');
       if(!ok){
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Create tutor';
@@ -856,29 +855,29 @@ window.saveTutorEdit = (id) => {
 };
 
 /* ---------- PASSWORD RESET / SUSPEND / DELETE ---------- */
-window.resetTutorPassword = (id) => {
+window.resetTutorPassword = async (id) => {
   const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
   if(!t.email){ alert('This tutor has no email on file.'); return; }
-  if(!confirm('Send a password reset email to ' + t.email + '?')) return;
+  if(!await PaisleyUI.confirm('Send a password reset email to ' + t.email + '?')) return;
   auth.sendPasswordResetEmail(t.email, { url: window.location.origin + '/tutor/login.html' })
     .then(()=>alert('Password reset email sent to ' + t.email + '.'))
     .catch(err=>alert('Could not send the reset email: ' + err.message));
 };
 
-window.setTutorStatus = (id, status) => {
+window.setTutorStatus = async (id, status) => {
   const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
   const verb = status === 'Suspended' ? 'Suspend' : 'Reactivate';
-  if(!confirm(verb + ' ' + (t.name||'this tutor') + '?')) return;
+  if(!await PaisleyUI.confirm(verb + ' ' + (t.name||'this tutor') + '?')) return;
   updateTutorAccount(id, { status: status }).catch(err=>alert('Could not update: ' + err.message));
 };
 
-window.removeTutor = (id) => {
+window.removeTutor = async (id) => {
   const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
   const kids = studentsOf(id);
   let msg = 'Delete the tutor record for ' + (t.name||'this tutor') + '?';
   if(kids.length) msg += '\n\n' + kids.length + ' student(s) will be left with no tutor assigned.';
   msg += '\n\nNote: this removes the tutorAccounts record only. Their Firebase Auth login must be deleted separately in the Firebase console (Authentication \u2192 Users), because browsers cannot delete another user\'s auth account. Suspending instead blocks their sign-in immediately.';
-  if(!confirm(msg)) return;
+  if(!await PaisleyUI.confirm(msg)) return;
 
   deleteTutorAccount(id).then(()=>{
     if(!kids.length) return;

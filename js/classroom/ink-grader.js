@@ -426,10 +426,10 @@
       pushUndo({ t: 'del', page: S.pageIdx, index: S.selected, stroke: removed });
       S.selected = null; redraw(); markChanged(false);
     }
-    function doClear() {
+    async function doClear() {
       var cur = pageInk(S.pageIdx).strokes;
       if (!cur.length) return;
-      if (!confirm('Clear all marks on this page?')) return;
+      if (!await PaisleyUI.confirm('Clear all marks on this page?')) return;
       pushUndo({ t: 'clear', page: S.pageIdx, strokes: cur.slice() });
       pageInk(S.pageIdx).strokes = []; S.selected = null; redraw(); markChanged(false);
     }
@@ -540,7 +540,7 @@
         var btn = this;
         var fb = ov.querySelector('#gFb').value.trim();
         if (!fb) { alert('Please write feedback when grading without a result.'); return; }
-        if (!confirm('Release this feedback without a score?')) return;
+        if (!await PaisleyUI.confirm('Release this feedback without a score?')) return;
         btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Grading...';
         try {
           await finalizeGrade(null, null, fb, 'Graded');
@@ -558,7 +558,7 @@
         var btn = this;
         var fb = ov.querySelector('#gFb').value.trim();
         if (!fb) { alert('Please write feedback explaining what needs to be corrected.'); return; }
-        if (!confirm('Send this back to the student for corrections?')) return;
+        if (!await PaisleyUI.confirm('Send this back to the student for corrections?')) return;
         btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
         try {
           await finalizeGrade(null, null, fb, 'Corrections');
@@ -634,7 +634,7 @@
       if (S.dirty || S.saving) {
         setStatus('saving', 'Saving\u2026');
         try { await saveInkNow(); } catch (e) {
-          if (!confirm('The latest marks could not be saved to the server. They are kept on this device and restored next time you open this work. Close anyway?')) return;
+          if (!await PaisleyUI.confirm('The latest marks could not be saved to the server. They are kept on this device and restored next time you open this work. Close anyway?')) return;
         }
       }
       finish();

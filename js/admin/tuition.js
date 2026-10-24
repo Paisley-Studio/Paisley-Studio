@@ -405,7 +405,7 @@
       };
     }
     async function declineRequest(r) {
-      var note = prompt('Optional note for the student (why it could not be approved yet):', '');
+      var note = await PaisleyUI.prompt('Optional note for the student (why it could not be approved yet):', {title:'Decline request', multiline:true, confirmLabel:'Decline'});
       if (note === null) return;
       try { await db.collection('tuitionRequests').doc(r.id).update({ status: 'Declined', adminNote: note.trim().slice(0, 200), resolvedAt: FV().serverTimestamp(), resolvedBy: opts.uid || '' }); }
       catch (e) { alert('Could not update: ' + errMsg(e)); }

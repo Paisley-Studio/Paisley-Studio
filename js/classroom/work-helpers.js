@@ -523,11 +523,21 @@
         path = 'classrooms/' + it.cid + '/topics/' + it.topicId + '/' + typeCol + '/' + it.id;
       }
       
+      var errEl = err;
       try {
+        PaisleyUI.loader.show('Releasing to ' + ids.length + ' student' + (ids.length === 1 ? '' : 's'), 'Sending it out and notifying your students');
         var r = await firebase.functions().httpsCallable('tutorReleaseWork')({ path: path, studentIds: ids });
-        m.close(); alert('Released to ' + ((r.data && r.data.released) || []).length + ' student(s).');
+        var n = ((r.data && r.data.released) || []).length;
+        PaisleyUI.loader.hide(true);
+        m.close(true);
+        PaisleyUI.alert('\u201c' + (it.title || 'This work') + '\u201d is now live for ' + n + ' student' + (n === 1 ? '' : 's') + '. They can open it straight away.', { type: 'success', title: 'Released successfully', okLabel: 'Great' });
         if (window.ClassroomUI && window.ClassroomUI._refresh) window.ClassroomUI._refresh();
-      } catch (e2) { err.textContent = e2.message || 'Could not release.'; btn.disabled = false; }
+      } catch (e2) {
+        PaisleyUI.loader.hide(true);
+        errEl.textContent = '';
+        btn.disabled = false;
+        PaisleyUI.alert((e2 && e2.message) || 'Could not release.', { type: 'error', title: 'Release failed' });
+      }
     };
   }
 
@@ -994,7 +1004,7 @@
       var k = isFlat ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment');
       var itemRef = isFlat ? flatExamRef(it.cid, it.id) : coll(it.cid, it.tid, k).doc(it.id);
       var cnt = Object.keys(S.subs[it.id] || {}).length;
-      if (!confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : 'assignment') + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors and students will no longer see it anywhere.\n\nThis cannot be undone.')) return;
+      if (!await PaisleyUI.confirm('PERMANENTLY DELETE \u201c' + it.title + '\u201d?\n\nThis wipes the ' + (isFlat ? 'exam' : 'assignment') + (cnt ? ', its ' + cnt + ' handed-in piece(s) of work, every uploaded file and all graded copies' : ' and its files') + '.\nTutors and students will no longer see it anywhere.\n\nThis cannot be undone.')) return;
       try {
         var sn = await itemRef.collection('submissions').get();
         var paths = [];
@@ -1126,6 +1136,22 @@
       renderList();
     });
 
+    // Live refresh: keeps statuses current without a page reload.
+    var refreshing = false;
+    async function smartRefresh() {
+      if (refreshing || !root.isConnected || S.screen !== 'class' || !S.cls) return;
+      refreshing = true;
+      var y = window.scrollY;
+      try { await reload(); render(); window.scrollTo(0, y); } catch (e) { /* keep the current view */ }
+      refreshing = false;
+    }
+    if (window.ClassroomUI) window.ClassroomUI._refresh = smartRefresh;
+    var pollTimer = setInterval(function () {
+      if (!root.isConnected) { clearInterval(pollTimer); return; }
+      if (document.hidden || document.querySelector('.cr-overlay, .pui-ov')) return;
+      smartRefresh();
+    }, 15000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && !document.querySelector('.cr-overlay, .pui-ov')) smartRefresh(); });
     loadClassrooms();
     return { reload: loadClassrooms };
   }

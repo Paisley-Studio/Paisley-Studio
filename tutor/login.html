@@ -102,6 +102,7 @@
   <a href="../index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to paisleystudio.online</a>
 </div>
 
+<script src="../js/ui/paisley-ui.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -241,7 +242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    const newPassword = prompt(`Welcome to Paisley Studio!\n\nPlease set a password for ${email}.\n(Must be at least 6 characters)`);
+    const newPassword = await PaisleyUI.prompt(`Please set a password for ${email}.\n(Must be at least 6 characters)`, { title:'Welcome to Paisley Studio!', password:true, placeholder:'New password', confirmLabel:'Set password' });
 
     if (!newPassword || newPassword.length < 6) {
       showErr("Password must be at least 6 characters. Please click the link in your email again.");

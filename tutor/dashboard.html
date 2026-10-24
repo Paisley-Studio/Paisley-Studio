@@ -316,6 +316,7 @@
   </div>
 </div>
 
+<script src="../js/ui/paisley-ui.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -432,14 +433,12 @@ auth.onAuthStateChanged(user=>{
   if(!user){ window.location.href = 'login.html'; return; }
   getTutorAccount(user.uid).then(doc=>{
     if(!doc.exists){
-      alert('This account is not a tutor account.');
-      auth.signOut().then(()=>window.location.href='login.html');
+      PaisleyUI.alert('This account is not a tutor account.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>window.location.href='login.html'));
       return;
     }
     tutor = { id: doc.id, ...doc.data() };
     if(tutor.status === 'Suspended'){
-      alert('This tutor account is suspended. Please contact the Studio Desk.');
-      auth.signOut().then(()=>window.location.href='login.html');
+      PaisleyUI.alert('This tutor account is suspended. Please contact the Studio Desk.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>window.location.href='login.html'));
       return;
     }
     myKeyStages = tutor.keyStages || [];
@@ -450,8 +449,7 @@ auth.onAuthStateChanged(user=>{
     initFirestore();
   }).catch(err=>{
     console.error(err);
-    alert('Could not load your tutor profile.');
-    auth.signOut().then(()=>window.location.href='login.html');
+    PaisleyUI.alert('Could not load your tutor profile.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>window.location.href='login.html'));
   });
 });
 
@@ -466,8 +464,8 @@ function renderIdentity(){
     (myKeyStages.length ? ' — you teach ' + myKeyStages.map(k=>escapeHtml(shortKS(k))).join(', ') + ', and anything you need, ask.' : ', anything you need, ask.');
 }
 
-document.getElementById('signOutBtn').addEventListener('click', ()=>{
-  if(!confirm('Sign out of the Tutor Portal?')) return;
+document.getElementById('signOutBtn').addEventListener('click', async () => {
+  if(!await PaisleyUI.confirm('Sign out of the Tutor Portal?')) return;
   auth.signOut().then(()=>window.location.href='login.html');
 });
 document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
@@ -1118,10 +1116,10 @@ window.saveEditedNotice = (id) => {
   if(!d.title){ alert('Please give the notice a title.'); return; }
   updateNotification(id, d).then(closeModal).catch(e=>alert(e.message));
 };
-window.removeNotice = (id) => {
+window.removeNotice = async (id) => {
   const n = DB.notifications.find(x=>x.id===id); if(!n) return;
   if(n.postedById !== tutor.id){ alert('You can only delete notices you posted.'); return; }
-  if(confirm('Delete this notice?')) deleteNotification(id).catch(e=>alert(e.message));
+  if(await PaisleyUI.confirm('Delete this notice?')) deleteNotification(id).catch(e=>alert(e.message));
 };
 
 let ttSlots = [];
@@ -1214,10 +1212,10 @@ window.saveEditedTt = (id) => {
   if(!d.title){ alert('Please give the timetable a title.'); return; }
   updateTimetable(id, d).then(closeModal).catch(e=>alert(e.message));
 };
-window.removeTt = (id) => {
+window.removeTt = async (id) => {
   const t = DB.timetables.find(x=>x.id===id); if(!t) return;
   if(t.postedById !== tutor.id){ alert('You can only delete timetables you posted.'); return; }
-  if(confirm('Delete this timetable?')) deleteTimetable(id).catch(e=>alert(e.message));
+  if(await PaisleyUI.confirm('Delete this timetable?')) deleteTimetable(id).catch(e=>alert(e.message));
 };
 
 function renderTickets(){

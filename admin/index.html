@@ -49,6 +49,7 @@
 <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
+<script src="../js/ui/paisley-ui.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -1067,13 +1068,11 @@ auth.onAuthStateChanged(function(user){
       if(doc.exists && doc.data().role === 'admin'){
         grantAdminAccess();
       } else {
-        alert('Access denied. This area is for Studio Desk administrators only.');
-        auth.signOut().then(() => location.reload());
+        PaisleyUI.alert('Access denied. This area is for Studio Desk administrators only.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(() => location.reload()));
       }
     })
     .catch(() => {
-      alert('Access denied.');
-      auth.signOut().then(() => location.reload());
+      PaisleyUI.alert('Access denied.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(() => location.reload()));
     });
 });
 
@@ -1141,8 +1140,8 @@ loginBtn.addEventListener('click', attemptLogin);
 loginEmail.addEventListener('keydown', e => { if(e.key === 'Enter') loginPassword.focus(); });
 loginPassword.addEventListener('keydown', e => { if(e.key === 'Enter') attemptLogin(); });
 
-document.getElementById('signOutBtn').addEventListener('click', () => {
-  if(!confirm('Sign out of Studio Desk?')) return;
+document.getElementById('signOutBtn').addEventListener('click', async () => {
+  if(!await PaisleyUI.confirm('Sign out of Studio Desk?')) return;
   auth.signOut().then(() => {
     location.reload();
   });
@@ -2057,7 +2056,7 @@ function addParentToStudent(studentId){
     });
 }
 
-function saveStudentEdit(id){
+async function saveStudentEdit(id){
   const keyStage = document.getElementById('editKS').value;
   const yearVal = document.getElementById('editYear').value;
   const status = document.getElementById('editStatus').value;
@@ -2070,7 +2069,7 @@ function saveStudentEdit(id){
   const incompatible = keys.filter(k=>allowed.indexOf(k)===-1);
   if(incompatible.length){
     const names = incompatible.map(lmzSubjectLabel).join(', ');
-    const drop = confirm('These subjects are not offered at the selected Key Stage:\n\n' + names + '\n\nOK = remove them from this student.\nCancel = go back and decide (nothing is saved).');
+    const drop = await PaisleyUI.confirm('These subjects are not offered at the selected Key Stage:\n\n' + names + '\n\nOK = remove them from this student.\nCancel = go back and decide (nothing is saved).');
     if(!drop) return;
     keys = keys.filter(k=>allowed.indexOf(k)!==-1);
   }
@@ -2285,7 +2284,7 @@ function renderResultsTable(){
     </tr>`;
   }).join('');
 }
-function removeResult(id){ if(confirm('Delete this result?')) deleteExamResult(id); }
+async function removeResult(id){ if(await PaisleyUI.confirm('Delete this result?')) deleteExamResult(id); }
 
 window.releaseResult = async (id) => {
   try { await db.collection('examResults').doc(id).update({ released: true, releasedAt: firebase.firestore.FieldValue.serverTimestamp() }); }
@@ -2299,7 +2298,7 @@ window.holdResult = async (id) => {
 document.getElementById('releaseAllBtn').addEventListener('click', async () => {
   const held = DB.examResults.filter(r => r.released !== true);
   if (!held.length) { alert('No results are currently held.'); return; }
-  if (!confirm('Release ' + held.length + ' held result(s) to students?')) return;
+  if (!await PaisleyUI.confirm('Release ' + held.length + ' held result(s) to students?')) return;
   const batch = db.batch();
   held.forEach(r => batch.update(db.collection('examResults').doc(r.id), { released: true, releasedAt: firebase.firestore.FieldValue.serverTimestamp() }));
   try { await batch.commit(); alert('Released ' + held.length + ' result(s).'); }
@@ -2644,7 +2643,7 @@ window.saveEditedHomework = (id) => {
   }).then(closeModal).catch(err=>alert('Could not save: '+err.message));
 };
 
-function removeHomework(id){ if(confirm('Delete this homework post?')) deleteHomework(id); }
+async function removeHomework(id){ if(await PaisleyUI.confirm('Delete this homework post?')) deleteHomework(id); }
 
 function renderHwTable(){
   const body = document.getElementById('hwTableBody');
@@ -3108,7 +3107,7 @@ function renderExamTable(){
 }
 function publishExam(id){ updateExam(id, {status:'Published'}); }
 function closeExam(id){ updateExam(id, {status:'Closed'}); }
-function removeExam(id){ if(confirm('Delete this exam?')) deleteExam(id); }
+async function removeExam(id){ if(await PaisleyUI.confirm('Delete this exam?')) deleteExam(id); }
 
 window.parseExamPdf = async () => {
   const statusEl = document.getElementById('ePdfStatus');
@@ -3553,7 +3552,7 @@ function openGradeAttempt(id){
   `, true);
 }
 
-window.saveAttemptGrade = (id) => {
+window.saveAttemptGrade = async (id) => {
   const a = DB.examAttempts.find(x=>x.id===id); if(!a) return;
   const ex = examById(a.examId);
   const score = parseFloat(document.getElementById('aScore').value);
@@ -3563,7 +3562,7 @@ window.saveAttemptGrade = (id) => {
 
   if(isNaN(score)){ alert('Please enter a score.'); return; }
   if(maxScore !== null && !isNaN(maxScore) && score > maxScore){
-    if(!confirm('The score is higher than the max score. Save anyway?')) return;
+    if(!await PaisleyUI.confirm('The score is higher than the max score. Save anyway?')) return;
   }
 
   gradeExamAttempt(id, {
@@ -3580,10 +3579,10 @@ window.saveAttemptGrade = (id) => {
   }).then(closeModal).catch(err=>alert('Could not save the grade: ' + err.message));
 };
 
-window.releaseAttempt = (id) => {
+window.releaseAttempt = async (id) => {
   const a = DB.examAttempts.find(x=>x.id===id); if(!a) return;
   const ex = examById(a.examId);
-  if(!confirm('Release this result to the student? They will see the score and feedback immediately.')) return;
+  if(!await PaisleyUI.confirm('Release this result to the student? They will see the score and feedback immediately.')) return;
   releaseExamAttempt(
     a.id,
     a.studentId,
@@ -3886,12 +3885,12 @@ window.openGrantForTask = (taskType, taskId) => {
   }, 60);
 };
 
-window.revokeGrant = (id) => {
-  if(!confirm('Revoke this grading right? The tutor will no longer be able to grade that task.')) return;
+window.revokeGrant = async (id) => {
+  if(!await PaisleyUI.confirm('Revoke this grading right? The tutor will no longer be able to grade that task.')) return;
   revokeGradingRight(id, whoAmI()).catch(e=>alert('Could not revoke: '+e.message));
 };
-window.reactivateGrant = (id) => {
-  if(!confirm('Reactivate this grading right?')) return;
+window.reactivateGrant = async (id) => {
+  if(!await PaisleyUI.confirm('Reactivate this grading right?')) return;
   reactivateGradingRight(id, whoAmI()).catch(e=>alert('Could not reactivate: '+e.message));
 };
 
@@ -4029,7 +4028,7 @@ window.saveEditedNote = (id) => {
   if(!d.title){ alert('Please give the note a title.'); return; }
   updateNote(id, d).then(closeModal).catch(e=>alert('Could not save: '+e.message));
 };
-window.removeNote = (id) => { if(confirm('Delete this note?')) deleteNote(id).catch(e=>alert(e.message)); };
+window.removeNote = async (id) => { if(await PaisleyUI.confirm('Delete this note?')) deleteNote(id).catch(e=>alert(e.message)); };
 
 function renderNoticeTable(){
   const body = document.getElementById('noticeTableBody');
@@ -4095,7 +4094,7 @@ window.saveEditedNotice = (id) => {
   if(!d.title){ alert('Please give the notice a title.'); return; }
   updateNotification(id, d).then(closeModal).catch(e=>alert('Could not save: '+e.message));
 };
-window.removeNotice = (id) => { if(confirm('Delete this notice?')) deleteNotification(id).catch(e=>alert(e.message)); };
+window.removeNotice = async (id) => { if(await PaisleyUI.confirm('Delete this notice?')) deleteNotification(id).catch(e=>alert(e.message)); };
 
 /* ---------- TIMETABLE ENTRIES ---------- */
 let ttSlots = [];
@@ -4185,8 +4184,8 @@ function saveTeForm(id){
   p.then(closeModal).catch(err=>alert('Could not save: '+err.message));
 }
 
-function deleteTeEntry(id){
-  if(!confirm('Remove this session from the timetable?')) return;
+async function deleteTeEntry(id){
+  if(!await PaisleyUI.confirm('Remove this session from the timetable?')) return;
   deleteTimetableEntry(id).catch(err=>alert('Could not delete: '+err.message));
 }
 
@@ -4279,7 +4278,7 @@ window.saveEditedTimetable = (id) => {
   if(!d.title){ alert('Please give the timetable a title.'); return; }
   updateTimetable(id, d).then(closeModal).catch(e=>alert('Could not save: '+e.message));
 };
-window.removeTimetable = (id) => { if(confirm('Delete this timetable?')) deleteTimetable(id).catch(e=>alert(e.message)); };
+window.removeTimetable = async (id) => { if(await PaisleyUI.confirm('Delete this timetable?')) deleteTimetable(id).catch(e=>alert(e.message)); };
 
 /* ---------- LIVE CLASSES ---------- */
 function renderLiveTable(){
@@ -4376,16 +4375,16 @@ window.saveEditedLive = (id) => {
   if(!d.title){ alert('Please give the class a title.'); return; }
   updateLiveClass(id, d).then(closeModal).catch(e=>alert('Could not save: '+e.message));
 };
-window.doStartLive = (id) => {
-  if(!confirm('Start this live class now? Students will see a LIVE NOW banner.')) return;
+window.doStartLive = async (id) => {
+  if(!await PaisleyUI.confirm('Start this live class now? Students will see a LIVE NOW banner.')) return;
   startLiveClass(id).then(()=>{ window.open('../live-class.html?id=' + id, '_blank', 'noopener'); })
     .catch(e=>alert('Could not start: '+e.message));
 };
-window.doEndLive = (id) => {
-  if(!confirm('End this live class?')) return;
+window.doEndLive = async (id) => {
+  if(!await PaisleyUI.confirm('End this live class?')) return;
   endLiveClass(id).catch(e=>alert('Could not end: '+e.message));
 };
-window.removeLive = (id) => { if(confirm('Delete this live class?')) deleteLiveClass(id).catch(e=>alert(e.message)); };
+window.removeLive = async (id) => { if(await PaisleyUI.confirm('Delete this live class?')) deleteLiveClass(id).catch(e=>alert(e.message)); };
 
 /* =========================================================
    MODAL HELPERS + ENROLMENT / TUTOR / MESSAGE VIEWERS
@@ -4557,8 +4556,8 @@ function cycleStatus(collection, id){
 function markReplied(id){
   db.collection('messages').doc(id).update({ status:'Confirmed' }).then(closeModal).catch(e=>alert('Could not update: '+e.message));
 }
-function deleteRecord(collection, id){
-  if(!confirm('Delete this record permanently?')) return;
+async function deleteRecord(collection, id){
+  if(!await PaisleyUI.confirm('Delete this record permanently?')) return;
   db.collection(collection).doc(id).delete().catch(e=>alert('Could not delete: '+e.message));
 }
 
