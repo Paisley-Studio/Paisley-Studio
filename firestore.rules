@@ -718,6 +718,32 @@ service cloud.firestore {
     // =====================================================
     // CLASSROOM
     // =====================================================
+    // =====================================================
+    // CLASSROOM RESOURCES — marking schemes, further resources.
+    // Admin posts; tutors of that subject read + discuss with the Studio Desk.
+    // =====================================================
+    match /classroomResources/{rid} {
+      allow read: if isAdmin() || classTutorSubject(resource.data.subjectId);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (classTutorSubject(resource.data.subjectId) &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['msgCount','lastMsgAt','lastMsgText','lastMsgBy','lastMsgByName','unreadAdmin','unreadTutor']));
+
+      match /messages/{mid} {
+        allow read: if isAdmin() ||
+          classTutorSubject(get(/databases/$(database)/documents/classroomResources/$(rid)).data.subjectId);
+        allow create: if isSignedIn() &&
+          request.resource.data.authorUid == request.auth.uid &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000 &&
+          ((isAdmin() && request.resource.data.authorRole == 'admin') ||
+           (classTutorSubject(get(/databases/$(database)/documents/classroomResources/$(rid)).data.subjectId) &&
+            request.resource.data.authorRole == 'tutor'));
+        allow update, delete: if isAdmin();
+      }
+    }
+
     match /classrooms/{cid} {
       allow read: if isSignedIn();
       allow create: if isAdmin();

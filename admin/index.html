@@ -60,6 +60,7 @@
 <script src="../lms-helpers.js"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
+<script src="../js/classroom/resources-folder.js?v=res1"></script>
 <script src="../js/classroom/work-helpers.js?v=live7"></script>
 <script src="../js/classroom/publish-helpers.js?v=live4"></script>
 <script src="../js/classroom/publish-ui.js?v=restore1"></script>
@@ -413,6 +414,7 @@
       <button class="nav-item" data-view="remotestudents" type="button"><i class="fas fa-house-laptop" aria-hidden="true"></i> Remote Students</button>
       <button class="nav-item" data-view="tuition" type="button"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Tuition</button>
       <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard" aria-hidden="true"></i> Classroom <span class="nav-badge" id="navCountClassroom" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="resources" type="button"><i class="fas fa-folder-open" aria-hidden="true"></i> Resources</button>
       <button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open" aria-hidden="true"></i> Homework Management <span class="nav-badge" id="navCountHw" style="display:none;">0</span></button>
       <button class="nav-item" data-view="exmgmt" type="button"><i class="fas fa-file-pen" aria-hidden="true"></i> Exam Management <span class="nav-badge" id="navCountEx" style="display:none;">0</span></button>
       
@@ -657,6 +659,7 @@
       </section>
 
       <section class="view" id="view-classroom"><div id="classroomHost"></div></section>
+      <section class="view" id="view-resources"><div id="resourcesHost"></div></section>
       <section class="view" id="view-remotestudents"><div id="remoteHost"></div></section>
       <section class="view" id="view-tuition"><div id="tuitionHost"></div></section>
       <section class="view" id="view-hwmgmt"><div id="hwHost"></div></section>
@@ -1357,6 +1360,12 @@ function mountWorkManagement(kind, hostId){
     }
   });
 }
+document.querySelector('.nav-item[data-view="resources"]').addEventListener('click', ()=>{
+  const u = firebase.auth().currentUser; if(!u) return;
+  const host = document.getElementById('resourcesHost'); host.innerHTML = '';
+  const box = document.createElement('div'); host.appendChild(box);
+  ResourcesUI.mount(box, { role:'admin', uid: u.uid, name: 'Studio Desk' });
+});
 document.querySelector('.nav-item[data-view="hwmgmt"]').addEventListener('click', ()=> mountWorkManagement('homework','hwHost'));
 document.querySelector('.nav-item[data-view="exmgmt"]').addEventListener('click', ()=> mountWorkManagement('exams','exHost'));
 

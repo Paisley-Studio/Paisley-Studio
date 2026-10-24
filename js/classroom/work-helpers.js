@@ -226,6 +226,23 @@
     return firebase.firestore.Timestamp.fromDate(d);
   }
 
+  /* Attachments (many files) + links shown on homework / classwork cards and detail screens. */
+  function attLinksHtml(it) {
+    it = it || {};
+    var list = Array.isArray(it.attachments) ? it.attachments.slice() : [];
+    if (!list.length && it.attachedPdfUrl) list.push({ name: it.attachedPdfName || 'Attached PDF', url: it.attachedPdfUrl });
+    var h = '';
+    list.forEach(function (a) {
+      if (!a || !/^https?:\/\//i.test(String(a.url || ''))) return;
+      h += '<a class="cr-btn sm" href="' + esc(a.url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-paperclip"></i> ' + esc(a.name || 'Attachment') + '</a> ';
+    });
+    (Array.isArray(it.links) ? it.links : []).forEach(function (l) {
+      if (!l || !/^https?:\/\//i.test(String(l.url || ''))) return;
+      h += '<a class="cr-btn sm" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-link"></i> ' + esc(l.label || l.url) + '</a> ';
+    });
+    return h;
+  }
+
   function openPostAssignment(o) {
     injectStyle();
     var cls = o.cls, topics = o.topics, user = o.user, ex = o.existing || null;
@@ -243,29 +260,63 @@
         return '<option value="' + esc(t.id) + '"' + (t.id === topicId0 ? ' selected' : '') + '>' + esc(t.title) + '</option>'; }).join('') + '</select></div></div>' +
       '<div class="cr-field"><label>Description / instructions</label><textarea id="wkDesc" rows="4" style="width:100%">' + esc(ex ? ex.description : '') + '</textarea></div>' +
       '<div class="cr-field"><label>Deadline <span class="cr-note" style="font-weight:600">(optional)</span></label><div class="cr-actions"><input type="date" id="wkDate" value="' + dp.date + '"><input type="time" id="wkTime" value="' + dp.time + '"></div></div>' +
-      '<div class="cr-field"><label>Attach PDF (optional)</label><div id="wkPdfNow">' + (ex && ex.attachedPdfName ? '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(ex.attachedPdfName) + '</span></div>' : '') + '</div>' +
-      '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> ' + (ex && ex.attachedPdfName ? 'Replace PDF' : 'Choose PDF') + '</button>' +
-      '<input type="file" id="wkPdfIn" accept="application/pdf,.pdf" style="display:none"><div class="cr-prog" id="wkProg" style="display:none"><div></div></div></div>' +
+      '<div class="cr-field"><label>Attachments <span class="cr-note" style="font-weight:600">(add as many files as you need)</span></label><div id="wkAttList"></div><div id="wkAttPend"></div>' +
+      '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> Add files</button>' +
+      '<input type="file" id="wkPdfIn" multiple style="display:none"></div>' +
+      '<div class="cr-field"><label>Links <span class="cr-note" style="font-weight:600">(add as many as you need)</span></label><div id="wkLinkList"></div><button type="button" class="cr-btn sm" data-a="addlink"><i class="fas fa-plus"></i> Add link</button></div>' +
       '<div class="cr-note" style="margin-top:.6rem; background:var(--sage); padding:.6rem .8rem; border-radius:8px;">Nothing is visible to anyone yet. After saving, open <strong>Publish</strong> to send it to Tutors or Students.</div>';
       
     m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
       '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Save assignment') + '</button>';
     var errEl = m.foot.querySelector('#wkErr');
 
-    var fileIn = m.body.querySelector('#wkPdfIn'), prog = m.body.querySelector('#wkProg');
+    var fileIn = m.body.querySelector('#wkPdfIn');
+    var atts = ex ? (Array.isArray(ex.attachments) ? ex.attachments.map(function (a) { return Object.assign({}, a); })
+      : (ex.attachedPdfUrl ? [{ name: ex.attachedPdfName || 'Attached PDF', url: ex.attachedPdfUrl, storagePath: ex.attachedPdfPath || '', type: 'application/pdf' }] : [])) : [];
+    var links = ex && Array.isArray(ex.links) ? ex.links.map(function (l) { return Object.assign({}, l); }) : [];
+    var removedPaths = [], pendingUploads = 0;
+    function drawAtts() {
+      var box = m.body.querySelector('#wkAttList');
+      box.innerHTML = atts.map(function (a, i) {
+        return '<div class="cr-res"><i class="fas fa-paperclip"></i><span class="nm">' + esc(a.name) + '</span>' +
+          '<button type="button" class="cr-btn sm danger" data-rm="' + i + '">Remove</button></div>';
+      }).join('');
+      box.querySelectorAll('[data-rm]').forEach(function (b) { b.onclick = function () {
+        var gone = atts.splice(Number(b.getAttribute('data-rm')), 1)[0];
+        if (gone && gone.storagePath) removedPaths.push(gone.storagePath);
+        drawAtts();
+      }; });
+    }
+    function drawLinks() {
+      var box = m.body.querySelector('#wkLinkList');
+      box.innerHTML = links.map(function (l, i) {
+        return '<div class="cr-actions" style="margin-bottom:.4rem"><input type="text" data-l="label" data-i="' + i + '" placeholder="Label (optional)" value="' + esc(l.label || '') + '" style="flex:1">' +
+          '<input type="text" data-l="url" data-i="' + i + '" placeholder="https://\u2026" value="' + esc(l.url || '') + '" style="flex:2">' +
+          '<button type="button" class="cr-btn sm danger" data-rl="' + i + '">&times;</button></div>';
+      }).join('');
+      box.querySelectorAll('input').forEach(function (inp) { inp.oninput = function () { links[Number(inp.getAttribute('data-i'))][inp.getAttribute('data-l')] = inp.value; }; });
+      box.querySelectorAll('[data-rl]').forEach(function (b) { b.onclick = function () { links.splice(Number(b.getAttribute('data-rl')), 1); drawLinks(); }; });
+    }
+    drawAtts(); drawLinks();
+    m.body.querySelector('[data-a="addlink"]').onclick = function () { links.push({ label: '', url: '' }); drawLinks(); };
     m.body.querySelector('[data-a="pdf"]').onclick = function () { fileIn.click(); };
     fileIn.onchange = async function () {
-      var f = fileIn.files[0]; fileIn.value = '';
-      if (!f) return;
-      if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { errEl.textContent = 'Please choose a PDF file.'; return; }
-      if (f.size > 25 * 1024 * 1024) { errEl.textContent = 'That PDF is larger than 25 MB.'; return; }
-      errEl.textContent = ''; busy = true; prog.style.display = '';
-      try {
-        var path = 'classroom-files/' + cls.subjectId + '/' + cls.id + '/' + aid + '/' + cleanName(f.name);
-        uploaded = await uploadTo(path, f, 'application/pdf', function (p) { prog.firstChild.style.width = p + '%'; });
-        m.body.querySelector('#wkPdfNow').innerHTML = '<div class="cr-res"><i class="fas fa-file-pdf"></i><span class="nm">' + esc(f.name) + '<small>Ready</small></span></div>';
-      } catch (e) { errEl.textContent = e.message; }
-      busy = false; prog.style.display = 'none';
+      var picked = Array.prototype.slice.call(fileIn.files); fileIn.value = '';
+      errEl.textContent = '';
+      for (var k = 0; k < picked.length; k++) {
+        var f = picked[k];
+        if (f.size > 100 * 1024 * 1024) { errEl.textContent = f.name + ' is larger than 100 MB.'; continue; }
+        var row = document.createElement('div'); row.className = 'cr-res';
+        row.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="nm">' + esc(f.name) + '<small>Uploading\u2026</small></span>';
+        m.body.querySelector('#wkAttPend').appendChild(row);
+        pendingUploads++; busy = true;
+        try {
+          var path = 'classroom-files/' + cls.subjectId + '/' + cls.id + '/' + aid + '/' + cleanName(f.name);
+          var up = await uploadTo(path, f, f.type || 'application/octet-stream');
+          atts.push({ name: f.name, url: up.url, storagePath: up.path, size: f.size, type: f.type || '' });
+        } catch (e) { errEl.textContent = f.name + ': ' + e.message; }
+        pendingUploads--; busy = pendingUploads > 0; row.remove(); drawAtts();
+      }
     };
     m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
     
@@ -295,7 +346,17 @@
       };
       if (when) data.dueAt = firebase.firestore.Timestamp.fromDate(when);
       
-      if (uploaded) { data.attachedPdfUrl = uploaded.url; data.attachedPdfName = uploaded.name; data.attachedPdfPath = uploaded.path; }
+      var cleanLinks = [];
+      for (var li = 0; li < links.length; li++) {
+        var lu = String(links[li].url || '').trim(); if (!lu) continue;
+        if (!/^https?:\/\//i.test(lu)) lu = 'https://' + lu;
+        if (!/^https?:\/\/[^\s.]+\.[^\s]+/i.test(lu)) { errEl.textContent = 'One of the links is not a valid web address.'; return; }
+        cleanLinks.push({ label: String(links[li].label || '').trim().slice(0, 120), url: lu });
+      }
+      data.attachments = atts.map(function (a) { return { name: a.name, url: a.url, storagePath: a.storagePath || '', size: a.size || 0, type: a.type || '' }; });
+      data.links = cleanLinks;
+      var firstAtt = atts.filter(function (a) { return /pdf/i.test(a.type || a.name); })[0] || atts[0];
+      data.attachedPdfUrl = firstAtt ? firstAtt.url : ''; data.attachedPdfName = firstAtt ? firstAtt.name : ''; data.attachedPdfPath = firstAtt ? (firstAtt.storagePath || '') : '';
       if (!ex) {
         data.attachedPdfUrl = data.attachedPdfUrl || ''; data.attachedPdfName = data.attachedPdfName || '';
         data.reminderSent = false; data.graceNoticeSent = false; data.reportSent = false;
@@ -307,6 +368,7 @@
       btn.disabled = true;
       try {
         await coll(cls.id, tid, 'assignment').doc(aid).set(data, { merge: true });
+        removedPaths.forEach(function (rp) { try { firebase.storage().ref(rp).delete().catch(function () {}); } catch (e) {} });
         m.close(true);
         if (o.afterSave) await o.afterSave();
       } catch (e) {
@@ -1011,7 +1073,7 @@
           '</div>' +
           '<div class="wk-chips" style="margin-top:.5rem">' + itemPill(it) +
             (kind === 'exam' && it.examPdfUrl ? '<a class="cr-btn sm" href="' + esc(it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> ' + esc(it.examPdfName || 'Exam PDF') + '</a>' : '') +
-            (!it.isClasswork && it.attachedPdfUrl ? '<a class="cr-btn sm" href="' + esc(it.attachedPdfUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> ' + esc(it.attachedPdfName || 'Attached PDF') + '</a>' : '') +
+            (!it.isClasswork ? attLinksHtml(it) : '') +
             ((isAdmin && !it.isClasswork) ? '<button type="button" class="cr-btn sm" data-a="grant"><i class="fas fa-user-shield"></i> Grant grading rights</button>' : '') +
           '</div>' +
           (it.requirements ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.requirements) + '</div>' : '') +
@@ -1758,7 +1820,7 @@
 
       var head = '<div class="cr-panel"><h3>' + esc(it.title) + '</h3>' +
         '<div class="cr-note">' + (it.description || it.requirements || 'No instructions provided.') + '</div>' +
-        (okUrl(it.attachedPdfUrl || it.examPdfUrl) ? '<div class="wk-box"><a href="' + esc(it.attachedPdfUrl || it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download task / resource</a></div>' : '') +
+        ((attLinksHtml(it) || okUrl(it.examPdfUrl)) ? '<div class="wk-box">' + attLinksHtml(it) + (!it.attachedPdfUrl && okUrl(it.examPdfUrl) ? '<a href="' + esc(it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download task / resource</a>' : '') + '</div>' : '') +
         '</div>';
 
       // Order: result first when graded, so it is the first thing the student sees.

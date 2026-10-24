@@ -27,7 +27,7 @@
    the same person twice.
 ========================================================= */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onDocumentUpdated, onDocumentCreated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 
 const { templates } = require("./email-templates");
@@ -397,6 +397,52 @@ exports.onNestedExamAudienceChanged = onDocumentUpdated(
 exports.onLessonAudienceChanged = onDocumentUpdated(
   Object.assign({ document: "classrooms/{cid}/topics/{tid}/lessons/{lid}" }, TRIGGER),
   (event) => handleWorkAudienceChange(event, "lesson", "published")
+);
+
+
+/* =========================================================
+   Resources folder — notifications
+   New resource  -> every active tutor of that subject
+   Admin message -> tutors of that subject
+========================================================= */
+async function tutorsOfSubject(subjectId, keyStage) {
+  const snap = await W.db().collection("tutorAccounts").get();
+  return snap.docs.filter((d) => {
+    const t = d.data() || {};
+    if (String(t.status || "Active").toLowerCase() === "suspended") return false;
+    if ((t.subjects || []).indexOf(subjectId) === -1) return false;
+    if ((t.keyStages || []).length && !/^CBC/i.test(keyStage || "") && t.keyStages.indexOf(keyStage) === -1) return false;
+    return true;
+  });
+}
+exports.onResourcePosted = onDocumentCreated(
+  { document: "classroomResources/{rid}", region: W.LOCATION },
+  async (event) => {
+    const r = (event.data && event.data.data()) || {};
+    for (const d of await tutorsOfSubject(r.subjectId, r.keyStage)) {
+      await W.notifyOnce(`res_${event.params.rid}_${d.id}`, d.id, "tutor", {
+        type: "material_posted", title: "New resource from the Studio Desk",
+        message: `${r.category || "Resource"}: ${r.title || ""} (${r.subjectName || ""}${r.topicTitle ? ", " + r.topicTitle : ""}) is in your Resources folder.`,
+        relatedEntity: "resource", relatedEntityId: event.params.rid
+      });
+    }
+  }
+);
+exports.onResourceMessage = onDocumentCreated(
+  { document: "classroomResources/{rid}/messages/{mid}", region: W.LOCATION },
+  async (event) => {
+    const m = (event.data && event.data.data()) || {};
+    if (m.authorRole !== "admin") return;
+    const res = await W.db().doc(`classroomResources/${event.params.rid}`).get();
+    const r = res.data() || {};
+    for (const d of await tutorsOfSubject(r.subjectId, r.keyStage)) {
+      await W.notifyOnce(`resmsg_${event.params.mid}_${d.id}`, d.id, "tutor", {
+        type: "material_posted", title: "Studio Desk replied about a resource",
+        message: `${r.title || "Resource"} (${r.subjectName || ""}${r.topicTitle ? ", " + r.topicTitle : ""}): ${String(m.text || "").slice(0, 100)}`,
+        relatedEntity: "resource", relatedEntityId: event.params.rid
+      });
+    }
+  }
 );
 
 /* =========================================================

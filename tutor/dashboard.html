@@ -154,6 +154,7 @@
       <button class="nav-item active" data-view="overview" type="button"><i class="fas fa-chart-pie"></i> Overview</button>
       <button class="nav-item" data-view="students" type="button"><i class="fas fa-user-graduate"></i> My Students</button>
       <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard"></i> Classroom <span class="nav-badge" id="navClassroomCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="resources" type="button"><i class="fas fa-folder-open"></i> Resources</button>
       <button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open"></i> Homework Management <span class="nav-badge" id="navHwCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="exmgmt" type="button"><i class="fas fa-file-pen"></i> Exam Management <span class="nav-badge" id="navExamCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="granted" type="button"><i class="fas fa-user-shield"></i> Granted to Me <span class="nav-badge" id="navGrantCount">0</span></button>
@@ -217,6 +218,7 @@
         </div>
       </section>
       <section class="view" id="view-classroom"><div id="classroomHost"></div></section>
+      <section class="view" id="view-resources"><div id="resourcesHost"></div></section>
       <section class="view" id="view-hwmgmt"><div id="hwHost"></div></section>
       <section class="view" id="view-exmgmt"><div id="exHost"></div></section>
       <section class="view" id="view-granted">
@@ -327,6 +329,7 @@
 <script src="../lms-helpers.js"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
+<script src="../js/classroom/resources-folder.js?v=res1"></script>
 <script src="../js/classroom/work-helpers.js?v=live7"></script>
 <script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
@@ -509,6 +512,12 @@ function mountWorkManagement(kind, hostId){
     pendingFor: pendingForClass
   });
 }
+document.querySelector('.nav-item[data-view="resources"]').addEventListener('click', ()=>{
+  if(!tutor) return;
+  const host = document.getElementById('resourcesHost'); host.innerHTML = '';
+  const box = document.createElement('div'); host.appendChild(box);
+  ResourcesUI.mount(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [] });
+});
 document.querySelector('.nav-item[data-view="hwmgmt"]').addEventListener('click', ()=> mountWorkManagement('homework','hwHost'));
 document.querySelector('.nav-item[data-view="exmgmt"]').addEventListener('click', ()=> mountWorkManagement('exams','exHost'));
 let tutorBellMounted = false;

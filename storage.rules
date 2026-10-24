@@ -119,6 +119,17 @@ service firebase.storage {
     }
 
     // =====================================================
+    // RESOURCES FOLDER — marking schemes / further resources
+    // Path: resource-files/{subjectId}/{resourceId}/{file}
+    // =====================================================
+    match /resource-files/{subjectId}/{resourceId}/{fileName} {
+      allow get: if isAdmin() || classTutorFor(subjectId);
+      allow list: if false;
+      allow create, update: if isAdmin() && classFileOk();
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
     // EXAM PDFs
     // Path: classroom-files/{subjectId}/{classroomId}/exams/{examId}/{fileName}
     // =====================================================

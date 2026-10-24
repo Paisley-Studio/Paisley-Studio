@@ -67,6 +67,8 @@
   .msg.show{display:block;}
   .msg.error{background:rgba(231,76,60,.08); color:#B8362A; border:1px solid rgba(231,76,60,.25);}
   .msg.success{background:rgba(46,184,114,.08); color:#1D8B57; border:1px solid rgba(46,184,114,.25);}
+  .forgot{background:none; border:none; color:var(--muted); font-family:var(--font); font-size:.8rem; cursor:pointer; margin-top:.9rem; width:100%; text-align:center;}
+  .forgot:hover{color:var(--brand-deep); text-decoration:underline;}
   .panel{display:none;}
   .panel.active{display:block;}
   .back-link{display:block; text-align:center; margin-top:1.4rem; font-size:.82rem; color:var(--muted); text-decoration:none;}
@@ -118,6 +120,7 @@
       <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
     </div>
     <button class="btn" id="loginBtn" type="button"><span class="btn-text"><i class="fas fa-arrow-right-to-bracket"></i> Sign In</span></button>
+    <button class="forgot" id="forgotBtn" type="button"><i class="fas fa-key"></i> Forgot your password?</button>
   </div>
 
   <!-- SIGNUP -->
@@ -250,6 +253,22 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
       if(err.code === 'auth/too-many-requests') m = 'Too many attempts. Please wait a few minutes.';
       showErr(m);
     });
+});
+
+// ---- FORGOT PASSWORD ----
+document.getElementById('forgotBtn').addEventListener('click', ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  if(!email){ showErr('Enter your email address first, then press "Forgot your password?".'); return; }
+  const btn = document.getElementById('forgotBtn');
+  btn.disabled = true;
+  auth.sendPasswordResetEmail(email, { url: window.location.origin + '/student/index.html' })
+    .then(()=>showOk('If an account exists for ' + email + ', a password reset link is on its way. Check your inbox and spam folder.'))
+    .catch(err=>{
+      if(err.code === 'auth/invalid-email') showErr('That email address is not valid.');
+      else if(err.code === 'auth/too-many-requests') showErr('Too many attempts. Please wait a few minutes.');
+      else showErr('Could not send the reset email: ' + err.message);
+    })
+    .finally(()=>{ btn.disabled = false; });
 });
 
 // ---- KEY STAGE → YEAR + SUBJECTS ----
