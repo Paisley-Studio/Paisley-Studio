@@ -21,6 +21,17 @@
       '.cr-badge.b-plain{background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
       '.cr-badge.b-grant{background:rgba(155,89,182,.12);color:#7c3f96}',
       '.wk-chips{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center}',
+      '.wk-sec{border-radius:14px;padding:1rem 1.1rem;margin:0 0 .9rem;border:1.5px solid var(--line,#D8E6E2)}',
+      '.wk-sec h4{margin:0 0 .55rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:.45rem}',
+      '.wk-sec.mine{background:#F4F8FF;border-color:#C9DBF5}.wk-sec.mine h4{color:#2F5FA8}',
+      '.wk-sec.graded{background:#EEFAF3;border-color:#2EB872;border-width:2px}.wk-sec.graded h4{color:#1d8b57}',
+      '.wk-sec.corr{background:#FFF6E8;border-color:#E8A33D;border-width:2px}.wk-sec.corr h4{color:#96690f}',
+      '.wk-sec.wait{background:#FAFAF6;border-style:dashed}.wk-sec.wait h4{color:#6b6b5a}',
+      '.wk-score{font-size:1.9rem;font-weight:800;color:#1d8b57;line-height:1.1}',
+      '.wk-fb{background:#fff;border-radius:10px;padding:.7rem .85rem;font-size:.88rem;white-space:pre-wrap;margin:.6rem 0;border:1px solid rgba(46,184,114,.3)}',
+      '.wk-dl{display:inline-flex;align-items:center;gap:.45rem;background:#2EB872;color:#fff!important;font-weight:800;border-radius:10px;padding:.6rem 1rem;text-decoration:none;font-size:.88rem}',
+      '.wk-dl.alt{background:#2F5FA8}.wk-dl.warn{background:#E8A33D}',
+      '.cr-btn.wk-gbtn{background:#2EB872;color:#fff;border-color:#2EB872}',
       '.wk-chip{font-size:.7rem;font-weight:700;color:var(--muted,#5A6E6A);background:var(--paper,#F1F9F7);border-radius:99px;padding:.15rem .55rem;display:inline-flex;gap:.3rem;align-items:center}',
       '.wk-ic{width:2rem;text-align:center;color:var(--brand-deep,#245F5A)}',
       '.wk-drop{border:2px dashed var(--line,rgba(38,51,49,.25));border-radius:14px;padding:1.2rem;text-align:center;color:var(--muted,#5A6E6A);cursor:pointer;background:var(--paper,#F1F9F7);transition:border-color .15s}',
@@ -941,8 +952,8 @@
             '<td>' + pill(st.cls, st.text, st.icon) + '</td>' +
             '<td>' + (sub && (sub.submittedAt || sub.updatedAt) ? esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '—') + '</td>' +
             '<td>' +
-              (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> File</a>' : '') +
-              (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Graded</a>' : '') +
+              (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> Student\u2019s upload</a>' : '') +
+              (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-circle-check"></i> Graded copy</a>' : '') +
               (canGrade
                 ? (kind === 'exam'
                     ? '<button type="button" class="cr-btn sm primary" data-a="grade-flat" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Review' : 'Grade') + '</button>'
@@ -1265,11 +1276,13 @@
 
     var subs = {};
     await Promise.all(items.concat(exams).map(function (it) {
+      // Students may only read THEIR OWN submission document (Firestore rules reject listing the whole
+      // collection), so fetch exactly doc(uid). Listing it silently failed and hid every graded result.
       var c = it.kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.kind).doc(it.id).collection('submissions');
-      return c.get().then(function (snap) {
-        var m = {}; snap.docs.forEach(function (d) { m[d.id] = Object.assign({ id: d.id }, d.data()); });
+      return c.doc(uid).get().then(function (d) {
+        var m = {}; if (d.exists) m[d.id] = Object.assign({ id: d.id }, d.data());
         subs[it.id] = m;
-      }).catch(function () { subs[it.id] = {}; });
+      }).catch(function (e) { console.warn('own submission read failed:', e && e.code); subs[it.id] = {}; });
     }));
 
     var out = { assignments: [], lessons: [], exams: [] };
@@ -1332,7 +1345,7 @@
             '<span class="tt">' + esc(it.title) + '<small>' + (isExam ? 'Exam' : (it.isClasswork ? 'Classwork' : 'Homework')) + (due ? ' · Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
             (U.boardAssigned(student, it._cls.subjectId) ? U.boardBadge(it._cls) : '') +
             '<span class="cr-badge ' + state.cls + '">' + esc(state.text) + '</span>' +
-            '<div class="cr-actions"><button type="button" class="cr-btn sm primary" onclick="window.WorkUI.openStudentDetail(\'' + it.cid + '\', \'' + (it.tid||'') + '\', \'' + it.id + '\', \'' + (isExam ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment')) + '\')"><i class="fas fa-eye"></i> Open</button></div></div>';
+            rowActionHtml(it, 'onclick="window.WorkUI.openStudentDetail(\'' + it.cid + '\', \'' + (it.tid||'') + '\', \'' + it.id + '\', \'' + (isExam ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment')) + '\')"') + '</div>';
         }
         function draw() {
           var shown = allWork.filter(function (it) { return !boardF || U.boardOf(it._cls) === boardF; });
@@ -1349,7 +1362,7 @@
             var past = bySubject[sub].filter(isGradedItem);
             h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(sub) + '</h4>' +
               (cur.length ? cur.map(rowHtml).join('') : '<div class="cr-empty">Nothing waiting for you here.</div>') +
-              (past.length ? '<details class="cr-past"><summary><i class="fas fa-box-archive"></i> Past Work (' + past.length + ')</summary>' + past.map(rowHtml).join('') + '</details>' : '') +
+              (past.length ? '<details class="cr-past"><summary><i class="fas fa-circle-check"></i> Graded work \u2014 Past Work (' + past.length + ')</summary>' + past.map(rowHtml).join('') + '</details>' : '') +
               '</div>';
           });
           root.innerHTML = h;
@@ -1364,52 +1377,117 @@
   }
 
   // =========================================================
-  // THE MISSING UPLOAD MECHANISM
+  // STUDENT ITEM VIEW
+  //   Three clearly separate zones:
+  //     BLUE  "Your uploaded work"          = what the student handed in
+  //     GREEN "Graded work from your tutor" = score, feedback, marked copy
+  //     AMBER "Corrections requested"       = tutor sent it back
   // =========================================================
+  function okUrl(u) { return /^https?:\/\//i.test(String(u || '')) ? String(u) : ''; }
+
+  function mineSectionHtml(sub, label) {
+    if (!sub || (!sub.fileUrl && !sub.textAnswer)) return '';
+    var when = sub.submittedAt || sub.updatedAt || sub.createdAt;
+    return '<div class="wk-sec mine"><h4><i class="fas fa-upload"></i> ' + esc(label || 'Your uploaded work') + '</h4>' +
+      (when ? '<div class="cr-note" style="margin-bottom:.45rem">Handed in ' + esc(U.fmtDateTime(when)) + '</div>' : '') +
+      (sub.textAnswer ? '<div class="wk-box" style="margin-bottom:.5rem">' + esc(sub.textAnswer) + '</div>' : '') +
+      (okUrl(sub.fileUrl) ? '<a class="wk-dl alt" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> ' + esc(sub.fileName || 'Open my upload') + '</a>' : '') +
+      '</div>';
+  }
+
+  function gradedSectionHtml(sub) {
+    if (!sub) return '';
+    var gAt = sub.gradedAt || sub.releasedAt;
+    if (sub.status === 'Graded') {
+      var sc = fmtScore(sub);
+      return '<div class="wk-sec graded"><h4><i class="fas fa-circle-check"></i> Graded work from your tutor</h4>' +
+        (sc ? '<div class="wk-score">' + esc(sc) + '</div>' : '<div style="font-weight:800;color:#1d8b57">Marked \u2014 see feedback below</div>') +
+        '<div class="cr-note" style="margin:.2rem 0 .3rem">' + (sub.gradedByName ? 'Marked by ' + esc(sub.gradedByName) : 'Marked') + (gAt ? ' \u00b7 ' + esc(U.fmtDateTime(gAt)) : '') + '</div>' +
+        (sub.feedback ? '<div class="wk-fb"><b>Tutor feedback</b><br>' + esc(sub.feedback) + '</div>' : '') +
+        (okUrl(sub.gradedFileUrl)
+          ? '<a class="wk-dl" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Download marked copy</a>'
+          : '<div class="cr-note">No marked copy was attached \u2014 the score and feedback above are your result.</div>') +
+        '</div>';
+    }
+    if (sub.status === 'Corrections') {
+      return '<div class="wk-sec corr"><h4><i class="fas fa-rotate-left"></i> Corrections requested</h4>' +
+        '<div class="cr-note" style="margin-bottom:.4rem">Your tutor sent this back' + (gAt ? ' \u00b7 ' + esc(U.fmtDateTime(gAt)) : '') + '. Read the notes, fix your work and upload it again below.</div>' +
+        (sub.feedback ? '<div class="wk-fb" style="border-color:rgba(232,163,61,.5)"><b>What to fix</b><br>' + esc(sub.feedback) + '</div>' : '') +
+        (okUrl(sub.gradedFileUrl) ? '<a class="wk-dl warn" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Download tutor\u2019s marked notes</a>' : '') +
+        '</div>';
+    }
+    if (sub.status === 'Submitted') {
+      return '<div class="wk-sec wait"><h4><i class="fas fa-hourglass-half"></i> Graded work</h4><div class="cr-note">Not graded yet. When your tutor marks this, your score, feedback and marked copy will appear here and you will get a notification.</div></div>';
+    }
+    return '';
+  }
+
   function openStudentDetail(cid, tid, id, kind, onDone) {
     injectStyle();
     var ref = U.clsRef(cid);
     if (kind !== 'exam') ref = ref.collection('topics').doc(tid).collection(collName(kind)).doc(id);
     else ref = ref.collection('exams').doc(id);
 
-    var m = U.openModal({ title: 'Submit Work', wide: true });
-    m.body.innerHTML = '<div class="cr-empty">Loading…</div>';
-    
-    ref.get().then(function(doc) {
+    var m = U.openModal({ title: 'My work', wide: true });
+    m.body.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
+    var me = firebase.auth().currentUser;
+
+    Promise.all([
+      ref.get(),
+      ref.collection('submissions').doc(me.uid).get().catch(function (e) { console.warn('own submission read failed:', e && e.code); return null; })
+    ]).then(function (res) {
+      var doc = res[0], subDoc = res[1];
       if (!doc.exists) { m.body.innerHTML = '<div class="cr-empty">Item not found.</div>'; return; }
       var it = Object.assign({ id: doc.id, cid: cid, tid: tid }, doc.data());
-      
-      m.body.innerHTML = '<div class="cr-panel"><h3>' + esc(it.title) + '</h3>' +
+      var sub = subDoc && subDoc.exists ? subDoc.data() : null;
+      var status = sub ? sub.status : '';
+      var isGraded = status === 'Graded';
+      var isCorr = status === 'Corrections';
+      var canUpload = !isGraded;
+
+      var head = '<div class="cr-panel"><h3>' + esc(it.title) + '</h3>' +
         '<div class="cr-note">' + (it.description || it.requirements || 'No instructions provided.') + '</div>' +
-        (it.attachedPdfUrl || it.examPdfUrl ? '<div class="wk-box"><a href="' + esc(it.attachedPdfUrl || it.examPdfUrl) + '" target="_blank" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download Resource</a></div>' : '') +
-        '<div class="cr-field" style="margin-top:1rem"><label>Your Answer (Optional)</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here..."></textarea></div>' +
-        '<div class="cr-field"><label>Upload File (PDF/Image)</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none"></div>' +
-        '<div class="cr-prog" id="subProg" style="display:none;height:4px;background:var(--line);margin-top:1rem;border-radius:2px"><div style="height:100%;background:var(--brand);width:0%;transition:width .2s"></div></div>' +
+        (okUrl(it.attachedPdfUrl || it.examPdfUrl) ? '<div class="wk-box"><a href="' + esc(it.attachedPdfUrl || it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download task / resource</a></div>' : '') +
         '</div>';
-      
-      m.foot.innerHTML = '<span class="cr-err" id="subErr"></span><button class="cr-btn" data-a="cancel">Cancel</button><button class="cr-btn primary" data-a="submit"><i class="fas fa-paper-plane"></i> Submit</button>';
-      
+
+      // Order: result first when graded, so it is the first thing the student sees.
+      var zones = '';
+      if (isGraded) zones = gradedSectionHtml(sub) + mineSectionHtml(sub, 'Your uploaded work (as handed in)');
+      else if (isCorr) zones = gradedSectionHtml(sub) + mineSectionHtml(sub, 'Your previous upload');
+      else zones = mineSectionHtml(sub, 'Your uploaded work') + gradedSectionHtml(sub);
+
+      var form = '';
+      if (canUpload) {
+        form = '<div class="cr-panel"><h4 style="margin:0 0 .5rem">' + (isCorr ? 'Upload your corrected work' : (sub ? 'Replace my upload' : 'Hand in my work')) + '</h4>' +
+          '<div class="cr-field"><label>Your Answer (Optional)</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here...">' + esc(sub && sub.textAnswer || '') + '</textarea></div>' +
+          '<div class="cr-field"><label>Upload File (PDF/Image)</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none"></div>' +
+          '<div class="cr-prog" id="subProg" style="display:none;height:4px;background:var(--line);margin-top:1rem;border-radius:2px"><div style="height:100%;background:var(--brand);width:0%;transition:width .2s"></div></div></div>';
+      }
+      m.body.innerHTML = head + zones + form;
+
+      if (!canUpload) {
+        m.foot.innerHTML = '<button class="cr-btn" data-a="cancel">Close</button>';
+        m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
+        return;
+      }
+      m.foot.innerHTML = '<span class="cr-err" id="subErr"></span><button class="cr-btn" data-a="cancel">Cancel</button><button class="cr-btn primary" data-a="submit"><i class="fas fa-paper-plane"></i> ' + (isCorr ? 'Resubmit' : 'Submit') + '</button>';
+
       var fileIn = m.body.querySelector('#subFile');
       var file = null;
-      
-      m.body.querySelector('#subDrop').onclick = function() { fileIn.click(); };
-      fileIn.onchange = function() {
+      m.body.querySelector('#subDrop').onclick = function () { fileIn.click(); };
+      fileIn.onchange = function () {
         file = fileIn.files[0];
         if (file) m.body.querySelector('#subDrop').innerHTML = '<b>' + esc(file.name) + '</b><br><small>Ready to upload</small>';
       };
-      
-      m.foot.querySelector('[data-a="cancel"]').onclick = function() { m.close(); };
-      
-      m.foot.querySelector('[data-a="submit"]').onclick = async function() {
+      m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
+
+      m.foot.querySelector('[data-a="submit"]').onclick = async function () {
         var btn = this;
         var text = m.body.querySelector('#subText').value.trim();
         var err = m.foot.querySelector('#subErr');
-        
         if (!text && !file) { err.textContent = 'Please type an answer or upload a file.'; return; }
-        
         btn.disabled = true;
         err.textContent = '';
-        
         try {
           var fileData = {};
           if (file) {
@@ -1425,31 +1503,30 @@
             // Must match storage.rules: classroom-files/{subject}/{classroom}/{itemId}/submissions/{uid}/{file}
             // (flat exams: classroom-files/{subject}/{classroom}/exams/{examId}/submissions/{uid}/{file})
             var path = 'classroom-files/' + subjectId + '/' + cid + '/' + (kind === 'exam' ? 'exams/' : '') + id + '/submissions/' + uidNow + '/' + cleanName(file.name);
-            
             var task = firebase.storage().ref(path).put(file, { contentType: file.type });
-            task.on('state_changed', function(s) {
+            task.on('state_changed', function (s) {
               prog.firstChild.style.width = Math.round((s.bytesTransferred / s.totalBytes) * 100) + '%';
             });
-            
-            await new Promise(function(res, rej) { task.on('state_changed', null, rej, res); });
+            await new Promise(function (res2, rej) { task.on('state_changed', null, rej, res2); });
             var url = await firebase.storage().ref(path).getDownloadURL();
-            
             fileData = { fileUrl: url, fileName: file.name, fileType: file.type, storagePath: path };
           }
-          
-          var me = firebase.auth().currentUser;
-          var subRef = ref.collection('submissions').doc(me.uid);
+
+          var meNow = firebase.auth().currentUser;
+          var subRef = ref.collection('submissions').doc(meNow.uid);
           var prev = await subRef.get().catch(function () { return null; });
           var FVs = firebase.firestore.FieldValue;
           if (prev && prev.exists) {
             if (prev.data().status === 'Graded') throw new Error('This work has already been graded and can no longer be changed.');
-            // Re-submission: rules only let students touch these fields.
-            await subRef.update(Object.assign({ textAnswer: text, updatedAt: FVs.serverTimestamp() }, fileData));
+            var upd = Object.assign({ textAnswer: text, updatedAt: FVs.serverTimestamp() }, fileData);
+            // Re-hand-in after "Corrections": flip back to Submitted so the tutor sees it is ready again.
+            if (prev.data().status === 'Corrections') { upd.status = 'Submitted'; upd.submittedAt = FVs.serverTimestamp(); }
+            await subRef.update(upd);
           } else {
             await subRef.set(Object.assign({
-              studentId: me.uid,
-              studentName: me.displayName || 'Student',
-              studentEmail: me.email || '',
+              studentId: meNow.uid,
+              studentName: meNow.displayName || 'Student',
+              studentEmail: meNow.email || '',
               textAnswer: text,
               status: 'Submitted',
               released: false,
@@ -1461,16 +1538,96 @@
           m.close();
           alert('Submission successful! Your tutor will be notified.');
           if (typeof onDone === 'function') { try { onDone(); } catch (e3) { console.warn(e3); } }
-          
         } catch (e) {
           console.error(e);
           err.textContent = 'Upload failed: ' + (e.message || e);
           btn.disabled = false;
         }
       };
-    }).catch(function(e) {
+    }).catch(function (e) {
       m.body.innerHTML = '<div class="cr-empty">Error loading item: ' + esc(e.message) + '</div>';
     });
+  }
+
+  // One consistent action button for a student row: graded work gets its own green button.
+  function rowActionHtml(it, onclickAttr) {
+    var st = it.sub && it.sub.status;
+    var label = st === 'Graded' ? 'View graded work' : (st === 'Corrections' ? 'Fix &amp; resubmit' : (it.sub ? 'View my work' : 'Open'));
+    var icon = st === 'Graded' ? 'fa-circle-check' : (st === 'Corrections' ? 'fa-rotate-left' : 'fa-eye');
+    var cls = st === 'Graded' ? 'cr-btn sm wk-gbtn' : 'cr-btn sm primary';
+    var extra = st === 'Graded' && okUrl(it.sub.gradedFileUrl)
+      ? '<a class="cr-btn sm" href="' + esc(it.sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer" style="text-decoration:none"><i class="fas fa-download"></i> Marked copy</a>' : '';
+    return '<div class="cr-actions">' + extra + '<button type="button" class="' + cls + '" ' + onclickAttr + '><i class="fas ' + icon + '"></i> ' + label + '</button></div>';
+  }
+
+  // =========================================================
+  // PARENT SIDE (read-only): the parent dashboard calls this for Homework and Exams.
+  // Shows, per item, the child's own upload and the tutor's graded work as separate links.
+  // =========================================================
+  async function mountParentWork(root, opts) {
+    injectStyle();
+    opts = opts || {};
+    var child = opts.child;
+    if (!root) return;
+    if (!child || !child.id) { root.innerHTML = ''; return; }
+    var kind = opts.kind === 'exams' ? 'exams' : 'homework';
+    var student = Object.assign({ id: child.id }, child);
+    var token = (root._wkTok = (root._wkTok || 0) + 1);
+    root.innerHTML = '<div class="cr-empty">Loading ' + esc(child.name || 'your child') + '\u2019s ' + kind + '\u2026</div>';
+    try {
+      var clsSnap = await db.collection('classrooms').get();
+      var subs = lmzSubjectKeys(student.subjects);
+      var myClassrooms = clsSnap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (c) {
+        return subs.indexOf(c.subjectId) !== -1 && (student.year == null || Number(student.year) === Number(c.year)) &&
+          U.boardOf(c) === U.studentBoardFor(student, c.subjectId);
+      });
+      var all = [];
+      for (var i = 0; i < myClassrooms.length; i++) {
+        var w = await loadStudentWork(myClassrooms[i], await U.loadTopics(myClassrooms[i].id), child.id, student);
+        var pick = kind === 'exams' ? w.exams : w.assignments.concat(w.lessons);
+        pick.forEach(function (x) { x._cls = myClassrooms[i]; all.push(x); });
+      }
+      if (root._wkTok !== token) return;
+      all = all.filter(function (it) { return studentSees(student, it); });
+
+      var f = String(opts.filter || 'all').toLowerCase();
+      if (f !== 'all') {
+        var filtered = all.filter(function (it) {
+          var st = workState(it, it.sub, it.kind === 'exam' ? 'exam' : 'assignment');
+          return st.k === f || String(it._cls.subjectId || '').toLowerCase() === f || String(it._cls.subjectName || '').toLowerCase() === f;
+        });
+        if (filtered.length || ['graded', 'submitted', 'pending', 'overdue', 'corrections'].indexOf(f) !== -1) all = filtered;
+      }
+      if (!all.length) { root.innerHTML = '<div class="cr-empty">No ' + kind + ' to show for ' + esc(child.name || 'your child') + ' yet.</div>'; return; }
+
+      var by = {};
+      all.forEach(function (it) { var n = it._cls.subjectName || it._cls.subjectId; (by[n] = by[n] || []).push(it); });
+      var h = '';
+      Object.keys(by).forEach(function (name) {
+        h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(name) + '</h4>';
+        by[name].forEach(function (it) {
+          var isExam = it.kind === 'exam';
+          var due = dueOf(it, isExam ? 'exam' : 'assignment');
+          var st = workState(it, it.sub, isExam ? 'exam' : 'assignment');
+          var sub = it.sub;
+          h += '<div class="cr-lesson" style="flex-wrap:wrap"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : (it.isClasswork ? 'fa-book-open' : 'fa-clipboard-check')) + '"></i></span>' +
+            '<span class="tt">' + esc(it.title || (isExam ? 'Exam' : 'Homework')) + '<small>' + (isExam ? 'Exam' : (it.isClasswork ? 'Classwork' : 'Homework')) + (due ? ' \u00b7 Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
+            '<span class="cr-badge ' + st.cls + '">' + esc(st.text) + '</span>';
+          if (sub && (okUrl(sub.fileUrl) || okUrl(sub.gradedFileUrl) || sub.status === 'Graded' || sub.status === 'Corrections')) {
+            h += '<div style="flex-basis:100%;margin-top:.5rem">';
+            if (okUrl(sub.fileUrl)) h += '<div class="wk-sec mine" style="margin-bottom:.5rem;padding:.6rem .8rem"><h4 style="margin:0 0 .35rem"><i class="fas fa-upload"></i> ' + esc(child.name || 'Your child') + '\u2019s uploaded work</h4><a class="wk-dl alt" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> ' + esc(sub.fileName || 'Open upload') + '</a></div>';
+            if (sub.status === 'Graded' || sub.status === 'Corrections') h += gradedSectionHtml(sub);
+            h += '</div>';
+          }
+          h += '</div>';
+        });
+        h += '</div>';
+      });
+      root.innerHTML = h;
+    } catch (e) {
+      console.error('mountParentWork:', e);
+      root.innerHTML = '<div class="cr-empty">Could not load the ' + kind + ': ' + esc(e.message || e) + '</div>';
+    }
   }
 
   // Rows of homework / exams shown under each topic in the student's Classroom view.
@@ -1484,7 +1641,7 @@
       '<span class="tt">' + esc(it.title || (isExam ? 'Exam' : 'Homework')) + '<small>' + (isExam ? 'Exam' : 'Homework') +
       (due ? ' \u00b7 Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
       '<span class="cr-badge ' + st.cls + '">' + esc(st.text) + '</span>' +
-      '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="work-open" data-k="' + k + '" data-t="' + esc(it.tid || '') + '" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button></div></div>';
+      rowActionHtml(it, 'data-a="work-open" data-k="' + k + '" data-t="' + esc(it.tid || '') + '" data-id="' + esc(it.id) + '"') + '</div>';
   }
 
   function studentTopicRows(work, topicId, cls) {
@@ -1507,7 +1664,7 @@
     var past = (work.assignments || []).concat(work.exams || []).filter(isGradedItem);
     if (!past.length) return '';
     return '<details class="cr-past"><summary><i class="fas fa-box-archive"></i> Past Work (' + past.length + ')</summary>' +
-      '<div class="cr-note" style="margin-bottom:.4rem">Submitted and graded \u2014 all done.</div>' + past.map(studentRowHtml).join('') + '</details>';
+      '<div class="cr-note" style="margin-bottom:.4rem">Submitted and graded \u2014 open an item to see your score, feedback and marked copy.</div>' + past.map(studentRowHtml).join('') + '</details>';
   }
 
   // Entry points that classroom-helpers.js calls from the student Classroom view.
@@ -1530,6 +1687,7 @@
     tutorPendingCount: tutorPendingCount,
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
+    mountParentWork: mountParentWork,
     studentTopicRows: studentTopicRows, studentPastWork: studentPastWork,
     openStudentDetail: openStudentDetail,
     openStudentItem: openStudentItem,

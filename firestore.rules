@@ -215,9 +215,13 @@ service cloud.firestore {
     }
     function studentWorkEdit() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-          ['fileUrl', 'fileName', 'fileType', 'storagePath', 'note', 'textAnswer', 'updatedAt', 'inkData', 'inkUpdatedAt']) &&
+          ['fileUrl', 'fileName', 'fileType', 'storagePath', 'note', 'textAnswer', 'updatedAt', 'inkData', 'inkUpdatedAt',
+           'status', 'submittedAt']) &&
         (!('inkData' in request.resource.data.diff(resource.data).affectedKeys()) ||
-          request.resource.data.inkData == null);
+          request.resource.data.inkData == null) &&
+        // status may only move Corrections -> Submitted (re-hand-in); a student can never grade or release.
+        (!('status' in request.resource.data.diff(resource.data).affectedKeys()) ||
+          (resource.data.status == 'Corrections' && request.resource.data.status == 'Submitted'));
     }
     function newStudentWork(sid) {
       return request.auth.uid == sid &&

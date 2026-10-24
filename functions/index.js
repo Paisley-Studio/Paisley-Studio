@@ -835,103 +835,93 @@ exports.onFlatExamSubmissionWritten = onDocumentWritten(
     const before = event.data.before.exists ? event.data.before.data() : null;
     const after  = event.data.after.exists  ? event.data.after.data()  : null;
     if (!after) return;                                 // deletion
-
-    const beforeReleased = !!(before && before.released === true);
-    const afterReleased  = !!(after  && after.released  === true);
-    if (!afterReleased) return;                         // not released
-    if (afterReleased === beforeReleased) return;       // no transition
-
     const { cid, eid, studentId } = event.params;
+    const WS = require("./work-shared");
     const db = admin.firestore();
 
-    // Claim the notification so a retry can't email twice.
-    const claimed = await db.runTransaction(async (tx) => {
-      const ref = db.doc(`classrooms/${cid}/exams/${eid}/submissions/${studentId}`);
-      const snap = await tx.get(ref);
-      if (!snap.exists) return false;
-      const d = snap.data() || {};
-      if (d.releaseNotifiedAt) return false;
-      tx.update(ref, { releaseNotifiedAt: admin.firestore.FieldValue.serverTimestamp() });
-      return true;
-    });
+    // Student re-handed-in after "Corrections" -> tell the exam's tutor.
+    if (before && before.status === "Corrections" && after.status === "Submitted") {
+      try {
+        const ex = await db.doc(`classrooms/${cid}/exams/${eid}`).get();
+        const e = ex.exists ? ex.data() : {};
+        if (e.tutorId) {
+          await WS.notify(e.tutorId, "tutor", {
+            type: "exam_submitted", title: "Exam resubmitted",
+            message: `${after.studentName || "A student"} resubmitted corrected work for ${e.title || "an exam"}.`,
+            relatedEntity: "exam", relatedEntityId: `${cid}/flat/${eid}`
+          });
+        }
+      } catch (err) { console.warn("onFlatExamSubmissionWritten: tutor resubmit notice failed", err.message || err); }
+      return;
+    }
+
+    // Only a tutor action (Graded / Corrections with released=true and a NEW gradedAt) notifies.
+    // Ink autosaves never change gradedAt, so they never email anyone.
+    const status = after.status;
+    if (after.released !== true || (status !== "Graded" && status !== "Corrections")) return;
+    const gA = WS.toDate(after.gradedAt), gB = before ? WS.toDate(before.gradedAt) : null;
+    const changed = !before || !before.released || before.status !== status || String(gA || "") !== String(gB || "");
+    if (!changed) return;
+
+    const claimed = await WS.claimOnce(WS.stableId("flatgraded", cid, eid, studentId, status, String(gA ? gA.getTime() : "0")));
     if (!claimed) return;
 
-    // Fetch exam + student.
+    const isCorr = status === "Corrections";
     const [examSnap, studentSnap] = await Promise.all([
       db.doc(`classrooms/${cid}/exams/${eid}`).get(),
       db.collection("students").doc(studentId).get()
     ]);
     const exam    = examSnap.exists    ? examSnap.data()    : {};
-    const student = studentSnap.exists ? studentSnap.data() : {};
+    const student = studentSnap.exists ? { id: studentId, ...studentSnap.data() } : { id: studentId, name: after.studentName, email: after.studentEmail };
+    const subj = exam.subjectName || "";
+    const score = after.grade != null && after.maxScore != null ? `${after.grade}/${after.maxScore}` : (after.grade != null ? String(after.grade) : "see feedback");
+    const studentMsg = isCorr
+      ? `"${exam.title || "Your exam"}" (${subj}) needs corrections. Open it to read your tutor's notes and upload your corrected work.`
+      : `Your results for "${exam.title || "your exam"}" (${subj}) are ready: ${score}. Open it to see your feedback and download your marked copy.`;
+    const parentMsg = isCorr
+      ? `${student.name || "Your child"}'s exam "${exam.title || ""}" (${subj}) has been sent back for corrections.`
+      : `Results for ${student.name || "your child"}'s exam "${exam.title || ""}" (${subj}) are ready: ${score}. The marked copy is in the Parent Portal.`;
+    const evType = isCorr ? "exam_corrections" : "exam_results_released";
+    const fileUrl = after.gradedFileUrl || "", fileName = after.gradedFileName || "";
+    const mail = (audience, parentName) => isCorr
+      ? templates.homeworkGraded({ audience, student, parentName, kind: "exam", item: exam, submission: after })
+      : templates.examResultsReleased({ audience, student, parentName, exam, submission: after });
 
-    // Bell for the student.
+    // Student: email + bell + Notices panel (with marked-copy link)
+    try { if (student.email) { const t = mail("student"); await sendEmail(student.email, t.subject, t.html); } }
+    catch (err) { console.warn("onFlatExamSubmissionWritten: student email failed", err.message || err); }
     try {
-      await db.collection("personalNotifications").add({
-        recipientId: studentId,
-        recipientType: "student",
-        type: "exam_results_released",
-        title: "Results released",
-        message: `Your results for "${exam.title || "your exam"}" (${exam.subjectName || ""}) are now available.`,
-        relatedEntity: "exam",
-        relatedEntityId: `${cid}/flat/${eid}`,
-        read: false, emailSent: !!student.email,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      await WS.notify(studentId, "student", {
+        type: evType, title: isCorr ? "Exam: corrections requested" : "Results released", message: studentMsg,
+        relatedEntity: "exam", relatedEntityId: `${cid}/flat/${eid}`, emailSent: !!student.email
       });
-    } catch (e) { /* ignore */ }
+      await WS.addStudentNotice(studentId, "student", {
+        type: isCorr ? "corrections" : "graded",
+        title: isCorr ? `Corrections requested: ${exam.title || "Exam"}` : `Exam graded: ${exam.title || "Exam"}`,
+        message: studentMsg, fileUrl, fileName, studentId, studentName: student.name
+      });
+    } catch (err) { console.warn("onFlatExamSubmissionWritten: student notice failed", err.message || err); }
 
-    // Email the student.
-    if (student.email) {
-      try {
-        const t = templates.examResultsReleased({
-          audience: "student",
-          student,
-          exam,
-          submission: after
-        });
-        await sendEmail(student.email, t.subject, t.html);
-      } catch (e) { console.warn("onFlatExamSubmissionWritten: student email failed", e.message || e); }
-    }
-
-    // Parents — bell + email.
+    // Every linked parent / guardian: email + bell + Notices panel
     try {
-      const links = await db.collection("parentStudentLinks")
-        .where("studentUid", "==", studentId).get();
-      for (const link of links.docs) {
-        const parentUid = link.data().parentUid;
-        if (!parentUid) continue;
-        const parentSnap = await db.collection("parentAccounts").doc(parentUid).get();
-        if (!parentSnap.exists) continue;
-        const parent = parentSnap.data() || {};
-
+      const parents = await WS.parentsOfStudent(studentId);
+      for (const p of parents) {
+        try { if (p.email) { const t = mail("parent", p.name); await sendEmail(p.email, t.subject, t.html); } }
+        catch (err) { console.warn("onFlatExamSubmissionWritten: parent email failed", p.email, err.message || err); }
         try {
-          await db.collection("personalNotifications").add({
-            recipientId: parentUid,
-            recipientType: "parent",
-            type: "exam_results_released",
-            title: `Results released: ${student.name || "your child"}`,
-            message: `Results for "${exam.title || "an exam"}" (${exam.subjectName || ""}) are now available.`,
-            relatedEntity: "exam",
-            relatedEntityId: `${cid}/flat/${eid}`,
-            read: false, emailSent: !!parent.email,
-            extra: { studentId },
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          await WS.notify(p.id, "parent", {
+            type: evType,
+            title: isCorr ? `${student.name || "Your child"}: exam corrections requested` : `Results released: ${student.name || "your child"}`,
+            message: parentMsg, relatedEntity: "exam", relatedEntityId: `${cid}/flat/${eid}`, emailSent: !!p.email, extra: { studentId }
           });
-        } catch (e) { /* ignore */ }
-
-        if (parent.email) {
-          try {
-            const t = templates.examResultsReleased({
-              audience: "parent",
-              student,
-              parentName: parent.name,
-              exam,
-              submission: after
-            });
-            await sendEmail(parent.email, t.subject, t.html);
-          } catch (e) { console.warn("onFlatExamSubmissionWritten: parent email failed", parent.email, e.message || e); }
-        }
+          await WS.addStudentNotice(p.id, "parent", {
+            type: isCorr ? "corrections" : "graded",
+            title: isCorr ? `${student.name || "Your child"}: exam corrections requested` : `${student.name || "Your child"}: exam graded`,
+            message: parentMsg, fileUrl, fileName, studentId, studentName: student.name
+          });
+        } catch (err) { console.warn("onFlatExamSubmissionWritten: parent notice failed", err.message || err); }
       }
-    } catch (e) { console.warn("onFlatExamSubmissionWritten: parent link read failed", e.message || e); }
+    } catch (err) { console.warn("onFlatExamSubmissionWritten: parent lookup failed", err.message || err); }
   }
 );
 

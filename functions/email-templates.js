@@ -489,6 +489,28 @@ function homeworkGraded({ audience, student, parentName, kind, item, submission 
     ? `${submission.grade} / ${submission.maxScore}`
     : (submission.grade != null ? String(submission.grade) : 'See feedback');
   const portal = audience === 'parent' ? PORTALS.parent : studentPortal(student);
+  if (submission.status === 'Corrections') {
+    const forParent = audience === 'parent';
+    return {
+      subject: `Corrections requested: ${item.title || label} (${item.subjectName || item.subject || 'Paisley Studio'})`,
+      html: render({
+        preheader: `${item.title || 'Work'} has been sent back for corrections.`,
+        heading: 'Corrections requested',
+        intro: audienceIntro(audience, student, parentName),
+        body: `
+        <p style="margin:0 0 14px;">${fa('fa-rotate-left', '#F39C12')}The tutor has looked at the ${label} below and asked for ${forParent ? `<strong>${esc((student && student.name) || 'your child')}</strong> to make` : 'you to make'} some corrections before it can be graded.</p>
+        ${detailList([
+          ['fa-book', 'Subject', item.subjectName || item.subject || '\u2014'],
+          ['fa-file-lines', 'Title', item.title || '\u2014'],
+          submission.gradedByName ? ['fa-user-check', 'Reviewed by', submission.gradedByName] : null
+        ])}
+        ${submission.feedback ? `<p style="margin:0 0 6px;font-weight:800;color:${BRAND.deep};">What needs fixing</p><p style="margin:0 0 14px;white-space:pre-wrap;">${esc(submission.feedback)}</p>` : ''}
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">${forParent ? 'Please encourage them to open the work in the portal and upload the corrected version.' : 'Open the work in the portal, read the notes and upload your corrected version.'}</p>
+      `,
+        cta: { label: forParent ? 'Open the Parent Portal' : 'Open the Student Portal', url: portal }
+      })
+    };
+  }
   return {
     subject: `Graded: ${item.title || label} (${item.subjectName || item.subject || 'Paisley Studio'})`,
     html: render({
@@ -505,7 +527,7 @@ function homeworkGraded({ audience, student, parentName, kind, item, submission 
           submission.gradedByName ? ['fa-user-check', 'Marked by', submission.gradedByName] : null
         ])}
         ${submission.feedback ? `<p style="margin:0 0 6px;font-weight:800;color:${BRAND.deep};">Tutor feedback</p><p style="margin:0 0 14px;white-space:pre-wrap;">${esc(submission.feedback)}</p>` : ''}
-        <p style="margin:0;font-size:13px;color:${BRAND.muted};">${submission.gradedFileUrl ? 'The marked copy with the tutor\u2019s ink is ready to download from the portal.' : 'Open the portal to see the full result.'}</p>
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">${submission.gradedFileUrl ? 'The marked copy with the tutor\u2019s ink is ready: open the work in the portal and use the green \u201cDownload marked copy\u201d button.' : 'Open the portal to see the full result.'}</p>
       `,
       cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: portal }
     })

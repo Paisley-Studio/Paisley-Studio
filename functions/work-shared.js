@@ -157,6 +157,18 @@ async function notifyOnce(docId, recipientId, recipientType, fields) {
   }
 }
 
+/* Atomically claim a one-time event key; true only for the first caller. */
+async function claimOnce(key) {
+  if (!key) return false;
+  try {
+    await db().collection("workEventClaims").doc(key).create({ createdAt: FV().serverTimestamp() });
+    return true;
+  } catch (e) {
+    if (e && (e.code === 6 || /ALREADY_EXISTS/i.test(String(e.message)))) return false;
+    throw e;
+  }
+}
+
 function stableId(...parts) {
   return require("crypto").createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 28);
 }
@@ -257,7 +269,7 @@ function cidTidFromRef(ref) {
 
 module.exports = {
   LOCATION, TIME_ZONE, SMTP_SECRETS, sendEmail,
-  db, FV, toDate, subjectKey, notify, addStudentNotice,
+  db, FV, toDate, subjectKey, notify, addStudentNotice, claimOnce,
   classroomOf, resolveStudents, parentsOfStudent,
   AUDIENCES, studentAudience, itemPostedTo, isVisibleTo, studentMaySee, notifyOnce, stableId,
   pathFromDownloadUrl, downloadStoredFile, saveStoredPdf, cidTidFromRef

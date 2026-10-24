@@ -1,7 +1,7 @@
 // Paisley Studio Service Worker
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v5-boards'; // Bumped to force browsers to drop the old broken cache
+const CACHE_NAME = 'paisley-studio-v6-graded'; // Bumped to force browsers to drop the old broken cache
 const CACHE_URLS = ['./', './index.html'];
 
 // Hosts that must NEVER be intercepted by the service worker.

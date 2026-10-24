@@ -108,60 +108,109 @@ async function handleWorkWrite(event, kind) {
   const after = event.data.after.exists ? event.data.after.data() : null;
   if (!after) return;
   const { cid, tid, studentId } = event.params;
-  const parentId = kind === "exam" ? event.params.eid : event.params.aid;
-  const parentCol = kind === "exam" ? "exams" : "assignments";
+  const parentId = kind === "exam" ? event.params.eid : (kind === "lesson" ? event.params.lid : event.params.aid);
+  const parentCol = kind === "exam" ? "exams" : (kind === "lesson" ? "lessons" : "assignments");
   const itemRef = W.db().doc(`classrooms/${cid}/topics/${tid}/${parentCol}/${parentId}`);
   const itemSnap = await itemRef.get();
   const item = itemSnap.exists ? itemSnap.data() : {};
   const entityId = `${cid}/${tid}/${parentId}`;
+  const relEntity = kind === "exam" ? "exam" : "assignment";
+  const noun = kind === "exam" ? "Exam" : (kind === "lesson" ? "Classwork" : "Homework");
 
   // 1. Student handed work in (first creation only)
   if (!before) {
     if (item.tutorId) {
       await W.notify(item.tutorId, "tutor", {
         type: kind === "exam" ? "exam_submitted" : "homework_submitted",
-        title: kind === "exam" ? "Exam paper handed in" : "Homework handed in",
+        title: `${noun} handed in`,
         message: `${after.studentName || "A student"} handed in ${item.title || "work"} (${item.subjectName || item.subject || ""}).`,
-        relatedEntity: kind === "exam" ? "exam" : "assignment", relatedEntityId: entityId
+        relatedEntity: relEntity, relatedEntityId: entityId
       });
     }
     return;
   }
 
-  // 2. Marks released or re-released
-  const nowReleased = after.released === true;
-  const changed = !before.released || String(W.toDate(before.gradedAt) || "") !== String(W.toDate(after.gradedAt) || "");
-  if (!nowReleased || !changed || after.status !== "Graded") return;
+  // 1b. Student re-handed-in after "Corrections" -> tutor is told it is ready again
+  if (before.status === "Corrections" && after.status === "Submitted") {
+    if (item.tutorId) {
+      await W.notify(item.tutorId, "tutor", {
+        type: kind === "exam" ? "exam_submitted" : "homework_submitted",
+        title: `${noun} resubmitted`,
+        message: `${after.studentName || "A student"} resubmitted corrected work for ${item.title || "work"} (${item.subjectName || item.subject || ""}).`,
+        relatedEntity: relEntity, relatedEntityId: entityId
+      });
+    }
+    return;
+  }
+
+  // 2. Marks released (Graded) or work sent back (Corrections)
+  const status = after.status;
+  if (after.released !== true || (status !== "Graded" && status !== "Corrections")) return;
+  const gAfter = W.toDate(after.gradedAt), gBefore = W.toDate(before.gradedAt);
+  const changed = !before.released || before.status !== status || String(gAfter || "") !== String(gBefore || "");
+  if (!changed) return;
+
+  // Claim this exact grading event so a retried trigger can never notify twice.
+  const claimKey = W.stableId("graded", cid, parentId, studentId, status, String(gAfter ? gAfter.getTime() : "0"));
+  const claimed = await W.claimOnce(claimKey);
+  if (!claimed) return;
 
   const studentSnap = await W.db().collection("students").doc(studentId).get();
   const student = studentSnap.exists ? { id: studentId, ...studentSnap.data() } : { id: studentId, name: after.studentName, email: after.studentEmail };
   const parents = await W.parentsOfStudent(studentId);
+  const isCorr = status === "Corrections";
   const score = after.grade != null && after.maxScore != null ? `${after.grade}/${after.maxScore}` : (after.grade != null ? String(after.grade) : "see feedback");
-  const label = kind === "exam" ? "exam" : "homework";
-  const msg = `${item.title || "Your " + label} (${item.subjectName || item.subject || ""}) has been marked: ${score}.`;
+  const subj = item.subjectName || item.subject || "";
+  const studentMsg = isCorr
+    ? `${item.title || noun} (${subj}) needs corrections. Open it to read your tutor's notes and upload your corrected work.`
+    : `${item.title || noun} (${subj}) has been graded: ${score}. Open it to see your feedback and download your marked copy.`;
+  const parentMsg = isCorr
+    ? `${student.name || "Your child"}'s ${noun.toLowerCase()} "${item.title || ""}" (${subj}) has been sent back for corrections.`
+    : `${student.name || "Your child"}'s ${noun.toLowerCase()} "${item.title || ""}" (${subj}) has been graded: ${score}. The marked copy is in the Parent Portal.`;
+  const typeKey = kind === "exam" ? "exam" : "homework";
+  const evType = isCorr ? `${typeKey}_corrections` : `${typeKey}_graded`;
+  const fileUrl = after.gradedFileUrl || "";
+  const fileName = after.gradedFileName || "";
 
-  if (student.email) {
-    const t = templates.homeworkGraded({ audience: "student", student, kind, item, submission: after });
-    await W.sendEmail(student.email, t.subject, t.html);
-  }
-  await W.notify(studentId, "student", {
-    type: kind === "exam" ? "exam_graded" : "homework_graded", title: `${kind === "exam" ? "Exam" : "Homework"} graded`, message: msg,
-    relatedEntity: kind === "exam" ? "exam" : "assignment", relatedEntityId: entityId, emailSent: !!student.email
-  });
-  await W.addStudentNotice(studentId, "student", {
-    type: "graded", title: `${kind === "exam" ? "Exam" : "Homework"} graded: ${item.title || ""}`, message: msg,
-    fileUrl: after.gradedFileUrl || "", fileName: after.gradedFileName || "", studentId, studentName: student.name
-  });
-  for (const p of parents) {
-    if (p.email) {
-      const t = templates.homeworkGraded({ audience: "parent", student, parentName: p.name, kind, item, submission: after });
-      await W.sendEmail(p.email, t.subject, t.html);
+  // --- student: email + bell + Notices panel (with the marked-copy link)
+  try {
+    if (student.email) {
+      const t = templates.homeworkGraded({ audience: "student", student, kind: kind === "exam" ? "exam" : "homework", item, submission: after });
+      await W.sendEmail(student.email, t.subject, t.html);
     }
-    await W.notify(p.id, "parent", {
-      type: kind === "exam" ? "exam_graded" : "homework_graded",
-      title: `${student.name || "Your child"}: ${label} graded`, message: msg,
-      relatedEntity: kind === "exam" ? "exam" : "assignment", relatedEntityId: entityId, emailSent: !!p.email, extra: { studentId }
+  } catch (e) { console.warn("graded: student email failed", e.message || e); }
+  try {
+    await W.notify(studentId, "student", {
+      type: evType, title: isCorr ? `${noun}: corrections requested` : `${noun} graded`, message: studentMsg,
+      relatedEntity: relEntity, relatedEntityId: entityId, emailSent: !!student.email
     });
+    await W.addStudentNotice(studentId, "student", {
+      type: isCorr ? "corrections" : "graded",
+      title: isCorr ? `Corrections requested: ${item.title || ""}` : `${noun} graded: ${item.title || ""}`,
+      message: studentMsg, fileUrl, fileName, studentId, studentName: student.name
+    });
+  } catch (e) { console.warn("graded: student notice failed", e.message || e); }
+
+  // --- every linked parent / guardian: email + bell + Notices panel
+  for (const p of parents) {
+    try {
+      if (p.email) {
+        const t = templates.homeworkGraded({ audience: "parent", student, parentName: p.name, kind: kind === "exam" ? "exam" : "homework", item, submission: after });
+        await W.sendEmail(p.email, t.subject, t.html);
+      }
+    } catch (e) { console.warn("graded: parent email failed", p.email, e.message || e); }
+    try {
+      await W.notify(p.id, "parent", {
+        type: evType,
+        title: isCorr ? `${student.name || "Your child"}: corrections requested` : `${student.name || "Your child"}: ${noun.toLowerCase()} graded`,
+        message: parentMsg, relatedEntity: relEntity, relatedEntityId: entityId, emailSent: !!p.email, extra: { studentId }
+      });
+      await W.addStudentNotice(p.id, "parent", {
+        type: isCorr ? "corrections" : "graded",
+        title: isCorr ? `${student.name || "Your child"}: corrections requested` : `${student.name || "Your child"}: ${noun.toLowerCase()} graded`,
+        message: parentMsg, fileUrl, fileName, studentId, studentName: student.name
+      });
+    } catch (e) { console.warn("graded: parent notice failed", e.message || e); }
   }
 }
 
@@ -172,6 +221,11 @@ exports.onSubmissionWritten = onDocumentWritten(
 exports.onExamAttemptWritten = onDocumentWritten(
   { document: "classrooms/{cid}/topics/{tid}/exams/{eid}/attempts/{studentId}", region: W.LOCATION, secrets: W.SMTP_SECRETS },
   (event) => handleWorkWrite(event, "exam")
+);
+
+exports.onLessonSubmissionWritten = onDocumentWritten(
+  { document: "classrooms/{cid}/topics/{tid}/lessons/{lid}/submissions/{studentId}", region: W.LOCATION, secrets: W.SMTP_SECRETS },
+  (event) => handleWorkWrite(event, "lesson")
 );
 
 /* =========================================================
