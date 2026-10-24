@@ -107,6 +107,38 @@ exports.onExamPostedOrPublished = onDocumentWritten(
      released (or re-released)              -> student + parent
                                                email, bell, notice
 --------------------------------------------------------- */
+/* Who should hear that work needs marking.
+   `primaryIds` (the item's tutor, or whoever marked it last) are always told. When none of
+   them is a real tutor account (admin-posted work nobody has marked yet, legacy items with no
+   tutorId), every active tutor of that subject + Key Stage is told instead, so a hand-in or a
+   resubmission can never be silently dropped. */
+async function tutorRecipientsFor(cid, item, primaryIds) {
+  const ids = [];
+  (primaryIds || []).forEach((id) => { if (id && ids.indexOf(id) === -1) ids.push(id); });
+  const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  try {
+    const accounts = await W.db().collection("tutorAccounts").get();
+    const byId = {};
+    accounts.docs.forEach((d) => { byId[d.id] = d.data() || {}; });
+    if (ids.some((id) => byId[id])) return ids;
+    const classroom = await W.classroomOf(cid);
+    const subjects = [classroom && classroom.subjectId, classroom && classroom.subjectName, item && item.subjectId, item && item.subjectName]
+      .filter(Boolean).map(norm);
+    const ks = (classroom && classroom.keyStage) || (item && item.keyStage) || "";
+    if (!subjects.length) return ids;
+    accounts.docs.forEach((d) => {
+      const t = d.data() || {};
+      if (String(t.status || "").toLowerCase() === "suspended") return;
+      const ts = (Array.isArray(t.subjects) ? t.subjects : []).map(norm);
+      if (!ts.some((x) => subjects.indexOf(x) !== -1)) return;
+      const tk = Array.isArray(t.keyStages) ? t.keyStages : [];
+      if (tk.length && ks && tk.indexOf(ks) === -1) return;
+      if (ids.indexOf(d.id) === -1) ids.push(d.id);
+    });
+  } catch (e) { console.warn("tutorRecipientsFor:", e && e.message); }
+  return ids;
+}
+
 async function handleWorkWrite(event, kind) {
   const before = event.data.before.exists ? event.data.before.data() : null;
   const after = event.data.after.exists ? event.data.after.data() : null;
@@ -144,8 +176,8 @@ async function handleWorkWrite(event, kind) {
 
   // 1. Student handed work in (first creation only)
   if (!before) {
-    if (tutorRecipient) {
-      await W.notify(tutorRecipient, "tutor", {
+    for (const rid of await tutorRecipientsFor(cid, item, [tutorRecipient])) {
+      await W.notify(rid, "tutor", {
         type: kind === "exam" ? "exam_submitted" : "homework_submitted",
         title: `${noun} handed in`,
         message: `${after.studentName || "A student"} handed in ${item.title || "work"} (${item.subjectName || item.subject || ""}).`,
@@ -162,11 +194,13 @@ async function handleWorkWrite(event, kind) {
   // legacy Studio Desk lesson, was empty — so nothing was written. Now the
   // resubmission reaches whoever the fallback identifies.
   if (before.status === "Corrections" && after.status === "Submitted") {
-    if (tutorRecipient) {
-      await W.notify(tutorRecipient, "tutor", {
-        type: kind === "exam" ? "exam_submitted" : "homework_submitted",
-        title: `${noun} resubmitted`,
-        message: `${after.studentName || "A student"} resubmitted corrected work for ${item.title || "work"} (${item.subjectName || item.subject || ""}).`,
+    // The tutor who sent it back for corrections is the one who should mark the corrected work.
+    const attempt = (Array.isArray(after.history) ? after.history.length : 1) + 1;
+    for (const rid of await tutorRecipientsFor(cid, item, [before.gradedBy, tutorRecipient])) {
+      await W.notify(rid, "tutor", {
+        type: kind === "exam" ? "exam_resubmitted" : "homework_resubmitted",
+        title: `${noun} RESUBMITTED (attempt ${attempt})`,
+        message: `${after.studentName || "A student"} resubmitted corrected work for ${item.title || "work"} (${item.subjectName || item.subject || ""}). It is ready for you to grade.`,
         relatedEntity: relEntity, relatedEntityId: entityId
       });
     }

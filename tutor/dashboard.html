@@ -190,11 +190,12 @@
         <div class="stats-row">
           <div class="stat-card"><div class="icon-wrap ic-1"><i class="fas fa-user-graduate"></i></div><div class="num" id="statStudents">0</div><div class="lbl">My students</div></div>
           <div class="stat-card"><div class="icon-wrap ic-2"><i class="fas fa-book-open"></i></div><div class="num" id="statMyHomework">0</div><div class="lbl">Homework I have set</div></div>
+          <div class="stat-card"><div class="icon-wrap ic-3"><i class="fas fa-clipboard-check"></i></div><div class="num" id="statHwToMark">0</div><div class="lbl">Homework &amp; classwork to mark<br><span id="statHwResub" style="font-size:.72rem;font-weight:800;color:#4a6fd6"></span></div></div>
           <div class="stat-card"><div class="icon-wrap ic-3"><i class="fas fa-file-circle-check"></i></div><div class="num" id="statAwaitingAttempts">0</div><div class="lbl">Exam papers to mark</div></div>
           <div class="stat-card"><div class="icon-wrap ic-5"><i class="fas fa-user-shield"></i></div><div class="num" id="statGranted">0</div><div class="lbl">Granted to me</div></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><div><h3>Needs your attention</h3><div class="sub">Everything currently waiting on you</div></div></div>
+          <div class="panel-head"><div><h3>Needs your attention</h3><div class="sub" id="attentionSub">Everything currently waiting on you</div></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>What</th><th>Student</th><th>Item</th><th>When</th><th></th></tr></thead>
@@ -326,8 +327,8 @@
 <script src="../lms-helpers.js"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
-<script src="../js/classroom/work-helpers.js?v=live3"></script>
-<script src="../js/classroom/ink-grader.js?v=boards1"></script>
+<script src="../js/classroom/work-helpers.js?v=live4"></script>
+<script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script>
 const auth = firebase.auth();
@@ -494,7 +495,7 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
   });
 });
-// Homework Management and Exam Management mount from work-helpers.js?v=live3.
+// Homework Management and Exam Management mount from work-helpers.js?v=live4.
 // Both are tutor-restricted there: no topic create, no exam create.
 // Tutors cannot create or edit assignments. What they keep: releasing
 // admin-posted homework to their own students, grading and feedback.
@@ -502,8 +503,9 @@ function mountWorkManagement(kind, hostId){
   const host = document.getElementById(hostId);
   host.innerHTML = '';
   const box = document.createElement('div'); host.appendChild(box);
+  const focus = window.__wkFocus || null; window.__wkFocus = null;   // set by the Overview "Mark" buttons
   WorkUI.mountManagement(box, {
-    kind, role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || []
+    kind, role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], focus
   });
 }
 document.querySelector('.nav-item[data-view="hwmgmt"]').addEventListener('click', ()=> mountWorkManagement('homework','hwHost'));
@@ -512,7 +514,7 @@ let tutorBellMounted = false;
 function mountTutorBell(){
   if(tutorBellMounted || !tutor) return; tutorBellMounted = true;
   mountNotificationBell(document.getElementById('bellHost'), tutor.id, 'tutor', {
-    navBadges: { classroom:'#navClassroomCount', homework:'#navHwCount', exams:'#navExamCount' },
+    navBadges: { classroom:'#navClassroomCount' },   // homework/exam bubbles are live "to mark" counts (renderOverview)
     navigate: (cat)=>{
       const view = { homework:'hwmgmt', exams:'exmgmt', classroom:'classroom', tickets:'tickets' }[cat];
       const btn = view && document.querySelector('.nav-item[data-view="'+view+'"]'); if(btn) btn.click();
@@ -793,6 +795,7 @@ async function subscribeHomeworkSubmissions(gen){
                 {
                   id: d.id,
                   kind: 'homework',
+                  cid: cls.id, tid: t.id, itemId: a.id,
                   homeworkId: a.id,
                   homeworkTitle: a.title || '(untitled)',
                   subject: a.subject || cls.subjectName || '',
@@ -829,6 +832,7 @@ async function subscribeHomeworkSubmissions(gen){
                 {
                   id: d.id,
                   kind: 'classwork',
+                  cid: cls.id, tid: t.id, itemId: l.id,
                   lessonId: l.id,
                   homeworkTitle: l.title || '(untitled)',
                   subject: l.subjectName || cls.subjectName || '',
@@ -871,6 +875,7 @@ async function subscribeFlatExamSubmissions(gen){
               {
                 id: d.id,
                 kind: 'exam',
+                cid: cls.id, itemId: ex.id,
                 examId: ex.id,
                 examTitle: ex.title || '(untitled)',
                 subject: ex.subjectName || '',
@@ -975,44 +980,84 @@ function myTickets(){ return DB.tickets.filter(t=>isMyStudent(t.studentId)); }
 //   • statAwaitingAttempts now counts only exam submissions awaiting grading
 //     (was already correct in spirit, but the pool it filters on was empty for
 //     classwork; that is now populated by the new listener).
+function subRoundOf(s){
+  const h = Array.isArray(s.history) ? s.history : [];
+  const resub = s.status === 'Submitted' && (h.length > 0 || !!s.gradedAt);
+  return { resub, round: h.length ? h.length + 1 : (resub ? 2 : 1) };
+}
 function renderOverview(){
   const allSubs = DB.submissions.filter(s=> isMyStudent(s.studentId) );
-  const awaitingSubs = allSubs.filter(s=> s.status === 'Submitted' || s.status === 'Corrections');
-  const grants       = myActiveGrants();
+  // Only work the tutor can act on right now. "Corrections" is with the student, so it is
+  // NOT listed as something to mark; it is counted separately below.
+  const toMark   = allSubs.filter(s=> s.status === 'Submitted');
+  const withStud = allSubs.filter(s=> s.status === 'Corrections');
+  const grants   = myActiveGrants();
+  const hwMark   = toMark.filter(s=> s.kind !== 'exam');
+  const exMark   = toMark.filter(s=> s.kind === 'exam');
+  const hwResub  = hwMark.filter(s=> subRoundOf(s).resub).length;
+  const exResub  = exMark.filter(s=> subRoundOf(s).resub).length;
   document.getElementById('statStudents').textContent = DB.students.length;
   document.getElementById('statMyHomework').textContent = DB.homework.length;
-  // Flat-exam submissions show up in the same pool, tagged kind: 'exam'.
-  document.getElementById('statAwaitingAttempts').textContent = awaitingSubs.filter(s=> s.kind === 'exam').length;
+  document.getElementById('statHwToMark').textContent = hwMark.length;
+  document.getElementById('statHwResub').textContent = hwResub ? (hwResub + ' resubmitted') : '';
+  document.getElementById('statAwaitingAttempts').textContent = exMark.length;
   document.getElementById('statGranted').textContent = grants.length;
   document.getElementById('navGrantCount').textContent = grants.length;
-  const rows = awaitingSubs.map(s=>({
-    what: s.kind === 'exam' ? 'Exam paper'
-         : (s.kind === 'classwork' ? 'Classwork' : 'Homework'),
-    icon: s.kind === 'exam' ? 'fa-file-pen'
-         : (s.kind === 'classwork' ? 'fa-book-open' : 'fa-clipboard-check'),
-    who: s.studentName||studentName(s.studentId),
-    item: s.examTitle || s.homeworkTitle || (s.kind === 'exam' ? 'Exam' : (s.kind === 'classwork' ? 'Classwork' : 'Homework')),
-    when: s.date,
-    statusPill: s.status === 'Corrections'
-      ? '<span class="badge b-pending">Corrections sent — awaiting student</span>'
-      : '<span class="badge b-plain">Awaiting grading</span>',
-    action: s.kind === 'exam'
-      ? `<button class="btn btn-ghost btn-sm" type="button" onclick="openExamManagement()"><i class="fas fa-pen"></i> Mark</button>`
-      : `<button class="btn btn-ghost btn-sm" type="button" onclick="openHomeworkManagement()"><i class="fas fa-pen"></i> Mark</button>`
-  })).sort((a,b)=>(b.when||0)-(a.when||0));
+
+  // Live "to mark" bubbles. They are driven by the work itself, not by unread notifications,
+  // so they stay until the work is actually marked (opening the tab no longer clears them).
+  setNavBubble('navHwCount', hwMark.length, hwResub);
+  setNavBubble('navExamCount', exMark.length, exResub);
+  const sub = document.getElementById('attentionSub');
+  if(sub) sub.textContent = toMark.length
+    ? (toMark.length + ' to mark' + (hwResub + exResub ? ' — ' + (hwResub + exResub) + ' resubmitted after corrections' : '')
+       + (withStud.length ? ' · ' + withStud.length + ' with students for corrections' : ''))
+    : (withStud.length ? withStud.length + ' with students for corrections — nothing to mark right now' : 'Everything currently waiting on you');
+
+  const rows = toMark.map(s=>{
+    const r = subRoundOf(s);
+    return {
+      s, resub: r.resub, round: r.round,
+      what: s.kind === 'exam' ? 'Exam paper' : (s.kind === 'classwork' ? 'Classwork' : 'Homework'),
+      icon: s.kind === 'exam' ? 'fa-file-pen' : (s.kind === 'classwork' ? 'fa-book-open' : 'fa-clipboard-check'),
+      who: s.studentName||studentName(s.studentId),
+      item: s.examTitle || s.homeworkTitle || (s.kind === 'exam' ? 'Exam' : (s.kind === 'classwork' ? 'Classwork' : 'Homework')),
+      when: s.date
+    };
+  }).sort((a,b)=> (a.resub === b.resub ? (a.when||0)-(b.when||0) : (a.resub ? -1 : 1)));   // resubmissions first, then longest-waiting
   const body = document.getElementById('attentionBody');
   if(!rows.length){
     body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:1.4rem;">Nothing waiting on you. Nicely done.</td></tr>';
     return;
   }
-  body.innerHTML = rows.map(r=>`<tr>
+  body.innerHTML = rows.map(r=>{
+    const pill = r.resub
+      ? `<span class="badge" style="background:#E6ECFF;color:#243b73;border:1px solid #6C8EE8;font-weight:800;"><i class="fas fa-rotate"></i> Resubmission – Attempt ${r.round}</span>`
+      : `<span class="badge" style="background:#FFF1D6;color:#8a5a00;border:1px solid #E8A33D;font-weight:800;">New hand-in</span>`;
+    return `<tr${r.resub ? ' style="background:#F4F7FF;"' : ''}>
     <td><i class="fas ${r.icon}" style="color:var(--brand); margin-right:.4rem;"></i>${escapeHtml(r.what)}</td>
     <td class="cell-name">${escapeHtml(r.who)}</td>
     <td>${escapeHtml(r.item)}</td>
-    <td>${fmtDate(r.when)} ${r.statusPill}</td>
-    <td class="row-actions">${r.action}</td>
-  </tr>`).join('');
+    <td>${fmtDate(r.when)} ${pill}</td>
+    <td class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-kind="${escapeHtml(r.s.kind)}" data-cid="${escapeHtml(r.s.cid||'')}" data-item="${escapeHtml(r.s.itemId||'')}" onclick="openMarkItem(this)"><i class="fas fa-pen"></i> ${r.resub ? 'Mark resubmission' : 'Mark'}</button></td>
+  </tr>`;}).join('');
 }
+function setNavBubble(id, total, resub){
+  const el = document.getElementById(id); if(!el) return;
+  if(!total){ el.style.display = 'none'; el.textContent = '0'; el.title = ''; return; }
+  el.style.display = 'inline-flex';
+  el.textContent = String(total);
+  el.style.background = resub ? '#4a6fd6' : '#E74C3C';
+  el.style.color = '#fff';
+  el.title = total + ' to mark' + (resub ? ' (' + resub + ' resubmitted)' : '');
+}
+// Open Homework/Exam Management straight on the item that needs marking.
+window.openMarkItem = (btn) => {
+  const kind = btn.dataset.kind, cid = btn.dataset.cid, itemId = btn.dataset.item;
+  window.__wkFocus = (cid && itemId) ? { cid, itemId } : null;
+  const view = kind === 'exam' ? 'exmgmt' : 'hwmgmt';
+  const nav = document.querySelector('.nav-item[data-view="' + view + '"]'); if(nav) nav.click();
+};
 window.openExamManagement = () => {
   const btn = document.querySelector('.nav-item[data-view="exmgmt"]'); if(btn) btn.click();
 };

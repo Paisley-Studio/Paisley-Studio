@@ -20,6 +20,12 @@
       '.cr-badge.b-declined{background:rgba(231,76,60,.1);color:#b8362a}',
       '.cr-badge.b-plain{background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
       '.cr-badge.b-grant{background:rgba(155,89,182,.12);color:#7c3f96}',
+      '.cr-badge.b-resub{background:#E6ECFF;color:#243b73;border:1px solid #6C8EE8;font-weight:800}',
+      '.cr-badge.b-new{background:#FFF1D6;color:#8a5a00;border:1px solid #E8A33D;font-weight:800}',
+      '.wk-bubble{display:inline-flex;align-items:center;gap:.25rem;background:#E74C3C;color:#fff;font-size:.68rem;font-weight:800;border-radius:99px;padding:.1rem .55rem;margin-left:.5rem;vertical-align:middle}',
+      '.wk-bubble.resub{background:#4a6fd6}',
+      '.wk-grp td{background:var(--sage,#E5F2EF);font-size:.74rem;font-weight:800;letter-spacing:.02em;color:var(--brand-deep,#245F5A);padding:.4rem .7rem!important}',
+      '.wk-grp.r0 td{background:#E6ECFF;color:#243b73}.wk-grp.r1 td{background:#FFF1D6;color:#8a5a00}',
       '.wk-chips{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center}',
       '.wk-sec{border-radius:14px;padding:1rem 1.1rem;margin:0 0 .9rem;border:1.5px solid var(--line,#D8E6E2)}',
       '.wk-sec h4{margin:0 0 .55rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:.45rem}',
@@ -89,13 +95,25 @@
     return w.mode === 'manual-open' || w.mode === 'auto-open';
   }
 
+  // One submission document is reused for every attempt. The tutor's grader appends a
+  // `history` entry each time work is sent back, so history.length = rounds already returned.
+  function subRound(sub) {
+    var h = sub && Array.isArray(sub.history) ? sub.history : [];
+    var resub = !!sub && sub.status === 'Submitted' && (h.length > 0 || !!sub.gradedAt);
+    return { resub: resub, round: h.length ? h.length + 1 : (resub ? 2 : 1), history: h };
+  }
   function workState(item, sub, kind) {
     var now = Date.now();
     if (sub && sub.status === 'Graded') return { k: 'graded', cls: 'b-confirmed', icon: 'fa-circle-check', text: 'Graded: ' + (fmtScore(sub) || 'done') };
-    if (sub && sub.status === 'Corrections') return { k: 'corrections', cls: 'b-declined', icon: 'fa-rotate-left', text: 'Corrections requested' };
+    if (sub && sub.status === 'Corrections') return { k: 'corrections', cls: 'b-declined', icon: 'fa-rotate-left', text: 'Corrections sent \u2013 with student' };
     if (sub && sub.status === 'Suspended') return { k: 'suspended', cls: 'b-declined', icon: 'fa-ban', text: 'Suspended' };
     if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
-    if (sub) return { k: 'submitted', cls: 'b-pending', icon: 'fa-inbox', text: 'Submitted \u2013 awaiting grading' };
+    if (sub) {
+      var ri = subRound(sub);
+      // k stays 'submitted' so the student filters keep working; resub/round tell the tutor which is which.
+      if (ri.resub) return { k: 'submitted', resub: true, round: ri.round, cls: 'b-resub', icon: 'fa-rotate', text: 'Resubmitted \u2013 Attempt ' + ri.round + ' \u2013 awaiting grading' };
+      return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-inbox', text: 'New hand-in \u2013 awaiting grading' };
+    }
     var due = dueOf(item, kind);
     if (due && due.getTime() < now) return { k: 'overdue', cls: 'b-declined', icon: 'fa-triangle-exclamation', text: 'Overdue' };
     return { k: 'pending', cls: 'b-plain', icon: 'fa-circle', text: 'Not submitted' };
@@ -761,16 +779,16 @@
     function counts(it) {
       var aud = expectedAudience(it);
       var subs = S.subs[it.id] || {};
-      var submitted = 0, graded = 0, toGrade = 0, corr = 0;
+      var submitted = 0, graded = 0, toGrade = 0, corr = 0, resub = 0;
       aud.forEach(function (s) {
         var x = subs[s.id];
         if (!x) return;
         if (x.status !== 'In progress' && x.status !== 'Suspended') submitted++;
         if (x.status === 'Graded') graded++;
-        if (x.status === 'Submitted') toGrade++;      // only work still waiting for the tutor
+        if (x.status === 'Submitted') { toGrade++; if (subRound(x).resub) resub++; }   // only work still waiting for the tutor
         if (x.status === 'Corrections') corr++;       // already actioned: sent back to the student
       });
-      return { total: aud.length, submitted: submitted, graded: graded, toGrade: toGrade, corr: corr };
+      return { total: aud.length, submitted: submitted, graded: graded, toGrade: toGrade, corr: corr, resub: resub };
     }
 
     // Past Work = every recipient has handed in AND every piece is graded.
@@ -797,7 +815,12 @@
       var isReleased = it.releasedTo && it.releasedTo.length > 0;
       
       if (c.total && c.graded === c.total) return pill('b-confirmed', 'All graded', 'fa-circle-check');
-      if (c.toGrade > 0) return pill('b-pending', c.toGrade + ' to grade', 'fa-inbox');
+      if (c.toGrade > 0) {
+        var newOnes = c.toGrade - c.resub;
+        return (c.resub > 0 ? pill('b-resub', c.resub + ' resubmitted', 'fa-rotate') + ' ' : '') +
+               (newOnes > 0 ? pill('b-new', newOnes + ' new to grade', 'fa-inbox') : '') +
+               (c.corr > 0 ? ' ' + pill('b-declined', c.corr + ' with student', 'fa-rotate-left') : '');
+      }
       if (c.corr > 0) return pill('b-declined', c.corr + ' with student for corrections', 'fa-rotate-left');
       if (isReleased && c.total && c.submitted === c.total) return pill('b-confirmed', 'All submitted', 'fa-inbox');
       if (due && due.getTime() < Date.now() && c.submitted < c.total) return pill('b-declined', 'Overdue', 'fa-triangle-exclamation');
@@ -877,14 +900,22 @@
           : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
         S.topics.forEach(function (t) {
           var rows = ITEMS.filter(function (x) { return x.tid === t.id; }).sort(function (a, b) {
+            // Work that needs marking floats to the top: resubmissions, then new hand-ins, then by deadline.
+            var ca = counts(a), cb = counts(b);
+            if ((cb.resub > 0) !== (ca.resub > 0)) return cb.resub > 0 ? 1 : -1;
+            if ((cb.toGrade > 0) !== (ca.toGrade > 0)) return cb.toGrade > 0 ? 1 : -1;
             var da = dueOf(a, 'assignment'), db2 = dueOf(b, 'assignment');
             return (da ? da.getTime() : 0) - (db2 ? db2.getTime() : 0);
           });
+          var tMark = 0, tResub = 0;
+          rows.forEach(function (x) { var cx = counts(x); tMark += cx.toGrade; tResub += cx.resub; });
           if (S.view === 'past' && !rows.length) return;
           var open = !S.collapsed[t.id];
           var topicActions = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Prepare assignment</button></div>' : '';
           h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' +
-            esc(t.title) + '<small>' + rows.length + ' assignment' + (rows.length === 1 ? '' : 's') + '</small></span>' +
+            esc(t.title) + '<small>' + rows.length + ' assignment' + (rows.length === 1 ? '' : 's') + '</small>' +
+            (tResub ? '<span class="wk-bubble resub"><i class="fas fa-rotate"></i> ' + tResub + ' resubmitted</span>' : '') +
+            (tMark - tResub > 0 ? '<span class="wk-bubble">' + (tMark - tResub) + ' to mark</span>' : '') + '</span>' +
             topicActions + '</div>';
           if (open) {
             if (!rows.length) h += '<div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience ? 'No assignments in this topic yet. Use \u201cPrepare assignment\u201d above.' : 'No assignments posted to this audience yet.') + '</div>';
@@ -957,22 +988,57 @@
           (it.description && !it.isClasswork ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.description) + '</div>' : '') +
         '</div>';
 
-        var rows = aud.map(function (s) {
-          var sub = subs[s.id] || null;
-          var st = workState(it, sub, kind);
+        // Order: resubmissions first, then new hand-ins (longest waiting first), then work that is
+        // with the student for corrections, then graded, then not handed in.
+        function rankOf(sub, st) {
+          if (!sub) return 4;
+          if (st.k === 'submitted') return st.resub ? 0 : 1;
+          if (st.k === 'corrections') return 2;
+          if (st.k === 'graded') return 3;
+          return 4;
+        }
+        function msOfSub(sub) { var t = sub && (sub.submittedAt || sub.updatedAt); t = t && U.toDate ? U.toDate(t) : null; return t ? t.getTime() : 0; }
+        var GROUP = {
+          0: 'Resubmitted \u2013 corrected work to grade', 1: 'New hand-ins to grade',
+          2: 'Sent back for corrections \u2013 waiting on the student', 3: 'Graded', 4: 'Not handed in'
+        };
+        var ordered = aud.map(function (s) {
+          var sub = subs[s.id] || null, st = workState(it, sub, kind);
+          return { s: s, sub: sub, st: st, rank: rankOf(sub, st) };
+        }).sort(function (a, b) {
+          if (a.rank !== b.rank) return a.rank - b.rank;
+          if (a.rank <= 1) return msOfSub(a.sub) - msOfSub(b.sub);
+          return String(a.s.name || '').localeCompare(String(b.s.name || ''));
+        });
+        var lastRank = -1;
+        var rows = ordered.map(function (o) {
+          var s = o.s, sub = o.sub, st = o.st;
           var canGrade = sub && sub.status !== 'In progress';
-          return '<tr>' +
+          var ri = subRound(sub);
+          var prevN = ri.history.length;
+          var grp = '';
+          if (o.rank !== lastRank) {
+            grp = '<tr class="wk-grp r' + o.rank + '"><td colspan="4">' + esc(GROUP[o.rank]) + '</td></tr>';
+            lastRank = o.rank;
+          }
+          var when = sub && (sub.submittedAt || sub.updatedAt) ? esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '\u2014';
+          var whenCell = when;
+          if (sub && st.k === 'submitted' && st.resub) whenCell = '<b>Resubmitted</b><br>' + when;
+          else if (sub && st.k === 'submitted') whenCell = '<b>First hand-in</b><br>' + when;
+          var upLabel = st.k === 'submitted' && st.resub ? 'Attempt ' + st.round + ' upload' : 'Student\u2019s upload';
+          return grp + '<tr>' +
             '<td><b>' + esc(s.name || s.email || s.id) + '</b></td>' +
-            '<td>' + pill(st.cls, st.text, st.icon) + '</td>' +
-            '<td>' + (sub && (sub.submittedAt || sub.updatedAt) ? esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '—') + '</td>' +
+            '<td>' + pill(st.cls, st.text, st.icon) + (prevN && st.k !== 'graded' ? '<div class="cr-note" style="margin-top:.25rem">' + prevN + ' earlier attempt' + (prevN === 1 ? '' : 's') + ' sent back</div>' : '') + '</td>' +
+            '<td>' + whenCell + '</td>' +
             '<td>' +
-              (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> Student\u2019s upload</a>' : '') +
-              (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-circle-check"></i> Graded copy</a>' : '') +
+              (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> ' + esc(upLabel) + '</a>' : '') +
+              (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-circle-check"></i> ' + (st.k === 'submitted' && st.resub ? 'Last marked copy' : 'Graded copy') + '</a>' : '') +
+              (prevN ? '<button type="button" class="cr-btn sm" data-a="hist" data-s="' + esc(s.id) + '"><i class="fas fa-clock-rotate-left"></i> Previous attempts (' + prevN + ')</button>' : '') +
               (canGrade
                 ? (kind === 'exam'
-                    ? '<button type="button" class="cr-btn sm primary" data-a="grade-flat" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Review' : 'Grade') + '</button>'
+                    ? '<button type="button" class="cr-btn sm primary" data-a="grade-flat" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' || sub.status === 'Corrections' ? 'Review' : (st.resub ? 'Grade resubmission' : 'Grade')) + '</button>'
                     : (global.InkGrader
-                        ? '<button type="button" class="cr-btn sm primary" data-a="grade-ink" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Review' : 'Grade') + '</button>'
+                        ? '<button type="button" class="cr-btn sm primary" data-a="grade-ink" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' || sub.status === 'Corrections' ? 'Review' : (st.resub ? 'Grade resubmission' : 'Grade')) + '</button>'
                         : ''))
                 : '') +
             '</td>' +
@@ -982,6 +1048,13 @@
         m.body.innerHTML = head + (aud.length
           ? '<div class="cr-table-wrap"><table class="cr-table wk-tbl" style="min-width:560px"><thead><tr><th>Student</th><th>State</th><th>Handed in</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
           : '<div class="cr-empty">No students are assigned to this item.</div>');
+
+        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="hist"]'), function (b) {
+          b.onclick = function () {
+            var sid = b.dataset.s, stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
+            openHistory(stu.name || (subs[sid] && subs[sid].studentName) || 'Student', subs[sid]);
+          };
+        });
 
         var gb = m.body.querySelector('[data-a="grant"]'); if (gb) gb.onclick = function () { openGrant(it); };
 
@@ -1010,6 +1083,24 @@
         });
       }
       paint();
+    }
+
+    function openHistory(name, sub) {
+      var hm = U.openModal({ title: 'Previous attempts \u2014 ' + name });
+      var h = (sub && Array.isArray(sub.history) ? sub.history : []).slice().sort(function (a, b) { return (a.round || 0) - (b.round || 0); });
+      function safe(u) { return /^https:\/\//.test(String(u || '')); }
+      hm.body.innerHTML = h.length ? h.map(function (e) {
+        return '<div class="wk-sec corr" style="margin-bottom:.8rem"><h4><i class="fas fa-rotate-left"></i> Attempt ' + esc(e.round || '?') + ' \u2014 sent back for corrections' +
+          (e.at ? ' \u00b7 ' + esc(U.fmtDateTime(new Date(e.at))) : '') + '</h4>' +
+          (e.studentText ? '<div class="wk-box">' + esc(e.studentText) + '</div>' : '') +
+          '<div class="wk-chips" style="margin:.4rem 0">' +
+            (safe(e.studentFileUrl) ? '<a class="cr-btn sm" href="' + esc(e.studentFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> Student\u2019s upload</a>' : '') +
+            (safe(e.markedFileUrl) ? '<a class="cr-btn sm" href="' + esc(e.markedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pen"></i> My marked copy</a>' : '') +
+          '</div>' +
+          '<div class="wk-fb"><b>Feedback given' + (e.gradedByName ? ' by ' + esc(e.gradedByName) : '') + ':</b><br>' + esc(e.feedback || '(none)') + '</div></div>';
+      }).join('') : '<div class="cr-empty">No earlier attempts recorded.</div>';
+      hm.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
+      hm.foot.querySelector('[data-a="x"]').onclick = function () { hm.close(); };
     }
 
     function openGrant(it) {
@@ -1243,7 +1334,9 @@
       smartRefresh();
     }, 15000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && !document.querySelector('.cr-overlay, .pui-ov')) smartRefresh(); });
-    loadClassrooms();
+    loadClassrooms().then(function () {
+      if (opts.focus && opts.focus.cid) openClass(opts.focus.cid, opts.focus.itemId);
+    });
     return { reload: loadClassrooms };
   }
 
@@ -1688,6 +1781,7 @@
             if (prev.data().status === 'Corrections') {
               upd.status = 'Submitted';
               upd.submittedAt = FVs.serverTimestamp();
+              upd.inkData = null;   // the tutor's marks belong to the previous attempt; rules allow clearing it
             }
             try { await subRef.update(upd); } catch (we) { throw wrapWriteErr(we, 'update', subRef, prev.data().status); }
           } else {

@@ -109,6 +109,10 @@
       '.ink-nav{display:flex;align-items:center;gap:.5rem;padding:.4rem .9rem;background:var(--surface,#fff);border-top:1px solid var(--line,rgba(38,51,49,.1));justify-content:center;flex-wrap:wrap}',
       '.ink-nav input{width:56px;padding:.35rem .4rem;border:1.5px solid var(--line,rgba(38,51,49,.1));border-radius:8px;font-family:inherit;text-align:center}',
       '.ink-msg{margin:auto;max-width:480px;text-align:center;padding:2rem 1rem;color:var(--muted,#5A6E6A);line-height:1.6}',
+      '.ink-banner{display:flex;gap:.7rem;align-items:flex-start;flex-wrap:wrap;padding:.55rem .9rem;background:#EEF3FF;border-bottom:2px solid #6C8EE8;font-size:.82rem;color:#243b73;line-height:1.45}',
+      '.ink-banner b.tag{background:#6C8EE8;color:#fff;border-radius:99px;padding:.12rem .6rem;font-size:.72rem;white-space:nowrap}',
+      '.ink-banner a{color:#243b73;font-weight:800;text-decoration:underline}',
+      '.ink-banner .prevfb{flex:1;min-width:220px;white-space:pre-wrap}',
       '.ink-text{white-space:pre-wrap;background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;padding:1rem;max-width:760px;width:100%;line-height:1.6;font-size:.92rem}',
       '@media (max-width:700px){.ink-btn .lbl{display:none}.ink-top{padding:.5rem}.ink-stage{padding:.4rem}}'
     ].join('\n');
@@ -122,6 +126,17 @@
     var user = opts.user || { uid: '', name: '' };
     var FV = firebase.firestore.FieldValue;
     var localKey = 'paisley-ink:' + opts.docRef.path;
+
+    // ---- Resubmission awareness -------------------------------------------------
+    // One submission document is reused for every attempt. Each time the tutor sends
+    // work back, finalizeGrade() appends the finished round to `history`, so:
+    //   history.length === number of rounds already sent back.
+    function msOf(t) { return t && t.toMillis ? t.toMillis() : (typeof t === 'number' ? t : 0); }
+    var hist = Array.isArray(data.history) ? data.history : [];
+    var isResub = data.status === 'Submitted' && (hist.length > 0 || !!data.gradedAt);
+    var round = hist.length ? hist.length + 1 : (isResub ? 2 : 1);   // legacy: graded once before, no log
+    var lastPrev = hist.length ? hist[hist.length - 1] : (isResub ? { feedback: data.feedback || '', markedFileUrl: data.gradedFileUrl || '', markedFileName: data.gradedFileName || '' } : null);
+    var submittedMs = msOf(data.submittedAt);
 
     var S = {
       pdf: null, imageBlob: null, isImage: false, sourceBytes: null,
@@ -144,6 +159,12 @@
         '<button type="button" class="ink-btn" data-a="draft"><i class="fas fa-floppy-disk"></i><span class="lbl">Save Draft</span></button>' +
         '<button type="button" class="ink-btn primary btn-primary" data-a="grade"><i class="fas fa-check"></i><span class="lbl">Grade</span></button>' +
       '</div>' +
+      (isResub && lastPrev
+        ? '<div class="ink-banner"><b class="tag"><i class="fas fa-rotate"></i> Resubmission \u2013 Attempt ' + round + '</b>' +
+          '<div class="prevfb"><b>Your feedback last time:</b> ' + esc(lastPrev.feedback || '(none recorded)') + '</div>' +
+          (lastPrev.markedFileUrl && /^https:\/\//.test(lastPrev.markedFileUrl) ? '<a href="' + esc(lastPrev.markedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pen"></i> Your marked copy from last time</a>' : '') +
+          '</div>'
+        : '') +
       '<div class="ink-tools" id="inkTools">' +
         '<button type="button" class="ink-btn on" data-tool="pen" title="Pen"><i class="fas fa-pen"></i></button>' +
         '<button type="button" class="ink-btn" data-tool="highlighter" title="Highlighter"><i class="fas fa-highlighter"></i></button>' +
@@ -580,7 +601,7 @@
       var markable = S.pdf || S.isImage;
       if (markable) {
         var bytes = await buildGradedPdf();
-        gradedFileName = (status === 'Corrections' ? 'corrections_' : 'graded_') + safeName(data.studentName) + '_' + safeName(item.title) + '.pdf';
+        gradedFileName = (status === 'Corrections' ? 'corrections_' : 'graded_') + (round > 1 ? 'attempt' + round + '_' : '') + safeName(data.studentName) + '_' + safeName(item.title) + '.pdf';
         var gradedSubject = String((opts.cid.match(/^(.*?)_y\d+/) || [])[1] || (item && item.subjectId) || opts.cid.split('_')[0]);
         gradedStoragePath = 'graded-submissions/' + gradedSubject + '/' + opts.cid + '/' + opts.itemId + '/' + (data.studentId || opts.docRef.id) + '/' + gradedFileName;
         var ref = firebase.storage().ref(gradedStoragePath);
@@ -604,6 +625,23 @@
       }
       if (markable) { update.gradedFileUrl = gradedFileUrl; update.gradedFileName = gradedFileName; update.gradedStoragePath = gradedStoragePath; }
       
+      // Keep a permanent record of the round being sent back, so the next hand-in can be
+      // told apart from this one and the tutor can always see what was said last time.
+      if (status === 'Corrections' && data.status !== 'Corrections') {
+        update.history = FV.arrayUnion({
+          round: round,
+          outcome: 'Corrections',
+          studentFileUrl: data.fileUrl || '',
+          studentFileName: data.fileName || '',
+          studentText: data.textAnswer || '',
+          submittedAtMs: submittedMs || 0,
+          markedFileUrl: (markable ? gradedFileUrl : (data.gradedFileUrl || '')) || '',
+          markedFileName: (markable ? gradedFileName : (data.gradedFileName || '')) || '',
+          feedback: feedback || '',
+          gradedByName: user.name || '',
+          at: Date.now()
+        });
+      }
       await opts.docRef.set(update, { merge: true });
       try { localStorage.removeItem(localKey); } catch (e) { /* ignore */ }
       S.dirty = false;
@@ -686,8 +724,12 @@
     (async function boot() {
       var server = data.inkData && data.inkData.pages ? data.inkData : null;
       var serverAt = data.inkUpdatedAt && data.inkUpdatedAt.toMillis ? data.inkUpdatedAt.toMillis() : 0;
+      // A resubmission is a NEW file. Marks drawn on the previous attempt must never be
+      // laid over it, so ink older than the latest hand-in is discarded.
+      if (isResub && submittedMs && serverAt && submittedMs > serverAt) { server = null; serverAt = 0; }
       var local = null;
       try { local = JSON.parse(localStorage.getItem(localKey) || 'null'); } catch (e) { local = null; }
+      if (isResub && local && submittedMs && local.at < submittedMs) local = null;
       if (local && local.ink && local.at > serverAt) { S.ink = local.ink; S.dirty = true; setStatus('local', 'Restored unsaved marks from this device'); }
       else if (server) S.ink = JSON.parse(JSON.stringify(server));
       if (!S.ink.pages) S.ink = { version: 1, pages: [] };
