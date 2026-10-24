@@ -1660,9 +1660,9 @@
             var upd = Object.assign({ textAnswer: text, updatedAt: FVs.serverTimestamp() }, fileData);
             // Re-hand-in after "Corrections": flip back to Submitted so the tutor sees it is ready again.
             if (prev.data().status === 'Corrections') { upd.status = 'Submitted'; upd.submittedAt = FVs.serverTimestamp(); }
-            await subRef.update(upd);
+            try { await subRef.update(upd); } catch (we) { throw wrapWriteErr(we, 'update', subRef, prev.data().status); }
           } else {
-            await subRef.set(Object.assign({
+            try { await subRef.set(Object.assign({
               studentId: meNow.uid,
               studentName: meNow.displayName || 'Student',
               studentEmail: meNow.email || '',
@@ -1672,7 +1672,7 @@
               createdAt: FVs.serverTimestamp(),
               submittedAt: FVs.serverTimestamp(),
               updatedAt: FVs.serverTimestamp()
-            }, fileData));
+            }, fileData)); } catch (we2) { throw wrapWriteErr(we2, 'create', subRef, ''); }
           }
           m.close();
           try { global.__wkStudentCache = {}; } catch (e4) { /* ignore */ }
@@ -1688,6 +1688,14 @@
     }).catch(function (e) {
       m.body.innerHTML = '<div class="cr-empty">Error loading item: ' + esc(e.message) + '</div>';
     });
+  }
+
+  // Turns a bare "Missing or insufficient permissions" into something that says WHICH write was refused.
+  function wrapWriteErr(e, op, ref, prevStatus) {
+    var code = e && e.code ? e.code : '';
+    var msg = 'Your ' + (op === 'create' ? 'first hand-in' : 're-submission') + ' was refused by the database' + (code ? ' (' + code + ')' : '') + '.';
+    try { console.error('[submit] ' + op + ' refused at', ref.path, 'previous status:', prevStatus || '(none)', 'uid:', firebase.auth().currentUser && firebase.auth().currentUser.uid, e); } catch (x) { /* ignore */ }
+    var w = new Error(msg + ' Path: ' + (ref && ref.path)); w.code = code; return w;
   }
 
   // One consistent action button for a student row: graded work gets its own green button.

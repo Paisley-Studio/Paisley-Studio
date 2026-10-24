@@ -641,7 +641,7 @@
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=live2"></script>
 <script src="../js/classroom/classroom-helpers.js?v=live2"></script>
-<script src="../js/classroom/work-helpers.js?v=live2"></script>
+<script src="../js/classroom/work-helpers.js?v=live3"></script>
 <script src="../js/classroom/work-learner.js?v=boards1"></script>
 <script>
 const auth = firebase.auth();
@@ -939,9 +939,11 @@ function startWorkFeatures(){
     navigate: (cat, n)=> goToWork(cat, n),
     onChange: (items)=>{
       // New work posted or something graded: recount shortly (debounced) so the bubbles never go stale.
-      const sig = items.length + ':' + items.filter(x=>!x.read).length;
-      if(sig === lastNewCount) return; lastNewCount = sig;
-      clearTimeout(badgeTimer); badgeTimer = setTimeout(()=>calculateClassroomBadges(true), 600);
+      // Recount only when a NEW notification arrives (not when we mark old ones read ourselves).
+      if(lastNewCount >= 0 && items.length <= lastNewCount){ lastNewCount = items.length; return; }
+      const first = lastNewCount < 0; lastNewCount = items.length;
+      if(first) return; // boot already runs a count
+      clearTimeout(badgeTimer); badgeTimer = setTimeout(()=>calculateClassroomBadges(true), 2500);
     }
   });
   watchMyStudentNotices(currentUser.uid, rows=>{ workNotices = rows; renderWorkNotices(); });
