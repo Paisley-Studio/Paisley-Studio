@@ -208,16 +208,20 @@ async function releaseWork(db, tutorUid, tutor, parsed, studentIds, dueAtIso) {
     }
   }
 
-  // THE FIX: Update releasedTo AND force the audiences to true so students can see it
-  await ref.update({
+  // Release reaches ONLY the ticked students. We deliberately do NOT touch `audiences`:
+  // flipping audiences.online/remote/tuition to true made the work visible to (and notify)
+  // every student in the class. Students see it through `releasedTo`; their parents through
+  // `releasedParents` (firestore.rules allows both).
+  const parentIds = new Set();
+  for (const sid of ok) { for (const p of await W.parentsOfStudent(sid)) parentIds.add(p.id); }
+  const releasePatch = {
     ...dueUpdate,
     releasedTo: admin.firestore.FieldValue.arrayUnion(...ok),
-    "audiences.online": true,
-    "audiences.remote": true,
-    "audiences.tuition": true,
     releaseLog: admin.firestore.FieldValue.arrayUnion({ by: tutorUid, byName: tutor.name || "", at: admin.firestore.Timestamp.now(), count: ok.length })
-  });
-  
+  };
+  if (parentIds.size) releasePatch.releasedParents = admin.firestore.FieldValue.arrayUnion(...Array.from(parentIds));
+  await ref.update(releasePatch);
+
   return { released: ok, rejected };
 }
 
@@ -233,6 +237,41 @@ exports.tutorReleaseWork = onCall(
     const ids = Array.from(new Set(((request.data || {}).studentIds || []).map(String))).slice(0, 200);
     if (!ids.length) throw new HttpsError("invalid-argument", "Choose at least one student.");
     return releaseWork(db, request.auth.uid, t.data() || {}, parsed, ids, (request.data || {}).dueAt);
+  }
+);
+
+/* =========================================================
+   repairReleasedAudiences — admin callable, idempotent.
+   Earlier versions of tutorReleaseWork switched audiences.online / remote /
+   tuition to true, which exposed released work to every student. This puts
+   those flags back to false when the Studio Desk never actually posted to
+   that audience (no `publication.<audience>` record), so released work is
+   visible only to the students it was released to.
+   Run { dryRun: true } first.
+========================================================= */
+exports.repairReleasedAudiences = onCall(
+  { cors: true, region: W.LOCATION, timeoutSeconds: 540, memory: "512MiB" },
+  async (request) => {
+    await requireAdmin(request);
+    const dryRun = !!(request.data && request.data.dryRun);
+    const db = admin.firestore();
+    const out = { dryRun, scanned: 0, repaired: 0, paths: [] };
+    for (const group of ["assignments", "lessons", "exams"]) {
+      const snap = await db.collectionGroup(group).get();
+      for (const doc of snap.docs) {
+        if (!doc.ref.path.startsWith("classrooms/")) continue;
+        const d = doc.data() || {};
+        if (!Array.isArray(d.releasedTo) || !d.releasedTo.length) continue;
+        out.scanned++;
+        const aud = d.audiences || {}, pub = d.publication || {};
+        const patch = {};
+        ["online", "remote", "tuition"].forEach((a) => { if (aud[a] === true && !pub[a]) patch["audiences." + a] = false; });
+        if (!Object.keys(patch).length) continue;
+        out.repaired++; out.paths.push(doc.ref.path);
+        if (!dryRun) await doc.ref.update(patch);
+      }
+    }
+    return out;
   }
 );
 

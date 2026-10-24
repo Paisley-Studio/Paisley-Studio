@@ -100,6 +100,7 @@ exports.runDeadlineJob               = deadlines.runDeadlineJob;
 const publishing = require("./publishing");
 exports.publishClassroomContent       = publishing.publishClassroomContent;
 exports.tutorReleaseWork              = publishing.tutorReleaseWork;
+exports.repairReleasedAudiences        = publishing.repairReleasedAudiences;
 exports.backfillAudiences             = publishing.backfillAudiences;
 exports.onAssignmentAudienceChanged   = publishing.onAssignmentAudienceChanged;
 exports.onNestedExamAudienceChanged   = publishing.onNestedExamAudienceChanged;

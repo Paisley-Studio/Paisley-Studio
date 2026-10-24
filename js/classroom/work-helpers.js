@@ -742,7 +742,9 @@
     }
     async function refresh() { await reload(); render(); }
 
-    function counts(it) {
+    // Who is expected to hand this in. When a tutor released it to specific students, ONLY those
+    // students count (not everyone enrolled in the subject).
+    function expectedAudience(it) {
       var aud = audienceOf(it, S.enrolled);
       if (it.releasedTo && it.releasedTo.length) {
         var seen = {};
@@ -750,16 +752,23 @@
         it.releasedTo.forEach(function(id){
           if (!seen[id]) { aud.push({ id: id, name: 'Student' }); seen[id] = true; }
         });
+        if (!isAdmin) aud = aud.filter(function (s) { return it.releasedTo.indexOf(s.id) !== -1; });
       }
+      return aud;
+    }
+    function counts(it) {
+      var aud = expectedAudience(it);
       var subs = S.subs[it.id] || {};
-      var submitted = 0, graded = 0;
+      var submitted = 0, graded = 0, toGrade = 0, corr = 0;
       aud.forEach(function (s) {
         var x = subs[s.id];
         if (!x) return;
         if (x.status !== 'In progress' && x.status !== 'Suspended') submitted++;
         if (x.status === 'Graded') graded++;
+        if (x.status === 'Submitted') toGrade++;      // only work still waiting for the tutor
+        if (x.status === 'Corrections') corr++;       // already actioned: sent back to the student
       });
-      return { total: aud.length, submitted: submitted, graded: graded };
+      return { total: aud.length, submitted: submitted, graded: graded, toGrade: toGrade, corr: corr };
     }
 
     // Past Work = every recipient has handed in AND every piece is graded.
@@ -786,7 +795,8 @@
       var isReleased = it.releasedTo && it.releasedTo.length > 0;
       
       if (c.total && c.graded === c.total) return pill('b-confirmed', 'All graded', 'fa-circle-check');
-      if (isReleased && c.submitted > c.graded) return pill('b-pending', (c.submitted - c.graded) + ' to grade', 'fa-inbox');
+      if (c.toGrade > 0) return pill('b-pending', c.toGrade + ' to grade', 'fa-inbox');
+      if (c.corr > 0) return pill('b-declined', c.corr + ' with student for corrections', 'fa-rotate-left');
       if (isReleased && c.total && c.submitted === c.total) return pill('b-confirmed', 'All submitted', 'fa-inbox');
       if (due && due.getTime() < Date.now() && c.submitted < c.total) return pill('b-declined', 'Overdue', 'fa-triangle-exclamation');
       if (isReleased) return pill('b-confirmed', 'Released', 'fa-share-from-square');
@@ -916,14 +926,7 @@
           }
         } catch (e) { m.body.innerHTML = '<div class="cr-empty">Could not load: ' + esc(e.message || e) + '</div>'; return; }
 
-        var aud = audienceOf(it, S.enrolled);
-        if (it.releasedTo && it.releasedTo.length) {
-           var seen = {};
-           aud.forEach(function(s){ seen[s.id] = true; });
-           it.releasedTo.forEach(function(id){
-             if (!seen[id]) { aud.push({ id: id, name: 'Student' }); seen[id] = true; }
-           });
-        }
+        var aud = expectedAudience(it);
 
         var head = '<div style="margin-bottom:.8rem">' +
           '<div class="cr-note"><b>' + esc(it.subjectName || '') + '</b>' +
@@ -1224,7 +1227,7 @@
   // Firestore security rules are NOT filters: a list query is only allowed when
   // its own constraints prove every possible result is readable by the student.
   // So each query below repeats the rule conditions (published + audience + recipient).
-  function studentQuery(baseQuery, aud, uid, withRecipients) {
+  function studentQuery(baseQuery, aud, uid, withRecipients, parentUid) {
     function run(q) {
       return q.get().then(function (snap) { return snap.docs; }).catch(function (e) {
         console.warn('student work query skipped:', e && e.code, e && e.message);
@@ -1236,6 +1239,7 @@
     if (withRecipients) {
       jobs.push(run(baseQuery().where(A, '==', true).where('recipients', 'array-contains', uid)));
       jobs.push(run(baseQuery().where('releasedTo', 'array-contains', uid)));
+      if (parentUid) jobs.push(run(baseQuery().where('releasedParents', 'array-contains', parentUid)));
     }
     return Promise.all(jobs).then(function (parts) {
       var seen = {}, out = [];
@@ -1244,7 +1248,7 @@
     });
   }
 
-  async function loadStudentWork(cls, topics, uid, profile, kinds) {
+  async function loadStudentWork(cls, topics, uid, profile, kinds, parentUid) {
     if (!cls) return { assignments: [], lessons: [], exams: [] };
     var items = [];
     var aud = studentAud(profile || {});
@@ -1254,14 +1258,21 @@
       var aParts = await Promise.all(topics.map(function(t) {
         var p = [];
         if (k.indexOf('assignments') !== -1) {
-          p.push(studentQuery(function () { return coll(cls.id, t.id, 'assignment'); }, aud, uid, true).then(function(docs) {
+          p.push(studentQuery(function () { return coll(cls.id, t.id, 'assignment'); }, aud, uid, true, parentUid).then(function(docs) {
             return docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'assignment', topicTitle: t.title }, d.data()); });
           }));
         }
         if (k.indexOf('lessons') !== -1) {
-          p.push(coll(cls.id, t.id, 'lesson').where('status', '==', 'published').where('audiences.' + aud, '==', true).get().then(function(snap) {
-            return snap.docs.map(function(d){ return Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'lesson', isClasswork: true, topicTitle: t.title }, d.data()); });
-          }).catch(function (e) { console.warn('lessons query skipped:', e && e.code, e && e.message); return []; }));
+          var lessonQ = function () { return coll(cls.id, t.id, 'lesson').where('status', '==', 'published'); };
+          var lessonJobs = [lessonQ().where('audiences.' + aud, '==', true), lessonQ().where('releasedTo', 'array-contains', uid)];
+          if (parentUid) lessonJobs.push(lessonQ().where('releasedParents', 'array-contains', parentUid));
+          p.push(Promise.all(lessonJobs.map(function (q) {
+            return q.get().then(function (snap) { return snap.docs; }).catch(function (e) { console.warn('lessons query skipped:', e && e.code, e && e.message); return []; });
+          })).then(function (parts) {
+            var seenL = {}, outL = [];
+            parts.forEach(function (docs) { docs.forEach(function (d) { if (!seenL[d.id]) { seenL[d.id] = 1; outL.push(Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'lesson', isClasswork: true, topicTitle: t.title }, d.data())); } }); });
+            return outL;
+          }));
         }
         return Promise.all(p).then(function(arr){ return [].concat.apply([], arr); });
       }));
@@ -1270,7 +1281,7 @@
 
     var exams = [];
     if (k.indexOf('exams') !== -1) {
-      var eDocs = await studentQuery(function () { return flatExamsRef(cls.id).where('status', '==', 'Published'); }, aud, uid, true);
+      var eDocs = await studentQuery(function () { return flatExamsRef(cls.id).where('status', '==', 'Published'); }, aud, uid, true, parentUid);
       exams = eDocs.map(function(d){ return Object.assign({ id: d.id, cid: cls.id, kind: 'exam', flat: true }, d.data()); });
     }
 
@@ -1305,75 +1316,129 @@
   async function mountStudentHome(root, opts) {
     injectStyle();
     var kind = opts.kind || 'homework';
+    var isEx = kind === 'exams';
     var student = Object.assign({ id: opts.uid }, opts.profile || {});
     var uid = opts.uid;
-    root.innerHTML = '<div class="cr-empty">Loading your work…</div>';
+    root.classList.add('cr-root');
+    if (root._wkTimer) { clearInterval(root._wkTimer); root._wkTimer = null; }
+    var S = { items: [], sel: null, loaded: false };
+    root.innerHTML = '<div class="cr-empty">Loading your ' + (isEx ? 'exams' : 'homework') + '\u2026</div>';
 
-    async function load() {
+    // Needs the student's action: not handed in yet, or sent back for corrections.
+    function isTodo(it) {
+      var st = it.sub && it.sub.status;
+      if (st === 'Corrections') return true;
+      if (isEx) {
+        if (st === 'Submitted' || st === 'Graded') return false;
+        if (it.flat && !isWindowOpen(it)) return false;
+        return true;
+      }
+      return !it.sub;
+    }
+
+    function groupByClass() {
+      var by = {}, order = [];
+      S.items.forEach(function (it) {
+        var id = it._cls.id;
+        if (!by[id]) { by[id] = { cls: it._cls, items: [] }; order.push(id); }
+        by[id].items.push(it);
+      });
+      return order.map(function (id) { return by[id]; });
+    }
+
+    function rowHtml(it) {
+      var isExam = it.kind === 'exam';
+      var due = dueOf(it, isExam ? 'exam' : 'assignment');
+      var state = workState(it, it.sub, isExam ? 'exam' : 'assignment');
+      return '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : (it.isClasswork ? 'fa-book-open' : 'fa-clipboard-check')) + '"></i></span>' +
+        '<span class="tt">' + esc(it.title) + '<small>' + (isExam ? 'Exam' : (it.isClasswork ? 'Classwork' : 'Homework')) + (due ? ' \u00b7 Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
+        '<span class="cr-badge ' + state.cls + '">' + esc(state.text) + '</span>' +
+        rowActionHtml(it, 'data-a="wk-open" data-id="' + esc(it.id) + '"') + '</div>';
+    }
+
+    function drawHome() {
+      var groups = groupByClass();
+      if (!groups.length) { root.innerHTML = '<div class="cr-empty">No ' + (isEx ? 'exams' : 'homework') + ' posted yet.</div>'; return; }
+      root.innerHTML = '<div class="cr-bar"><div><h3>My ' + (isEx ? 'Exams' : 'Homework') + '</h3><div class="cr-sub">Pick a subject. The red bubble shows how many ' + (isEx ? 'exams' : 'pieces of work') + ' need you; graded work waits inside the subject.</div></div></div>' +
+        '<div class="cr-grid">' + groups.map(function (g) {
+          var todo = g.items.filter(isTodo).length;
+          var done = g.items.filter(isGradedItem).length;
+          return '<button type="button" class="cr-card" data-a="wk-subj" data-c="' + esc(g.cls.id) + '">' +
+            (todo ? '<div class="cr-badge-red">' + todo + '</div>' : '') +
+            '<div class="ic"><i class="fas ' + (isEx ? 'fa-file-pen' : 'fa-clipboard-check') + '"></i></div><h4>' + esc(g.cls.subjectName || g.cls.subjectId) + '</h4>' +
+            '<div class="meta">' + (g.cls.year != null ? 'Year ' + esc(g.cls.year) : '') + '</div>' +
+            (U.boardAssigned(student, g.cls.subjectId) ? '<div style="margin-top:.4rem">' + U.boardBadge(g.cls) + '</div>' : '') +
+            (done ? '<div style="margin-top:.45rem"><span class="cr-badge b-confirmed"><i class="fas fa-circle-check"></i> ' + done + ' graded</span></div>' : '') +
+            '</button>';
+        }).join('') + '</div>';
+    }
+
+    function drawSubject() {
+      var g = groupByClass().filter(function (x) { return x.cls.id === S.sel; })[0];
+      if (!g) { S.sel = null; return drawHome(); }
+      var cur = g.items.filter(function (it) { return !isGradedItem(it); });
+      var past = g.items.filter(isGradedItem);
+      var byTopic = {}, order = [];
+      cur.forEach(function (it) {
+        var key = it.tid || '_flat';
+        if (!byTopic[key]) { byTopic[key] = { title: it.topicTitle || (isEx ? 'Exams' : 'Work'), items: [] }; order.push(key); }
+        byTopic[key].items.push(it);
+      });
+      var h = '<div class="cr-crumb"><a data-a="wk-home">My ' + (isEx ? 'Exams' : 'Homework') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(g.cls.subjectName || g.cls.subjectId) + '</span></div>';
+      if (!order.length) h += '<div class="cr-panel"><div class="cr-empty">Nothing waiting for you here.</div></div>';
+      order.forEach(function (key) {
+        h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(byTopic[key].title) + '</h4>' + byTopic[key].items.map(rowHtml).join('') + '</div>';
+      });
+      if (past.length) {
+        h += '<details class="cr-past" open><summary><i class="fas fa-circle-check"></i> Graded work \u2014 Past Work (' + past.length + ')</summary>' +
+          '<div class="cr-note" style="margin-bottom:.4rem">Open an item to see your score, feedback and your tutor\u2019s marked copy.</div>' + past.map(rowHtml).join('') + '</details>';
+      }
+      root.innerHTML = h;
+    }
+
+    function draw() { if (S.sel) drawSubject(); else drawHome(); }
+
+    async function load(silent) {
       try {
         var clsSnap = await db.collection('classrooms').get();
-        var myClassrooms = clsSnap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }).filter(function(c){
-          var subs = lmzSubjectKeys(student.subjects);
+        var subs = lmzSubjectKeys(student.subjects);
+        var mine = clsSnap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (c) {
           return subs.indexOf(c.subjectId) !== -1 && (student.year == null || Number(student.year) === Number(c.year)) &&
             U.boardOf(c) === U.studentBoardFor(student, c.subjectId); // only the board the admin assigned
         });
-
-        var allWork = [];
-        for (var i = 0; i < myClassrooms.length; i++) {
-          var w = await loadStudentWork(myClassrooms[i], await U.loadTopics(myClassrooms[i].id), uid, student);
-          if (kind === 'homework') {
-            w.assignments.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
-            w.lessons.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
-          } else if (kind === 'exams') {
-            w.exams.forEach(function(x){ x._cls = myClassrooms[i]; allWork.push(x); });
-          }
+        var all = [];
+        for (var i = 0; i < mine.length; i++) {
+          var w = await loadStudentWork(mine[i], await U.loadTopics(mine[i].id), uid, student);
+          var pick = isEx ? w.exams : w.assignments.concat(w.lessons);
+          pick.forEach(function (x) { x._cls = mine[i]; all.push(x); });
         }
-
-        allWork = allWork.filter(function(it) { return studentSees(student, it); });
-
-        if (!allWork.length) {
-          root.innerHTML = '<div class="cr-empty">No ' + kind + ' posted yet.</div>';
-          return;
-        }
-
-        var boardF = '';
-        function rowHtml(it) {
-          var isExam = it.kind === 'exam';
-          var due = dueOf(it, isExam ? 'exam' : 'assignment');
-          var state = workState(it, it.sub, isExam ? 'exam' : 'assignment');
-          return '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : (it.isClasswork ? 'fa-book-open' : 'fa-clipboard-check')) + '"></i></span>' +
-            '<span class="tt">' + esc(it.title) + '<small>' + (isExam ? 'Exam' : (it.isClasswork ? 'Classwork' : 'Homework')) + (due ? ' · Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
-            (U.boardAssigned(student, it._cls.subjectId) ? U.boardBadge(it._cls) : '') +
-            '<span class="cr-badge ' + state.cls + '">' + esc(state.text) + '</span>' +
-            rowActionHtml(it, 'onclick="window.WorkUI.openStudentDetail(\'' + it.cid + '\', \'' + (it.tid||'') + '\', \'' + it.id + '\', \'' + (isExam ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment')) + '\')"') + '</div>';
-        }
-        function draw() {
-          var shown = allWork.filter(function (it) { return !boardF || U.boardOf(it._cls) === boardF; });
-          var h = '';
-          if (!shown.length) h += '<div class="cr-empty">No ' + kind + ' posted yet.</div>';
-          var bySubject = {};
-          shown.forEach(function(it) {
-            var sName = it._cls.subjectName || it._cls.subjectId;
-            if (!bySubject[sName]) bySubject[sName] = [];
-            bySubject[sName].push(it);
-          });
-          Object.keys(bySubject).forEach(function(sub) {
-            var cur = bySubject[sub].filter(function (it) { return !isGradedItem(it); });
-            var past = bySubject[sub].filter(isGradedItem);
-            h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(sub) + '</h4>' +
-              (cur.length ? cur.map(rowHtml).join('') : '<div class="cr-empty">Nothing waiting for you here.</div>') +
-              (past.length ? '<details class="cr-past"><summary><i class="fas fa-circle-check"></i> Graded work \u2014 Past Work (' + past.length + ')</summary>' + past.map(rowHtml).join('') + '</details>' : '') +
-              '</div>';
-          });
-          root.innerHTML = h;
-        }
+        S.items = all.filter(function (it) { return studentSees(student, it); });
+        S.loaded = true;
+        if (!root.isConnected) { clearInterval(root._wkTimer); return; }
+        if (silent && document.querySelector('.cr-overlay, .pui-ov')) return; // never redraw under an open dialog
         draw();
       } catch (e) {
         console.error(e);
-        root.innerHTML = '<div class="cr-empty">Error loading work: ' + esc(e.message || e) + '</div>';
+        if (!silent || !S.loaded) root.innerHTML = '<div class="cr-empty">Error loading work: ' + esc(e.message || e) + '</div>';
       }
     }
-    load();
+
+    root.addEventListener('click', function (e) {
+      var el = e.target.closest('[data-a]'); if (!el || !root.contains(el)) return;
+      var a = el.dataset.a;
+      if (a === 'wk-subj') { S.sel = el.dataset.c; draw(); window.scrollTo({ top: 0 }); return; }
+      if (a === 'wk-home') { S.sel = null; draw(); return; }
+      if (a === 'wk-open') {
+        var it = S.items.filter(function (x) { return x.id === el.dataset.id; })[0];
+        if (!it) return;
+        openStudentDetail(it.cid, it.tid || '', it.id, it.kind === 'exam' ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment'), function () { load(true); });
+      }
+    });
+
+    await load(false);
+    // Keep the red bubbles alive: refresh quietly every minute and whenever the tab regains focus.
+    root._wkTimer = setInterval(function () { if (!document.hidden && root.isConnected) load(true); else if (!root.isConnected) clearInterval(root._wkTimer); }, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && root.isConnected) load(true); });
   }
 
   // =========================================================
@@ -1583,7 +1648,7 @@
       });
       var all = [];
       for (var i = 0; i < myClassrooms.length; i++) {
-        var w = await loadStudentWork(myClassrooms[i], await U.loadTopics(myClassrooms[i].id), child.id, student);
+        var w = await loadStudentWork(myClassrooms[i], await U.loadTopics(myClassrooms[i].id), child.id, student, null, firebase.auth().currentUser.uid);
         var pick = kind === 'exams' ? w.exams : w.assignments.concat(w.lessons);
         pick.forEach(function (x) { x._cls = myClassrooms[i]; all.push(x); });
       }

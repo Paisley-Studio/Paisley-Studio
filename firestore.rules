@@ -249,7 +249,10 @@ service cloud.firestore {
         (('releasedTo' in d) && request.auth.uid in d.releasedTo));
     }
     function studentSeesLesson(cid) {
-      return (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
+      return ((isOnlineStudent() || remoteActive() || tuitionActive()) && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && ('releasedTo' in resource.data) &&
+               request.auth.uid in resource.data.releasedTo) ||
+             (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
                resource.data.status == 'published' && resource.data.audiences.online == true) ||
              (remoteActive() && classStudentMay(classroomData(cid)) &&
                resource.data.status == 'published' && resource.data.audiences.remote == true) ||
@@ -258,6 +261,7 @@ service cloud.firestore {
     }
     function parentSeesLesson(cid) {
       return resource.data.status == 'published' && (
+        (('releasedParents' in resource.data) && request.auth.uid in resource.data.releasedParents) ||
         (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
         (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))) ||
         (resource.data.audiences.get('tuition', false) == true && parentSlotTuition(classroomData(cid))));
@@ -280,7 +284,8 @@ service cloud.firestore {
                 request.auth.uid in resource.data.releasedTo));
     }
     function parentSeesWork(cid) {
-      return (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
+      return (('releasedParents' in resource.data) && request.auth.uid in resource.data.releasedParents) ||
+             (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
              (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))) ||
              (resource.data.audiences.get('tuition', false) == true && parentSlotTuition(classroomData(cid)));
     }
