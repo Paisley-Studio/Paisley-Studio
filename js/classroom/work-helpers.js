@@ -1223,7 +1223,8 @@
         var clsSnap = await db.collection('classrooms').get();
         var myClassrooms = clsSnap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }).filter(function(c){
           var subs = lmzSubjectKeys(student.subjects);
-          return subs.indexOf(c.subjectId) !== -1 && (student.year == null || Number(student.year) === Number(c.year));
+          return subs.indexOf(c.subjectId) !== -1 && (student.year == null || Number(student.year) === Number(c.year)) &&
+            U.boardOf(c) === U.studentBoardFor(student, c.subjectId); // only the board the admin assigned
         });
 
         var allWork = [];
@@ -1251,14 +1252,14 @@
           var state = workState(it, it.sub, isExam ? 'exam' : 'assignment');
           return '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : (it.isClasswork ? 'fa-book-open' : 'fa-clipboard-check')) + '"></i></span>' +
             '<span class="tt">' + esc(it.title) + '<small>' + (isExam ? 'Exam' : (it.isClasswork ? 'Classwork' : 'Homework')) + (due ? ' · Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
-            U.boardBadge(it._cls) +
+            (U.boardAssigned(student, it._cls.subjectId) ? U.boardBadge(it._cls) : '') +
             '<span class="cr-badge ' + state.cls + '">' + esc(state.text) + '</span>' +
             '<div class="cr-actions"><button type="button" class="cr-btn sm primary" onclick="window.WorkUI.openStudentDetail(\'' + it.cid + '\', \'' + (it.tid||'') + '\', \'' + it.id + '\', \'' + (isExam ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment')) + '\')"><i class="fas fa-eye"></i> Open</button></div></div>';
         }
         function draw() {
           var shown = allWork.filter(function (it) { return !boardF || U.boardOf(it._cls) === boardF; });
-          var h = '<div class="cr-filters" style="margin-bottom:.8rem"><select data-bf aria-label="Exam board">' + U.boardOptionsHtml(boardF, true) + '</select></div>';
-          if (!shown.length) h += '<div class="cr-empty">No ' + kind + ' posted for this exam board yet.</div>';
+          var h = '';
+          if (!shown.length) h += '<div class="cr-empty">No ' + kind + ' posted yet.</div>';
           var bySubject = {};
           shown.forEach(function(it) {
             var sName = it._cls.subjectName || it._cls.subjectId;
@@ -1274,8 +1275,6 @@
               '</div>';
           });
           root.innerHTML = h;
-          var sel = root.querySelector('[data-bf]');
-          if (sel) sel.onchange = function () { boardF = sel.value; draw(); };
         }
         draw();
       } catch (e) {

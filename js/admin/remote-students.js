@@ -194,6 +194,7 @@
         '<div class="cr-row2"><div class="cr-field"><label for="rsKs">Key Stage</label><select id="rsKs">' + CU.KEY_STAGES.map(function (k) { return '<option value="' + esc(k) + '"' + (k === ks0 ? ' selected' : '') + '>' + esc(k) + '</option>'; }).join('') + '</select></div>' +
         '<div class="cr-field"><label for="rsYear">Year</label><select id="rsYear"></select></div></div>' +
         '<div class="cr-field"><label>Subjects</label><div id="rsSubjects"></div></div>' +
+        (s ? '<div id="rsBoards"></div>' : '') +
         (s ? '' : '<h4 style="margin:.6rem 0;font-size:.8rem;color:var(--brand-deep)">Parents / guardians (at least one)</h4>' + guardianBlock(0) + '<details><summary class="cr-note" style="cursor:pointer">Add a second parent / guardian</summary>' + guardianBlock(1) + '</details>');
       var ks = m.body.querySelector('#rsKs'), yr = m.body.querySelector('#rsYear'), sb = m.body.querySelector('#rsSubjects');
       function fill(keep) {
@@ -201,10 +202,19 @@
         var cur = keep ? Array.prototype.map.call(sb.querySelectorAll('input:checked'), function (c) { return c.value; }) : chosen;
         sb.innerHTML = subjectChecks(ks.value, cur);
       }
-      ks.addEventListener('change', function () { fill(true); }); fill(false);
+      var bx = m.body.querySelector('#rsBoards');
+      function drawBoards() {
+        if (!bx) return;
+        var cur = bx.children.length ? CU.readBoardAssign(bx, 'rb') : { board: s.board || '', subjectBoards: s.subjectBoards || {} };
+        var keys = Array.prototype.map.call(sb.querySelectorAll('input:checked'), function (c) { return c.value; });
+        bx.innerHTML = '<h4 style="margin:.8rem 0 .4rem;font-size:.8rem;color:var(--brand-deep)">Exam board</h4>' + CU.boardAssignHtml(cur, keys, 'rb');
+      }
+      ks.addEventListener('change', function () { fill(true); drawBoards(); }); fill(false); drawBoards();
+      sb.addEventListener('change', drawBoards);
       return function read() {
         return { name: m.body.querySelector('#rsName').value.trim(), email: m.body.querySelector('#rsEmail').value.trim(), phone: m.body.querySelector('#rsPhone').value.trim(),
-          keyStage: ks.value, year: Number(yr.value), subjects: Array.prototype.map.call(sb.querySelectorAll('input:checked'), function (c) { return c.value; }) };
+          keyStage: ks.value, year: Number(yr.value), subjects: Array.prototype.map.call(sb.querySelectorAll('input:checked'), function (c) { return c.value; }),
+          boards: bx && bx.children.length ? CU.readBoardAssign(bx, 'rb') : null };
       };
     }
 
@@ -244,8 +254,13 @@
         if (!d.subjects.length) { err.textContent = 'Choose at least one subject.'; return; }
         btn.disabled = true;
         try {
+          var bset = {};
+          if (d.boards) {
+            var sbm = {}; d.subjects.forEach(function (k) { if (d.boards.subjectBoards[k]) sbm[k] = d.boards.subjectBoards[k]; });
+            bset = { board: d.boards.board || firebase.firestore.FieldValue.delete(), subjectBoards: sbm };
+          }
           await db.collection('students').doc(s.id).update(Object.assign({ name: d.name, phone: d.phone, keyStage: d.keyStage, year: d.year,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, lmzSubjectWriteFields(d.subjects)));
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, bset, lmzSubjectWriteFields(d.subjects)));
           m.close(true);
         } catch (e) { err.textContent = errMsg(e); btn.disabled = false; }
       };

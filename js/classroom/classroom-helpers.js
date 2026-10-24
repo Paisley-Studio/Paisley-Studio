@@ -74,11 +74,45 @@
   function classroomId(subjectId, year, board) {
     return subjectId + '_y' + year + ((board && board !== DEFAULT_BOARD) ? '_' + board : '');
   }
-  function boardPrefKey(uid, subjectId) { return 'paisley_board_' + (uid || 'x') + '_' + subjectId; }
-  function getBoardPref(uid, subjectId) {
-    try { var v = localStorage.getItem(boardPrefKey(uid, subjectId)); return BOARDS.some(function (b) { return b.id === v; }) ? v : null; } catch (e) { return null; }
+  // The admin assigns boards on the student's profile:
+  //   board        = default for every subject ('' = not set -> Cambridge)
+  //   subjectBoards = { subjectId: boardId } overrides per subject
+  function studentBoardFor(p, subjectId) {
+    var sb = p && p.subjectBoards && p.subjectBoards[subjectId];
+    var b = sb || (p && p.board);
+    return BOARDS.some(function (x) { return x.id === b; }) ? b : DEFAULT_BOARD;
   }
-  function setBoardPref(uid, subjectId, v) { try { localStorage.setItem(boardPrefKey(uid, subjectId), v); } catch (e) {} }
+  function boardAssigned(p, subjectId) {
+    var sb = p && p.subjectBoards && p.subjectBoards[subjectId];
+    var b = sb || (p && p.board);
+    return BOARDS.some(function (x) { return x.id === b; });
+  }
+  // Admin widget: one "all subjects" select + one select per subject.
+  function boardAssignHtml(p, subjectKeys, idp) {
+    idp = idp || 'ba';
+    var h = '<div class="cr-field"><label>Exam board \u2014 all subjects</label><select id="' + idp + 'All">' +
+      '<option value="">Cambridge (default)</option>' + BOARDS.filter(function (b) { return b.id !== DEFAULT_BOARD; }).map(function (b) {
+        return '<option value="' + esc(b.id) + '"' + ((p && p.board) === b.id ? ' selected' : '') + '>' + esc(b.label) + '</option>';
+      }).join('') + '</select></div>';
+    if (subjectKeys && subjectKeys.length) {
+      h += '<div class="cr-note" style="margin-bottom:.4rem">Or set a different board for individual subjects (e.g. Maths on Oxford AQA, English on Pearson Edexcel):</div>';
+      h += subjectKeys.map(function (k) {
+        var cur = p && p.subjectBoards && p.subjectBoards[k];
+        return '<div class="cr-field"><label>' + esc(lmzSubjectLabel(k)) + '</label><select data-board-subj="' + esc(k) + '">' +
+          '<option value="">Same as above</option>' + BOARDS.map(function (b) {
+            return '<option value="' + esc(b.id) + '"' + (cur === b.id ? ' selected' : '') + '>' + esc(b.label) + '</option>';
+          }).join('') + '</select></div>';
+      }).join('');
+    }
+    return h;
+  }
+  function readBoardAssign(root, idp) {
+    idp = idp || 'ba';
+    var all = root.querySelector('#' + idp + 'All');
+    var map = {};
+    root.querySelectorAll('[data-board-subj]').forEach(function (sel) { if (sel.value) map[sel.dataset.boardSubj] = sel.value; });
+    return { board: all && all.value ? all.value : '', subjectBoards: map };
+  }
   function ksShort(ks) { return String(ks || '').replace(/\s*\(.*/, ''); }
   function byOrder(a, b) {
     return ((a.order == null ? 1e9 : a.order) - (b.order == null ? 1e9 : b.order)) ||
@@ -1451,7 +1485,8 @@
         '<div class="cr-grid">' + subjects.map(function (k) {
           return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '">' +
             '<div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' +
-            esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(profile.keyStage))) + '</div></button>';
+            esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(profile.keyStage))) + '</div>' +
+            (boardAssigned(profile, k) ? '<div style="margin-top:.4rem">' + boardBadge({ board: studentBoardFor(profile, k) }) + '</div>' : '') + '</button>';
         }).join('') + '</div>';
 
       // Badges are filled in per subject as each one resolves, using the shared
@@ -1459,9 +1494,7 @@
       subjects.forEach(function (k) {
         (async function () {
           try {
-            var bPref = getBoardPref(opts.uid, k);
-            if (!bPref) return; // board not chosen yet: badge appears once they pick one
-            var cls = await findClassroomCached(k, year, profile.keyStage, bPref);
+            var cls = await findClassroomCached(k, year, profile.keyStage, studentBoardFor(profile, k));
             if (!cls || !window.WorkUI || !window.WorkUI.loadStudentWork) return;
             var topics = await loadTopicsCached(cls.id);
             var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
@@ -1483,19 +1516,9 @@
       });
     }
 
-    function renderBoardPicker(subjectId) {
-      homeToken++;
-      root.innerHTML = '<div class="cr-crumb"><a data-a="home">My Classes</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(lmzSubjectLabel(subjectId)) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>Which exam board?</h3><div class="cr-sub">Choose the board you are studying ' + esc(lmzSubjectLabel(subjectId)) + ' with. You can change this at any time.</div></div></div>' +
-        '<div class="cr-pick">' + BOARDS.map(function (b) {
-          return '<button type="button" class="cr-card" data-a="pick-board" data-s="' + esc(subjectId) + '" data-b="' + esc(b.id) + '"><div class="ic"><i class="fas fa-landmark"></i></div><h4>' + esc(b.label) + (b.isNew ? ' <span class="cr-board-new">NEW</span>' : '') + '</h4></button>';
-        }).join('') + '</div>';
-    }
-
-    async function openSubject(subjectId, forcePick) {
+    async function openSubject(subjectId) {
       homeToken++; // cancel any badge fills still running for the home screen
-      var board = getBoardPref(opts.uid, subjectId);
-      if (!board || forcePick) return renderBoardPicker(subjectId);
+      var board = studentBoardFor(profile, subjectId); // assigned by the admin
       S.board = board;
       root.innerHTML = loaderHtml('Loading\u2026');
       try {
@@ -1524,7 +1547,7 @@
       var name = displayName(c);
       var h = '<div class="cr-crumb"><a data-a="home">My Classes</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + '</span></div>' +
         '<div class="cr-bar"><div><h3>' + esc(name) + (c.year ? ' — Year ' + esc(c.year) : '') + '</h3>' +
-        '<div class="cr-board-row">' + boardBadge({ board: S.board }) + '<button type="button" class="cr-btn sm" data-a="change-board" data-s="' + esc(c.subjectId || '') + '"><i class="fas fa-repeat"></i> Change board</button></div></div></div>';
+        (boardAssigned(profile, c.subjectId) ? '<div class="cr-board-row">' + boardBadge({ board: S.board }) + '</div>' : '') + '</div></div>';
       var ordered = visibleOrdered();
       var hasWork = S.work && (S.work.assignments.length || S.work.exams.length);
       if (!ordered.length && !hasWork) {
@@ -1622,8 +1645,6 @@
         }
         return;
       }
-      if (a === 'pick-board') { setBoardPref(opts.uid, el.dataset.s, el.dataset.b); openSubject(el.dataset.s); return; }
-      if (a === 'change-board') { openSubject(el.dataset.s || (S.cls && S.cls.subjectId), true); return; }
       if (a === 'home') renderHome();
       else if (a === 'open') openSubject(el.dataset.s);
       else if (a === 'class') renderClass();
@@ -1666,17 +1687,8 @@
           return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '"><div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' + esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(child.keyStage))) + '</div></button>';
         }).join('') + '</div>';
     }
-    var PUID = 'parent_' + (child.id || child.uid || child.name || 'child');
-    function parentPicker(k) {
-      root.innerHTML = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(lmzSubjectLabel(k)) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>Which exam board?</h3><div class="cr-sub">Choose the board ' + esc(child.name || 'your child') + ' studies ' + esc(lmzSubjectLabel(k)) + ' with.</div></div></div>' +
-        '<div class="cr-pick">' + BOARDS.map(function (b) {
-          return '<button type="button" class="cr-card" data-a="pick-board" data-s="' + esc(k) + '" data-b="' + esc(b.id) + '"><div class="ic"><i class="fas fa-landmark"></i></div><h4>' + esc(b.label) + (b.isNew ? ' <span class="cr-board-new">NEW</span>' : '') + '</h4></button>';
-        }).join('') + '</div>';
-    }
-    async function openSubject(k, forcePick) {
-      var pboard = getBoardPref(PUID, k);
-      if (!pboard || forcePick) return parentPicker(k);
+    async function openSubject(k) {
+      var pboard = studentBoardFor(child, k); // assigned by the admin
       root.innerHTML = loaderHtml('Loading\u2026');
       try {
         var cls = await findClassroomCached(k, year, child.keyStage, pboard);
@@ -1688,7 +1700,7 @@
     function list() {
       S.open = null;
       var h = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(displayName(S.cls)) + '</span></div>' +
-        '<div class="cr-board-row">' + boardBadge(S.cls) + '<button type="button" class="cr-btn sm" data-a="change-board" data-s="' + esc(S.cls.subjectId || '') + '"><i class="fas fa-repeat"></i> Change board</button></div>';
+        (boardAssigned(child, S.cls.subjectId) ? '<div class="cr-board-row">' + boardBadge(S.cls) + '</div>' : '');
       var any = false;
       S.topics.forEach(function (t) {
         var ls = S.lessons.filter(function (l) { return l.topicId === t.id; }).sort(byOrder);
@@ -1713,7 +1725,7 @@
     }
     root.addEventListener('click', function (e) {
       var el = e.target.closest('[data-a]'); if (!el) return; var a = el.dataset.a;
-      if (a === 'pick-board') { setBoardPref(PUID, el.dataset.s, el.dataset.b); openSubject(el.dataset.s); } else if (a === 'change-board') openSubject(el.dataset.s, true); else if (a === 'home') home(); else if (a === 'open') openSubject(el.dataset.s); else if (a === 'list') list(); else if (a === 'lesson') lesson(el.dataset.id);
+      if (a === 'home') home(); else if (a === 'open') openSubject(el.dataset.s); else if (a === 'list') list(); else if (a === 'lesson') lesson(el.dataset.id);
     });
     home();
     return { reload: home };
@@ -1727,7 +1739,7 @@
       loadTopics: loadTopics, loadLessons: loadLessons, loadLessonsForTopics: loadLessonsForTopics,
       findClassroomCached: findClassroomCached, loadTopicsCached: loadTopicsCached, loadLessonsCached: loadLessonsCached, memo: memo, clearMemo: clearMemo, loaderHtml: loaderHtml, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
       KEY_STAGES: KEY_STAGES, audFor: audFor, isCbcStage: isCbcStage,
-      BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, getBoardPref: getBoardPref
+      BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, studentBoardFor: studentBoardFor, boardAssigned: boardAssigned, boardAssignHtml: boardAssignHtml, readBoardAssign: readBoardAssign
     }
   };
 })(window);

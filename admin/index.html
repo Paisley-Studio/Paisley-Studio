@@ -1848,6 +1848,13 @@ function viewStudent(id){
         <div id="editSubjectWarn" style="display:none; margin-top:.5rem; font-size:.78rem; color:#B8362A;"></div>
       </div>
     </div>
+    <div class="detail-block">
+      <div class="k">Exam board</div>
+      <div class="v">
+        <div style="font-size:.78rem; color:var(--muted); margin-bottom:.6rem;">Choose which exam board this student follows. The student only sees that board&rsquo;s classroom, homework and exams, with a board badge on the subject.</div>
+        <div id="editBoards" class="cr-boardbox"></div>
+      </div>
+    </div>
         <div class="detail-block">
       <div class="k">Tutors — one per subject</div>
       <div class="v">
@@ -2108,7 +2115,14 @@ function saveStudentEdit(id){
     tutorIds: tutorIds,
     tutorId: legacyTutorId,
     tutorName: legacyTutorName,
-    tutorSlug: legacyTutorSlug
+    tutorSlug: legacyTutorSlug,
+    ...(()=>{
+      const bh = document.getElementById('editBoards');
+      if(!bh || !window.ClassroomUI) return {};
+      const r = ClassroomUI.util.readBoardAssign(bh, 'eb');
+      const sb = {}; keys.forEach(k=>{ if(r.subjectBoards[k]) sb[k] = r.subjectBoards[k]; });
+      return { board: r.board || firebase.firestore.FieldValue.delete(), subjectBoards: sb };
+    })()
   }).then(closeModal).catch(err=>alert('Could not save: '+err.message));
 }
 
@@ -2133,7 +2147,17 @@ function eligibleTutorsForSubject(subjectId, keyStage){
   }).sort((a,b)=> String(a.name||'').localeCompare(String(b.name||'')));
 }
 
+function renderEditBoards(s){
+  const host = document.getElementById('editBoards');
+  if(!host || !window.ClassroomUI) return;
+  const CUt = ClassroomUI.util;
+  // keep anything already picked in this modal when subjects are added/removed
+  const cur = host.children.length ? (()=>{ const r = CUt.readBoardAssign(host, 'eb'); return { board: r.board, subjectBoards: r.subjectBoards }; })() : { board: s.board || '', subjectBoards: s.subjectBoards || {} };
+  host.innerHTML = CUt.boardAssignHtml(cur, editSubjectKeys, 'eb');
+}
+
 function renderSubjectTutors(s){
+  renderEditBoards(s);
   const host = document.getElementById('editSubjectTutors');
   if(!host) return;
   const ks = (document.getElementById('editKS')||{value:''}).value;

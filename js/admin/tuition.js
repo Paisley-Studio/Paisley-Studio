@@ -160,6 +160,7 @@
           return '<div class="cr-field"><label for="tuT-' + esc(k) + '">' + esc(lmzSubjectLabel(k)) + '</label><select id="tuT-' + esc(k) + '" data-subj="' + esc(k) + '">' + tutOpts((cur[k] || {}).tutorId) + '</select></div>';
         }).join('') : '<div class="cr-note">This student has not chosen subjects yet.</div>') + '</div>';
       m.body.insertAdjacentHTML('beforeend', h);
+      m.body.insertAdjacentHTML('beforeend', '<div id="tuBoards"><h4 style="margin:.8rem 0 .4rem;font-size:.8rem;color:var(--brand-deep)">Exam board</h4>' + CU.boardAssignHtml(s, subjects, 'tb') + '</div>');
       var all = m.body.querySelector('#tuAll');
       all.addEventListener('change', function () { m.body.querySelectorAll('[data-subj]').forEach(function (sel) { sel.value = all.value; }); });
       return function read() {
@@ -172,7 +173,9 @@
           ids[t.id] = true;
         });
         var tutorIds = Object.keys(ids), first = tutorIds.length ? subjectTutors[Object.keys(subjectTutors)[0]] : null;
+        var bd = CU.readBoardAssign(m.body.querySelector('#tuBoards'), 'tb');
         return {
+          board: bd.board, subjectBoards: bd.subjectBoards,
           mode: mode, subjectTutors: subjectTutors, tutorIds: tutorIds,
           tutorId: first ? first.tutorId : '', tutorName: first ? first.tutorName : '', tutorSlug: ''
         };
@@ -180,8 +183,9 @@
     }
     function pairFields(r, forceMode) {
       var mode = forceMode || r.mode || (r.tutorIds.length ? 'tutored' : 'self');
-      if (mode === 'self') return { tuitionMode: 'self', subjectTutors: {}, tutorIds: [], tutorId: '', tutorName: '', tutorSlug: '' };
-      return { tuitionMode: 'tutored', subjectTutors: r.subjectTutors, tutorIds: r.tutorIds, tutorId: r.tutorId, tutorName: r.tutorName, tutorSlug: r.tutorSlug };
+      var bf = { board: r.board || firebase.firestore.FieldValue.delete(), subjectBoards: r.subjectBoards || {} };
+      if (mode === 'self') return { board: bf.board, subjectBoards: bf.subjectBoards, tuitionMode: 'self', subjectTutors: {}, tutorIds: [], tutorId: '', tutorName: '', tutorSlug: '' };
+      return { board: bf.board, subjectBoards: bf.subjectBoards, tuitionMode: 'tutored', subjectTutors: r.subjectTutors, tutorIds: r.tutorIds, tutorId: r.tutorId, tutorName: r.tutorName, tutorSlug: r.tutorSlug };
     }
 
     function openApprove(s) {
