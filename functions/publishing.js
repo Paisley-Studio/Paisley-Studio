@@ -169,10 +169,32 @@ function tutorTeaches(student, subjectId, tutorUid) {
   return !!(direct || bySubject);
 }
 
-async function releaseWork(db, tutorUid, tutor, parsed, studentIds, dueAtIso) {
+/* The page tells us where it thinks an item lives, but a stored `topicId` can be stale
+   (work moved between topics) or the type can be guessed wrong. If nothing is at the
+   given path, look for the same id in every topic of that classroom, in every work
+   collection, and use where it really is. */
+const COL_TYPE = { assignments: "assignment", lessons: "lesson", exams: "exam" };
+async function locateItem(db, parsed) {
   const ref = db.doc(parsed.path);
-  const [itemSnap, clsSnap] = await Promise.all([ref.get(), db.doc("classrooms/" + parsed.cid).get()]);
-  if (!itemSnap.exists || !clsSnap.exists) throw new HttpsError("not-found", "That item no longer exists.");
+  const snap = await ref.get();
+  if (snap.exists || parsed.type === "flatExam") return { parsed, ref, snap };
+  const topics = await db.collection(`classrooms/${parsed.cid}/topics`).get();
+  for (const t of topics.docs) {
+    for (const col of Object.keys(COL_TYPE)) {
+      const alt = db.doc(`classrooms/${parsed.cid}/topics/${t.id}/${col}/${parsed.id}`);
+      if (alt.path === ref.path) continue;
+      const s = await alt.get();
+      if (s.exists) return { parsed: { type: COL_TYPE[col], path: alt.path, cid: parsed.cid, tid: t.id, id: parsed.id }, ref: alt, snap: s };
+    }
+  }
+  return { parsed, ref, snap };
+}
+
+async function releaseWork(db, tutorUid, tutor, parsed0, studentIds, dueAtIso) {
+  const found = await locateItem(db, parsed0);
+  const parsed = found.parsed, ref = found.ref, itemSnap = found.snap;
+  const clsSnap = await db.doc("classrooms/" + parsed.cid).get();
+  if (!itemSnap.exists || !clsSnap.exists) throw new HttpsError("not-found", "That item no longer exists. (" + (itemSnap.exists ? "classroom " + parsed.cid : parsed0.path) + " was not found)");
   const item = itemSnap.data() || {}, cls = clsSnap.data() || {};
   if (!(item.audiences && item.audiences.tutors === true)) throw new HttpsError("failed-precondition", "The Studio Desk has not posted this to tutors.");
   const subjects = Array.isArray(tutor.subjects) ? tutor.subjects : [];
