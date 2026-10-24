@@ -291,7 +291,7 @@
         }).join('') +
         '<div class="rs-actions"><button class="rs-btn" data-a="thread" data-r="' + esc(r.id) + '"><i class="fas fa-comments"></i> ' + (isAdmin ? 'Discussion' : 'Talk to the Studio Desk') +
         (r.msgCount ? ' (' + r.msgCount + ')' : '') + (unread ? ' <span class="rs-dot"></span>' : '') + '</button>' +
-        (isAdmin ? (r.workSourceId ? '' : '<button class="rs-btn" data-a="edit" data-r="' + esc(r.id) + '"><i class="fas fa-pen"></i> Edit</button>') + '<button class="rs-btn danger" data-a="del" data-r="' + esc(r.id) + '"><i class="fas fa-trash"></i> Delete</button>' : '') +
+        (isAdmin ? '<button class="rs-btn" data-a="edit" data-r="' + esc(r.id) + '"><i class="fas fa-pen"></i> Edit</button><button class="rs-btn danger" data-a="del" data-r="' + esc(r.id) + '"><i class="fas fa-trash"></i> Delete</button>' : '') +
         '<span style="margin-left:auto;font-size:.7rem;color:var(--muted)">Posted ' + esc(fmtDT(r.createdAt)) + '</span></div></div>';
     }
 
@@ -418,13 +418,12 @@
     }
 
     async function removeResource(r) {
-      var linked = !!r.workSourceId;
-      if (!confirm(linked ? 'Remove "' + r.title + '" from the Resources folder? The ' + (r.workType === 'homework' ? 'assignment' : 'lesson') + ' keeps its files.' : 'Delete "' + r.title + '" and its files? Tutors will lose access.')) return;
+      if (!confirm('Delete "' + r.title + '" and its files? Tutors will lose access.')) return;
       try {
         var msgs = await db().collection('classroomResources').doc(r.id).collection('messages').get();
         for (var i = 0; i < msgs.docs.length; i++) await msgs.docs[i].ref.delete();
         await db().collection('classroomResources').doc(r.id).delete();
-        if (!linked) (r.files || []).forEach(function (f) { if (f.storagePath) firebase.storage().ref(f.storagePath).delete().catch(function () {}); });
+        (r.files || []).forEach(function (f) { if (f.storagePath) firebase.storage().ref(f.storagePath).delete().catch(function () {}); });
         S.resources = S.resources.filter(function (x) { return x.id !== r.id; }); render();
       } catch (e) { alert('Could not delete: ' + (e.message || e)); }
     }
@@ -493,9 +492,87 @@
     if (!snap.exists) Object.assign(data, { createdBy: o.uid || '', createdByName: o.name || 'Studio Desk', createdAt: FV().serverTimestamp(), msgCount: 0, unreadAdmin: false, unreadTutor: true });
     await ref.set(data, { merge: true });
   }
-  function removeWork(type, sourceId) {
-    return db().collection('classroomResources').doc('wk_' + (type === 'homework' ? 'homework' : 'classwork') + '_' + sourceId).delete().catch(function () {});
+  async function removeWork(type, sourceId) {
+    try {
+      var ref = db().collection('classroomResources').doc('wk_' + (type === 'homework' ? 'homework' : 'classwork') + '_' + sourceId);
+      var snap = await ref.get();
+      if (!snap.exists) return;
+      ((snap.data().files) || []).forEach(function (f) { if (f.storagePath) firebase.storage().ref(f.storagePath).delete().catch(function () {}); });
+      await ref.delete();
+    } catch (e) { /* not an admin, or nothing to remove */ }
   }
 
-  global.ResourcesUI = { mount: mount, syncFromWork: syncFromWork, removeWork: removeWork };
+  /* Only the Studio Desk (admin page) can post tutor resources. */
+  function canPad() { return /\/admin(\/|$)/.test(location.pathname); }
+
+  /* "Tutor resources" pad shown inside the lesson editor and the Prepare assignment window.
+     Separate from the lesson/assignment attachments that students see: everything added here is
+     TUTORS ONLY and is filed in Resources under the unit, as Classwork (lesson) or Homework (assignment). */
+  function tutorPad(host, o) {
+    if (!host) return null;
+    var type = o.workType === 'homework' ? 'homework' : 'classwork', label = type === 'homework' ? 'Homework' : 'Classwork';
+    var rid = 'wk_' + type + '_' + o.sourceId, c = o.cls;
+    var files = [], links = [], fresh = [], gone = [], busy = 0, loaded = false;
+    host.innerHTML = '<label>Tutor resources <span class="cr-note" style="font-weight:600">(tutors only \u2014 marking schemes, extra teaching materials)</span></label>' +
+      '<div data-p="list"></div><div data-p="pend"></div>' +
+      '<div class="cr-actions" style="margin-top:.4rem"><button type="button" class="cr-btn sm" data-p="up"><i class="fas fa-upload"></i> Upload tutor resource</button>' +
+      '<button type="button" class="cr-btn sm" data-p="lnk"><i class="fas fa-link"></i> Add tutor link</button></div>' +
+      '<input type="file" multiple data-p="in" style="display:none">' +
+      '<div class="cr-note" data-p="err" style="color:#b8362a;font-weight:700"></div>' +
+      '<div class="cr-note" data-p="tag" style="margin-top:.4rem;background:#fff8dc;border:1px solid #f0dc8a;padding:.5rem .7rem;border-radius:8px"></div>';
+    var $ = function (k) { return host.querySelector('[data-p="' + k + '"]'); };
+    function tag() {
+      $('tag').innerHTML = '<i class="fas fa-folder-open" style="color:#EDB000"></i> Goes to the tutors\u2019 <b>Resources</b> folder \u2014 <b>Unit: ' + esc((o.getTopic && o.getTopic()) || '') + '</b> \u00b7 <b>' + label + '</b>. Students never see these.';
+    }
+    function draw() {
+      $('list').innerHTML = files.map(function (f, i) {
+        return '<div class="cr-res"><i class="fas ' + fileIcon(f.name) + '"></i><span class="nm">' + esc(f.name) + '<small>' + fmtSize(f.size) + '</small></span><button type="button" class="cr-btn sm danger" data-rf="' + i + '">Remove</button></div>';
+      }).join('') + links.map(function (l, i) {
+        return '<div class="cr-res"><i class="fas fa-link"></i><span class="nm">' + esc(l.label || l.url) + '<small>' + esc(l.url) + '</small></span><button type="button" class="cr-btn sm danger" data-rl="' + i + '">Remove</button></div>';
+      }).join('') || '<div class="cr-note">No tutor resources added.</div>';
+      $('list').querySelectorAll('[data-rf]').forEach(function (b) { b.onclick = function () {
+        var f = files.splice(Number(b.dataset.rf), 1)[0], k = fresh.indexOf(f);
+        if (f && f.storagePath) { if (k !== -1) { fresh.splice(k, 1); firebase.storage().ref(f.storagePath).delete().catch(function () {}); } else gone.push(f); }
+        draw();
+      }; });
+      $('list').querySelectorAll('[data-rl]').forEach(function (b) { b.onclick = function () { links.splice(Number(b.dataset.rl), 1); draw(); }; });
+    }
+    draw(); tag();
+    db().collection('classroomResources').doc(rid).get().then(function (s) {
+      if (s.exists) { files = (s.data().files || []).map(function (f) { return Object.assign({}, f); }); links = (s.data().links || []).map(function (l) { return Object.assign({}, l); }); }
+      loaded = true; draw();
+    }).catch(function (e) { $('err').textContent = 'Could not load existing tutor resources (' + (e.code || e.message) + ').'; });
+
+    $('up').onclick = function () { $('in').click(); };
+    $('in').onchange = async function () {
+      var picked = Array.prototype.slice.call(this.files); this.value = ''; $('err').textContent = '';
+      for (var i = 0; i < picked.length; i++) {
+        var f = picked[i];
+        if (f.size > MAX_BYTES) { $('err').textContent = f.name + ' is larger than 100 MB.'; continue; }
+        var row = document.createElement('div'); row.className = 'cr-res';
+        row.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="nm">' + esc(f.name) + '<small>Uploading\u2026</small></span>';
+        $('pend').appendChild(row); busy++;
+        try {
+          var up = await uploadFile('resource-files/' + c.subjectId + '/' + rid + '/' + Date.now() + '_' + f.name.replace(/[^a-zA-Z0-9._-]/g, '_'), f);
+          files.push(up); fresh.push(up);
+        } catch (e) { $('err').textContent = e.message; }
+        busy--; row.remove(); draw();
+      }
+    };
+    $('lnk').onclick = function () {
+      var u = normUrl(prompt('Link address (https://\u2026) \u2014 for tutors only') || ''); if (!u) return;
+      links.push({ label: (prompt('Link title (shown to tutors)', 'Teaching resource') || 'Link').trim().slice(0, 120), url: u }); draw();
+    };
+    return {
+      busy: function () { return busy > 0; },
+      canSync: function () { return loaded; },
+      retag: tag,
+      items: function () {
+        return files.map(function (f) { return Object.assign({ kind: 'file' }, f); }).concat(links.map(function (l) { return { kind: 'link', name: l.label, url: l.url }; }));
+      },
+      commit: function () { gone.forEach(function (f) { if (f.storagePath) firebase.storage().ref(f.storagePath).delete().catch(function () {}); }); gone = []; fresh = []; }
+    };
+  }
+
+  global.ResourcesUI = { mount: mount, syncFromWork: syncFromWork, removeWork: removeWork, tutorPad: tutorPad, canPad: canPad };
 })(window);
