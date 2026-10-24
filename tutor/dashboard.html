@@ -327,7 +327,7 @@
 <script src="../lms-helpers.js"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
-<script src="../js/classroom/work-helpers.js?v=live4"></script>
+<script src="../js/classroom/work-helpers.js?v=live5"></script>
 <script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script>
@@ -495,7 +495,7 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
   });
 });
-// Homework Management and Exam Management mount from work-helpers.js?v=live4.
+// Homework Management and Exam Management mount from work-helpers.js?v=live5.
 // Both are tutor-restricted there: no topic create, no exam create.
 // Tutors cannot create or edit assignments. What they keep: releasing
 // admin-posted homework to their own students, grading and feedback.
@@ -505,7 +505,8 @@ function mountWorkManagement(kind, hostId){
   const box = document.createElement('div'); host.appendChild(box);
   const focus = window.__wkFocus || null; window.__wkFocus = null;   // set by the Overview "Mark" buttons
   WorkUI.mountManagement(box, {
-    kind, role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], focus
+    kind, role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], focus,
+    pendingFor: pendingForClass
   });
 }
 document.querySelector('.nav-item[data-view="hwmgmt"]').addEventListener('click', ()=> mountWorkManagement('homework','hwHost'));
@@ -1008,6 +1009,7 @@ function renderOverview(){
   // so they stay until the work is actually marked (opening the tab no longer clears them).
   setNavBubble('navHwCount', hwMark.length, hwResub);
   setNavBubble('navExamCount', exMark.length, exResub);
+  try{ window.dispatchEvent(new CustomEvent('wk:pending-changed')); }catch(e){}
   const sub = document.getElementById('attentionSub');
   if(sub) sub.textContent = toMark.length
     ? (toMark.length + ' to mark' + (hwResub + exResub ? ' — ' + (hwResub + exResub) + ' resubmitted after corrections' : '')
@@ -1041,6 +1043,16 @@ function renderOverview(){
     <td>${fmtDate(r.when)} ${pill}</td>
     <td class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-kind="${escapeHtml(r.s.kind)}" data-cid="${escapeHtml(r.s.cid||'')}" data-item="${escapeHtml(r.s.itemId||'')}" onclick="openMarkItem(this)"><i class="fas fa-pen"></i> ${r.resub ? 'Mark resubmission' : 'Mark'}</button></td>
   </tr>`;}).join('');
+}
+// Live hand-ins waiting to be marked in one classroom (feeds the subject-card bubbles).
+function pendingForClass(cid, what){
+  let toMark = 0, resub = 0;
+  DB.submissions.forEach(s=>{
+    if(s.cid !== cid || s.status !== 'Submitted' || !isMyStudent(s.studentId)) return;
+    if(what === 'exams' ? s.kind !== 'exam' : s.kind === 'exam') return;
+    toMark++; if(subRoundOf(s).resub) resub++;
+  });
+  return { toMark, resub };
 }
 function setNavBubble(id, total, resub){
   const el = document.getElementById(id); if(!el) return;

@@ -593,6 +593,12 @@
   //   (b) student hand-ins still waiting to be graded.
   // what: 'homework' | 'exams' | 'classwork'
   async function tutorPendingCount(cid, what) {
+    var d = await tutorPendingDetail(cid, what);
+    return d.unreleased + d.toMark;
+  }
+  // unreleased = admin-posted work this tutor still has to release to students.
+  // toMark / resub = hand-ins waiting for grading (resub = corrected work handed back in).
+  async function tutorPendingDetail(cid, what) {
     var topics = await U.loadTopics(cid);
     var res, items;
     if (what === 'exams') { res = await loadFlatExams(cid, true); items = res.items; }
@@ -600,14 +606,16 @@
       res = await loadClassHomework(cid, topics, true);
       items = res.items.filter(function (it) { return what === 'classwork' ? it.isClasswork === true : !it.isClasswork; });
     }
-    var n = 0;
+    var unreleased = 0, toMark = 0, resub = 0;
     items.forEach(function (it) {
       if (it.status === 'Draft' || it.status === 'draft') return;
-      if (!it.releasedTo || !it.releasedTo.length) n++;
+      if (!it.releasedTo || !it.releasedTo.length) unreleased++;
       var subs = res.subs[it.id] || {};
-      Object.keys(subs).forEach(function (k) { if (subs[k] && subs[k].status === 'Submitted') n++; });
+      Object.keys(subs).forEach(function (k) {
+        if (subs[k] && subs[k].status === 'Submitted') { toMark++; if (subRound(subs[k]).resub) resub++; }
+      });
     });
-    return n;
+    return { unreleased: unreleased, toMark: toMark, resub: resub };
   }
 
   function mountManagement(root, opts) {
@@ -718,15 +726,34 @@
       if (!isAdmin) fillTutorBubbles();
     }
     var bubbleToken = 0;
+    // Bubble on each subject card = work waiting on this tutor in that subject:
+    //   red  = total to act on (hand-ins to mark + admin work still to release)
+    //   blue = how many of those are corrected resubmissions
+    // Hand-in counts come from the portal's own live submission feed (opts.pendingFor) so the
+    // cards always agree with the sidebar bubble; a direct read is only the fallback.
     function fillTutorBubbles() {
       var token = ++bubbleToken;
       Array.prototype.forEach.call(root.querySelectorAll('.cr-card[data-a="open"]'), function (card) {
         var cid = card.dataset.id;
-        tutorPendingCount(cid, kind === 'exam' ? 'exams' : 'homework').then(function (n) {
-          if (token !== bubbleToken || !n || !card.isConnected || card.querySelector('.cr-badge-red')) return;
-          card.insertAdjacentHTML('afterbegin', '<div class="cr-badge-red">' + n + '</div>');
-        }).catch(function (e) { console.warn('tutor bubble skipped', cid, e && e.code); });
+        var what = kind === 'exam' ? 'exams' : 'homework';
+        tutorPendingDetail(cid, what).catch(function () { return { unreleased: 0, toMark: 0, resub: 0 }; }).then(function (d) {
+          if (token !== bubbleToken || !card.isConnected) return;
+          var live = typeof opts.pendingFor === 'function' ? opts.pendingFor(cid, what) : null;
+          var toMark = live ? live.toMark : d.toMark, resub = live ? live.resub : d.resub;
+          var n = d.unreleased + toMark;
+          Array.prototype.forEach.call(card.querySelectorAll('.cr-badge-red'), function (x) { x.remove(); });
+          if (!n) return;
+          card.insertAdjacentHTML('afterbegin',
+            (resub ? '<div class="cr-badge-red" style="right:26px;background:#4a6fd6;box-shadow:0 2px 6px rgba(74,111,214,.4)" title="' + resub + ' resubmitted after corrections"><i class="fas fa-rotate" style="font-size:.6rem;margin-right:.2rem"></i>' + resub + '</div>' : '') +
+            '<div class="cr-badge-red" title="' + n + ' waiting on you">' + n + '</div>');
+        });
       });
+    }
+    // The portal tells us when its live counts change; refresh the bubbles while the subject list is showing.
+    if (!isAdmin) {
+      if (global.__wkPendingHandler) global.removeEventListener('wk:pending-changed', global.__wkPendingHandler);
+      global.__wkPendingHandler = function () { if (S.screen === 'list' && root.isConnected) fillTutorBubbles(); };
+      global.addEventListener('wk:pending-changed', global.__wkPendingHandler);
     }
     function sel(id, all, pairs, cur) {
       return '<select data-f="' + id + '" aria-label="' + esc(all) + '"><option value="">' + esc(all) + '</option>' +
@@ -1970,6 +1997,7 @@
     openGradeFlatExamInk: openGradeFlatExamInk,
     openRelease: openRelease,
     tutorPendingCount: tutorPendingCount,
+    tutorPendingDetail: tutorPendingDetail,
     loadStudentWork: loadStudentWork,
     mountStudentHome: mountStudentHome,
     mountParentWork: mountParentWork,
