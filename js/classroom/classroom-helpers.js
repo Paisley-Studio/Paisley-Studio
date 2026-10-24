@@ -1143,12 +1143,13 @@
         }).join('') + '</select></div></div>' +
         '<div class="cr-field"><label>Lesson notes</label><div id="crEditorHost"></div>' +
         '<div class="cr-note" style="margin-top:.35rem;">Write the lesson directly — students read it in their portal. Files are optional.</div></div>' +
-        '<div class="cr-field"><label>Resources</label><div id="crAtts"></div>' +
-        '<div class="cr-actions" style="margin-top:.4rem;"><button type="button" class="cr-btn sm" data-a="add-file"><i class="fas fa-upload"></i> Upload file</button>' +
-        '<button type="button" class="cr-btn sm" data-a="add-link"><i class="fas fa-link"></i> Add link</button></div>' +
+        '<div class="cr-field"><label>Resources <span class="cr-note" style="font-weight:600">(saved to the Resources folder as Classwork)</span></label><div id="crAtts"></div>' +
+        '<div class="cr-actions" style="margin-top:.4rem;"><button type="button" class="cr-btn sm" data-a="add-file"><i class="fas fa-upload"></i> Upload resource</button>' +
+        '<button type="button" class="cr-btn sm" data-a="add-link"><i class="fas fa-link"></i> Add resource link</button></div>' +
         '<input type="file" id="crFileIn" multiple style="display:none" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.mp3,.wav,.m4a,.ogg">' +
         '<input type="file" id="crImgIn" style="display:none" accept="image/jpeg,image/png,image/gif,image/webp">' +
-        '<div class="cr-note" style="margin-top:.35rem;">PDF, Word, PowerPoint, Excel, images, video and audio up to 100 MB each.</div></div>' +
+        '<div class="cr-note" style="margin-top:.35rem;">PDF, Word, PowerPoint, Excel, images, video and audio up to 100 MB each.</div>' +
+        '<div class="cr-note" id="crResTag" style="margin-top:.4rem;background:var(--sage);padding:.5rem .7rem;border-radius:8px;"></div></div>' +
         '<div class="cr-field"><label>Release</label><div class="cr-actions"><span class="cr-note">Schedule for</span>' +
         '<input type="date" id="crSchDate" value="' + defDate + '"><input type="time" id="crSchTime" value="' + defTime + '"></div>' +
         (lesson ? '<div class="cr-note" style="margin-top:.35rem;">Current status: ' + statusBadge(lesson) + '</div>' : '') + '</div>';
@@ -1172,6 +1173,12 @@
             : { online: false, remote: false, tuition: false, tutors: false });
 
       var errEl = m.foot.querySelector('#crLErr');
+      function updResTag() {
+        var sel = m.body.querySelector('#crLTopic'), tg = m.body.querySelector('#crResTag'); if (!tg) return;
+        var opt = sel && sel.options[sel.selectedIndex];
+        tg.innerHTML = '<i class="fas fa-folder-open" style="color:#EDB000"></i> Files and links added here go straight to the <b>Resources</b> folder, tagged <b>Unit: ' + esc(opt ? opt.text : '') + '</b> \u00b7 <b>Classwork</b>.';
+      }
+      m.body.querySelector('#crLTopic').addEventListener('change', updResTag); updResTag();
       var attsEl = m.body.querySelector('#crAtts');
 
       var audBtn = m.foot.querySelector('[data-a="set-audience"]');
@@ -1364,6 +1371,7 @@
         try {
           var writeRef = lessonRef(cls.id, topicId, lid);
           await writeRef.set(data, { merge: true });
+          try { if (global.ResourcesUI && global.ResourcesUI.syncFromWork) await global.ResourcesUI.syncFromWork({ cls: cls, sourceId: lid, workType: 'classwork', title: title, topicId: topicId, topicTitle: topic ? topic.title : '', items: atts, uid: user.uid, name: user.name }); } catch (se) { console.warn('resources sync:', se); }
           removedExisting.forEach(function (a) { deleteStored(a.storagePath); });
           dirty = false; uploadedNow.length = 0;
           m.close(true);
@@ -1407,6 +1415,7 @@
       if (!ok) return;
       try {
         (attachments || []).forEach(function (a) { if (a.storagePath) deleteStored(a.storagePath); });
+        try { if (global.ResourcesUI && global.ResourcesUI.removeWork) global.ResourcesUI.removeWork('classwork', lessonId); } catch (e0) {}
         var ts = await loadTopics(cid);
         var removed = false;
         for (var i = 0; i < ts.length; i++) {

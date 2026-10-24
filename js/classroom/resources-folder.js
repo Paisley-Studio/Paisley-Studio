@@ -20,10 +20,16 @@
 
   var db = function () { return firebase.firestore(); };
   var FV = function () { return firebase.firestore.FieldValue; };
-  var CATEGORIES = ['Marking scheme', 'Further resources', 'Past paper', 'Worked solutions', 'Revision notes', 'Other'];
+  var CATEGORIES = ['Classwork', 'Homework', 'Marking scheme', 'Further resources', 'Past paper', 'Worked solutions', 'Revision notes', 'Other'];
   var MAX_BYTES = 100 * 1024 * 1024;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  /* real-computer yellow folder: back #EDB000, paper, slanted front #FECE00 */
+  var FOLDER_SVG = '<svg viewBox="0 0 290 236" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M4 20Q4 5 19 5H104Q113 5 119 11L141 31Q147 36 156 36H238Q252 36 252 50V212Q252 231 233 231H23Q4 231 4 212Z" fill="#EDB000"/>' +
+    '<rect x="26" y="48" width="212" height="130" rx="4" fill="#E9E9E9"/><rect x="29" y="52" width="206" height="126" rx="3" fill="#fff"/>' +
+    '<path d="M44 86H160L192 65Q198 61 206 61H280Q294 62 290 78L254 213Q250 231 234 231H22Q2 231 7 212L36 98Q39 86 52 86Z" fill="#FECE00"/>' +
+    '</svg>';
   function toDate(ts) { return ts && ts.toDate ? ts.toDate() : (ts ? new Date(ts) : null); }
   function fmtDT(ts) { var d = toDate(ts); return d ? d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
   function fmtSize(n) { n = Number(n) || 0; return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
@@ -59,12 +65,10 @@
       /* folders */
       '.rs-folders{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1.6rem 1.2rem}',
       '.rs-folder{background:none;border:none;cursor:pointer;text-align:center;font-family:inherit;padding:.5rem;border-radius:16px;transition:transform .15s}',
-      '.rs-folder:hover{transform:translateY(-4px)}.rs-folder:hover .rs-fi-body{filter:brightness(1.08)}',
-      '.rs-fi{position:relative;width:190px;height:150px;margin:0 auto .7rem}',
-      '.rs-fi-tab{position:absolute;left:0;top:0;width:78px;height:30px;background:linear-gradient(#a8692f,#8d5424);border-radius:12px 12px 0 0}',
-      '.rs-fi-back{position:absolute;left:0;top:14px;right:0;bottom:0;background:linear-gradient(#92591f,#7a481a);border-radius:6px 16px 16px 16px;box-shadow:0 10px 22px rgba(80,45,10,.28)}',
-      '.rs-fi-body{position:absolute;left:0;right:0;bottom:0;top:42px;background:linear-gradient(#c98a45,#a9692b);border-radius:8px 8px 16px 16px;box-shadow:inset 0 2px 0 rgba(255,255,255,.25)}',
-      '.rs-fi-badge{position:absolute;right:12px;top:52px;background:#fff;color:#7a481a;font-weight:900;font-size:.8rem;min-width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;padding:0 .5rem;box-shadow:0 2px 6px rgba(0,0,0,.2)}',
+      '.rs-folder:hover{transform:translateY(-4px)}.rs-folder:hover .rs-fi svg{filter:drop-shadow(0 10px 12px rgba(120,90,0,.3)) brightness(1.04)}',
+      '.rs-fi{position:relative;width:200px;height:158px;margin:0 auto .7rem}',
+      '.rs-fi svg{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 6px 8px rgba(120,90,0,.22));transition:filter .15s}',
+      '.rs-fi-badge{position:absolute;right:22px;top:80px;background:#fff;color:#6b5200;font-weight:900;font-size:.8rem;min-width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;padding:0 .5rem;box-shadow:0 2px 6px rgba(0,0,0,.22)}',
       '.rs-fi-badge.unread{background:#d93d2f;color:#fff}',
       '.rs-fname{font-weight:800;font-size:1rem;line-height:1.25}',
       '.rs-fsub{font-size:.76rem;color:var(--muted,#6b7b78);margin-top:.15rem}',
@@ -73,16 +77,16 @@
       '.rs-filters select,.rs-filters input{padding:.5rem .7rem;border:1.5px solid var(--line,#d9e3e0);border-radius:9px;font-family:inherit;font-size:.82rem;background:#fff;min-width:150px}',
       /* cards */
       '.rs-list{display:grid;gap:.9rem}',
-      '.rs-card{background:#fff;border:1.5px solid var(--line,#d9e3e0);border-left:6px solid #a9692b;border-radius:14px;padding:1rem 1.1rem}',
+      '.rs-card{background:#fff;border:1.5px solid var(--line,#d9e3e0);border-left:6px solid #EDB000;border-radius:14px;padding:1rem 1.1rem}',
       '.rs-card h3{margin:0 0 .35rem;font-size:1rem;font-weight:800}',
       '.rs-chips{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem}',
-      '.rs-chip{background:#f6ebdc;color:#7a481a;border-radius:20px;padding:.18rem .65rem;font-size:.72rem;font-weight:800}',
-      '.rs-chip.cat{background:#e3f1ee;color:#245f5a}.rs-chip.tutor{background:#e8e4f7;color:#4a3c8f}',
+      '.rs-chip{background:#fff4cc;color:#6b5200;border-radius:20px;padding:.18rem .65rem;font-size:.72rem;font-weight:800}',
+      '.rs-chip.cat{background:#e3f1ee;color:#245f5a}.rs-chip.tutor{background:#e8e4f7;color:#4a3c8f}.rs-chip.cw{background:#e1effc;color:#1d5a9a}.rs-chip.hw{background:#ffe6d2;color:#9a4a10}.rs-chip.src{background:#f1f4f3;color:#4b5c59}',
       '.rs-note{font-size:.84rem;color:var(--muted,#6b7b78);margin:.2rem 0 .6rem;white-space:pre-wrap}',
       '.rs-file{display:flex;align-items:center;gap:.6rem;padding:.5rem .65rem;border:1px solid var(--line,#d9e3e0);border-radius:10px;margin-top:.4rem;font-size:.84rem}',
       '.rs-file .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}',
       '.rs-file small{color:var(--muted,#6b7b78);font-weight:600;margin-left:.4rem}',
-      '.rs-file i.ic{color:#a9692b;font-size:1.1rem}',
+      '.rs-file i.ic{color:#EDB000;font-size:1.1rem}',
       '.rs-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.8rem}',
       '.rs-empty{text-align:center;padding:2.5rem 1rem;color:var(--muted,#6b7b78)}',
       /* modal */
@@ -96,9 +100,9 @@
       '.rs-fld{margin-bottom:.9rem}.rs-fld label{display:block;font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--brand-deep,#245f5a);margin-bottom:.35rem}',
       '.rs-fld input,.rs-fld select,.rs-fld textarea{width:100%;padding:.6rem .75rem;border:1.5px solid var(--line,#d9e3e0);border-radius:10px;font-family:inherit;font-size:.9rem;box-sizing:border-box}',
       '.rs-r2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}@media(max-width:560px){.rs-r2{grid-template-columns:1fr}}',
-      '.rs-drop{border:2px dashed #c9a479;background:#fbf5ec;border-radius:12px;padding:1.2rem;text-align:center;cursor:pointer;font-weight:700;color:#7a481a}',
-      '.rs-drop.over{background:#f3e3cc}',
-      '.rs-prog{height:6px;background:#eee;border-radius:3px;overflow:hidden;margin-top:.3rem}.rs-prog div{height:100%;width:0;background:#a9692b}',
+      '.rs-drop{border:2px dashed #e6c24d;background:#fffaf0;border-radius:12px;padding:1.2rem;text-align:center;cursor:pointer;font-weight:700;color:#6b5200}',
+      '.rs-drop.over{background:#fff0bf}',
+      '.rs-prog{height:6px;background:#eee;border-radius:3px;overflow:hidden;margin-top:.3rem}.rs-prog div{height:100%;width:0;background:#EDB000}',
       /* thread */
       '.rs-thread{display:flex;flex-direction:column;gap:.7rem}',
       '.rs-msg{max-width:88%;padding:.65rem .85rem;border-radius:14px;font-size:.86rem;line-height:1.45;white-space:pre-wrap;word-break:break-word}',
@@ -212,13 +216,13 @@
     function renderFolders() {
       var subs = subjects();
       var unreadFor = function (sid) { return S.resources.filter(function (r) { return r.subjectId === sid && (isAdmin ? r.unreadAdmin : r.unreadTutor); }).length; };
-      var html = '<div class="rs-top"><h2><i class="fas fa-folder-open" style="color:#a9692b"></i> Resources</h2>' +
+      var html = '<div class="rs-top"><h2><i class="fas fa-folder-open" style="color:#EDB000"></i> Resources</h2>' +
         (isAdmin ? '<button class="rs-btn primary" data-a="upload"><i class="fas fa-cloud-arrow-up"></i> Upload marking schemes / further resources</button>' : '') + '</div>';
       if (isAdmin) html += inboxHtml();
       if (!subs.length) html += '<div class="rs-empty">No subjects yet.</div>';
       html += '<div class="rs-folders">' + subs.map(function (s) {
         var n = S.resources.filter(function (r) { return r.subjectId === s.id; }).length, u = unreadFor(s.id);
-        return '<button class="rs-folder" data-a="open" data-s="' + esc(s.id) + '"><div class="rs-fi"><div class="rs-fi-tab"></div><div class="rs-fi-back"></div><div class="rs-fi-body"></div>' +
+        return '<button class="rs-folder" data-a="open" data-s="' + esc(s.id) + '"><div class="rs-fi">' + FOLDER_SVG +
           '<div class="rs-fi-badge' + (u ? ' unread' : '') + '">' + (u ? u + ' new' : n) + '</div></div>' +
           '<div class="rs-fname">' + esc(s.name) + '</div><div class="rs-fsub">Resources · ' + n + ' item' + (n === 1 ? '' : 's') + '</div></button>';
       }).join('') + '</div>';
@@ -254,14 +258,14 @@
       var units = {}, years = {}, cats = {};
       all.forEach(function (r) { if (r.topicTitle) units[r.topicTitle] = 1; if (r.year) years[r.year] = 1; if (r.category) cats[r.category] = 1; });
       var list = filtered();
-      var html = '<div class="rs-top"><button class="rs-crumb" data-a="back"><i class="fas fa-arrow-left"></i> All folders</button><h2><i class="fas fa-folder-open" style="color:#a9692b"></i> ' + esc(sName) + ' — Resources</h2>' +
+      var html = '<div class="rs-top"><button class="rs-crumb" data-a="back"><i class="fas fa-arrow-left"></i> All folders</button><h2><i class="fas fa-folder-open" style="color:#EDB000"></i> ' + esc(sName) + ' — Resources</h2>' +
         (isAdmin ? '<button class="rs-btn primary" data-a="upload"><i class="fas fa-cloud-arrow-up"></i> Upload resources</button>' : '') + '</div>' +
         '<div class="rs-filters"><select data-f="fUnit"><option value="">All units</option><option value="__all"' + (S.fUnit === '__all' ? ' selected' : '') + '>Whole subject (no unit)</option>' +
         Object.keys(units).sort().map(function (u) { return '<option' + (S.fUnit === u ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '</select>' +
         '<select data-f="fCat"><option value="">All types</option>' + Object.keys(cats).sort().map(function (c) { return '<option' + (S.fCat === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>' +
         '<select data-f="fYear"><option value="">All years</option>' + Object.keys(years).sort(function (a, b) { return a - b; }).map(function (y) { return '<option value="' + y + '"' + (S.fYear === String(y) ? ' selected' : '') + '>Year ' + y + '</option>'; }).join('') + '</select>' +
         '<input data-f="fQ" type="search" placeholder="Search resources…" value="' + esc(S.fQ) + '"></div>';
-      if (!list.length) html += '<div class="rs-empty"><i class="fas fa-folder-open" style="font-size:2.4rem;color:#c9a479"></i><p>' + (all.length ? 'Nothing matches those filters.' : 'No resources in this folder yet.') + '</p></div>';
+      if (!list.length) html += '<div class="rs-empty"><i class="fas fa-folder-open" style="font-size:2.4rem;color:#e6c24d"></i><p>' + (all.length ? 'Nothing matches those filters.' : 'No resources in this folder yet.') + '</p></div>';
       html += '<div class="rs-list">' + list.map(card).join('') + '</div>';
       host.innerHTML = html; wire();
       var q = host.querySelector('[data-f="fQ"]');
@@ -272,7 +276,8 @@
       var unread = isAdmin ? r.unreadAdmin : r.unreadTutor;
       return '<div class="rs-card" data-r="' + esc(r.id) + '"><h3>' + esc(r.title) + '</h3>' +
         '<div class="rs-chips"><span class="rs-chip"><i class="fas fa-folder"></i> ' + esc(r.topicTitle || 'Whole subject') + '</span>' +
-        '<span class="rs-chip cat">' + esc(r.category || 'Resource') + '</span>' +
+        '<span class="rs-chip cat' + (r.workType === 'classwork' ? ' cw' : r.workType === 'homework' ? ' hw' : '') + '">' + esc(r.category || 'Resource') + '</span>' +
+        (r.sourceTitle ? '<span class="rs-chip src"><i class="fas fa-link"></i> ' + (r.workType === 'homework' ? 'Assignment' : 'Lesson') + ': ' + esc(r.sourceTitle) + '</span>' : '') +
         '<span class="rs-chip">' + esc(r.year ? 'Year ' + r.year : '') + (r.board ? ' · ' + esc(String(r.board).toUpperCase()) : '') + '</span></div>' +
         (r.note ? '<div class="rs-note">' + esc(r.note) + '</div>' : '') +
         (r.files || []).map(function (f, i) {
@@ -286,7 +291,7 @@
         }).join('') +
         '<div class="rs-actions"><button class="rs-btn" data-a="thread" data-r="' + esc(r.id) + '"><i class="fas fa-comments"></i> ' + (isAdmin ? 'Discussion' : 'Talk to the Studio Desk') +
         (r.msgCount ? ' (' + r.msgCount + ')' : '') + (unread ? ' <span class="rs-dot"></span>' : '') + '</button>' +
-        (isAdmin ? '<button class="rs-btn" data-a="edit" data-r="' + esc(r.id) + '"><i class="fas fa-pen"></i> Edit</button><button class="rs-btn danger" data-a="del" data-r="' + esc(r.id) + '"><i class="fas fa-trash"></i> Delete</button>' : '') +
+        (isAdmin ? (r.workSourceId ? '' : '<button class="rs-btn" data-a="edit" data-r="' + esc(r.id) + '"><i class="fas fa-pen"></i> Edit</button>') + '<button class="rs-btn danger" data-a="del" data-r="' + esc(r.id) + '"><i class="fas fa-trash"></i> Delete</button>' : '') +
         '<span style="margin-left:auto;font-size:.7rem;color:var(--muted)">Posted ' + esc(fmtDT(r.createdAt)) + '</span></div></div>';
     }
 
@@ -413,12 +418,13 @@
     }
 
     async function removeResource(r) {
-      if (!confirm('Delete "' + r.title + '" and its files? Tutors will lose access.')) return;
+      var linked = !!r.workSourceId;
+      if (!confirm(linked ? 'Remove "' + r.title + '" from the Resources folder? The ' + (r.workType === 'homework' ? 'assignment' : 'lesson') + ' keeps its files.' : 'Delete "' + r.title + '" and its files? Tutors will lose access.')) return;
       try {
         var msgs = await db().collection('classroomResources').doc(r.id).collection('messages').get();
         for (var i = 0; i < msgs.docs.length; i++) await msgs.docs[i].ref.delete();
         await db().collection('classroomResources').doc(r.id).delete();
-        (r.files || []).forEach(function (f) { if (f.storagePath) firebase.storage().ref(f.storagePath).delete().catch(function () {}); });
+        if (!linked) (r.files || []).forEach(function (f) { if (f.storagePath) firebase.storage().ref(f.storagePath).delete().catch(function () {}); });
         S.resources = S.resources.filter(function (x) { return x.id !== r.id; }); render();
       } catch (e) { alert('Could not delete: ' + (e.message || e)); }
     }
@@ -464,5 +470,32 @@
     boot();
   }
 
-  global.ResourcesUI = { mount: mount };
+  /* Lesson / assignment files go straight into the Resources folder, tagged with the
+     unit and Classwork (lesson) or Homework (assignment). One resource per lesson or
+     assignment (id wk_<type>_<sourceId>) so re-saving updates it instead of duplicating. */
+  async function syncFromWork(o) {
+    if (!o || !o.sourceId || !o.cls) return;
+    var type = o.workType === 'homework' ? 'homework' : 'classwork';
+    var ref = db().collection('classroomResources').doc('wk_' + type + '_' + o.sourceId);
+    var files = [], links = [];
+    (o.items || []).forEach(function (a) {
+      if (!a) return;
+      if (a.kind === 'link') { var u = safeUrl(a.url); if (u) links.push({ label: String(a.name || a.label || '').slice(0, 120), url: u }); }
+      else if (a.url) files.push({ name: a.name || 'File', url: a.url, storagePath: a.storagePath || '', size: a.size || 0, type: a.type || '' });
+    });
+    (o.links || []).forEach(function (l) { var u = safeUrl(l && l.url); if (u) links.push({ label: String(l.label || '').slice(0, 120), url: u }); });
+    if (!files.length && !links.length) { await ref.delete().catch(function () {}); return; }
+    var c = o.cls, label = type === 'homework' ? 'Homework' : 'Classwork';
+    var data = { title: (o.title || label) + ' \u2014 ' + label.toLowerCase(), category: label, workType: type, workSourceId: o.sourceId, sourceTitle: o.title || '',
+      note: '', cid: c.id, subjectId: c.subjectId, subjectName: subjName(c), keyStage: c.keyStage || '', year: c.year == null ? null : c.year, board: c.board || '',
+      topicId: o.topicId || '', topicTitle: o.topicTitle || '', files: files, links: links, updatedAt: FV().serverTimestamp() };
+    var snap = await ref.get();
+    if (!snap.exists) Object.assign(data, { createdBy: o.uid || '', createdByName: o.name || 'Studio Desk', createdAt: FV().serverTimestamp(), msgCount: 0, unreadAdmin: false, unreadTutor: true });
+    await ref.set(data, { merge: true });
+  }
+  function removeWork(type, sourceId) {
+    return db().collection('classroomResources').doc('wk_' + (type === 'homework' ? 'homework' : 'classwork') + '_' + sourceId).delete().catch(function () {});
+  }
+
+  global.ResourcesUI = { mount: mount, syncFromWork: syncFromWork, removeWork: removeWork };
 })(window);

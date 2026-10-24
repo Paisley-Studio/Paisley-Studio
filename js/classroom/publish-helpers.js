@@ -277,15 +277,22 @@
         '<div class="cr-note" style="margin-top:.4rem">If you select Tutors, they must release it to their students.</div>' +
       '</div>' +
 
-      '<div class="cr-field"><label>Attachments <span class="cr-note" style="font-weight:600">(add as many files as you need)</span></label><div id="wkAttList"></div><div id="wkAttPend"></div>' +
-      '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> Add files</button>' +
+      '<div class="cr-field"><label>Attachments &amp; resources <span class="cr-note" style="font-weight:600">(saved to the Resources folder as Homework)</span></label><div id="wkAttList"></div><div id="wkAttPend"></div>' +
+      '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> Upload resource</button>' +
       '<input type="file" id="wkPdfIn" multiple style="display:none"></div>' +
-      '<div class="cr-field"><label>Links <span class="cr-note" style="font-weight:600">(add as many as you need)</span></label><div id="wkLinkList"></div><button type="button" class="cr-btn sm" data-a="addlink"><i class="fas fa-plus"></i> Add link</button></div>' +
+      '<div class="cr-field"><label>Links <span class="cr-note" style="font-weight:600">(add as many as you need)</span></label><div id="wkLinkList"></div><button type="button" class="cr-btn sm" data-a="addlink"><i class="fas fa-plus"></i> Add resource link</button></div>' +
+      '<div class="cr-note" id="wkResTag" style="background:var(--sage);padding:.5rem .7rem;border-radius:8px;margin-top:.2rem"></div>' +
       recipientsHtml('wkR');
       
     m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
       '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Save assignment') + '</button>';
     var errEl = m.foot.querySelector('#wkErr');
+    function updResTag() {
+      var sel = m.body.querySelector('#wkTopic'), tg = m.body.querySelector('#wkResTag'); if (!tg) return;
+      var opt = sel && sel.options[sel.selectedIndex];
+      tg.innerHTML = '<i class="fas fa-folder-open" style="color:#EDB000"></i> Files and links added here go straight to the <b>Resources</b> folder, tagged <b>Unit: ' + esc(opt ? opt.text : '') + '</b> \u00b7 <b>Homework</b>.';
+    }
+    m.body.querySelector('#wkTopic').addEventListener('change', updResTag); updResTag();
     var readRecipients = wireRecipients(m, 'wkR', cls, ex ? ex.recipients : []);
 
     var fileIn = m.body.querySelector('#wkPdfIn');
@@ -402,6 +409,7 @@
       btn.disabled = true;
       try {
         await coll(cls.id, tid, 'assignment').doc(aid).set(data, { merge: true });
+        try { if (global.ResourcesUI && global.ResourcesUI.syncFromWork) await global.ResourcesUI.syncFromWork({ cls: cls, sourceId: aid, workType: 'homework', title: title, topicId: tid, topicTitle: topic ? topic.title : '', items: atts, links: cleanLinks, uid: user.uid, name: user.name }); } catch (se) { console.warn('resources sync:', se); }
         removedPaths.forEach(function (rp) { try { firebase.storage().ref(rp).delete().catch(function () {}); } catch (e) {} });
         m.close(true);
         if (o.afterSave) await o.afterSave();
