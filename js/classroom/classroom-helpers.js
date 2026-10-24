@@ -113,6 +113,48 @@
     root.querySelectorAll('[data-board-subj]').forEach(function (sel) { if (sel.value) map[sel.dataset.boardSubj] = sel.value; });
     return { board: all && all.value ? all.value : '', subjectBoards: map };
   }
+  // ---- Admin board switcher --------------------------------------
+  // One card per subject + year; the board is switched INSIDE the subject.
+  function adminBoardKey(subjectId, year) { return 'paisley_admin_board_' + subjectId + '_' + year; }
+  function getAdminBoard(subjectId, year) {
+    try { var v = localStorage.getItem(adminBoardKey(subjectId, year)); return BOARDS.some(function (b) { return b.id === v; }) ? v : null; } catch (e) { return null; }
+  }
+  function setAdminBoard(subjectId, year, v) { try { localStorage.setItem(adminBoardKey(subjectId, year), v); } catch (e) {} }
+  function groupClassrooms(list, boardFilter) {
+    var groups = {}, order = [];
+    (list || []).forEach(function (c) {
+      var k = c.subjectId + '|' + c.year + '|' + c.keyStage;
+      if (!groups[k]) { groups[k] = []; order.push(k); }
+      groups[k].push(c);
+    });
+    var out = [];
+    order.forEach(function (k) {
+      var g = groups[k], want = boardFilter || getAdminBoard(g[0].subjectId, g[0].year) || DEFAULT_BOARD;
+      var hit = g.filter(function (c) { return boardOf(c) === want; })[0];
+      if (!hit && boardFilter) return; // filtering by a board this subject does not have yet
+      out.push(hit || g.filter(function (c) { return boardOf(c) === DEFAULT_BOARD; })[0] || g[0]);
+    });
+    return out;
+  }
+  function boardSwitcherHtml(c) {
+    return '<div class="cr-board-row"><span class="cr-note" style="margin:0">Exam board:</span>' + BOARDS.map(function (b) {
+      var on = b.id === boardOf(c);
+      return '<button type="button" class="cr-btn sm' + (on ? ' primary' : '') + '" data-a="switch-board" data-b="' + esc(b.id) + '"' + (on ? ' aria-pressed="true"' : '') + '>' +
+        (on ? '<i class="fas fa-check"></i> ' : '') + esc(b.label) + (b.isNew ? ' <span class="cr-board-new">NEW</span>' : '') + '</button>';
+    }).join('') + '</div>';
+  }
+  // Returns the classroom id to open for `board`, creating it (after a confirm) the first time.
+  async function switchBoardTarget(list, cls, board, user) {
+    var hit = (list || []).filter(function (c) { return c.subjectId === cls.subjectId && Number(c.year) === Number(cls.year) && c.keyStage === cls.keyStage && boardOf(c) === board; })[0];
+    if (!hit) {
+      if (!confirm('Start ' + boardInfo(board).label + ' for ' + displayName(cls) + ' (Year ' + cls.year + ')?\n\nThis creates an empty ' + boardInfo(board).label + ' classroom you can fill with its own lessons, homework and exams. Your ' + boardLabel(cls) + ' content is not touched.')) return null;
+      hit = await ensureClassroom(cls.subjectId, cls.keyStage, cls.year, user, board);
+      if (list) list.push(hit);
+    }
+    setAdminBoard(cls.subjectId, cls.year, board);
+    return hit.id;
+  }
+
   function ksShort(ks) { return String(ks || '').replace(/\s*\(.*/, ''); }
   function byOrder(a, b) {
     return ((a.order == null ? 1e9 : a.order) - (b.order == null ? 1e9 : b.order)) ||
@@ -760,8 +802,9 @@
 
       var list = (S.classrooms || []).filter(function (c) {
         var f = S.filters;
-        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year) && (!f.board || boardOf(c) === f.board);
+        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year);
       });
+      list = groupClassrooms(list, S.filters.board);
       if (isAdmin) {
         h += '<div class="cr-filters">' +
           '<select data-f="f-board" aria-label="Exam board">' + boardOptionsHtml(S.filters.board, true) + '</select>' +
@@ -895,7 +938,7 @@
         (yearTxt ? '<span class="cr-year-suffix">' + esc(yearTxt) + '</span>' : '') +
         pen +
         '</h3>' +
-        '<div class="cr-board-row">' + boardChip + '</div>' +
+        (isAdmin ? boardSwitcherHtml(c) : '<div class="cr-board-row">' + boardChip + '</div>') +
         '<div class="cr-sub">' + esc(ksShort(c.keyStage)) + ' · ' + esc(tutorHint) + '</div></div>' +
         addTopicBtn + '</div>';
 
@@ -1382,6 +1425,7 @@
       try {
         if (a === 'rename-subject') { if (isAdmin) openRenameSubject(); }
         else if (a === 'open') openClassroom(id);
+        else if (a === 'switch-board') { switchBoardTarget(S.classrooms, S.cls, el.dataset.b, user).then(function (tid) { if (tid && tid !== S.cls.id) openClassroom(tid); }).catch(function (err) { alert('Could not switch board: ' + (err.message || err)); }); }
         else if (a === 'back') { S.classrooms = null; loadClassrooms(); }
         else if (a === 'add-class') { if (isAdmin) openAddClassroom(); }
         else if (a === 'publish-class') { if (isAdmin && !isScoped && global.PublishUI) global.PublishUI.openForClassroom(S.cls, user, refreshClassroom); }
@@ -1739,7 +1783,7 @@
       loadTopics: loadTopics, loadLessons: loadLessons, loadLessonsForTopics: loadLessonsForTopics,
       findClassroomCached: findClassroomCached, loadTopicsCached: loadTopicsCached, loadLessonsCached: loadLessonsCached, memo: memo, clearMemo: clearMemo, loaderHtml: loaderHtml, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
       KEY_STAGES: KEY_STAGES, audFor: audFor, isCbcStage: isCbcStage,
-      BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, studentBoardFor: studentBoardFor, boardAssigned: boardAssigned, boardAssignHtml: boardAssignHtml, readBoardAssign: readBoardAssign
+      BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, groupClassrooms: groupClassrooms, boardSwitcherHtml: boardSwitcherHtml, switchBoardTarget: switchBoardTarget, studentBoardFor: studentBoardFor, boardAssigned: boardAssigned, boardAssignHtml: boardAssignHtml, readBoardAssign: readBoardAssign
     }
   };
 })(window);

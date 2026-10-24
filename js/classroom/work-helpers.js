@@ -607,8 +607,9 @@
       var list = (S.classrooms || []).filter(function (c) {
         var f = S.filters;
         if ((opts.audience === 'tuition') !== /^CBC\b/i.test(String(c.keyStage || ''))) return false;
-        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year) && (!f.board || U.boardOf(c) === f.board);
+        return (!f.subject || c.subjectId === f.subject) && (!f.ks || c.keyStage === f.ks) && (!f.year || String(c.year) === f.year);
       });
+      list = U.groupClassrooms(list, S.filters.board);
       if (isAdmin) {
         h += '<div class="cr-filters"><select data-f="f-board" aria-label="Exam board">' + U.boardOptionsHtml(S.filters.board, true) + '</select>' + sel('f-subject', 'All subjects', LMZ_SUBJECTS.map(function (s) { return [s.id, s.name]; }), S.filters.subject) +
           sel('f-ks', 'All Key Stages', (opts.audience === 'tuition' && typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : U.KEY_STAGES).map(function (k) { return [k, U.ksShort(k)]; }), S.filters.ks) +
@@ -736,7 +737,7 @@
         topBtn = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
       }
       var h = '<div class="cr-crumb"><a data-a="back">' + title + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3><div class="cr-board-row">' + U.boardBadge(c) + '</div><div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !S.monitoringOnly && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
+        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3>' + (isAdmin ? U.boardSwitcherHtml(c) : '<div class="cr-board-row">' + U.boardBadge(c) + '</div>') + '<div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !S.monitoringOnly && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
         topBtn + '</div>' +
         '<div class="cr-tabs"><button type="button" class="cr-btn ' + (S.view === 'active' ? 'on' : '') + '" data-a="view" data-v="active"><i class="fas fa-inbox"></i> Current</button>' +
         '<button type="button" class="cr-btn ' + (S.view === 'past' ? 'on' : '') + '" data-a="view" data-v="past"><i class="fas fa-box-archive"></i> Past Work (' + pastCount + ')</button></div>' +
@@ -1078,6 +1079,7 @@
       var item = id ? S.items.filter(function (x) { return x.id === id; })[0] : null;
       try {
         if (a === 'open') openClass(id);
+        else if (a === 'switch-board') { U.switchBoardTarget(S.classrooms, S.cls, el.dataset.b, user).then(function (tid) { if (tid && tid !== S.cls.id) openClass(tid); }).catch(function (err) { alert('Could not switch board: ' + (err.message || err)); }); }
         else if (a === 'back') { S.classrooms = null; loadClassrooms(); }
         else if (a === 'tab') { S.tab = el.dataset.v; renderList(); }
         else if (a === 'view') { S.view = el.dataset.v; render(); }
