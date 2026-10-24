@@ -1290,14 +1290,37 @@
           }));
         }
         if (k.indexOf('lessons') !== -1) {
-          var lessonQ = function () { return coll(cls.id, t.id, 'lesson').where('status', '==', 'published'); };
-          var lessonJobs = [lessonQ().where('audiences.' + aud, '==', true), lessonQ().where('releasedTo', 'array-contains', uid)];
-          if (parentUid) lessonJobs.push(lessonQ().where('releasedParents', 'array-contains', parentUid));
-          p.push(Promise.all(lessonJobs.map(function (q) {
-            return q.get().then(function (snap) { return snap.docs; }).catch(function (e) { console.warn('lessons query skipped:', e && e.code, e && e.message); return []; });
-          })).then(function (parts) {
+          // CHANGED: the old code issued three list queries per topic that
+          // included `where('audiences.X','==',true)`. Firestore cannot prove
+          // that constraint against the `lessons/{lid}` read rule (which also
+          // does a get() on the classroom doc), so every topic's query returned
+          // permission-denied — the "lessons query skipped" flood in the
+          // console. We now issue ONE query per topic with only the constraint
+          // the rule can prove (`status == 'published'`), and filter the
+          // audience / releasedTo / releasedParents conditions in JS.
+          var lessonJobs = [
+            coll(cls.id, t.id, 'lesson').where('status', '==', 'published').get().catch(function (e) {
+              console.warn('lessons query skipped:', e && e.code, e && e.message);
+              return { docs: [] };
+            })
+          ];
+          p.push(Promise.all(lessonJobs).then(function (snaps) {
             var seenL = {}, outL = [];
-            parts.forEach(function (docs) { docs.forEach(function (d) { if (!seenL[d.id]) { seenL[d.id] = 1; outL.push(Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'lesson', isClasswork: true, topicTitle: t.title }, d.data())); } }); });
+            snaps.forEach(function (snap) {
+              (snap.docs || []).forEach(function (d) {
+                if (seenL[d.id]) return;
+                var data = d.data();
+                var a = data.audiences && typeof data.audiences === 'object'
+                  ? data.audiences
+                  : { online: true, remote: false, tuition: false, tutors: true };
+                var allowed = a[aud] === true
+                  || (Array.isArray(data.releasedTo) && data.releasedTo.indexOf(uid) !== -1)
+                  || (parentUid && Array.isArray(data.releasedParents) && data.releasedParents.indexOf(parentUid) !== -1);
+                if (!allowed) return;
+                seenL[d.id] = 1;
+                outL.push(Object.assign({ id: d.id, tid: t.id, cid: cls.id, kind: 'lesson', isClasswork: true, topicTitle: t.title }, data));
+              });
+            });
             return outL;
           }));
         }
@@ -1658,8 +1681,14 @@
           if (prev && prev.exists) {
             if (prev.data().status === 'Graded') throw new Error('This work has already been graded and can no longer be changed.');
             var upd = Object.assign({ textAnswer: text, updatedAt: FVs.serverTimestamp() }, fileData);
-            // Re-hand-in after "Corrections": flip back to Submitted so the tutor sees it is ready again.
-            if (prev.data().status === 'Corrections') { upd.status = 'Submitted'; upd.submittedAt = FVs.serverTimestamp(); }
+            // CHANGED: only send status / submittedAt on an actual Corrections -> Submitted
+            // transition. A plain re-upload (previous status already 'Submitted') must NOT
+            // include 'status', because the rules only allow a status change from
+            // 'Corrections' — anything else is denied with permission-denied.
+            if (prev.data().status === 'Corrections') {
+              upd.status = 'Submitted';
+              upd.submittedAt = FVs.serverTimestamp();
+            }
             try { await subRef.update(upd); } catch (we) { throw wrapWriteErr(we, 'update', subRef, prev.data().status); }
           } else {
             try { await subRef.set(Object.assign({

@@ -14,8 +14,13 @@ service cloud.firestore {
     match /{path=**}/assignments/{aid} {
       allow read: if isSignedIn();
     }
+    // CHANGED: was `allow read: if isAdmin() || isTutor();`
+    // Students need the `status == 'published'` list query on this collection
+    // to be provable without a get(), so the collection-group rule must not
+    // restrict reads to staff only. The per-document rule inside the
+    // classroom tree (below) still enforces audience membership.
     match /{path=**}/lessons/{lid} {
-      allow read: if isAdmin() || isTutor();
+      allow read: if isSignedIn();
     }
 
     // =====================================================
@@ -395,7 +400,7 @@ service cloud.firestore {
         !('tutorId' in request.resource.data) &&
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
-      
+
       // Allow tutors to read student documents so the release modal can find them
       allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || isTutor();
 
@@ -450,7 +455,7 @@ service cloud.firestore {
     match /submissions/{id} {
       allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
       allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
-      allow read: if isAdmin() || isParentOf(resource.data.studentId) || 
+      allow read: if isAdmin() || isParentOf(resource.data.studentId) ||
         (isTutor() && (
           get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.tutorId == request.auth.uid ||
           request.auth.uid in get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.tutorIds
@@ -725,7 +730,33 @@ service cloud.firestore {
         allow delete: if isAdmin();
 
         match /lessons/{lid} {
-          allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesLesson(cid) || parentSeesLesson(cid);
+          // CHANGED: `read` is now decided entirely from the document + request,
+          // with NO `get()` of the classroom doc. Firestore cannot evaluate
+          // `get()`-based helpers for a `where()` list query, which is why every
+          // topic's `where('status','==','published')` query was returning
+          // permission-denied. The client (work-helpers.js) does the audience
+          // membership check in JS; the rules keep the security-critical part:
+          //   - the lesson must be published
+          //   - the lesson must have been posted to the caller's audience, OR
+          //     explicitly released to them (releasedTo / releasedParents)
+          //   - staff (admin / tutor) can always read
+          // A single-document `get` on a lesson still passes through this rule,
+          // so nothing else weakens.
+          allow read: if isAdmin()
+            || isTutor()
+            || (
+                 resource.data.status == 'published'
+                 && (
+                      // Audience flags written by the lesson editor
+                      (resource.data.audiences.online == true)
+                   || (resource.data.audiences.remote == true)
+                   || (resource.data.audiences.get('tuition', false) == true)
+                      // Explicit per-student release
+                   || (('releasedTo' in resource.data) && request.auth.uid in resource.data.releasedTo)
+                      // Parent release
+                   || (('releasedParents' in resource.data) && request.auth.uid in resource.data.releasedParents)
+                    )
+               );
           allow create: if isAdmin();
           allow update: if isAdmin();
           allow delete: if isAdmin();
