@@ -1319,10 +1319,12 @@
     var isEx = kind === 'exams';
     var student = Object.assign({ id: opts.uid }, opts.profile || {});
     var uid = opts.uid;
+    var subjKeys = lmzSubjectKeys(student.subjects);
     root.classList.add('cr-root');
     if (root._wkTimer) { clearInterval(root._wkTimer); root._wkTimer = null; }
-    var S = { items: [], sel: null, loaded: false };
-    root.innerHTML = '<div class="cr-empty">Loading your ' + (isEx ? 'exams' : 'homework') + '\u2026</div>';
+    // One cache shared by the Homework and Exams tabs: reopening a tab paints instantly.
+    var CACHE = global.__wkStudentCache = global.__wkStudentCache || {};
+    var S = { items: [], clsBySubject: {}, sel: null, loaded: false };
 
     // Needs the student's action: not handed in yet, or sent back for corrections.
     function isTodo(it) {
@@ -1336,14 +1338,23 @@
       return !it.sub;
     }
 
-    function groupByClass() {
-      var by = {}, order = [];
-      S.items.forEach(function (it) {
-        var id = it._cls.id;
-        if (!by[id]) { by[id] = { cls: it._cls, items: [] }; order.push(id); }
-        by[id].items.push(it);
+    function buildFrom(per) {
+      var all = [];
+      S.clsBySubject = {};
+      per.forEach(function (pc) {
+        S.clsBySubject[pc.cls.subjectId] = pc.cls;
+        var pick = isEx ? pc.w.exams : pc.w.assignments.concat(pc.w.lessons);
+        pick.forEach(function (x) { x._cls = pc.cls; all.push(x); });
       });
-      return order.map(function (id) { return by[id]; });
+      S.items = all.filter(function (it) { return studentSees(student, it); });
+      S.loaded = true;
+    }
+
+    function groups() {
+      return subjKeys.map(function (k) {
+        var items = S.items.filter(function (it) { return it._cls.subjectId === k; });
+        return { key: k, cls: S.clsBySubject[k] || null, items: items };
+      });
     }
 
     function rowHtml(it) {
@@ -1356,26 +1367,30 @@
         rowActionHtml(it, 'data-a="wk-open" data-id="' + esc(it.id) + '"') + '</div>';
     }
 
+    // The subject cards need nothing from Firestore, so they paint at once; the red bubbles fill in after.
     function drawHome() {
-      var groups = groupByClass();
-      if (!groups.length) { root.innerHTML = '<div class="cr-empty">No ' + (isEx ? 'exams' : 'homework') + ' posted yet.</div>'; return; }
+      if (!subjKeys.length) { root.innerHTML = '<div class="cr-empty">No ' + (isEx ? 'exams' : 'homework') + ' posted yet.</div>'; return; }
       root.innerHTML = '<div class="cr-bar"><div><h3>My ' + (isEx ? 'Exams' : 'Homework') + '</h3><div class="cr-sub">Pick a subject. The red bubble shows how many ' + (isEx ? 'exams' : 'pieces of work') + ' need you; graded work waits inside the subject.</div></div></div>' +
-        '<div class="cr-grid">' + groups.map(function (g) {
+        '<div class="cr-grid">' + groups().map(function (g) {
           var todo = g.items.filter(isTodo).length;
           var done = g.items.filter(isGradedItem).length;
-          return '<button type="button" class="cr-card" data-a="wk-subj" data-c="' + esc(g.cls.id) + '">' +
+          var yr = g.cls && g.cls.year != null ? g.cls.year : student.year;
+          return '<button type="button" class="cr-card" data-a="wk-subj" data-c="' + esc(g.key) + '">' +
             (todo ? '<div class="cr-badge-red">' + todo + '</div>' : '') +
-            '<div class="ic"><i class="fas ' + (isEx ? 'fa-file-pen' : 'fa-clipboard-check') + '"></i></div><h4>' + esc(g.cls.subjectName || g.cls.subjectId) + '</h4>' +
-            '<div class="meta">' + (g.cls.year != null ? 'Year ' + esc(g.cls.year) : '') + '</div>' +
-            (U.boardAssigned(student, g.cls.subjectId) ? '<div style="margin-top:.4rem">' + U.boardBadge(g.cls) + '</div>' : '') +
+            '<div class="ic"><i class="fas ' + (isEx ? 'fa-file-pen' : 'fa-clipboard-check') + '"></i></div><h4>' + esc(g.cls ? (g.cls.subjectName || lmzSubjectLabel(g.key)) : lmzSubjectLabel(g.key)) + '</h4>' +
+            '<div class="meta">' + (yr != null && yr !== '' ? 'Year ' + esc(yr) : '') + '</div>' +
+            (g.cls && U.boardAssigned(student, g.key) ? '<div style="margin-top:.4rem">' + U.boardBadge(g.cls) + '</div>' : '') +
             (done ? '<div style="margin-top:.45rem"><span class="cr-badge b-confirmed"><i class="fas fa-circle-check"></i> ' + done + ' graded</span></div>' : '') +
             '</button>';
         }).join('') + '</div>';
     }
 
     function drawSubject() {
-      var g = groupByClass().filter(function (x) { return x.cls.id === S.sel; })[0];
+      var g = groups().filter(function (x) { return x.key === S.sel; })[0];
       if (!g) { S.sel = null; return drawHome(); }
+      var title = g.cls ? (g.cls.subjectName || lmzSubjectLabel(g.key)) : lmzSubjectLabel(g.key);
+      var h = '<div class="cr-crumb"><a data-a="wk-home">My ' + (isEx ? 'Exams' : 'Homework') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(title) + '</span></div>';
+      if (!S.loaded) { root.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">Loading\u2026</div></div>'; return; }
       var cur = g.items.filter(function (it) { return !isGradedItem(it); });
       var past = g.items.filter(isGradedItem);
       var byTopic = {}, order = [];
@@ -1384,7 +1399,6 @@
         if (!byTopic[key]) { byTopic[key] = { title: it.topicTitle || (isEx ? 'Exams' : 'Work'), items: [] }; order.push(key); }
         byTopic[key].items.push(it);
       });
-      var h = '<div class="cr-crumb"><a data-a="wk-home">My ' + (isEx ? 'Exams' : 'Homework') + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(g.cls.subjectName || g.cls.subjectId) + '</span></div>';
       if (!order.length) h += '<div class="cr-panel"><div class="cr-empty">Nothing waiting for you here.</div></div>';
       order.forEach(function (key) {
         h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(byTopic[key].title) + '</h4>' + byTopic[key].items.map(rowHtml).join('') + '</div>';
@@ -1398,29 +1412,37 @@
 
     function draw() { if (S.sel) drawSubject(); else drawHome(); }
 
-    async function load(silent) {
-      try {
-        var clsSnap = await db.collection('classrooms').get();
-        var subs = lmzSubjectKeys(student.subjects);
-        var mine = clsSnap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (c) {
-          return subs.indexOf(c.subjectId) !== -1 && (student.year == null || Number(student.year) === Number(c.year)) &&
-            U.boardOf(c) === U.studentBoardFor(student, c.subjectId); // only the board the admin assigned
-        });
-        var all = [];
-        for (var i = 0; i < mine.length; i++) {
-          var w = await loadStudentWork(mine[i], await U.loadTopics(mine[i].id), uid, student);
-          var pick = isEx ? w.exams : w.assignments.concat(w.lessons);
-          pick.forEach(function (x) { x._cls = mine[i]; all.push(x); });
-        }
-        S.items = all.filter(function (it) { return studentSees(student, it); });
-        S.loaded = true;
+    async function fetchAll() {
+      // One small query per subject (not the whole classrooms collection), all subjects in parallel.
+      var classLists = await Promise.all(subjKeys.map(function (k) {
+        return db.collection('classrooms').where('subjectId', '==', k).get().then(function (snap) {
+          return snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (c) {
+            return (student.year == null || Number(student.year) === Number(c.year)) && U.boardOf(c) === U.studentBoardFor(student, c.subjectId);
+          });
+        }).catch(function (e) { console.warn('classroom lookup skipped:', k, e && e.code); return []; });
+      }));
+      var classes = [].concat.apply([], classLists);
+      return Promise.all(classes.map(function (c) {
+        return U.loadTopics(c.id).then(function (topics) { return loadStudentWork(c, topics, uid, student); })
+          .then(function (w) { return { cls: c, w: w }; })
+          .catch(function (e) { console.warn('work load skipped:', c.id, e && e.code); return { cls: c, w: { assignments: [], lessons: [], exams: [] } }; });
+      }));
+    }
+
+    var loading = null;
+    function load(silent) {
+      if (loading) return loading;
+      loading = fetchAll().then(function (per) {
+        CACHE[uid] = { at: Date.now(), per: per };
+        buildFrom(per);
         if (!root.isConnected) { clearInterval(root._wkTimer); return; }
         if (silent && document.querySelector('.cr-overlay, .pui-ov')) return; // never redraw under an open dialog
         draw();
-      } catch (e) {
+      }).catch(function (e) {
         console.error(e);
-        if (!silent || !S.loaded) root.innerHTML = '<div class="cr-empty">Error loading work: ' + esc(e.message || e) + '</div>';
-      }
+        if (!S.loaded) root.innerHTML = '<div class="cr-empty">Error loading work: ' + esc(e.message || e) + '</div>';
+      }).then(function () { loading = null; });
+      return loading;
     }
 
     root.addEventListener('click', function (e) {
@@ -1435,9 +1457,12 @@
       }
     });
 
-    await load(false);
-    // Keep the red bubbles alive: refresh quietly every minute and whenever the tab regains focus.
-    root._wkTimer = setInterval(function () { if (!document.hidden && root.isConnected) load(true); else if (!root.isConnected) clearInterval(root._wkTimer); }, 60000);
+    // Instant paint: cached data if we have it (bubbles included), otherwise the bare subject cards.
+    if (CACHE[uid] && CACHE[uid].per) buildFrom(CACHE[uid].per);
+    draw();
+    // Refresh in the background (NOT awaited, so the tab opens immediately), then keep the bubbles alive.
+    load(true);
+    root._wkTimer = setInterval(function () { if (!root.isConnected) clearInterval(root._wkTimer); else if (!document.hidden) load(true); }, 60000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && root.isConnected) load(true); });
   }
 
