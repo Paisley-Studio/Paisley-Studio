@@ -1668,11 +1668,20 @@
 
       var lWork = S.work.lessons ? S.work.lessons.find(function(x){ return x.id === l.id; }) : null;
       h += '<div class="cr-classwork-upload" style="margin-top:1.5rem; padding:1rem; border:1px solid var(--line); border-radius:12px; background:var(--paper);">';
-      if (lWork && lWork.sub && lWork.sub.status === 'Graded') {
-        h += '<div class="cr-note" style="color:var(--brand-deep); font-weight:700;">Graded: ' + (lWork.sub.grade || 'View Feedback') + '</div>';
-        if (lWork.sub.gradedFileUrl) {
-          h += '<div style="margin-top:.5rem"><a href="' + esc(lWork.sub.gradedFileUrl) + '" target="_blank" class="cr-btn sm primary"><i class="fas fa-download"></i> Download Marked Work</a></div>';
-        }
+      var st = lWork && lWork.sub ? lWork.sub.status : '';
+      var checkBtn = '<button type="button" class="cr-btn" data-a="check-hw" data-id="' + esc(l.id) + '" style="margin-left:.5rem"><i class="fas fa-clipboard-check"></i> Check on Homework</button>';
+      if (st === 'Graded') {
+        h += '<div class="cr-note" style="color:var(--brand-deep); font-weight:700;"><i class="fas fa-circle-check"></i> Graded: ' + (lWork.sub.grade != null && lWork.sub.grade !== '' ? esc(lWork.sub.grade) : 'View Feedback') + '</div>';
+        h += '<div style="margin-top:.6rem">' +
+          (lWork.sub.gradedFileUrl ? '<a href="' + esc(lWork.sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer" class="cr-btn sm primary"><i class="fas fa-download"></i> Download Marked Work</a>' : '') +
+          checkBtn + '</div>';
+      } else if (st === 'Corrections') {
+        h += '<div class="cr-note" style="color:#a86b00; font-weight:700;"><i class="fas fa-rotate-left"></i> Your tutor asked for corrections</div>' +
+          '<div style="margin-top:.6rem"><button type="button" class="cr-btn primary" data-a="upload-classwork"><i class="fas fa-upload"></i> Fix &amp; resubmit</button>' + checkBtn + '</div>';
+      } else if (st) {
+        // Already handed in: no submit button, just the status and a way to see it under Homework.
+        h += '<div class="cr-note" style="color:#1d8b57; font-weight:700;"><i class="fas fa-circle-check"></i> Submitted \u2014 awaiting grading</div>' +
+          '<div style="margin-top:.6rem">' + checkBtn.replace(' style="margin-left:.5rem"', '').replace('class="cr-btn"', 'class="cr-btn primary"') + '</div>';
       } else {
         h += '<button type="button" class="cr-btn primary" data-a="upload-classwork"><i class="fas fa-upload"></i> Submit Classwork Response</button>';
       }
@@ -1691,6 +1700,10 @@
       var el = e.target.closest('[data-a]'); if (!el) return;
       var a = el.dataset.a;
       if (a === 'work-open') { global.WorkUI.openStudentItem({ kind: el.dataset.k, cid: S.cls.id, tid: el.dataset.t, id: el.dataset.id, uid: opts.uid, profile: profile, onChange: function () { openSubject(S.cls.subjectId); } }); return; }
+      if (a === 'check-hw') {
+        try { window.dispatchEvent(new CustomEvent('wk:check', { detail: { cid: S.cls.id, id: el.dataset.id } })); } catch (e0) { /* ignore */ }
+        return;
+      }
       if (a === 'upload-classwork') {
         if (window.WorkUI && window.WorkUI.openStudentLesson) {
           window.WorkUI.openStudentLesson(S.cls, S.current, opts.uid, profile, function(){ openSubject(S.cls.subjectId); });

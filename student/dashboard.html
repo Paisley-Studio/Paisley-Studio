@@ -639,9 +639,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
-<script src="../js/classroom/work-helpers.js?v=graded1"></script>
+<script src="../lms-helpers.js?v=live2"></script>
+<script src="../js/classroom/classroom-helpers.js?v=live2"></script>
+<script src="../js/classroom/work-helpers.js?v=live2"></script>
 <script src="../js/classroom/work-learner.js?v=boards1"></script>
 <script>
 const auth = firebase.auth();
@@ -805,38 +805,87 @@ function withHostLoader(host, msg, mountFn){
    Fetches pending counts much faster by checking submissions 
    and avoiding massive topic loops where possible.
 ============================================================ */
-async function calculateClassroomBadges() {
+window.__wkCounts = null;
+let workBell = null;
+let _badgeRun = null, _badgeAgain = false;
+
+function setNavBadge(id, n){
+  const el = document.getElementById(id); if(!el) return;
+  if(n > 0){ el.textContent = n > 99 ? '99+' : n; el.style.display = ''; } else { el.style.display = 'none'; }
+}
+
+// Turns loaded classroom work into bubble counts + status, and clears "new work" alerts for anything already handed in.
+function applyWorkCounts(per){
+  if(!window.WorkUI || !profile) return;
+  const H = WorkUI._h;
+  let hw = 0, ex = 0, cls = 0;
+  const handedIn = [];
+  per.forEach(function(pc){
+    const w = pc.w || {};
+    (w.assignments||[]).concat(w.lessons||[]).forEach(function(it){
+      if(!H.studentSees(profile, it)) return;
+      if(WorkUI.isStudentTodo(it, false)) hw++;
+      if(it.isClasswork && (!it.sub || (it.sub && it.sub.status === 'Corrections'))) cls++;
+      if(it.sub) handedIn.push(it.id);
+    });
+    (w.exams||[]).forEach(function(it){
+      if(!H.studentSees(profile, it)) return;
+      if(WorkUI.isStudentTodo(it, true)) ex++;
+      if(it.sub) handedIn.push(it.id);
+    });
+  });
+  window.__wkCounts = { homework: hw, exams: ex, classroom: cls };
+  setNavBadge('navHwCount', hw);
+  setNavBadge('navExamCount', ex);
+  setNavBadge('navClassroomCount', cls);
+  const sh = document.getElementById('statHwPending'); if(sh) sh.textContent = hw;
+  const se = document.getElementById('statExamsOpen'); if(se) se.textContent = ex;
+  // Already handed in -> its "New homework / exam posted" alerts are stale: mark them read so the bell agrees.
+  if(workBell && workBell.markEntityRead){
+    handedIn.forEach(function(id){ workBell.markEntityRead(id, ['homework_assigned','exam_posted','homework_reminder','homework_overdue']); });
+  }
+}
+
+async function calculateClassroomBadges(force) {
   if (!window.ClassroomUI || !window.WorkUI || !profile) return;
+  if (_badgeRun) { if (force) _badgeAgain = true; return _badgeRun; }
   const U = ClassroomUI.util;
   const subjects = lmzSubjectKeys(profile.subjects);
   const year = profile.year != null && profile.year !== '' ? Number(profile.year) : null;
-  let totalPending = 0;
-
-  // Only Classwork (lessons) feeds this badge, so only that section is fetched.
-  // Cached + shared with the Classroom/Homework tabs so nothing is loaded twice.
-  await Promise.all(subjects.map(async function(k) {
-    try {
-      const cls = await U.findClassroomCached(k, year, profile.keyStage, U.studentBoardFor(profile, k));
-      if (!cls) return;
-      const topics = await U.loadTopicsCached(cls.id);
-      if (!topics.length) return;
-      const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile, ['lessons']);
-      totalPending += work.lessons.filter(function(l){
-        return !l.sub || l.sub.status === 'Corrections';
-      }).length;
-    } catch(e) { console.warn('badge calc error for', k, e); }
-  }));
-
-  const badge = document.getElementById('navClassroomCount');
-  if (badge) {
-    if (totalPending > 0) {
-      badge.textContent = totalPending;
-      badge.style.display = '';
-    } else {
-      badge.style.display = 'none';
-    }
-  }
+  _badgeRun = (async function(){
+    const per = [];
+    await Promise.all(subjects.map(async function(k) {
+      try {
+        const cls = await U.findClassroomCached(k, year, profile.keyStage, U.studentBoardFor(profile, k));
+        if (!cls) return;
+        const topics = await U.loadTopicsCached(cls.id);
+        const work = await window.WorkUI.loadStudentWork(cls, topics, currentUser.uid, profile);
+        per.push({ cls: cls, w: work });
+      } catch(e) { console.warn('badge calc error for', k, e); }
+    }));
+    applyWorkCounts(per);
+  })().catch(function(e){ console.warn('badge calc failed', e); }).then(function(){
+    _badgeRun = null;
+    if(_badgeAgain){ _badgeAgain = false; calculateClassroomBadges(true); }
+  });
+  return _badgeRun;
 }
+
+// Student handed work in: flip status everywhere at once (bubbles, overview, any open tab).
+window.addEventListener('wk:submitted', function(ev){
+  const d = (ev && ev.detail) || {};
+  if(workBell && d.id) workBell.markEntityRead(d.id);
+  ['workHwHost','workExHost'].forEach(function(id){
+    const h = document.getElementById(id);
+    if(h && h._wkBox && h._wkBox._wkReload) h._wkBox._wkReload();
+  });
+  calculateClassroomBadges(true);
+});
+// A Homework / Exams tab finished loading: reuse its data for the bubbles (no second fetch).
+window.addEventListener('wk:loaded', function(){
+  const c = window.__wkStudentCache && currentUser && window.__wkStudentCache[currentUser.uid];
+  if(c && c.per) applyWorkCounts(c.per);
+});
 
 /* ============================================================
    BOOT
@@ -883,15 +932,28 @@ auth.onAuthStateChanged(user=>{
 
 let workNotices = [];
 function startWorkFeatures(){
-  mountNotificationBell(document.getElementById('bellHost'), currentUser.uid, 'student', {
-    navBadges: { classroom:'#navClassroomCount', homework:'#navHwCount', exams:'#navExamCount' },
-    navigate: (cat)=>{
-      const view = { homework:'homework', exams:'exams', classroom:'classroom', notices:'notices', tickets:'tickets' }[cat];
-      const btn = view && document.querySelector('.nav-item[data-view="'+view+'"]'); if(btn) btn.click();
+  let lastNewCount = -1, badgeTimer = null;
+  workBell = mountNotificationBell(document.getElementById('bellHost'), currentUser.uid, 'student', {
+    // Work bubbles (Classroom / Homework / Exams) are driven by real submission state, see applyWorkCounts().
+    navBadges: {},
+    navigate: (cat, n)=> goToWork(cat, n),
+    onChange: (items)=>{
+      // New work posted or something graded: recount shortly (debounced) so the bubbles never go stale.
+      const sig = items.length + ':' + items.filter(x=>!x.read).length;
+      if(sig === lastNewCount) return; lastNewCount = sig;
+      clearTimeout(badgeTimer); badgeTimer = setTimeout(()=>calculateClassroomBadges(true), 600);
     }
   });
   watchMyStudentNotices(currentUser.uid, rows=>{ workNotices = rows; renderWorkNotices(); });
 }
+window.addEventListener('wk:check', function(ev){
+  const d = (ev && ev.detail) || {};
+  goToWork('homework', { relatedEntityId: (d.cid||'') + '/x/' + d.id });
+});
+document.addEventListener('click', function(e){
+  const b = e.target.closest && e.target.closest('[data-check]'); if(!b) return;
+  goToWork(b.dataset.cat || 'homework', b.dataset.check ? { relatedEntityId: b.dataset.check } : null);
+});
 function renderWorkNotices(){
   const list = document.getElementById('workNoticesList'); if(!list) return;
   list.innerHTML = workNotices.map(n=>{
@@ -901,7 +963,10 @@ function renderWorkNotices(){
       <div class="title">${escapeHtml(n.title||'Notice')}</div>
       <div class="meta">${when}${bad?' <span class="pill down">Action needed</span>':''}</div>
       ${n.message?`<div class="meta" style="margin-top:.4rem; white-space:pre-wrap;">${escapeHtml(n.message)}</div>`:''}
-      ${n.fileUrl?`<div class="actions"><a class="btn-sm download-btn file-link" href="${escapeHtml(n.fileUrl)}" target="_blank" rel="noopener"><i class="fas fa-download"></i> <span class="file-name-text">${escapeHtml(n.fileName||'Download')}</span></a></div>`:''}
+      <div class="actions">
+        ${(n.type==='graded'||n.type==='corrections') ? `<button type="button" class="btn-sm primary" data-check="${escapeHtml(n.entityId||'')}" data-cat="${escapeHtml(n.entityKind==='exam'?'exams':'homework')}"><i class="fas fa-circle-check"></i> Check result</button>` : ''}
+        ${n.fileUrl?`<a class="btn-sm download-btn file-link" href="${escapeHtml(n.fileUrl)}" target="_blank" rel="noopener"><i class="fas fa-download"></i> <span class="file-name-text">${escapeHtml(n.fileName||'Download')}</span></a>`:''}
+      </div>
     </div></div>`;
   }).join('');
   const badge = document.getElementById('navNoticeCount');
@@ -911,11 +976,31 @@ function renderWorkNotices(){
   }
 }
 
+/* Jump to a notification's target. For homework / exams it opens the right SUBJECT and the item itself. */
+function goToWork(cat, n){
+  const view = { homework:'homework', exams:'exams', classroom:'classroom', notices:'notices', tickets:'tickets' }[cat];
+  const hostId = cat === 'exams' ? 'workExHost' : (cat === 'homework' ? 'workHwHost' : null);
+  const host = hostId && document.getElementById(hostId);
+  if(host) host._wkBox = null;
+  const btn = view && document.querySelector('.nav-item[data-view="'+view+'"]'); if(btn) btn.click();
+  const entity = n && (n.relatedEntityId || n.entityId);
+  if(host && entity){
+    const itemId = String(entity).split('/').pop();
+    let tries = 0;
+    const t = setInterval(function(){
+      tries++;
+      if(host._wkBox && host._wkBox._wkFocus){ clearInterval(t); host._wkBox._wkFocus(itemId, true); }
+      else if(tries > 60) clearInterval(t);
+    }, 100);
+  }
+}
+
 /* Route clicks to the direct mounters (NO PREFETCH) */
 document.querySelector('.nav-item[data-view="homework"]').addEventListener('click', ()=>{ 
   if(!currentUser || !profile) return;
   const host = document.getElementById('workHwHost');
   withHostLoader(host, 'Loading homework…', function(box){
+    host._wkBox = box;
     return WorkUI.mountStudentHome(box, { kind: 'homework', uid: currentUser.uid, profile: profile });
   });
 });
@@ -924,6 +1009,7 @@ document.querySelector('.nav-item[data-view="exams"]').addEventListener('click',
   if(!currentUser || !profile) return;
   const host = document.getElementById('workExHost');
   withHostLoader(host, 'Loading exams…', function(box){
+    host._wkBox = box;
     return WorkUI.mountStudentHome(box, { kind: 'exams', uid: currentUser.uid, profile: profile });
   });
 });
@@ -1138,11 +1224,11 @@ function renderOverview(){
 
   const submittedHwIds = new Set(allSubmissions.map(s=>s.homeworkId));
   const pendingHw = allHomework.filter(h=>!submittedHwIds.has(h.id)).length;
-  document.getElementById('statHwPending').textContent = pendingHw;
+  document.getElementById('statHwPending').textContent = window.__wkCounts ? window.__wkCounts.homework : pendingHw;
 
   const attemptedExamIds = new Set(allAttempts.map(a=>a.examId));
   const openExams = allExams.filter(e=>!attemptedExamIds.has(e.id)).length;
-  document.getElementById('statExamsOpen').textContent = openExams;
+  document.getElementById('statExamsOpen').textContent = window.__wkCounts ? window.__wkCounts.exams : openExams;
 
   renderResultsTable('recentResultsBody', allResults.slice().reverse().slice(0,5));
   drawProgressChart('__all');
