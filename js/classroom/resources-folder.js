@@ -164,6 +164,8 @@
       var ks = o.keyStages || [];
       if (ks.length) out = out.filter(function (r) { return /^CBC/i.test(r.keyStage || '') || ks.indexOf(r.keyStage) !== -1; });
     }
+    // Work the Studio Desk has withdrawn is hidden from tutors (the admin still sees it, marked Withdrawn).
+    if (o.role !== 'admin') out = out.filter(function (r) { return r.withdrawn !== true; });
     return out.sort(function (a, b) { var x = toDate(b.createdAt), y = toDate(a.createdAt); return (x ? x.getTime() : 0) - (y ? y.getTime() : 0); });
   }
 
@@ -277,6 +279,7 @@
       return '<div class="rs-card" data-r="' + esc(r.id) + '"><h3>' + esc(r.title) + '</h3>' +
         '<div class="rs-chips"><span class="rs-chip"><i class="fas fa-folder"></i> ' + esc(r.topicTitle || 'Whole subject') + '</span>' +
         '<span class="rs-chip cat' + (r.workType === 'classwork' ? ' cw' : r.workType === 'homework' ? ' hw' : '') + '">' + esc(r.category || 'Resource') + '</span>' +
+        (r.withdrawn === true ? '<span class="rs-chip" style="background:#FFF8E6;color:#9A6200;border-color:#D98A00"><i class="fas fa-eye-slash"></i> Withdrawn \u2013 hidden from tutors</span>' : '') +
         (r.sourceTitle ? '<span class="rs-chip src"><i class="fas fa-link"></i> ' + (r.workType === 'homework' ? 'Assignment' : 'Lesson') + ': ' + esc(r.sourceTitle) + '</span>' : '') +
         '<span class="rs-chip">' + esc(r.year ? 'Year ' + r.year : '') + (r.board ? ' · ' + esc(String(r.board).toUpperCase()) : '') + '</span></div>' +
         (r.note ? '<div class="rs-note">' + esc(r.note) + '</div>' : '') +
@@ -487,7 +490,7 @@
     var c = o.cls, label = type === 'homework' ? 'Homework' : 'Classwork';
     var data = { title: (o.title || label) + ' \u2014 ' + label.toLowerCase(), category: label, workType: type, workSourceId: o.sourceId, sourceTitle: o.title || '',
       note: '', cid: c.id, subjectId: c.subjectId, subjectName: subjName(c), keyStage: c.keyStage || '', year: c.year == null ? null : c.year, board: c.board || '',
-      topicId: o.topicId || '', topicTitle: o.topicTitle || '', files: files, links: links, updatedAt: FV().serverTimestamp() };
+      topicId: o.topicId || '', topicTitle: o.topicTitle || '', files: files, links: links, withdrawn: false, updatedAt: FV().serverTimestamp() };
     var snap = await ref.get();
     if (!snap.exists) Object.assign(data, { createdBy: o.uid || '', createdByName: o.name || 'Studio Desk', createdAt: FV().serverTimestamp(), msgCount: 0, unreadAdmin: false, unreadTutor: true });
     await ref.set(data, { merge: true });

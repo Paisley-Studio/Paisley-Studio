@@ -336,6 +336,14 @@
         try {
           var res = await firebase.functions().httpsCallable('publishClassroomContent')({ audience: choice.id, paths: fresh.map(function (i) { return i.path; }), requestId: requestId });
           var d = res.data || {};
+          // Items that were withdrawn earlier get their tutor-only resources back when they are posted again.
+          (d.results || []).forEach(function (r) {
+            if (!r || r.status !== 'published') return;
+            var t = r.type === 'lesson' ? 'classwork' : (r.type === 'assignment' ? 'homework' : '');
+            var id = String(r.path || '').split('/').pop();
+            if (!t || !id) return;
+            firebase.firestore().collection('classroomResources').doc('wk_' + t + '_' + id).update({ withdrawn: false }).catch(function () {});
+          });
           m.body.innerHTML = '<div class="cr-panel" style="margin:0"><h4 style="margin:0 0 .4rem;color:var(--brand-deep)"><i class="fas fa-circle-check" style="color:#1d8b57"></i> Done</h4>' +
             '<div style="font-size:.88rem">Posted: <b>' + (d.published || 0) + '</b> · Already posted: ' + (d.already || 0) + ' · Skipped: ' + (d.skipped || 0) + (d.failed ? ' · <span style="color:var(--error)">Failed: ' + d.failed + '</span>' : '') + '</div>' +
             ((d.results || []).filter(function (r) { return r.status === 'error' || r.status === 'skipped'; }).map(function (r) { return '<div class="cr-note">' + esc(r.path.split('/').pop()) + ': ' + esc(r.reason || r.status) + '</div>'; }).join('')) + '</div>';
