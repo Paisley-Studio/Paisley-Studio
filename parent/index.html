@@ -77,10 +77,10 @@
     <h1>Welcome back</h1>
     <p class="sub">Sign in to follow your child's progress at Paisley Studio.</p>
     <div id="errMsg"></div>
-    <div class="field"><label>Email</label><input type="email" id="loginEmail" autocomplete="username" /></div>
+    <div class="field"><label>Email or phone number</label><input type="text" id="loginEmail" autocomplete="username" inputmode="email" placeholder="you@example.com or 0700 000 000" /></div>
     <div class="field"><label>Password</label><input type="password" id="loginPassword" autocomplete="current-password" /></div>
     <button class="btn" id="loginBtn" type="button">Sign In</button>
-    <div class="linkrow" style="margin-bottom:.4rem;font-size:.8rem;color:#5A6E6A;">New account? Your password is the guardian phone number given when your child signed up (see your welcome email).</div>
+    <div class="linkrow" style="margin-bottom:.4rem;font-size:.8rem;color:#5A6E6A;">You can sign in with your email or your phone number. New account? Your password is the guardian phone number given when your child signed up (see your welcome email).</div>
     <div class="linkrow"><a id="forgotLink">Forgot your password?</a></div>
   </div>
 
@@ -99,6 +99,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js"></script>
 
@@ -119,12 +120,17 @@ function hideErr(){ document.getElementById('errMsg').style.display='none'; }
 
 document.getElementById('loginBtn').addEventListener('click', ()=>{
   hideErr();
-  const email = document.getElementById('loginEmail').value.trim();
+  const ident = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
-  if(!email || !password){ showErr('Please enter your email and password.'); return; }
+  if(!ident || !password){ showErr('Please enter your email or phone number, and your password.'); return; }
   const btn = document.getElementById('loginBtn');
   btn.disabled = true; btn.textContent = 'Signing in…';
-  auth.signInWithEmailAndPassword(email, password).then(cred => {
+  // Typed an email → use it directly. Otherwise treat it as a phone number
+  // and let the server find the matching account (only if the password is right).
+  const emailPromise = ident.indexOf('@') !== -1
+    ? Promise.resolve(ident)
+    : firebase.functions().httpsCallable('parentPhoneLogin')({ phone: ident, password: password }).then(r => r.data.email);
+  emailPromise.then(email => auth.signInWithEmailAndPassword(email, password)).then(cred => {
     return db.collection('parentAccounts').doc(cred.user.uid).get();
   }).then(doc => {
     if(!doc.exists){
@@ -135,8 +141,8 @@ document.getElementById('loginBtn').addEventListener('click', ()=>{
     }
     window.location.href = '/parent/dashboard.html';
   }).catch(err => {
-    showErr(err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found'
-      ? 'Incorrect email or password.' : err.message);
+    showErr(err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'functions/permission-denied'
+      ? 'Incorrect email/phone number or password.' : err.message);
     btn.disabled = false; btn.textContent = 'Sign In';
   });
 });

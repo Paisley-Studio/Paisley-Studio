@@ -57,17 +57,20 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../firestore-helpers.js"></script>
-<script src="../lms-helpers.js"></script>
+<script src="../lms-helpers.js?v=scope1"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
-<script src="../js/classroom/resources-folder.js?v=res2"></script>
-<script src="../js/classroom/work-helpers.js?v=live8"></script>
+<script src="../js/classroom/classroom-helpers.js?v=scope1"></script>
+<script src="../js/classroom/resources-folder.js?v=res3"></script>
+<script src="../js/classroom/work-helpers.js?v=live9"></script>
 <script src="../js/classroom/publish-helpers.js?v=live5"></script>
 <script src="../js/classroom/publish-ui.js?v=restore2"></script>
 <script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/admin/remote-students.js"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script src="../js/admin/tuition.js"></script>
+<link rel="stylesheet" href="../js/tech/tech.css" />
+<script src="../js/tech/tech-helpers.js"></script>
+<script src="../js/admin/tech.js"></script>
 
 <style>
   :root{
@@ -411,11 +414,12 @@
 
       <div class="sidebar-section-label">Learning Management</div>
       <button class="nav-item" data-view="studentmgmt" type="button"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Student Management <span class="nav-badge" id="navCountStudents">0</span></button>
+<button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard" aria-hidden="true"></i> Classroom <span class="nav-badge" id="navCountClassroom" style="display:none;">0</span></button>
+<button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open" aria-hidden="true"></i> Homework Management <span class="nav-badge" id="navCountHw" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="resources" type="button"><i class="fas fa-folder-open" aria-hidden="true"></i> Resources</button>
       <button class="nav-item" data-view="remotestudents" type="button"><i class="fas fa-house-laptop" aria-hidden="true"></i> Remote Students</button>
       <button class="nav-item" data-view="tuition" type="button"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Tuition</button>
-      <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard" aria-hidden="true"></i> Classroom <span class="nav-badge" id="navCountClassroom" style="display:none;">0</span></button>
-      <button class="nav-item" data-view="resources" type="button"><i class="fas fa-folder-open" aria-hidden="true"></i> Resources</button>
-      <button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open" aria-hidden="true"></i> Homework Management <span class="nav-badge" id="navCountHw" style="display:none;">0</span></button>
+<button class="nav-item" data-view="tech" type="button"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> Tech Studio</button>
       <button class="nav-item" data-view="exmgmt" type="button"><i class="fas fa-file-pen" aria-hidden="true"></i> Exam Management <span class="nav-badge" id="navCountEx" style="display:none;">0</span></button>
       
 
@@ -662,6 +666,7 @@
       <section class="view" id="view-resources"><div id="resourcesHost"></div></section>
       <section class="view" id="view-remotestudents"><div id="remoteHost"></div></section>
       <section class="view" id="view-tuition"><div id="tuitionHost"></div></section>
+      <section class="view" id="view-tech"><div id="techHost"></div></section>
       <section class="view" id="view-hwmgmt"><div id="hwHost"></div></section>
       <section class="view" id="view-exmgmt"><div id="exHost"></div></section>
 
@@ -1275,7 +1280,8 @@ const titles = {
   hwmgmt: ['Homework Management', 'Assignments by subject and topic, with ink grading'],
   exmgmt: ['Exam Management', 'AI-tracked and PDF-upload exams by subject and topic'],
   remotestudents: ['Remote Students', 'Admissions, parents, remote classroom delivery, submissions and grading'],
-  tuition: ['Tuition', 'CBC tuition: applications, tutors, timetable, classroom delivery and marking'],
+    tuition: ['Tuition', 'CBC tuition: applications, tutors, timetable, classroom delivery and marking'],
+  tech: ['TECH', 'Digital AI Literacy: students, coaches, paths, missions, builds and the TECH Wall'],
   studentmgmt: ['Student Management', 'Accounts, results, homework, exams and submissions'],
   content: ['Timetable & Notices', 'Announcements and timetables by Key Stage'],
   liveclasses: ['Live Classes', 'Schedule and run Jitsi Meet sessions'],
@@ -1328,8 +1334,26 @@ document.getElementById('menuToggle').addEventListener('click', ()=>{
     host.appendChild(box);
     tuitionInstance = TuitionAdmin.mount(box, { uid: u.uid, name: 'Studio Desk' });
   });
-  // Deep link from admin alert emails: /admin/#tuition
+   // Deep link from admin alert emails: /admin/#tuition
   if(location.hash === '#tuition'){
+    const off = firebase.auth().onAuthStateChanged(u=>{ if(u){ off(); setTimeout(()=>navBtn.click(), 400); } });
+  }
+})();
+
+// TECH: Digital AI Literacy — students, coaches, paths, missions, builds and the TECH Wall.
+(function(){
+  let techInstance = null;
+  const navBtn = document.querySelector('.nav-item[data-view="tech"]');
+  navBtn.addEventListener('click', ()=>{
+    const u = firebase.auth().currentUser; if(!u) return;
+    if(techInstance && techInstance.destroy) techInstance.destroy();
+    const host = document.getElementById('techHost');
+    host.innerHTML = '';
+    const box = document.createElement('div');
+    host.appendChild(box);
+    techInstance = TechAdmin.mount(box, { uid: u.uid, name: 'Studio Desk' });
+  });
+  if(location.hash === '#tech'){
     const off = firebase.auth().onAuthStateChanged(u=>{ if(u){ off(); setTimeout(()=>navBtn.click(), 400); } });
   }
 })();
@@ -1791,7 +1815,7 @@ function renderStudentMgmt(){
 }
 
 // Normal vs remote is decided by the stored studentType field, never by the page visited.
-const isRemoteStu = s => s && (s.studentType === 'remote' || s.studentType === 'tuition');   // remote + CBC tuition students have their own panels
+const isRemoteStu = s => s && (s.studentType === 'remote' || s.studentType === 'tuition' || s.studentType === 'tech');
 function renderStuTable(){
   const body = document.getElementById('stuTableBody');
   let list = DB.students.filter(s=>!isRemoteStu(s));
@@ -1943,6 +1967,7 @@ function initStudentSubjectEditor(s){
   };
   fillYears(s.year);
     ksSel.addEventListener('change', ()=>{ fillYears(yearSel.value); renderEditSubjects(); renderSubjectTutors(s); });
+  yearSel.addEventListener('change', ()=>renderSubjectTutors(s));
   document.getElementById('editSubjectAddBtn').addEventListener('click', ()=>{
     const sel = document.getElementById('editSubjectAdd');
     if(sel.value && editSubjectKeys.indexOf(sel.value) === -1) editSubjectKeys.push(sel.value);
@@ -2145,14 +2170,11 @@ async function saveStudentEdit(id){
    On save, we derive `tutorIds[]` (for the tutor portal query)
    and the legacy `tutorId`/`tutorName`/`tutorSlug` fields.
 --------------------------------------------------------- */
-function eligibleTutorsForSubject(subjectId, keyStage){
+function eligibleTutorsForSubject(subjectId, keyStage, year){
   return (DB.tutorAccounts || []).filter(t=>{
     if((t.status||'') === 'Suspended') return false;
-    const subs = Array.isArray(t.subjects) ? t.subjects : [];
-    if(subs.indexOf(subjectId) === -1) return false;
-    const ks = Array.isArray(t.keyStages) ? t.keyStages : [];
-    if(ks.length && ks.indexOf(keyStage) === -1) return false;
-    return true;
+    // Exact Key Stage + subject + Year the tutor was given (older tutors keep their subjects + Key Stages).
+    return lmzTutorCovers(t, subjectId, keyStage, year);
   }).sort((a,b)=> String(a.name||'').localeCompare(String(b.name||'')));
 }
 
@@ -2179,7 +2201,7 @@ function renderSubjectTutors(s){
     const allowed = lmzSubjectsForKeyStage(ks).map(x=>x.id);
     const bad = allowed.indexOf(k) === -1;
     const cur = existing[k] || null;
-    const eligible = eligibleTutorsForSubject(k, ks);
+    const eligible = eligibleTutorsForSubject(k, ks, (document.getElementById('editYear')||{}).value || s.year);
     let options = '<option value="">— No tutor assigned —</option>';
     options += eligible.map(t=>`<option value="${escapeHtml(t.id)}" ${cur && cur.tutorId===t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
     // If the current tutor is no longer eligible, still show them but mark it.

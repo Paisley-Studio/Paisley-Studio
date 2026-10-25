@@ -654,8 +654,10 @@
     var scopeBanner = isScoped
       ? '<div class="cr-scope-banner"><i class="fas ' + (scope === 'tuition' ? 'fa-graduation-cap' : 'fa-house-laptop') + '"></i> <b>Classwork — ' + scopeName + ' ' + (scope === 'tuition' ? 'students' : 'students') + ' only.</b> Everything saved here is posted to ' + scopeWho + '. ' + (scope === 'tuition' ? 'Online and remote students' : 'Online students') + ' and tutors will not see it.</div>'
       : '';
-    var tutorSubjects = lmzSubjectKeys(opts.subjects || []);
-    var tutorKS = opts.keyStages || [];
+    // Exact scope: Key Stage + subject + Years (opts.teaching). Older tutors without it keep subjects + keyStages.
+    var tutorScope = { teaching: opts.teaching, subjects: opts.subjects, keyStages: opts.keyStages };
+    var tutorSubjects = lmzTutorSubjectKeys(tutorScope);
+    var tutorKS = lmzTutorKeyStages(tutorScope);
     var user = { uid: opts.uid, name: opts.name || (isAdmin ? 'Studio Desk' : 'Tutor') };
 
     var S = { screen: 'list', tab: 'classrooms', classrooms: null, allLessons: null, cls: null, topics: [], lessons: [], collapsed: {},
@@ -763,7 +765,7 @@
             return db.collection('classrooms').where('subjectId', '==', k).get().then(snapDocs);
           }));
           S.classrooms = [].concat.apply([], parts).filter(function (c) {
-            return !tutorKS.length || tutorKS.indexOf(c.keyStage) !== -1;
+            return lmzTutorCovers(tutorScope, c.subjectId, c.keyStage, c.year);
           });
         }
       } catch (e) {

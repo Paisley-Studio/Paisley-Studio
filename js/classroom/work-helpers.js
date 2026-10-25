@@ -699,8 +699,10 @@
     var kind = opts.kind === 'exams' ? 'exam' : 'assignment';
     var isAdmin = opts.role === 'admin';
     var title = kind === 'exam' ? 'Exam Management' : 'Homework Management';
-    var tutorSubjects = lmzSubjectKeys(opts.subjects || []);
-    var tutorKS = opts.keyStages || [];
+    // Exact scope: Key Stage + subject + Years (opts.teaching). Older tutors without it keep subjects + keyStages.
+    var tutorScope = { teaching: opts.teaching, subjects: opts.subjects, keyStages: opts.keyStages };
+    var tutorSubjects = lmzTutorSubjectKeys(tutorScope);
+    var tutorKS = lmzTutorKeyStages(tutorScope);
     var user = { uid: opts.uid, name: opts.name || (isAdmin ? 'Studio Desk' : 'Tutor') };
     var S = { screen: 'list', tab: 'classes', classrooms: null, cls: null, topics: [], items: [], subs: {}, enrolled: [], collapsed: {}, filters: { subject: '', ks: '', year: '', board: '' }, view: 'active', granted: [], monitoringOnly: !!opts.monitoringOnly };
     root.classList.add('cr-root');
@@ -711,7 +713,7 @@
         if (isAdmin) S.classrooms = U.snapDocs(await db.collection('classrooms').get());
         else {
           var parts = await Promise.all(tutorSubjects.map(function (k) { return db.collection('classrooms').where('subjectId', '==', k).get().then(U.snapDocs); }));
-          S.classrooms = [].concat.apply([], parts).filter(function (c) { return !tutorKS.length || tutorKS.indexOf(c.keyStage) !== -1; });
+          S.classrooms = [].concat.apply([], parts).filter(function (c) { return lmzTutorCovers(tutorScope, c.subjectId, c.keyStage, c.year); });
           S.granted = await loadGranted();
         }
       } catch (e) { root.innerHTML = '<div class="cr-empty">Could not load: ' + esc(e.message || e) + '</div>'; return; }

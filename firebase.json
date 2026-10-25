@@ -81,6 +81,18 @@
       {
         "source": "/tuition/dashboard",
         "destination": "/tuition/dashboard.html"
+      },
+      {
+        "source": "/tech",
+        "destination": "/tech.html"
+      },
+      {
+        "source": "/tech/login",
+        "destination": "/tech/index.html"
+      },
+      {
+        "source": "/tech/dashboard",
+        "destination": "/tech/dashboard.html"
       }
     ]
   },

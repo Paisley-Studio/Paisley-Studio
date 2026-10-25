@@ -104,6 +104,48 @@
   .check-grid{display:flex; flex-direction:column; gap:.35rem;}
   .check-grid label{display:flex; align-items:center; gap:.5rem; font-size:.8rem; color:var(--ink); font-weight:600;}
 
+  /* ---- Tutor form: teaching assignments (Key Stage -> subjects -> Years) ---- */
+  .modal.wide{max-width:800px;}
+  .form-field .tp-sub input[type=checkbox]{width:18px; height:18px; padding:0; margin:0; border:none; flex:none; accent-color:var(--brand-deep); background:none; box-shadow:none;}
+  .tp-sec{margin-top:.4rem; padding-top:.9rem; border-top:1px solid var(--line);}
+  .tp-sec h4{margin:0; font-size:.92rem; color:var(--brand-deep);}
+  .tp-intro{font-size:.78rem; color:var(--muted); line-height:1.5; margin:-.2rem 0 .1rem;}
+  .tp{display:flex; flex-direction:column; gap:.9rem;}
+  .tp-grouplabel{font-size:.64rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 .4rem;}
+  .tp-pills{display:flex; flex-wrap:wrap; gap:.5rem;}
+  .tp-pill{position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:.08rem; padding:.55rem .85rem; min-width:116px; border:1.5px solid var(--line); border-radius:12px; background:#fff; cursor:pointer; font-family:var(--font); color:var(--ink); text-align:left; transition:border-color .15s, background .15s;}
+  .tp-pill b{font-size:.8rem; font-weight:800;}
+  .tp-pill small{font-size:.68rem; font-weight:600; color:var(--muted);}
+  .tp-pill:hover{border-color:var(--brand);}
+  .tp-pill.on{background:var(--brand-deep); border-color:var(--brand-deep); color:#fff;}
+  .tp-pill.on small{color:rgba(255,255,255,.78);}
+  .tp-count{position:absolute; top:-8px; right:-8px; min-width:21px; height:21px; padding:0 6px; border-radius:11px; background:var(--gold); color:#4a3a00; font-style:normal; font-size:.7rem; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,.12);}
+  .tp-panel{border:1.5px solid var(--line); border-radius:14px; background:var(--paper); padding:1rem;}
+  .tp-panel-head{display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap; margin-bottom:.7rem;}
+  .tp-panel-head h4{margin:0; font-size:.88rem; color:var(--brand-deep);}
+  .tp-panel-head small{display:block; margin-top:.15rem; font-size:.72rem; color:var(--muted); font-weight:600;}
+  .tp-link{background:none; border:none; padding:.2rem .35rem; font-family:var(--font); font-size:.74rem; font-weight:800; color:var(--brand-deep); text-decoration:underline; cursor:pointer;}
+  .tp-row{display:flex; align-items:center; justify-content:space-between; gap:.5rem 1rem; flex-wrap:wrap; padding:.55rem .75rem; margin-bottom:.4rem; background:#fff; border:1.5px solid transparent; border-radius:11px;}
+  .tp-row:last-child{margin-bottom:0;}
+  .tp-row.on{border-color:var(--brand);}
+  .tp-sub{display:flex; align-items:center; gap:.65rem; flex:1 1 190px; min-width:0; margin:0; font-size:.84rem; font-weight:700; color:var(--ink); cursor:pointer;}
+  .tp-yrs{display:flex; flex-wrap:wrap; gap:.3rem;}
+  .tp-yr{padding:.28rem .65rem; border:1.5px solid var(--line); border-radius:999px; background:#fff; font-family:var(--font); font-size:.72rem; font-weight:700; color:var(--muted); cursor:pointer;}
+  .tp-yr.on{background:var(--sage); border-color:var(--brand); color:var(--brand-deep);}
+  .tp-yr:disabled{opacity:.35; cursor:not-allowed;}
+  .tp-chips{display:flex; flex-wrap:wrap; gap:.4rem;}
+  .tp-chip{display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .35rem .3rem .7rem; border-radius:999px; background:var(--sage); border:1px solid rgba(85,191,179,.45); font-size:.75rem; font-weight:700; color:var(--brand-deep);}
+  .tp-chip b{font-weight:800;}
+  .tp-chip button{width:20px; height:20px; border:none; border-radius:50%; background:rgba(36,95,90,.12); color:var(--brand-deep); font-size:.85rem; line-height:1; cursor:pointer; padding:0;}
+  .tp-chip button:hover{background:var(--error); color:#fff;}
+  .tp-empty{font-size:.78rem; color:var(--muted); background:#fff8e6; border:1px solid #f0dc8a; border-radius:10px; padding:.6rem .8rem;}
+  .tp-lost{font-size:.76rem; color:#8a5a00; background:#fff8e6; border:1px solid #f0dc8a; border-radius:10px; padding:.6rem .8rem;}
+  .tt-line{font-size:.76rem; line-height:1.5; margin-bottom:.2rem;}
+  .tt-line:last-child{margin-bottom:0;}
+  .tt-line b{color:var(--brand-deep); font-weight:800; margin-right:.25rem;}
+  .tt-line span{color:var(--muted); font-weight:600;}
+  @media (max-width:560px){ .tp-pill{min-width:calc(50% - .25rem);} }
+
   .field-hint{font-size:.72rem; color:var(--warn); margin-top:.35rem; line-height:1.4; display:flex; gap:.35rem; align-items:flex-start;}
   .field-hint i{margin-top:.15rem;}
 
@@ -236,7 +278,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Tutor</th><th>Login URL</th><th>Key Stages</th><th>Subjects</th><th>Students</th><th>Status</th><th>Created</th><th></th></tr></thead>
+            <thead><tr><th>Tutor</th><th>Login URL</th><th>Key Stages</th><th>Teaches (subject · years)</th><th>Students</th><th>Status</th><th>Created</th><th></th></tr></thead>
             <tbody id="tutorAcctBody"></tbody>
           </table>
         </div>
@@ -263,7 +305,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js"></script>
+<script src="../lms-helpers.js?v=scope1"></script>
 <script>
 const auth = firebase.auth();
 
@@ -368,7 +410,8 @@ const keyStages = [
 const overlay = document.getElementById('modalOverlay');
 document.getElementById('modalClose').addEventListener('click', closeModal);
 overlay.addEventListener('click', e=>{ if(e.target === overlay) closeModal(); });
-function closeModal(){ overlay.classList.remove('open'); }
+function closeModal(){ overlay.classList.remove('open'); const m = overlay.querySelector('.modal'); if(m) m.classList.remove('wide'); }
+function openWideModal(title, bodyHtml, footHtml){ openModal(title, bodyHtml, footHtml); const m = overlay.querySelector('.modal'); if(m) m.classList.add('wide'); }
 function openModal(title, bodyHtml, footHtml){
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHtml;
@@ -450,8 +493,8 @@ function renderTutorAccounts(){
       <td><div class="cell-name">${escapeHtml(t.name||'—')}</div><div class="cell-sub">${escapeHtml(t.email||'')}</div></td>
       <td><span class="copy-link">/tutor/${escapeHtml(t.slug||'')}</span>
           <button class="mini-btn" title="Copy full login URL" type="button" onclick="copyUrl('${escapeHtml(url)}')"><i class="fas fa-copy" aria-hidden="true"></i></button></td>
-      <td>${(t.keyStages||[]).map(k=>escapeHtml(k.replace(/\s*\(.*/, ''))).join(', ') || '—'}</td>
-      <td>${lmzSubjectLabels(t.subjects).map(escapeHtml).join(', ') || '<span class="cell-sub">None assigned</span>'}</td>
+      <td>${lmzTutorKeyStages(t).map(k=>escapeHtml(lmzKeyStageShort(k))).join(', ') || '—'}</td>
+      <td>${teachesHtml(t)}</td>
       <td>${count}</td>
       <td><span class="badge ${suspended?'b-declined':'b-confirmed'}">${escapeHtml(t.status||'Active')}</span></td>
       <td>${fmtDate(t.date)}</td>
@@ -484,7 +527,7 @@ window.copyUrl = (url) => {
    and saves in one go. Currently assigned students appear
    pre-ticked; untick to remove them from this tutor.
 ========================================================= */
-let msState = { tutorId: '', tutorName: '', tutorSlug: '', tutorKS: [], assignments: {}, search: '' };
+let msState = { tutorId: '', tutorName: '', tutorSlug: '', tutorKS: [], tutor: null, assignedAtOpen: {}, assignments: {}, search: '' };
 
 window.manageStudents = (tutorId) => {
   const t = DB.tutorAccounts.find(x=>x.id===tutorId);
@@ -494,14 +537,16 @@ window.manageStudents = (tutorId) => {
     tutorId: t.id,
     tutorName: t.name || '',
     tutorSlug: t.slug || '',
-    tutorKS: (t.keyStages || []).slice(),
+    tutorKS: lmzTutorKeyStages(t),
+    tutor: t,
+    assignedAtOpen: {},
     assignments: {},
     search: ''
   };
 
   // Pre-tick every student already assigned to this tutor.
   DB.students.forEach(s=>{
-    if(s.tutorId === t.id) msState.assignments[s.id] = true;
+    if(s.tutorId === t.id){ msState.assignments[s.id] = true; msState.assignedAtOpen[s.id] = true; }
   });
 
   const eligible = eligibleStudents();
@@ -516,7 +561,7 @@ window.manageStudents = (tutorId) => {
 
   if(!eligible.length){
     openModal('Manage students — ' + (t.name||'Tutor'),
-      '<div class="setup-note"><i class="fas fa-circle-info" aria-hidden="true"></i><div>There are no students yet in this tutor\'s Key Stages (' + escapeHtml(msState.tutorKS.map(k=>k.replace(/\s*\(.*/, '')).join(', ')) + ').</div></div>',
+      '<div class="setup-note"><i class="fas fa-circle-info" aria-hidden="true"></i><div>There are no students yet matching this tutor\'s assignments (' + escapeHtml(msState.tutorKS.map(k=>lmzKeyStageShort(k)).join(', ')) + ').</div></div>',
       '<button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Close</button>'
     );
     return;
@@ -525,8 +570,9 @@ window.manageStudents = (tutorId) => {
   renderMsModal();
 };
 
+// Only students this tutor's assignments cover (same Key Stage, Year and subject), plus anyone already with them.
 function eligibleStudents(){
-  return DB.students.filter(s=> msState.tutorKS.indexOf(s.keyStage || '') !== -1);
+  return DB.students.filter(s=> msState.assignedAtOpen[s.id] || tutorCoversStudent(msState.tutor, s));
 }
 
 function renderMsModal(){
@@ -535,10 +581,10 @@ function renderMsModal(){
 
   const body = `
     <div class="detail-row"><span class="k">Tutor</span><span class="v">${escapeHtml(msState.tutorName)}</span></div>
-    <div class="detail-row"><span class="k">Their Key Stages</span><span class="v">${msState.tutorKS.map(k=>escapeHtml(k.replace(/\s*\(.*/, ''))).join(', ')}</span></div>
+    <div class="detail-row"><span class="k">Teaches</span><span class="v">${teachesHtml(msState.tutor)}</span></div>
     <div class="setup-note" style="margin-top:1rem;">
       <i class="fas fa-circle-info" aria-hidden="true"></i>
-      <div>Only students in this tutor's Key Stages are shown. Tick the ones this tutor should teach. Save to apply.</div>
+      <div>Only students this tutor's assignments cover are shown (same Key Stage, Year and subject). Tick the ones this tutor should teach. Save to apply.</div>
     </div>
     <div class="ms-toolbar">
       <input class="ms-search" id="msSearch" type="text" placeholder="Search students by name or email…" value="${escapeHtml(msState.search)}" />
@@ -593,7 +639,7 @@ function renderMsRows(eligible){
       <input type="checkbox" id="ms_${s.id}" data-sid="${s.id}" ${checked} />
       <div class="ms-who">
         <div class="ms-name">${escapeHtml(s.name||'(unnamed)')}${currentTag}</div>
-        <div class="ms-meta">${escapeHtml(s.email||'')} · ${escapeHtml((s.keyStage||'').replace(/\s*\(.*/, ''))} · ${escapeHtml(s.status||'')}</div>
+        <div class="ms-meta">${escapeHtml(s.email||'')} · ${escapeHtml((s.keyStage||'').replace(/\s*\(.*/, ''))}${s.year ? ' · Year ' + escapeHtml(s.year) : ''} · ${escapeHtml(s.status||'')}</div>
       </div>
     </label>`;
   }).join('');
@@ -672,13 +718,144 @@ window.saveMsAssignments = async () => {
 };
 
 /* ---------- CREATE ---------- */
-// Catalogue subjects, plus any older free-text subject already on the tutor that
-// the catalogue does not know — shown ticked so saving never drops it silently.
-function tutorSubjectOptions(current){
-  const have = lmzSubjectKeys(current);
-  const opts = LMZ_SUBJECTS.map(s=>({ key:s.id, label:s.name, checked:have.indexOf(s.id)!==-1, legacy:false }));
-  have.filter(k=>!lmzIsCatalogueSubject(k)).forEach(k=>opts.push({ key:k, label:lmzSubjectLabel(k), checked:true, legacy:true }));
-  return opts;
+/* =========================================================
+   TEACHING PICKER — Key Stage -> subjects -> Years
+   ---------------------------------------------------------
+   Pick a Key Stage and only THAT Key Stage's subjects appear.
+   Each ticked subject gets Year chips, so the tutor is given the
+   exact Key Stage + subject + Years (KS3 English is not KS4 English).
+   Reads/writes tutorAccounts.teaching; keyStages/subjects are derived.
+========================================================= */
+function tpKsSmall(k){
+  const tag = /IGCSE|A-Level/.exec(k);
+  return lmzYearsLabel(k) + (tag ? ' \u00b7 ' + tag[0] : '');
+}
+
+function initTeachPicker(t){
+  const host = document.getElementById('tTeach');
+  if(!host) return;
+  const stages = lmzTeachingKeyStages();
+  const map = {};
+  lmzTutorTeaching(t || { teaching: [] }).forEach(e=>{
+    (map[e.keyStage] = map[e.keyStage] || {})[e.subjectId] = (e.years.length ? e.years : lmzYearsForKeyStage(e.keyStage)).slice();
+  });
+
+  // Older tutors: anything that did not fit a Key Stage is dropped on save, so say so.
+  let lost = [];
+  if(t && !Array.isArray(t.teaching)){
+    const kept = {};
+    Object.keys(map).forEach(k=>Object.keys(map[k]).forEach(s=>{ kept[s] = true; }));
+    lost = lmzSubjectKeys(t.subjects).filter(s=>!kept[s]);
+  }
+
+  let active = stages.find(k=>map[k] && Object.keys(map[k]).length) || stages[1] || stages[0];
+  const count = k => Object.keys(map[k] || {}).length;
+  const total = () => stages.reduce((n,k)=>n+count(k), 0);
+
+  function pill(k){
+    return `<button type="button" class="tp-pill${k===active?' on':''}" data-tp-ks="${escapeHtml(k)}">
+      <b>${escapeHtml(lmzKeyStageShort(k))}</b><small>${escapeHtml(tpKsSmall(k))}</small>
+      ${count(k) ? `<i class="tp-count">${count(k)}</i>` : ''}</button>`;
+  }
+
+  function panel(){
+    const subs = lmzSubjectsForKeyStage(active);
+    const cur = map[active] || {};
+    const yrs = lmzYearsForKeyStage(active);
+    const word = lmzIsCbcBand(active) ? 'Grade' : 'Year';
+    const rows = subs.map(s=>{
+      const on = !!cur[s.id];
+      return `<div class="tp-row${on?' on':''}">
+        <label class="tp-sub"><input type="checkbox" data-tp-sub="${escapeHtml(s.id)}" ${on?'checked':''} /><span>${escapeHtml(s.name)}</span></label>
+        <div class="tp-yrs">${yrs.map(y=>`<button type="button" class="tp-yr${on && cur[s.id].indexOf(y)!==-1 ? ' on' : ''}" data-tp-yr="${y}" data-tp-for="${escapeHtml(s.id)}" ${on?'':'disabled'}>${word} ${y}</button>`).join('')}</div>
+      </div>`;
+    }).join('');
+    return `<div class="tp-panel">
+      <div class="tp-panel-head">
+        <div><h4>${escapeHtml(active.replace(/^CBC\s+/, 'CBC \u00b7 '))}</h4><small>Subjects offered at this stage. Tick the ones this tutor takes, then choose the ${word}s.</small></div>
+        <div><button type="button" class="tp-link" data-tp-all>Select all</button><button type="button" class="tp-link" data-tp-none>Clear</button></div>
+      </div>
+      ${rows || '<div class="tp-empty">No subjects are set up for this stage yet.</div>'}
+    </div>`;
+  }
+
+  function summary(){
+    const items = [];
+    stages.forEach(k=>{
+      Object.keys(map[k] || {}).sort((a,b)=>lmzSubjectLabel(a).localeCompare(lmzSubjectLabel(b))).forEach(sid=>items.push({ k, sid, y: map[k][sid] }));
+    });
+    if(!items.length) return '<div class="tp-empty">Nothing assigned yet. This tutor will not see any classrooms, resources or timetable sessions until you tick at least one subject.</div>';
+    return `<div class="tp-chips">${items.map(i=>`<span class="tp-chip"><b>${escapeHtml(lmzKeyStageShort(i.k).replace('Key Stage ','KS'))}</b> ${escapeHtml(lmzSubjectLabel(i.sid))} \u00b7 ${escapeHtml(lmzYearsLabel(i.k, i.y))}<button type="button" data-tp-rm="${escapeHtml(i.k)}|${escapeHtml(i.sid)}" aria-label="Remove">\u00d7</button></span>`).join('')}</div>`;
+  }
+
+  function paint(){
+    host.innerHTML = `<div class="tp">
+      <div class="tp-intro">Choose a Key Stage, tick the subjects this tutor takes, then pick the Years. The tutor sees <b>only</b> the Key Stage, subject and Years set here.</div>
+      <div><div class="tp-grouplabel">British curriculum</div><div class="tp-pills">${KEY_STAGES.map(pill).join('')}</div></div>
+      <div><div class="tp-grouplabel">CBC \u00b7 Tuition</div><div class="tp-pills">${CBC_BANDS.map(pill).join('')}</div></div>
+      ${panel()}
+      <div><div class="tp-grouplabel">Assigned (${total()})</div>${summary()}</div>
+      ${lost.length ? `<div class="tp-lost"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> These older entries do not fit any Key Stage and will be dropped when you save: <b>${lost.map(s=>escapeHtml(lmzSubjectLabel(s))).join(', ')}</b>.</div>` : ''}
+    </div>`;
+  }
+
+  host.addEventListener('click', e=>{
+    const b = e.target.closest('[data-tp-ks],[data-tp-yr],[data-tp-all],[data-tp-none],[data-tp-rm]');
+    if(!b || !host.contains(b)) return;
+    if(b.dataset.tpKs){ active = b.dataset.tpKs; }
+    else if(b.dataset.tpYr){
+      const sid = b.dataset.tpFor, y = Number(b.dataset.tpYr);
+      const arr = (map[active] || {})[sid]; if(!arr) return;
+      const i = arr.indexOf(y);
+      if(i === -1) arr.push(y); else arr.splice(i, 1);
+      arr.sort((a,c)=>a-c);
+      if(!arr.length) delete map[active][sid];
+    }
+    else if(b.hasAttribute('data-tp-all')){
+      map[active] = map[active] || {};
+      lmzSubjectsForKeyStage(active).forEach(s=>{ if(!map[active][s.id]) map[active][s.id] = lmzYearsForKeyStage(active).slice(); });
+    }
+    else if(b.hasAttribute('data-tp-none')){ delete map[active]; }
+    else if(b.dataset.tpRm){
+      const [k, sid] = b.dataset.tpRm.split('|');
+      if(map[k]) delete map[k][sid];
+    }
+    paint();
+  });
+  host.addEventListener('change', e=>{
+    const cb = e.target.closest('[data-tp-sub]'); if(!cb) return;
+    const sid = cb.dataset.tpSub;
+    map[active] = map[active] || {};
+    if(cb.checked) map[active][sid] = lmzYearsForKeyStage(active).slice(); else delete map[active][sid];
+    paint();
+  });
+
+  host._tpGet = () => {
+    const out = [];
+    stages.forEach(k=>Object.keys(map[k] || {}).forEach(sid=>out.push({ keyStage: k, subjectId: sid, years: map[k][sid].slice() })));
+    return lmzNormTeaching(out);
+  };
+  paint();
+}
+
+// Compact "what they teach" block, grouped by Key Stage (tutor table + Manage students).
+function teachesHtml(t){
+  const rows = lmzTutorTeaching(t);
+  if(!rows.length) return '<span class="cell-sub">None assigned</span>';
+  const by = {}, order = [];
+  rows.forEach(e=>{ if(!by[e.keyStage]){ by[e.keyStage] = []; order.push(e.keyStage); } by[e.keyStage].push(e); });
+  return order.map(k=>`<div class="tt-line"><b>${escapeHtml(lmzKeyStageShort(k).replace('Key Stage ','KS'))}</b>${by[k].map(e=>`${escapeHtml(lmzSubjectLabel(e.subjectId))} <span>${escapeHtml(lmzYearsLabel(k, e.years))}</span>`).join(' \u00b7 ')}</div>`).join('');
+}
+
+// Does this tutor's assignment cover this student (same Key Stage, Year and a subject the student takes)?
+function tutorCoversStudent(t, s){
+  if(!t) return false;
+  if(!Array.isArray(t.teaching)) return (t.keyStages || []).indexOf(s.keyStage || '') !== -1;
+  const subs = lmzSubjectKeys(s.subjects);
+  return lmzTutorTeaching(t).some(e=>
+    e.keyStage === s.keyStage &&
+    (!e.years.length || s.year == null || s.year === '' || e.years.indexOf(Number(s.year)) !== -1) &&
+    (!subs.length || subs.indexOf(e.subjectId) !== -1));
 }
 
 function tutorFormHtml(t, isNew){
@@ -694,26 +871,18 @@ function tutorFormHtml(t, isNew){
         <div class="field-hint"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>Copy or screenshot this after you click Create. It cannot be shown again for the tutor's safety.</span></div>
       </div>`:''}
       <div class="form-field full"><label>Login slug — their URL becomes /tutor/{slug}</label><input type="text" id="tSlug" value="${escapeHtml(t.slug||'')}" placeholder="jane-wanjiru" /></div>
-      <div class="form-field full"><label>Key Stages they teach</label>
-        <div class="check-grid" id="tKeyStages">
-          ${keyStages.map(k=>`<label><input type="checkbox" value="${escapeHtml(k)}" ${(t.keyStages||[]).indexOf(k)!==-1?'checked':''} /> ${escapeHtml(k)}</label>`).join('')}
-        </div>
-      </div>
-      <div class="form-field full"><label>Subjects they teach</label>
-        <div class="check-grid" id="tSubjects" style="display:grid; grid-template-columns:1fr 1fr; gap:.35rem .8rem;">
-          ${tutorSubjectOptions(t.subjects).map(o=>`<label><input type="checkbox" value="${escapeHtml(o.key)}" ${o.checked?'checked':''} /> ${escapeHtml(o.label)}${o.legacy?' <span class="cell-sub">(older entry — not in subject list)</span>':''}</label>`).join('')}
-        </div>
-        <div class="field-hint"><i class="fas fa-circle-info" aria-hidden="true"></i><span>A tutor only sees timetable sessions for the subjects ticked here. With none ticked they see no sessions.</span></div>
-      </div>
+      <div class="form-field full tp-sec"><h4>Teaching assignments</h4></div>
+      <div class="form-field full"><div id="tTeach"></div></div>
     </div>
     ${isNew?`<div class="setup-note" style="margin:1rem 0 0;"><i class="fas fa-circle-info" aria-hidden="true"></i><div>When you click Create, the password is shown once in a pop-up. Copy it or screenshot it and send it to the tutor. It is not stored anywhere and will not be shown again.</div></div>`:''}
   `;
 }
 
 document.getElementById('addTutorBtn').addEventListener('click', ()=>{
-  openModal('Create tutor account', tutorFormHtml(null, true), `
+  openWideModal('Create tutor account', tutorFormHtml(null, true), `
     <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
     <button class="btn btn-primary btn-sm" id="createTutorConfirm" type="button"><i class="fas fa-check" aria-hidden="true"></i> Create tutor</button>`);
+  initTeachPicker(null);
   const nameEl = document.getElementById('tName');
   const slugEl = document.getElementById('tSlug');
   let slugTouched = false;
@@ -723,13 +892,14 @@ document.getElementById('addTutorBtn').addEventListener('click', ()=>{
 });
 
 function readTutorForm(){
+  const tHost = document.getElementById('tTeach');
+  const teaching = tHost && tHost._tpGet ? tHost._tpGet() : [];
   return {
+    ...lmzTeachingWriteFields(teaching),
     name: document.getElementById('tName').value.trim(),
     email: (document.getElementById('tEmail').value || '').trim(),
     phone: document.getElementById('tPhone').value.trim(),
-    slug: tutorSlugify(document.getElementById('tSlug').value),
-    keyStages: Array.from(document.querySelectorAll('#tKeyStages input:checked')).map(cb=>cb.value),
-    subjects: Array.from(document.querySelectorAll('#tSubjects input:checked')).map(cb=>cb.value)
+    slug: tutorSlugify(document.getElementById('tSlug').value)
   };
 }
 
@@ -742,6 +912,7 @@ async function createTutor(){
   if(!d.email){ alert('Please enter their email address.'); return; }
   if(!password || password.length < 6){ alert('Please set a password of at least 6 characters.'); return; }
   if(!d.slug){ alert('Please set a login slug.'); return; }
+  if(!d.teaching.length && !await PaisleyUI.confirm('No Key Stage or subject has been ticked, so this tutor will not see any classrooms, resources or timetable sessions.\n\nCreate the account anyway?')) return;
 
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Creating…';
@@ -752,7 +923,7 @@ async function createTutor(){
     return secAuth.createUserWithEmailAndPassword(d.email, password)
       .then(cred=>{
         const uid = cred.user.uid;
-        return createTutorAccount(uid, { ...d, ...lmzSubjectWriteFields(d.subjects) }).then(()=>uid);
+        return createTutorAccount(uid, { ...d }).then(()=>uid);
       })
       .then(uid=>{
         return secAuth.signOut().then(()=>uid);
@@ -800,8 +971,12 @@ async function createTutor(){
       }
       return firebase.functions().httpsCallable('createTutorForExistingAccount')({
         name: d.name, email: d.email, phone: d.phone, slug: d.slug, keyStages: d.keyStages,
-        ...lmzSubjectWriteFields(d.subjects)
-      }).then(()=>{
+        subjects: d.subjects, subjectNames: d.subjectNames
+      }).then(async ()=>{
+        try{
+          const q = await db.collection('tutorAccounts').where('slug','==',d.slug).limit(1).get();
+          if(!q.empty) await q.docs[0].ref.update({ teaching: d.teaching });
+        }catch(te){ console.warn('Could not store exact teaching assignments:', te); }
         closeModal();
         alert('Tutor role added to the existing account for ' + d.email + '.\n\nThey can sign in at ' + location.origin + '/tutor/' + d.slug + ' with the password they already use.');
       }).catch(e2=>{
@@ -824,7 +999,7 @@ window.viewTutor = (id) => {
   const t = DB.tutorAccounts.find(x=>x.id===id); if(!t) return;
   const students = studentsOf(id);
   const url = location.origin + '/tutor/' + (t.slug||'');
-  openModal('Tutor — ' + (t.name||''), `
+  openWideModal('Tutor — ' + (t.name||''), `
     ${row('Email', t.email)}
     ${row('Auth UID', t.id)}
     <div class="detail-row"><span class="k">Login URL</span><span class="v"><span class="copy-link">${escapeHtml(url)}</span></span></div>
@@ -833,17 +1008,19 @@ window.viewTutor = (id) => {
   `, `
     <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Close</button>
     <button class="btn btn-primary btn-sm" onclick="saveTutorEdit('${id}')" type="button"><i class="fas fa-check" aria-hidden="true"></i> Save changes</button>`);
+  initTeachPicker(t);
 };
 
-window.saveTutorEdit = (id) => {
+window.saveTutorEdit = async (id) => {
   const d = readTutorForm();
   if(!d.name){ alert('Please enter the tutor\'s full name.'); return; }
   if(!d.slug){ alert('Please set a login slug.'); return; }
+  if(!d.teaching.length && !await PaisleyUI.confirm('No Key Stage or subject is ticked, so this tutor will not see any classrooms, resources or timetable sessions.\n\nSave anyway?')) return;
   isTutorSlugTaken(d.slug, id).then(taken=>{
     if(taken) throw new Error('That slug is already in use by another tutor.');
     return updateTutorAccount(id, {
       name: d.name, phone: d.phone, slug: d.slug,
-      keyStages: d.keyStages, ...lmzSubjectWriteFields(d.subjects)
+      ...lmzTeachingWriteFields(d.teaching)
     });
   }).then(()=>{
     const kids = studentsOf(id);

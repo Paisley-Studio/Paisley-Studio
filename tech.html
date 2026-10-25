@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paisley TECH | Digital AI Literacy — Learn What You Can Do With AI</title>
+  <meta name="description" content="Paisley TECH is Digital AI Literacy: learn to use AI to think faster, work smarter, create better and build real things. No coding or experience needed." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://paisleystudio.online/tech" />
+  <meta property="og:title" content="Paisley TECH | Digital AI Literacy" />
+  <meta property="og:description" content="AI isn't the future. Knowing what to do with it is. Learn to think, create, solve and build with AI — no coding needed." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://paisleystudio.online/tech" />
+  <meta property="og:image" content="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" />
+  <meta property="og:site_name" content="Paisley Studio" />
+  <meta property="og:locale" content="en_GB" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Paisley TECH | Digital AI Literacy" />
+  <meta name="twitter:description" content="Learn what you can DO with AI. No coding needed." />
+  <meta name="theme-color" content="#245F5A" />
+  <link rel="manifest" href="/manifest.json" />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"Course","name":"Paisley TECH — Digital AI Literacy","description":"A practical, project-based programme teaching students what they can do with AI: thinking, creating, researching, solving problems, staying safe and building.","provider":{"@type":"EducationalOrganization","name":"Paisley Studio","url":"https://paisleystudio.online"}}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+  <style>
+    :root{--brand:#55BFB3;--brand-deep:#245F5A;--brand-soft:#7BCBC2;--paper:#F1F9F7;--surface:#FFFFFF;--sage:#E5F2EF;--ink:#263331;--muted:#5A6E6A;--line:rgba(38,51,49,.10);--dark:#0F1A14;--dark-line:rgba(255,255,255,.10);--dark-muted:#8FA8A2;--gold:#F5C842;--gold-soft:#FFE57A;--font:'Quicksand',sans-serif;--container:1160px;--pad:6rem;--header-h:68px;--success:#2EB872;--error:#E74C3C}
+    *{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}
+    body{font-family:var(--font);color:var(--ink);background:var(--paper);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    a{color:inherit;text-decoration:none}img{max-width:100%}
+    .container{width:min(var(--container),100% - 2.4rem);margin-inline:auto}
+    section{padding:var(--pad) 0}@media(max-width:700px){section{padding:3.6rem 0}}
+    .skip{position:absolute;left:-999px;top:0;background:var(--brand-deep);color:#fff;padding:.6rem 1rem;z-index:2000}.skip:focus{left:0}
+    :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+    .eyebrow{font-size:.74rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-deep);display:inline-flex;gap:.5rem;align-items:center;margin-bottom:.8rem}
+    .eyebrow::before{content:"";width:26px;height:2px;background:var(--brand)}
+    h1,h2,h3{font-weight:800;line-height:1.08;letter-spacing:-.02em}
+    h2{font-size:clamp(1.9rem,4.4vw,3.1rem);margin-bottom:1rem}
+    .lead{font-size:clamp(1rem,1.6vw,1.18rem);color:var(--muted);max-width:42rem}
+    .center{text-align:center}.center .lead{margin-inline:auto}.center .eyebrow{justify-content:center}
+    .btn{display:inline-flex;align-items:center;gap:.6rem;font-family:var(--font);font-weight:700;font-size:.85rem;padding:.9rem 1.9rem;border-radius:50px;border:1px solid transparent;transition:all .4s cubic-bezier(.4,0,.2,1);cursor:pointer;text-transform:uppercase;letter-spacing:.06em}
+    .btn-primary{background:var(--brand);color:#fff}.btn-primary:hover{background:var(--brand-deep);transform:translateY(-3px) scale(1.02);box-shadow:0 10px 30px rgba(85,191,179,.3)}
+    .btn-ghost{background:transparent;border-color:var(--line);color:var(--ink)}.btn-ghost:hover{border-color:var(--brand);color:var(--brand);transform:translateY(-3px)}
+    .btn-gold{background:var(--gold);color:var(--brand-deep)}.btn-gold:hover{background:var(--gold-soft);transform:translateY(-3px);box-shadow:0 10px 30px rgba(245,200,66,.3)}
+    .btn-light{background:transparent;border-color:var(--dark-line);color:#fff}.btn-light:hover{border-color:var(--brand);color:var(--brand-soft);transform:translateY(-3px)}
+    .reveal{opacity:0;transform:translateY(40px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)}.reveal.in{opacity:1;transform:none}
+    @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}*{animation:none!important;scroll-behavior:auto}}
+    /* header */
+    .site-header{position:sticky;top:0;z-index:1000;background:rgba(241,249,247,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+    .header-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:var(--header-h)}
+    .logo{display:flex;align-items:center;gap:.7rem}.logo-img{border-radius:10px}
+    .logo-word{font-weight:800;font-size:1.05rem;line-height:1.1;color:var(--brand-deep)}.logo-word b{display:inline-block;margin-left:.35rem;background:var(--brand-deep);color:#fff;border-radius:6px;padding:.05rem .45rem;font-size:.8rem;letter-spacing:.08em}
+    .main-nav{display:flex;gap:1.5rem;font-size:.84rem;font-weight:700}.main-nav a{color:var(--muted);transition:color .3s}.main-nav a:hover{color:var(--brand-deep)}
+    .header-cta{display:flex;align-items:center;gap:1rem}.header-cta .btn{padding:.55rem 1.3rem;font-size:.7rem}.header-cta .signin{font-size:.8rem;font-weight:700;color:var(--muted)}
+    @media(max-width:900px){.main-nav{display:none}.logo-word{font-size:.95rem}}
+    @media(max-width:480px){.header-cta .signin{display:none}}
+    /* hero */
+    .hero{background:var(--dark);color:#fff;padding:5.5rem 0 4.5rem;position:relative;overflow:hidden}
+    .hero::before{content:"";position:absolute;inset:auto -10% -40% auto;width:60vw;height:60vw;max-width:760px;max-height:760px;background:radial-gradient(circle,rgba(85,191,179,.28),transparent 65%);pointer-events:none}
+    .hero .eyebrow{color:var(--brand-soft)}.hero .eyebrow::before{background:var(--gold)}
+    .hero h1{font-size:clamp(2.5rem,7.4vw,5.4rem);max-width:15ch;margin-bottom:1.4rem}.hero h1 em{font-style:normal;color:var(--brand)}
+    .hero .lead{color:var(--dark-muted);font-size:clamp(1.05rem,1.8vw,1.28rem);margin-bottom:2rem}
+    .hero-cta{display:flex;gap:.9rem;flex-wrap:wrap;margin-bottom:2.2rem}
+    .nos{display:flex;gap:.6rem;flex-wrap:wrap}.nos span{border:1px solid var(--dark-line);border-radius:50px;padding:.4rem .95rem;font-size:.8rem;font-weight:700;color:var(--brand-soft)}.nos span i{color:var(--gold);margin-right:.4rem}
+    .hero-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:3rem;align-items:center;position:relative}
+    @media(max-width:900px){.hero-grid{grid-template-columns:1fr}}
+    .prompt-card{background:rgba(255,255,255,.05);border:1px solid var(--dark-line);border-radius:22px;padding:1.3rem;backdrop-filter:blur(6px)}
+    .prompt-card small{font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dark-muted);font-weight:800}
+    .prompt-card .q{margin:.5rem 0 1rem;font-weight:700;font-size:1.02rem;min-height:3.3em}
+    .prompt-card .a{background:rgba(85,191,179,.12);border-radius:14px;padding:.8rem .9rem;font-size:.88rem;color:#d3ece7;min-height:5.2em}
+    .prompt-dots{display:flex;gap:.4rem;margin-top:.9rem}.prompt-dots i{width:22px;height:4px;border-radius:4px;background:var(--dark-line);transition:background .4s}.prompt-dots i.on{background:var(--brand)}
+    /* tabs / superpower */
+    .tabs{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin:2rem 0 1.6rem}
+    .tab{font-family:var(--font);font-weight:800;font-size:.76rem;letter-spacing:.08em;padding:.6rem 1.15rem;border-radius:50px;border:1.5px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .3s}
+    .tab:hover{border-color:var(--brand);color:var(--brand-deep)}.tab[aria-selected="true"]{background:var(--brand-deep);border-color:var(--brand-deep);color:#fff;transform:translateY(-2px)}
+    .power{display:grid;grid-template-columns:1fr 1fr;gap:1.4rem;background:var(--surface);border:1px solid var(--line);border-radius:26px;padding:2rem;box-shadow:0 18px 50px rgba(36,95,90,.07)}
+    @media(max-width:820px){.power{grid-template-columns:1fr;padding:1.3rem}}
+    .power h3{font-size:1.8rem;margin-bottom:.4rem;color:var(--brand-deep)}.power ul{list-style:none;margin-top:1rem;display:grid;gap:.55rem}
+    .power li{display:flex;gap:.6rem;align-items:flex-start;font-weight:600}.power li i{color:var(--brand);margin-top:.28rem}
+    .try{background:var(--sage);border-radius:18px;padding:1.2rem;align-self:stretch}.try small{font-size:.66rem;font-weight:800;letter-spacing:.14em;color:var(--brand-deep);text-transform:uppercase}
+    .try p{margin-top:.5rem;font-weight:700;font-size:1.02rem}.try .out{margin-top:.8rem;background:var(--surface);border-radius:12px;padding:.8rem .9rem;font-size:.9rem;font-weight:500;color:var(--muted)}
+    /* statement */
+    .statement{background:var(--brand-deep);color:#fff;text-align:center}
+    .statement h2{font-size:clamp(2rem,5.4vw,4rem);max-width:18ch;margin-inline:auto}.statement h2 em{font-style:normal;color:var(--gold)}
+    .statement .lead{color:#cfe9e4;margin-inline:auto}
+    .scenario{background:var(--paper)}
+    .sc-top{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:1.2rem 1.4rem;font-weight:700;font-size:1.15rem;max-width:34rem;margin:0 auto 1.6rem;text-align:center}
+    .sc-top i{color:var(--gold);margin-right:.5rem}
+    .roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem}
+    .role{font-family:var(--font);text-align:left;border:1.5px solid var(--line);background:var(--surface);border-radius:16px;padding:.9rem;cursor:pointer;transition:all .3s}
+    .role b{display:block;font-size:.88rem;color:var(--brand-deep)}.role span{font-size:.76rem;color:var(--muted);font-weight:600}
+    .role:hover{transform:translateY(-3px);border-color:var(--brand)}.role[aria-pressed="true"]{background:var(--brand);border-color:var(--brand)}.role[aria-pressed="true"] b,.role[aria-pressed="true"] span{color:#fff}
+    .role-out{margin:1.2rem auto 0;max-width:46rem;background:var(--surface);border-left:5px solid var(--brand);border-radius:14px;padding:1.1rem 1.3rem;font-weight:600;min-height:4.5rem}
+    .moral{margin-top:1.6rem;font-weight:800;font-size:1.15rem;color:var(--brand-deep)}
+    /* journey */
+    .journey{background:var(--dark);color:#fff}.journey .eyebrow{color:var(--brand-soft)}.journey .lead{color:var(--dark-muted)}
+    .levels{margin-top:2.6rem;display:grid;gap:.8rem;position:relative}
+    .level{display:grid;grid-template-columns:70px 1fr;gap:1rem;align-items:center;border:1px solid var(--dark-line);border-radius:18px;padding:1rem 1.2rem;background:rgba(255,255,255,.03);transition:all .4s;cursor:default}
+    .level:hover{background:rgba(85,191,179,.1);border-color:var(--brand);transform:translateX(6px)}
+    .level .n{font-size:1.9rem;font-weight:800;color:var(--brand)}.level .n small{display:block;font-size:.55rem;letter-spacing:.14em;color:var(--dark-muted)}
+    .level h3{font-size:1.1rem}.level p{font-size:.9rem;color:var(--dark-muted);font-weight:500}
+    .level:last-child{border-color:var(--gold)}.level:last-child .n{color:var(--gold)}
+    .goal{margin-top:2.4rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem}
+    .goal div{border-radius:14px;background:rgba(255,255,255,.05);padding:.8rem 1rem;font-weight:700;font-size:.88rem;display:flex;gap:.6rem;align-items:center}.goal i{color:var(--gold)}
+    /* cards */
+    .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:1rem;margin-top:2.4rem}
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:1.4rem;transition:all .4s cubic-bezier(.16,1,.3,1)}
+    .card:hover{transform:translateY(-6px);box-shadow:0 18px 40px rgba(36,95,90,.12);border-color:var(--brand)}
+    .card .ic{width:44px;height:44px;border-radius:13px;background:var(--sage);color:var(--brand-deep);display:grid;place-items:center;margin-bottom:.9rem;font-size:1.05rem}
+    .card h3{font-size:1.02rem;margin-bottom:.35rem;letter-spacing:0}.card p{font-size:.88rem;color:var(--muted);font-weight:500}
+    .card .tag{font-size:.64rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+    .skills{background:var(--sage)}.skills .card{background:var(--surface)}
+    .quote{margin-top:2rem;text-align:center;font-weight:800;font-size:1.2rem;color:var(--brand-deep)}
+    /* lab */
+    .lab{background:var(--dark);color:#fff}.lab .eyebrow{color:var(--brand-soft)}.lab .lead{color:var(--dark-muted)}
+    .lab-wrap{display:grid;grid-template-columns:260px 1fr;gap:1.2rem;margin-top:2.2rem}
+    @media(max-width:860px){.lab-wrap{grid-template-columns:1fr}}
+    .exps{display:flex;flex-direction:column;gap:.5rem}@media(max-width:860px){.exps{flex-direction:row;overflow-x:auto;padding-bottom:.4rem}.exps .exp{min-width:200px}}
+    .exp{font-family:var(--font);text-align:left;color:#fff;background:rgba(255,255,255,.04);border:1px solid var(--dark-line);border-radius:14px;padding:.8rem .95rem;cursor:pointer;transition:all .3s}
+    .exp small{display:block;font-size:.6rem;letter-spacing:.14em;color:var(--brand-soft);font-weight:800}.exp b{font-size:.9rem}
+    .exp:hover{border-color:var(--brand)}.exp[aria-selected="true"]{background:var(--brand);border-color:var(--brand)}.exp[aria-selected="true"] small{color:#fff}
+    .stage{background:rgba(255,255,255,.04);border:1px solid var(--dark-line);border-radius:22px;padding:1.4rem;min-height:340px}
+    .stage h3{font-size:1.35rem;margin-bottom:.3rem}.stage .why{color:var(--dark-muted);font-size:.9rem;margin-bottom:1.1rem;font-weight:500}
+    .bubble{border-radius:14px;padding:.8rem 1rem;margin-bottom:.7rem;font-size:.92rem;font-weight:500;animation:pop .5s cubic-bezier(.16,1,.3,1)}
+    .bubble.you{background:rgba(255,255,255,.08)}.bubble.ai{background:rgba(85,191,179,.16);color:#d8f1ed}
+    .bubble.note{background:rgba(245,200,66,.14);color:var(--gold-soft);font-weight:700}.bubble small{display:block;font-size:.6rem;letter-spacing:.14em;font-weight:800;opacity:.7;margin-bottom:.2rem}
+    @keyframes pop{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+    .stage-actions{display:flex;gap:.6rem;align-items:center;margin-top:1rem;flex-wrap:wrap}.stage-actions .btn{padding:.6rem 1.3rem;font-size:.72rem}
+    .stage .fine{font-size:.72rem;color:var(--dark-muted)}
+    .levels-sw{display:flex;gap:.4rem;margin-bottom:1rem}.levels-sw button{font-family:var(--font);font-weight:800;font-size:.72rem;border-radius:50px;border:1px solid var(--dark-line);background:transparent;color:#fff;padding:.4rem .9rem;cursor:pointer}.levels-sw button[aria-pressed="true"]{background:var(--gold);color:var(--brand-deep);border-color:var(--gold)}
+    /* chips */
+    .chips{display:flex;flex-wrap:wrap;gap:.7rem;margin-top:2rem;justify-content:center}
+    .chip{background:var(--surface);border:1.5px solid var(--line);border-radius:50px;padding:.75rem 1.3rem;font-weight:800;font-size:.9rem;color:var(--brand-deep);transition:all .3s}.chip i{color:var(--brand);margin-right:.5rem}.chip:hover{background:var(--brand);color:#fff;border-color:var(--brand);transform:translateY(-3px) rotate(-1deg)}.chip:hover i{color:#fff}
+    .flow{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:center;margin-top:2.2rem}
+    .flow span{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:.7rem 1.1rem;font-weight:800;font-size:.8rem;letter-spacing:.08em;color:var(--brand-deep)}.flow i{color:var(--brand)}
+    .flow span:nth-of-type(1){background:var(--brand-deep);color:#fff;border-color:var(--brand-deep)}.flow span:last-of-type{background:var(--gold);border-color:var(--gold)}
+    /* statuses */
+    .status{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:center;margin-top:1.4rem}.status span{font-size:.7rem;font-weight:800;letter-spacing:.1em;padding:.4rem .9rem;border-radius:50px;background:var(--sage);color:var(--brand-deep)}.status span:last-child{background:var(--success);color:#fff}
+    /* wall */
+    .wall{background:var(--sage)}
+    .wall-card{background:var(--surface);border-radius:20px;overflow:hidden;border:1px solid var(--line);cursor:pointer;transition:all .4s cubic-bezier(.16,1,.3,1);text-align:left;font-family:var(--font);padding:0;display:block;width:100%}
+    .wall-card:hover{transform:translateY(-6px);box-shadow:0 18px 40px rgba(36,95,90,.14)}
+    .wall-cover{height:140px;background:linear-gradient(135deg,var(--brand-deep),var(--brand));display:grid;place-items:center;color:#fff;font-size:2.2rem;background-size:cover;background-position:center}
+    .wall-body{padding:1rem 1.1rem}.wall-body h3{font-size:1rem;letter-spacing:0}.wall-body small{color:var(--muted);font-weight:600}
+    .wall-empty{grid-column:1/-1;text-align:center;padding:2rem;border:2px dashed var(--brand);border-radius:20px;background:var(--surface);font-weight:700;color:var(--brand-deep)}
+    .drop{margin-top:2.4rem;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:1.6rem;display:grid;grid-template-columns:1.3fr 1fr;gap:1.4rem;align-items:center}
+    @media(max-width:760px){.drop{grid-template-columns:1fr}}
+    .drop h3{font-size:1.4rem;margin:.3rem 0 .5rem;color:var(--brand-deep)}.drop ul{list-style:none;display:grid;gap:.35rem;font-size:.9rem;font-weight:600}.drop li i{color:var(--brand);margin-right:.5rem}
+    .toolbox{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.8rem;margin-top:2rem}
+    .toolbox div{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:1.1rem}.toolbox b{display:block;color:var(--brand-deep);letter-spacing:.1em;font-size:.78rem;margin-bottom:.4rem}.toolbox span{font-size:.86rem;font-weight:600;color:var(--muted)}
+    /* final + footer */
+    .final{background:var(--dark);color:#fff;text-align:center;position:relative;overflow:hidden}
+    .final::before{content:"";position:absolute;left:50%;top:50%;width:70vw;height:70vw;max-width:800px;max-height:800px;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(85,191,179,.22),transparent 65%)}
+    .final .container{position:relative}.final h2{font-size:clamp(2rem,5.4vw,4rem);max-width:16ch;margin-inline:auto}.final p{color:var(--dark-muted);margin:0 auto 2rem;max-width:34rem}
+    .site-footer{background:#0a120e;color:var(--dark-muted);padding:2.4rem 0;font-size:.85rem}.site-footer .container{display:flex;gap:1rem;justify-content:space-between;flex-wrap:wrap}.site-footer a:hover{color:var(--brand-soft)}.site-footer nav{display:flex;gap:1.2rem;flex-wrap:wrap}
+    /* showcase modal */
+    .modal{position:fixed;inset:0;background:rgba(15,26,20,.7);display:none;place-items:center;z-index:2000;padding:1rem}.modal.open{display:grid}
+    .modal-card{background:var(--surface);border-radius:26px;width:min(560px,100%);overflow:hidden;max-height:92vh;overflow-y:auto}
+    .modal-card .wall-cover{height:190px}.modal-body{padding:1.5rem}.modal-body h3{font-size:1.6rem;color:var(--brand-deep);margin-bottom:.3rem}
+    .modal-body .tags{display:flex;gap:.4rem;flex-wrap:wrap;margin:.8rem 0}.modal-body .tags span{background:var(--sage);color:var(--brand-deep);font-size:.7rem;font-weight:800;border-radius:50px;padding:.25rem .7rem}
+    .built{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.78rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-deep);display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center}
+  </style>
+</head>
+<body>
+<a class="skip" href="#main-content">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="index.html" class="logo" aria-label="Paisley Studio home">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" class="logo-img" width="38" height="38">
+      <span class="logo-word">Paisley<b>TECH</b></span>
+    </a>
+    <nav class="main-nav" aria-label="Primary">
+      <a href="#superpower">Superpower</a><a href="#journey">The journey</a><a href="#lab">AI Lab</a><a href="#build">Builds</a><a href="#wall">Tech Wall</a>
+    </nav>
+    <div class="header-cta">
+      <a href="tech/index.html" class="signin">Sign in</a>
+      <a href="tech/index.html?tab=signup" class="btn btn-primary">Start Today</a>
+    </div>
+  </div>
+</header>
+
+<main id="main-content">
+<!-- HERO -->
+<section class="hero" aria-labelledby="heroTitle">
+  <div class="container hero-grid">
+    <div>
+      <div class="eyebrow">Paisley TECH · Digital AI Literacy</div>
+      <h1 id="heroTitle">AI isn't the future. <em>Knowing what to do with it is.</em></h1>
+      <p class="lead">Learn how to use AI to think faster, work smarter, create better, solve harder problems and turn ideas into reality.</p>
+      <div class="hero-cta">
+        <a href="tech/index.html?tab=signup" class="btn btn-primary">Start today <i class="fas fa-arrow-right"></i></a>
+        <a href="#superpower" class="btn btn-light">See what you could do</a>
+      </div>
+      <div class="nos" aria-label="What you need">
+        <span><i class="fas fa-check"></i>No coding needed</span><span><i class="fas fa-check"></i>No tech background</span><span><i class="fas fa-check"></i>No AI experience</span>
+      </div>
+    </div>
+    <div class="prompt-card reveal" aria-live="polite">
+      <small>One idea, many ways to use AI</small>
+      <div class="q" id="heroQ"></div>
+      <div class="a" id="heroA"></div>
+      <div class="prompt-dots" id="heroDots"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SUPERPOWER -->
+<section id="superpower" aria-labelledby="spTitle">
+  <div class="container center">
+    <div class="eyebrow">What if…</div>
+    <h2 id="spTitle">What if AI became your superpower?</h2>
+    <p class="lead">Not just for coders. For thinking, working, creating, learning and staying safe — in whatever world you're in.</p>
+    <div class="tabs" role="tablist" aria-label="Ways to use AI" id="spTabs"></div>
+    <div class="power reveal" id="spPanel" role="tabpanel" style="text-align:left"></div>
+  </div>
+</section>
+
+<!-- STATEMENT -->
+<section class="statement" aria-labelledby="stTitle">
+  <div class="container">
+    <h2 id="stTitle">You don't learn AI. <em>You learn what you can do with it.</em></h2>
+    <p class="lead">Knowing how a tool works is a start. Knowing what to ask, when to trust it, when to push back and what to make with it — that's the skill.</p>
+  </div>
+</section>
+
+<section class="scenario" aria-labelledby="scTitle">
+  <div class="container center">
+    <div class="eyebrow">A real scenario</div>
+    <h2 id="scTitle">One problem. Seven different AIs.</h2>
+    <div class="sc-top reveal"><i class="fas fa-flask"></i>“I have a science project due Friday.”</div>
+    <div class="roles" id="roles"></div>
+    <div class="role-out" id="roleOut" aria-live="polite"></div>
+    <p class="moral">AI isn't just an answer machine. Used properly, it becomes a thinking and working partner.</p>
+  </div>
+</section>
+
+<!-- JOURNEY -->
+<section class="journey" id="journey" aria-labelledby="jTitle">
+  <div class="container">
+    <div class="eyebrow">The AI literacy journey</div>
+    <h2 id="jTitle">Seven levels. One direction: more capable.</h2>
+    <p class="lead">Every level builds the judgement that makes AI actually useful — not just the buttons to press.</p>
+    <div class="levels" id="levels"></div>
+    <div class="goal" id="goal"></div>
+  </div>
+</section>
+
+<!-- SKILLS -->
+<section class="skills" aria-labelledby="skTitle">
+  <div class="container center">
+    <div class="eyebrow">What you take away</div>
+    <h2 id="skTitle">Skills that stay with you when the tools change.</h2>
+    <p class="lead">Tools come and go. These are the human capabilities AI makes more valuable.</p>
+    <div class="cards" id="skillCards" style="text-align:left"></div>
+    <p class="quote">“Could AI help me solve this?” — the question that changes everything.</p>
+  </div>
+</section>
+
+<!-- EVERYWHERE -->
+<section aria-labelledby="evTitle">
+  <div class="container center">
+    <div class="eyebrow">AI belongs everywhere</div>
+    <h2 id="evTitle">AI applies to <em style="font-style:normal;color:var(--brand)">your</em> world.</h2>
+    <p class="lead">Whatever you want to do next, there's a way AI can make you better at it.</p>
+    <div class="cards" id="fieldCards" style="text-align:left"></div>
+  </div>
+</section>
+
+<!-- AI LAB -->
+<section class="lab" id="lab" aria-labelledby="labTitle">
+  <div class="container">
+    <div class="eyebrow">AI Lab</div>
+    <h2 id="labTitle">Don't just read about AI literacy. Try it.</h2>
+    <p class="lead">Five small experiments that show the difference between using AI and using it well.</p>
+    <div class="lab-wrap">
+      <div class="exps" id="exps" role="tablist" aria-label="Experiments"></div>
+      <div class="stage" id="stage" role="tabpanel" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- BUILDS -->
+<section id="build" aria-labelledby="bTitle">
+  <div class="container center">
+    <div class="eyebrow">What will you build?</div>
+    <h2 id="bTitle">Ideas become things.</h2>
+    <p class="lead">These are possibilities, not requirements. Pick what matters to you — your coach helps you get there.</p>
+    <div class="chips" id="chips"></div>
+    <h2 style="margin-top:4rem;font-size:clamp(1.5rem,3vw,2.2rem)">How learning works in TECH</h2>
+    <p class="lead">Not course → module → quiz → certificate. Missions, builds and real feedback.</p>
+    <div class="flow" id="flow"></div>
+    <div class="status" aria-label="Project stages"><span>IDEA</span><span>LEARNING</span><span>BUILDING</span><span>TESTING</span><span>READY</span></div>
+  </div>
+</section>
+
+<!-- WALL + DROP + TOOLBOX -->
+<section class="wall" id="wall" aria-labelledby="wTitle">
+  <div class="container center">
+    <div class="eyebrow">The Tech Wall</div>
+    <h2 id="wTitle">What students have made.</h2>
+    <p class="lead">Approved projects from Paisley TECH builders — shown for what they made, not their grades.</p>
+    <div class="cards" id="wallGrid" style="text-align:left"><div class="wall-empty">Loading the wall…</div></div>
+
+    <div class="drop reveal" style="text-align:left">
+      <div>
+        <div class="eyebrow" style="margin:0">Example · Monthly TECH Drop</div>
+        <h3>Build an AI-powered website for a business you know.</h3>
+        <ul><li><i class="fas fa-file-lines"></i>Challenge brief and starter material</li><li><i class="fas fa-link"></i>Resources and examples</li><li><i class="fas fa-clock"></i>A deadline and a submission</li><li><i class="fas fa-star"></i>A chance to be featured on the wall</li></ul>
+      </div>
+      <div><a href="tech/index.html?tab=signup" class="btn btn-gold">Join the next drop <i class="fas fa-arrow-right"></i></a></div>
+    </div>
+
+    <h2 style="margin-top:4rem;font-size:clamp(1.5rem,3vw,2.2rem)">An AI Toolbox organised by what you want to do</h2>
+    <div class="toolbox" style="text-align:left">
+      <div><b>BUILD</b><span>Chatbots · Websites · Apps · Games</span></div>
+      <div><b>CREATE</b><span>Images · Video · Music · Voice</span></div>
+      <div><b>THINK</b><span>Research · Writing · Brainstorming · Study</span></div>
+      <div><b>WORK</b><span>Presentations · Documents · Data · Automation</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL -->
+<section class="final" aria-labelledby="fTitle">
+  <div class="container">
+    <h2 id="fTitle">You could become much more capable.</h2>
+    <p>Create your TECH account. Your first question is simple: what are we building?</p>
+    <a href="tech/index.html?tab=signup" class="btn btn-primary">Start today <i class="fas fa-arrow-right"></i></a>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div>© <span id="yr"></span> Paisley Studio · Paisley TECH</div>
+    <nav aria-label="Footer"><a href="index.html">Paisley Studio</a><a href="tuition.html">Tuition</a><a href="why-paisley.html">Why Paisley</a><a href="index.html#contact">Contact</a><a href="tech/index.html">Sign in</a></nav>
+  </div>
+</footer>
+
+<!-- Shared build modal -->
+<div class="modal" id="buildModal" role="dialog" aria-modal="true" aria-label="Student project">
+  <div class="modal-card" id="buildCard"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+$('yr').textContent=new Date().getFullYear();
+
+/* ---- hero rotating prompts ---- */
+var HERO=[
+ ['"I have a business idea but don\'t know where to start."','Turn it into a one-page concept: who it helps, what it costs, who else is doing it, and the three riskiest assumptions to test first.'],
+ ['"I don\'t understand this biology chapter."','Explained three ways — simply, with an analogy, then as an exam answer — followed by five practice questions to check you really got it.'],
+ ['"Is this message from my bank real?"','Spot the warning signs: urgency, odd links, mismatched sender. Then learn what to verify before you ever click.'],
+ ['"I want to make a game for my friends."','Break it into rules, art, levels and a first playable version you can finish this week.']
+];
+var hi=0,hq=$('heroQ'),ha=$('heroA'),hd=$('heroDots');
+hd.innerHTML=HERO.map(function(){return'<i></i>'}).join('');
+function heroShow(){hq.textContent=HERO[hi][0];ha.textContent=HERO[hi][1];[].forEach.call(hd.children,function(d,i){d.classList.toggle('on',i===hi)});hi=(hi+1)%HERO.length}
+heroShow();
+if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)setInterval(heroShow,5200);
+
+/* ---- superpower tabs ---- */
+var SP=[
+ ['THINK','fa-brain','Analyse. Challenge. Decide.',['Analyse problems from several angles','Challenge your own assumptions','Compare ideas side by side','Spot patterns you would have missed','Make better decisions'],'Give me the strongest argument for AND against moving to a new school.','Two balanced cases, the hidden assumption in each, and the three questions that would settle it.'],
+ ['WORK','fa-bolt','Turn hours into minutes.',['Research faster','Organise messy information','Summarise long material','Automate repetitive tasks','Get to a useful first draft sooner'],'Summarise these 12 pages into a one-page brief with action points.','A tight brief, the five decisions it needs, and a checklist — ready to refine.'],
+ ['CREATE','fa-palette','From imagination to something real.',['Images and illustrations','Videos and presentations','Stories and scripts','Music and voice','Brands and whole campaigns'],'Build a launch campaign for a school bake sale.','A name, a tagline, poster ideas, three social posts and a one-week plan.'],
+ ['DISCOVER','fa-compass','Follow your curiosity.',['Investigate any topic','Explore possibilities','Test ideas quickly','Run your own research','Learn unfamiliar subjects'],'What would I need to know to understand how vaccines are developed?','A learning map from basics to detail, with the right questions to ask next.'],
+ ['SOLVE','fa-puzzle-piece','Make big problems manageable.',['Break problems into parts','Brainstorm solutions','Test alternatives','Improve ideas','Decide what to try first'],'Our school loses a lot of food waste every day. Where could we begin?','Five causes, ten ideas ranked by effort and impact, and one small pilot to run on Monday.'],
+ ['COMMUNICATE','fa-comments','Say it so people get it.',['Write better','Explain better','Present better','Translate','Prepare for important conversations'],'Help me ask my teacher for an extension without sounding like I\'m making excuses.','A clear, respectful message — and a version you can say out loud.'],
+ ['LEARN','fa-graduation-cap','Study smarter, at your pace.',['Ask better questions','Practise and revise','Understand difficult concepts','Get a patient explainer','Learn at your own pace'],'Quiz me on photosynthesis, then tell me what I still don\'t understand.','Questions that get harder, plus a plain-language fix for each mistake.'],
+ ['PROTECT','fa-shield-halved','Stay safe, stay sharp.',['Understand privacy','Recognise scams','Spot misinformation','Understand deepfakes','Protect personal information and use AI responsibly'],'How can I tell if this video of a famous person is real?','A verification checklist: source, context, artefacts and how to cross-check.'],
+ ['BUILD','fa-hammer','Websites, apps, games, prototypes.',['Websites and apps','Games and prototypes','Your own AI assistant','Digital products','Business concepts'],'Help me prototype a study-timetable app I can show my class.','A feature list, a simple design, a first version — and what to improve next.']
+];
+var spT=$('spTabs'),spP=$('spPanel'),spI=0;
+spT.innerHTML=SP.map(function(s,i){return'<button class="tab" role="tab" id="sp'+i+'" aria-selected="'+(i===0)+'" aria-controls="spPanel" data-i="'+i+'">'+s[0]+'</button>'}).join('');
+function spShow(i){spI=i;var s=SP[i];[].forEach.call(spT.children,function(b,j){b.setAttribute('aria-selected',j===i)});
+ spP.setAttribute('aria-labelledby','sp'+i);
+ spP.innerHTML='<div><div class="eyebrow">'+s[0]+'</div><h3><i class="fas '+s[1]+'" style="font-size:1.3rem;margin-right:.5rem;color:var(--brand)"></i>'+esc(s[2])+'</h3><ul>'+s[3].map(function(x){return'<li><i class="fas fa-circle-check"></i>'+esc(x)+'</li>'}).join('')+'</ul>'+(s[0]==='BUILD'?'<p style="margin-top:1rem;font-size:.85rem;color:var(--muted);font-weight:600">Building is one part of TECH — not all of it.</p>':'')+'</div><div class="try"><small>Try asking</small><p>“'+esc(s[4])+'”</p><div class="out"><b style="color:var(--brand-deep)">What you could get:</b> '+esc(s[5])+'</div></div>';}
+spT.addEventListener('click',function(e){var b=e.target.closest('[data-i]');if(b)spShow(+b.dataset.i)});
+spT.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key==='ArrowLeft'){var n=(spI+(e.key==='ArrowRight'?1:-1)+SP.length)%SP.length;spShow(n);$('sp'+n).focus()}});
+spShow(0);
+
+/* ---- scenario roles ---- */
+var ROLES=[
+ ['Research assistant','Finds and organises','Collects what is known about your topic, sorted into what matters — and shows you where to verify it.'],
+ ['Idea generator','Sparks options','Suggests ten project ideas at different difficulty levels so you can choose one you actually care about.'],
+ ['Explainer','Makes it clear','Explains the hard part three ways until it clicks: simply, with an analogy, then at exam level.'],
+ ['Research critic','Pokes holes','Challenges your claims, finds weak evidence and asks "how do you know?" before your teacher does.'],
+ ['Presentation designer','Shapes the story','Turns your findings into a clear structure, slide outline and speaker notes in your own words.'],
+ ['Practice partner','Rehearses with you','Plays the curious audience: asks tough questions so Friday feels familiar, not frightening.'],
+ ['Final reviewer','Checks the work','Reviews clarity, accuracy and gaps — and you decide what to change. The project stays yours.']
+];
+var rl=$('roles'),ro=$('roleOut');
+rl.innerHTML=ROLES.map(function(r,i){return'<button class="role" aria-pressed="'+(i===0)+'" data-i="'+i+'"><b>'+esc(r[0])+'</b><span>'+esc(r[1])+'</span></button>'}).join('');
+function roleShow(i){[].forEach.call(rl.children,function(b,j){b.setAttribute('aria-pressed',j===i)});ro.innerHTML='<b style="color:var(--brand-deep)">'+esc(ROLES[i][0])+':</b> '+esc(ROLES[i][2])}
+rl.addEventListener('click',function(e){var b=e.target.closest('[data-i]');if(b)roleShow(+b.dataset.i)});roleShow(0);
+
+/* ---- journey ---- */
+var LV=[['AI Aware','Understand what AI is.'],['AI User','Learn how to use AI effectively.'],['AI Thinker','Use AI to analyse, question and reason.'],['AI Creator','Use AI to create.'],['AI Problem Solver','Use AI to tackle real-world problems.'],['AI Builder','Turn ideas into real creations.'],['AI Guru','Know what to ask, when to trust, and how to turn AI into useful outcomes.']];
+$('levels').innerHTML=LV.map(function(l,i){return'<div class="level reveal"><div class="n"><small>LEVEL</small>0'+(i+1)+'</div><div><h3>'+esc(l[0])+'</h3><p>'+esc(l[1])+'</p></div></div>'}).join('');
+$('goal').innerHTML=['what to ask','how to ask','when to trust AI','when to challenge AI','how to verify results','how to improve outputs','how to combine tools','how to turn it into outcomes'].map(function(g){return'<div><i class="fas fa-circle-check"></i>Knowing '+g+'</div>'}).join('');
+
+/* ---- skills ---- */
+var SK=[['SPEED','fa-gauge-high','Move from idea to useful result faster.'],['ACCURACY','fa-bullseye','Verify, refine and improve AI output.'],['CRITICAL THINKING','fa-scale-balanced','Question what AI tells you.'],['PROBLEM SOLVING','fa-puzzle-piece','Break difficult problems into manageable parts.'],['RESEARCH','fa-magnifying-glass','Find, compare and interrogate information.'],['COMMUNICATION','fa-comment-dots','Express ideas clearly.'],['CREATIVITY','fa-wand-magic-sparkles','Turn imagination into something tangible.'],['DIGITAL SAFETY','fa-shield-halved','Understand privacy, scams, misinformation and responsible AI use.'],['ADAPTABILITY','fa-arrows-rotate','Work with new AI tools as technology changes.'],['INITIATIVE','fa-flag','See a problem and ask: "Could AI help me solve this?"']];
+$('skillCards').innerHTML=SK.map(function(s){return'<div class="card reveal"><div class="ic"><i class="fas '+s[1]+'"></i></div><h3>'+s[0]+'</h3><p>'+esc(s[2])+'</p></div>'}).join('');
+
+/* ---- fields ---- */
+var FD=[['Medicine','fa-stethoscope','Create a patient-education assistant.'],['Business','fa-briefcase','Turn an idea into a business concept.'],['Agriculture','fa-seedling','Create an AI-assisted crop research tool.'],['Law','fa-gavel','Turn complicated information into an understandable guide.'],['Education','fa-book-open','Create a personalised study assistant.'],['Journalism','fa-newspaper','Research and organise a story.'],['Finance','fa-coins','Build a personal budgeting assistant.'],['Science','fa-flask','Use AI to investigate a question.'],['Creative arts','fa-paintbrush','Create an entire campaign from an idea.'],['Entrepreneurship','fa-rocket','Identify a problem and prototype a solution.'],['Technology','fa-microchip','Build something functional.']];
+$('fieldCards').innerHTML=FD.map(function(f){return'<div class="card reveal"><div class="ic"><i class="fas '+f[1]+'"></i></div><span class="tag">In '+esc(f[0])+'</span><h3 style="margin-top:.2rem">'+esc(f[2])+'</h3></div>'}).join('');
+
+/* ---- AI Lab (controlled demonstrations — no live AI calls) ---- */
+var LAB=[
+ {k:'01',t:'Give AI a bad question',w:'Vague questions get vague answers.',steps:[['you','Tell me about climate.'],['ai','Climate is the long-term pattern of weather in a region. It is affected by many factors, including greenhouse gases, oceans and human activity. There is a lot to say about this topic…'],['note','Too broad to be useful. AI had to guess what you wanted.']]},
+ {k:'02',t:'Improve the question',w:'Add who you are, what you need and the shape of the answer.',steps:[['you','Tell me about climate.'],['note','Now improve it →'],['you','I\'m 15 and preparing a 5-minute talk on how climate change affects Kenyan farmers. Give me 3 key points, one real example each, and what to verify.'],['ai','Three focused points — shifting rains, crop disease range, and water access — each with an example and a list of sources to check before you present.'],['note','Context + goal + format = a useful answer.']]},
+ {k:'03',t:'Ask AI to argue against you',w:'A thinking partner should challenge you, not flatter you.',steps:[['you','I think school should start at 10am. Argue the strongest case AGAINST me.'],['ai','Transport and parents\' work schedules; later finish cuts into after-school clubs and sleep that evening; learning-time needs to be made up. Your best reply would address these.'],['note','Now you know what to prepare for.']]},
+ {k:'04',t:'Ask AI to find flaws in its own answer',w:'First answers are drafts. Make AI check itself — then check it yourself.',steps:[['you','Now list what could be wrong or missing in your last answer.'],['ai','Some figures may be out of date, I generalised across regions, and I can\'t confirm my example is current. Verify the statistics with an official source.'],['note','Never treat confident-sounding as correct.']]},
+ {k:'05',t:'Explain it at different levels',w:'Same topic, different depth — you choose where you start.',lv:{'Age 8':'A battery is a little box that stores energy, like a water bottle stores water, and lets it out when a gadget needs it.','Teenager':'Batteries store chemical energy and convert it to electrical energy when ions move between two electrodes through an electrolyte.','Expert':'Charge/discharge involves reversible redox reactions at anode and cathode with ion intercalation; capacity fade is driven by SEI growth and lithium plating.'}}
+];
+var ex=$('exps'),stage=$('stage'),exI=0,stI=0;
+ex.innerHTML=LAB.map(function(l,i){return'<button class="exp" role="tab" aria-selected="'+(i===0)+'" data-i="'+i+'"><small>EXPERIMENT '+l.k+'</small><b>'+esc(l.t)+'</b></button>'}).join('');
+function labShow(i){exI=i;stI=0;[].forEach.call(ex.children,function(b,j){b.setAttribute('aria-selected',j===i)});drawLab()}
+function drawLab(){var l=LAB[exI];var h='<h3>'+esc(l.t)+'</h3><p class="why">'+esc(l.w)+'</p>';
+ if(l.lv){var keys=Object.keys(l.lv);var cur=l._cur||keys[0];h+='<div class="bubble you"><small>YOU</small>Explain how a battery works.</div><div class="levels-sw" role="group" aria-label="Level">'+keys.map(function(k){return'<button aria-pressed="'+(k===cur)+'" data-lv="'+esc(k)+'">'+esc(k)+'</button>'}).join('')+'</div><div class="bubble ai"><small>AI · '+esc(cur.toUpperCase())+'</small>'+esc(l.lv[cur])+'</div><div class="bubble note">Ask again at a different level whenever you get stuck.</div>';}
+ else{for(var s=0;s<=stI&&s<l.steps.length;s++){var st=l.steps[s];h+='<div class="bubble '+st[0]+'"><small>'+(st[0]==='you'?'YOU':st[0]==='ai'?'AI':'WHAT HAPPENED')+'</small>'+esc(st[1])+'</div>'}
+  h+='<div class="stage-actions">'+(stI<l.steps.length-1?'<button class="btn btn-primary" id="labNext">Next <i class="fas fa-arrow-right"></i></button>':'<button class="btn btn-gold" id="labAgain">Replay</button>')+'</div>';}
+ h+='<p class="fine" style="margin-top:1rem">Illustrative examples, written by us — not live AI responses.</p>';
+ stage.innerHTML=h}
+ex.addEventListener('click',function(e){var b=e.target.closest('[data-i]');if(b)labShow(+b.dataset.i)});
+stage.addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;if(t.id==='labNext'){stI++;drawLab()}else if(t.id==='labAgain'){stI=0;drawLab()}else if(t.dataset.lv){LAB[exI]._cur=t.dataset.lv;drawLab()}});
+labShow(0);
+
+/* ---- build chips + flow ---- */
+var BC=[['fa-robot','Your own AI assistant'],['fa-globe','An AI-powered website'],['fa-gamepad','An AI game'],['fa-book-open','An AI study system'],['fa-magnifying-glass-chart','An AI research assistant'],['fa-lightbulb','A business prototype'],['fa-chart-line','A data dashboard'],['fa-bullhorn','A creative campaign'],['fa-film','An AI film'],['fa-mobile-screen','A mobile app'],['fa-box-open','A digital product'],['fa-earth-africa','A solution to a real-world problem']];
+$('chips').innerHTML=BC.map(function(c){return'<span class="chip"><i class="fas '+c[0]+'"></i>'+esc(c[1])+'</span>'}).join('');
+$('flow').innerHTML=['PATH','MISSION','TOPIC','BUILD','TEST','COACH FEEDBACK','IMPROVE','SHOW'].map(function(f,i,a){return'<span>'+f+'</span>'+(i<a.length-1?'<i class="fas fa-chevron-right" aria-hidden="true"></i>':'')}).join('');
+
+/* ---- Tech Wall (public, approved projects only) ---- */
+var wallData={};
+function coverStyle(w){return w.coverUrl&&/^https:\/\//.test(w.coverUrl)?' style="background-image:url(\''+encodeURI(w.coverUrl).replace(/'/g,'%27')+'\')"':''}
+function openBuild(id){var w=wallData[id];if(!w)return;var c=$('buildCard');
+ c.innerHTML='<div class="wall-cover"'+coverStyle(w)+'>'+(w.coverUrl?'':'<i class="fas fa-hammer"></i>')+'</div><div class="modal-body"><h3>'+esc(w.title)+'</h3><small style="color:var(--muted);font-weight:700">Built by '+esc(w.displayName||'a Paisley student')+' · '+esc(w.category||'')+'</small><p style="margin-top:.8rem;font-weight:500">'+esc(w.description||'')+'</p>'+((w.skills||[]).length?'<div class="tags">'+w.skills.map(function(s){return'<span>'+esc(s)+'</span>'}).join('')+'</div>':'')+
+ (w.previewUrl&&/^https?:\/\//.test(w.previewUrl)?'<a class="btn btn-primary" style="margin-top:.6rem" target="_blank" rel="noopener" href="'+esc(w.previewUrl)+'">View the build <i class="fas fa-arrow-up-right-from-square"></i></a>':'')+
+ '<div class="built"><span>Built with Paisley TECH</span><a href="tech/index.html?tab=signup" style="color:var(--brand)">Start yours →</a></div><button class="btn btn-ghost" id="mClose" style="margin-top:1rem;padding:.55rem 1.2rem;font-size:.7rem">Close</button></div>';
+ $('buildModal').classList.add('open');document.title=w.title+' — built with Paisley TECH';$('mClose').focus();
+ try{history.replaceState(null,'','?build='+encodeURIComponent(id)+'#wall')}catch(e){}}
+function closeBuild(){$('buildModal').classList.remove('open');document.title='Paisley TECH | Digital AI Literacy — Learn What You Can Do With AI';try{history.replaceState(null,'',location.pathname+'#wall')}catch(e){}}
+$('buildModal').addEventListener('click',function(e){if(e.target===this||e.target.id==='mClose')closeBuild()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeBuild()});
+$('wallGrid').addEventListener('click',function(e){var b=e.target.closest('[data-w]');if(b)openBuild(b.dataset.w)});
+function loadWall(){
+ if(typeof db==='undefined'){$('wallGrid').innerHTML='<div class="wall-empty">The wall is warming up.</div>';return}
+ db.collection('techShowcase').get().then(function(snap){
+  var list=snap.docs.map(function(d){var x=d.data();x.id=d.id;wallData[d.id]=x;return x});
+  list.sort(function(a,b){return (b.featured?1:0)-(a.featured?1:0)||((b.approvedAt&&b.approvedAt.seconds)||0)-((a.approvedAt&&a.approvedAt.seconds)||0)});
+  list=list.slice(0,12);
+  $('wallGrid').innerHTML=list.length?list.map(function(w){return'<button class="wall-card" data-w="'+esc(w.id)+'"><div class="wall-cover"'+coverStyle(w)+'>'+(w.coverUrl?'':'<i class="fas fa-hammer"></i>')+'</div><div class="wall-body"><h3>'+esc(w.title)+(w.featured?' <i class="fas fa-star" style="color:var(--gold)" title="Featured"></i>':'')+'</h3><small>Built by '+esc(w.displayName||'a Paisley student')+' · '+esc(w.category||'')+'</small></div></button>'}).join(''):'<div class="wall-empty">The wall is waiting for its first build.<br><small>Approved student projects will appear here. Yours could be first.</small></div>';
+  var q=new URLSearchParams(location.search).get('build');if(q)openBuild(q);
+ }).catch(function(){$('wallGrid').innerHTML='<div class="wall-empty">The wall could not load right now. Please try again shortly.</div>'});
+}
+loadWall();
+
+/* ---- reveal on scroll ---- */
+var io=('IntersectionObserver' in window)?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12}):null;
+[].forEach.call(document.querySelectorAll('.reveal'),function(el){io?io.observe(el):el.classList.add('in')});
+})();
+</script>
+</body>
+</html>

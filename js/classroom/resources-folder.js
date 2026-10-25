@@ -133,6 +133,9 @@
   }
 
   /* ---------- data ---------- */
+  // Exact tutor scope (Key Stage + subject + Years). Older tutors keep subjects + keyStages.
+  function scopeOf(o) { return { teaching: o.teaching, subjects: o.subjects, keyStages: o.keyStages }; }
+  function subjKeys(o) { return typeof lmzTutorSubjectKeys === 'function' ? lmzTutorSubjectKeys(scopeOf(o)) : (o.subjects || []); }
   var cacheCls = null;
   async function loadClassrooms(o) {
     if (!cacheCls) {
@@ -142,6 +145,7 @@
     var subs = o.subjects || [], ks = o.keyStages || [];
     return cacheCls.filter(function (c) {
       if (o.role === 'admin') return true;
+      if (Array.isArray(o.teaching)) return lmzTutorCovers(scopeOf(o), c.subjectId, c.keyStage, c.year);
       if (subs.indexOf(c.subjectId) === -1) return false;
       return !ks.length || /^CBC/i.test(c.keyStage || '') || ks.indexOf(c.keyStage) !== -1;
     });
@@ -157,12 +161,15 @@
       var s = await db().collection('classroomResources').get();
       out = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
     } else {
-      var qs = await Promise.all((o.subjects || []).map(function (sid) {
+      var qs = await Promise.all(subjKeys(o).map(function (sid) {
         return db().collection('classroomResources').where('subjectId', '==', sid).get().catch(function (e) { console.warn('resources ' + sid, e); return { docs: [] }; });
       }));
       qs.forEach(function (q) { q.docs.forEach(function (d) { out.push(Object.assign({ id: d.id }, d.data())); }); });
       var ks = o.keyStages || [];
-      if (ks.length) out = out.filter(function (r) { return /^CBC/i.test(r.keyStage || '') || ks.indexOf(r.keyStage) !== -1; });
+      if (Array.isArray(o.teaching)) {
+        // Files tied to a Key Stage show only where the tutor teaches that exact Key Stage + subject + Year.
+        out = out.filter(function (r) { return !r.keyStage || lmzTutorCovers(scopeOf(o), r.subjectId, r.keyStage, r.year); });
+      } else if (ks.length) out = out.filter(function (r) { return /^CBC/i.test(r.keyStage || '') || ks.indexOf(r.keyStage) !== -1; });
     }
     // Work the Studio Desk has withdrawn is hidden from tutors (the admin still sees it, marked Withdrawn).
     if (o.role !== 'admin') out = out.filter(function (r) { return r.withdrawn !== true; });
@@ -209,7 +216,7 @@
       var m = {};
       S.classrooms.forEach(function (c) { m[c.subjectId] = m[c.subjectId] || { id: c.subjectId, name: subjName(c) }; });
       S.resources.forEach(function (r) { m[r.subjectId] = m[r.subjectId] || { id: r.subjectId, name: r.subjectName || r.subjectId }; });
-      (o.subjects || []).forEach(function (id) { m[id] = m[id] || { id: id, name: (typeof lmzSubjectLabel === 'function' ? lmzSubjectLabel(id) : id) }; });
+      subjKeys(o).forEach(function (id) { m[id] = m[id] || { id: id, name: (typeof lmzSubjectLabel === 'function' ? lmzSubjectLabel(id) : id) }; });
       return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
     }
 

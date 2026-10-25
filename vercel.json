@@ -19,6 +19,9 @@
     { "source": "/tuition",                 "destination": "/tuition.html" },
     { "source": "/tuition/login",           "destination": "/tuition/index.html" },
     { "source": "/tuition/dashboard",       "destination": "/tuition/dashboard.html" },
+    { "source": "/tech",                    "destination": "/tech.html" },
+    { "source": "/tech/login",              "destination": "/tech/index.html" },
+    { "source": "/tech/dashboard",          "destination": "/tech/dashboard.html" },
 
     { "source": "/student",                 "destination": "/student/index.html" },
     { "source": "/student/dashboard",       "destination": "/student/dashboard.html" },

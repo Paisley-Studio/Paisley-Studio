@@ -340,7 +340,7 @@
         '<b style="display:block;margin-top:.5rem">Parents / guardians</b><div class="cr-note">' + (ps.length ? ps.map(function (p) { return esc(p.name || '') + ' &lt;' + esc(p.email || '') + '&gt;'; }).join('<br>') : 'No linked portal accounts yet.') + '</div></div>' +
         '<div class="cr-panel" style="margin-top:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep)">Add a parent / guardian</h4><div class="cr-row2">' +
         '<div class="cr-field"><label for="apName">Name</label><input id="apName" maxlength="120"></div><div class="cr-field"><label for="apEmail">Email</label><input id="apEmail" maxlength="200"></div></div>' +
-        '<div class="cr-field" style="max-width:260px"><label for="apPhone">Phone</label><input id="apPhone" maxlength="40"></div>' +
+        '<div class="cr-field" style="max-width:260px"><label for="apPhone">Phone (required)</label><input id="apPhone" maxlength="40"></div>' +
         '<button type="button" class="cr-btn primary" id="apGo"><i class="fas fa-user-plus"></i> Create / link parent</button> <span class="cr-note" id="apMsg" role="status"></span>' +
         '<div class="cr-note" style="margin-top:.4rem">An existing parent account (matched by email) is reused, so a parent with children on different curriculums keeps one login.</div></div>';
       m.foot.innerHTML = tt.map(function (t) { return '<button type="button" class="cr-btn" data-chat="' + esc(t.id) + '"><i class="fas fa-comments"></i> Chat with ' + esc(t.name) + '</button>'; }).join('') + '<button type="button" class="cr-btn primary" data-a="x">Close</button>';
@@ -355,7 +355,7 @@
       });
       m.body.querySelector('#apGo').onclick = async function () {
         var msg = m.body.querySelector('#apMsg'), name = m.body.querySelector('#apName').value.trim(), email = m.body.querySelector('#apEmail').value.trim(), phone = m.body.querySelector('#apPhone').value.trim();
-        if (!name || !/^\S+@\S+\.\S+$/.test(email)) { toast(msg, 'Enter the parent’s name and a valid email.', true); return; }
+        if (!name || !/^\S+@\S+\.\S+$/.test(email) || phone.replace(/\D/g, '').length < 6) { toast(msg, 'Enter the parent’s name, a valid email and a phone number (required).', true); return; }
         toast(msg, 'Working…');
         try {
           var r = await callable('createParentAccount', { studentId: s.id, parentEmail: email, parentName: name, parentPhone: phone });

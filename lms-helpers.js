@@ -378,6 +378,7 @@ function createTutorAccount(uid, data) {
     slug: data.slug || tutorSlugify(data.name),
     subjects: data.subjects || [],
     keyStages: data.keyStages || [],
+    teaching: Array.isArray(data.teaching) ? data.teaching : [],
     role: 'tutor',
     status: data.status || 'Active',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1233,6 +1234,137 @@ function lmzSubjectWriteFields(list) {
   return { subjects: keys, subjectNames: keys.map(lmzSubjectLabel) };
 }
 
+// =========================================================
+// TUTOR TEACHING SCOPE  (exact Key Stage + subject + Years)
+//
+//   tutorAccounts.teaching = [ { keyStage, subjectId, years:[7,8,9] }, ... ]
+//
+// One entry per Key Stage + subject, listing the exact Years the tutor takes.
+// A tutor sees ONLY those classrooms, resources and timetable sessions: KS3
+// English never exposes KS4 English.
+//
+// `subjects` and `keyStages` on the tutor are still written, as the union of
+// the entries, because the security rules and cloud functions read them.
+//
+// Tutors saved before this existed have no `teaching` field. They keep their old
+// meaning (every ticked subject in every ticked Key Stage, all Years) until the
+// Studio Desk next saves them.
+// =========================================================
+function lmzTeachingKeyStages() {
+  return KEY_STAGES.concat(typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : []);
+}
+
+// Tidy raw entries: one per Key Stage + subject, Years limited to that stage's Years.
+function lmzNormTeaching(list) {
+  var order = lmzTeachingKeyStages(), byKey = {}, out = [];
+  (Array.isArray(list) ? list : []).forEach(function (e) {
+    if (!e) return;
+    var ks = String(e.keyStage || ''), sid = lmzSubjectKey(e.subjectId);
+    if (!ks || !sid || order.indexOf(ks) === -1) return;
+    var valid = lmzYearsForKeyStage(ks);
+    var yrs = (Array.isArray(e.years) ? e.years : []).map(Number).filter(function (y) { return valid.indexOf(y) !== -1; });
+    var k = ks + '|' + sid;
+    if (!byKey[k]) { byKey[k] = { keyStage: ks, subjectId: sid, years: [] }; out.push(byKey[k]); }
+    yrs.forEach(function (y) { if (byKey[k].years.indexOf(y) === -1) byKey[k].years.push(y); });
+  });
+  out.forEach(function (e) { e.years.sort(function (a, b) { return a - b; }); });
+  out.sort(function (a, b) {
+    return (order.indexOf(a.keyStage) - order.indexOf(b.keyStage)) || lmzSubjectLabel(a.subjectId).localeCompare(lmzSubjectLabel(b.subjectId));
+  });
+  return out;
+}
+
+// What an old-style tutor (subjects[] + keyStages[]) effectively teaches, as entries.
+function lmzLegacyTeaching(tutor) {
+  var subs = lmzSubjectKeys(tutor && tutor.subjects), ks = (tutor && tutor.keyStages) || [], out = [];
+  var stages = ks.length ? ks : lmzTeachingKeyStages();
+  stages.forEach(function (k) {
+    var offered = lmzSubjectsForKeyStage(k).map(function (s) { return s.id; });
+    subs.forEach(function (sid) { if (offered.indexOf(sid) !== -1) out.push({ keyStage: k, subjectId: sid, years: [] }); });
+  });
+  return lmzNormTeaching(out);
+}
+
+// The tutor's entries. An empty `years` list means every Year of that Key Stage.
+function lmzTutorTeaching(tutor) {
+  if (tutor && Array.isArray(tutor.teaching)) return lmzNormTeaching(tutor.teaching);
+  return lmzLegacyTeaching(tutor);
+}
+
+// Does this tutor teach this subject in this Key Stage (and Year, when given)?
+function lmzTutorCovers(tutor, subjectId, keyStage, year) {
+  if (!tutor) return false;
+  var sid = lmzSubjectKey(subjectId);
+  if (!sid) return false;
+  if (!Array.isArray(tutor.teaching)) {
+    if (lmzSubjectKeys(tutor.subjects).indexOf(sid) === -1) return false;
+    var ks = tutor.keyStages || [];
+    return !ks.length || ks.indexOf(keyStage) !== -1;
+  }
+  var noYear = year == null || year === '';
+  return lmzNormTeaching(tutor.teaching).some(function (e) {
+    if (e.subjectId !== sid || e.keyStage !== keyStage) return false;
+    return noYear || !e.years.length || e.years.indexOf(Number(year)) !== -1;
+  });
+}
+
+function lmzTutorSubjectKeys(tutor) {
+  if (tutor && Array.isArray(tutor.teaching)) {
+    var out = [];
+    lmzNormTeaching(tutor.teaching).forEach(function (e) { if (out.indexOf(e.subjectId) === -1) out.push(e.subjectId); });
+    return out;
+  }
+  return lmzSubjectKeys(tutor && tutor.subjects);
+}
+
+function lmzTutorKeyStages(tutor) {
+  if (tutor && Array.isArray(tutor.teaching)) {
+    var out = [];
+    lmzNormTeaching(tutor.teaching).forEach(function (e) { if (out.indexOf(e.keyStage) === -1) out.push(e.keyStage); });
+    return out;
+  }
+  return ((tutor && tutor.keyStages) || []).slice();
+}
+
+// Everything to write on a tutor profile for a set of entries.
+function lmzTeachingWriteFields(list) {
+  var teaching = lmzNormTeaching(list), ks = [], subs = [];
+  teaching.forEach(function (e) {
+    if (ks.indexOf(e.keyStage) === -1) ks.push(e.keyStage);
+    if (subs.indexOf(e.subjectId) === -1) subs.push(e.subjectId);
+  });
+  return { teaching: teaching, keyStages: ks, subjects: subs, subjectNames: subs.map(lmzSubjectLabel) };
+}
+
+// "Year 7", "Years 7-9", "Years 7, 9", "Grades 4-6"
+function lmzYearsLabel(keyStage, years) {
+  var all = lmzYearsForKeyStage(keyStage), ys = (years && years.length ? years : all).slice().sort(function (a, b) { return a - b; });
+  var word = lmzIsCbcBand(keyStage) ? 'Grade' : 'Year';
+  if (!ys.length) return '';
+  if (ys.length === 1) return word + ' ' + ys[0];
+  var runs = [], start = ys[0], prev = ys[0];
+  for (var i = 1; i <= ys.length; i++) {
+    if (ys[i] === prev + 1) { prev = ys[i]; continue; }
+    runs.push(start === prev ? String(start) : (prev - start === 1 ? start + ', ' + prev : start + '\u2013' + prev));
+    start = prev = ys[i];
+  }
+  return word + 's ' + runs.join(', ');
+}
+
+// "Key Stage 3", "KS4 IGCSE" style short names.
+function lmzKeyStageShort(ks) {
+  var s = String(ks || '');
+  if (lmzIsCbcBand(s)) return s.replace(/^CBC\s+/i, '').replace(/\s*\(.*/, '');
+  return s.replace(/\s*\(.*/, '');
+}
+
+// Plain-text lines for the tutor's own sidebar / lists: "English \u00b7 Key Stage 3 \u00b7 Years 7\u20139"
+function lmzTeachingLines(tutor) {
+  return lmzTutorTeaching(tutor).map(function (e) {
+    return lmzSubjectLabel(e.subjectId) + ' \u00b7 ' + lmzKeyStageShort(e.keyStage) + ' \u00b7 ' + lmzYearsLabel(e.keyStage, e.years);
+  });
+}
+
 function lmzEntrySubjectKey(entry) {
   return lmzSubjectKey((entry && (entry.subjectId || entry.subjectName)) || '');
 }
@@ -1313,16 +1445,15 @@ function watchTimetableEntriesForStudent(student, cb, errCb) {
 // Tutors: only their assigned subjects — never the whole timetable. No
 // assigned subjects means an empty list, not everything.
 function watchTimetableEntriesForTutor(tutor, cb, errCb) {
-  var keys = lmzSubjectKeys(tutor && tutor.subjects);
+  var keys = lmzTutorSubjectKeys(tutor);
   if (!keys.length) { cb([]); return function () {}; }
-  var ks = (tutor && tutor.keyStages) || [];
   var queries = _lmzEntryQueries('', keys);
   var buckets = queries.map(function () { return []; });
   var unsubs = queries.map(function (q, i) {
     return q.onSnapshot(function (snap) {
       buckets[i] = _lmzSnapToEntries(snap);
-      // Existing Key Stage restriction stays as an additional filter.
-      cb(_lmzFlatten(buckets).filter(function (e) { return !ks.length || ks.indexOf(e.keyStage) !== -1; }));
+      // Only the exact Key Stage + subject pairs this tutor was given (KS3 English never shows KS4 English).
+      cb(_lmzFlatten(buckets).filter(function (e) { return lmzTutorCovers(tutor, lmzEntrySubjectKey(e), e.keyStage); }));
     }, errCb || function (e) { console.error('timetableEntries listener:', e); });
   });
   return function () { unsubs.forEach(function (u) { u(); }); };

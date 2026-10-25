@@ -344,7 +344,7 @@
       h += '<div class="cr-panel" style="margin-top:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep)">Create or link a parent</h4><div class="cr-row2">' +
         '<div class="cr-field"><label for="lpStudent">Remote student</label><select id="lpStudent">' + S.students.map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>'; }).join('') + '</select></div>' +
         '<div class="cr-field"><label for="lpName">Parent name</label><input type="text" id="lpName" maxlength="120"></div></div><div class="cr-row2">' +
-        '<div class="cr-field"><label for="lpEmail">Parent email</label><input type="text" id="lpEmail" maxlength="200"></div><div class="cr-field"><label for="lpPhone">Phone</label><input type="text" id="lpPhone" maxlength="40"></div></div>' +
+        '<div class="cr-field"><label for="lpEmail">Parent email</label><input type="text" id="lpEmail" maxlength="200"></div><div class="cr-field"><label for="lpPhone">Phone (required)</label><input type="text" id="lpPhone" maxlength="40"></div></div>' +
         '<div class="cr-actions"><button type="button" class="cr-btn primary" data-a="link-parent"' + (S.students.length ? '' : ' disabled') + '><i class="fas fa-user-plus"></i> Create / link parent</button><span class="cr-note" id="lpMsg" role="status"></span></div>' +
         '<div class="cr-note" style="margin-top:.4rem">An existing parent account (matched by email) is reused — never duplicated — and a new parent receives a single-use password link.</div></div>';
       body.innerHTML = h;
@@ -352,7 +352,7 @@
     async function linkParent(body) {
       var msg = body.querySelector('#lpMsg'), sid = body.querySelector('#lpStudent').value;
       var name = body.querySelector('#lpName').value.trim(), email = body.querySelector('#lpEmail').value.trim(), phone = body.querySelector('#lpPhone').value.trim();
-      if (!name || !/^\S+@\S+\.\S+$/.test(email)) { toast(msg, 'Enter the parent’s name and a valid email.', true); return; }
+      if (!name || !/^\S+@\S+\.\S+$/.test(email) || phone.replace(/\D/g, '').length < 6) { toast(msg, 'Enter the parent’s name, a valid email and a phone number (required).', true); return; }
       toast(msg, 'Working…');
       try {
         var r = await fn('createParentAccount', { studentId: sid, parentEmail: email, parentName: name, parentPhone: phone });

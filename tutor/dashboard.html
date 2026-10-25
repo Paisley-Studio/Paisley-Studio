@@ -326,11 +326,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js"></script>
+<script src="../lms-helpers.js?v=scope1"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=boards1"></script>
-<script src="../js/classroom/resources-folder.js?v=res2"></script>
-<script src="../js/classroom/work-helpers.js?v=live7"></script>
+<script src="../js/classroom/classroom-helpers.js?v=scope1"></script>
+<script src="../js/classroom/resources-folder.js?v=res3"></script>
+<script src="../js/classroom/work-helpers.js?v=live9"></script>
 <script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script>
@@ -459,7 +459,7 @@ auth.onAuthStateChanged(user=>{
 
 function renderIdentity(){
   document.getElementById('sideAvatar').textContent = lmsInitials(tutor.name);
-  document.getElementById('sideWho').innerHTML = escapeHtml(tutor.name||'Tutor') + '<span>' + escapeHtml(lmzSubjectLabels(tutor.subjects).join(', ') || 'Tutor') + '</span>';
+  document.getElementById('sideWho').innerHTML = escapeHtml(tutor.name||'Tutor') + '<span>' + escapeHtml((function(){ const l = lmzTeachingLines(tutor); return l.length ? l.slice(0,2).join(' | ') + (l.length>2 ? ' +' + (l.length-2) + ' more' : '') : 'Tutor'; })()) + '</span>';
   document.getElementById('scopeNoteText').innerHTML =
     'Welcome back, <strong>' + escapeHtml((tutor.name||'').split(/\s+/)[0]) + '</strong>. ' +
     'You are one of the reasons Paisley Studio holds its standard. ' +
@@ -508,7 +508,7 @@ function mountWorkManagement(kind, hostId){
   const box = document.createElement('div'); host.appendChild(box);
   const focus = window.__wkFocus || null; window.__wkFocus = null;   // set by the Overview "Mark" buttons
   WorkUI.mountManagement(box, {
-    kind, role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], focus,
+    kind, role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching, focus,
     pendingFor: pendingForClass
   });
 }
@@ -516,7 +516,7 @@ document.querySelector('.nav-item[data-view="resources"]').addEventListener('cli
   if(!tutor) return;
   const host = document.getElementById('resourcesHost'); host.innerHTML = '';
   const box = document.createElement('div'); host.appendChild(box);
-  ResourcesUI.mount(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [] });
+  ResourcesUI.mount(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching });
 });
 document.querySelector('.nav-item[data-view="hwmgmt"]').addEventListener('click', ()=> mountWorkManagement('homework','hwHost'));
 document.querySelector('.nav-item[data-view="exmgmt"]').addEventListener('click', ()=> mountWorkManagement('exams','exHost'));
@@ -537,7 +537,7 @@ document.querySelector('.nav-item[data-view="classroom"]').addEventListener('cli
   host.innerHTML = '';
   const box = document.createElement('div');
   host.appendChild(box);
-  ClassroomUI.mountManager(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [] });
+  ClassroomUI.mountManager(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching });
 });
 document.querySelectorAll('#contentSubtabs .subtab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -653,7 +653,7 @@ function initFirestore(){
   let teUnsub = null, teSig = null;
   db.collection('tutorAccounts').doc(tutor.id).onSnapshot(doc=>{
     if(doc.exists){ tutor = { id: doc.id, ...doc.data() }; myKeyStages = tutor.keyStages || []; renderIdentity(); }
-    const sig = JSON.stringify([lmzSubjectKeys(tutor.subjects).sort(), (tutor.keyStages||[]).slice().sort()]);
+    const sig = JSON.stringify([lmzTutorSubjectKeys(tutor).sort(), lmzTutorKeyStages(tutor).slice().sort(), Array.isArray(tutor.teaching) ? lmzTutorTeaching(tutor) : null]);
     if(sig === teSig) return;
     teSig = sig;
     if(teUnsub) teUnsub();
@@ -752,7 +752,7 @@ function tutorClassroomsInScope(){
   return c.scope;
 }
 async function tutorClassroomsInScopeFetch(){
-  const subjects = lmzSubjectKeys(tutor.subjects || []);
+  const subjects = lmzTutorSubjectKeys(tutor);
   if(!subjects.length) return [];
   let classrooms = [];
   try {
@@ -765,8 +765,8 @@ async function tutorClassroomsInScopeFetch(){
     handleErr(e, 'classrooms-sub');
     return [];
   }
-  const ks = (tutor.keyStages || []);
-  return classrooms.filter(c => !ks.length || ks.indexOf(c.keyStage) !== -1);
+  // Exact scope: this Key Stage + subject + Year only (KS3 English is not KS4 English).
+  return classrooms.filter(c => lmzTutorCovers(tutor, c.subjectId, c.keyStage, c.year));
 }
 
 // CHANGED:
@@ -1161,7 +1161,7 @@ function renderTutorTeGrid(){
   const grid = document.getElementById('tutorTeGrid');
   if(!grid) return;
   const list = DB.timetableEntries || [];
-  if(!lmzSubjectKeys(tutor.subjects).length){ grid.innerHTML = '<div style="color:var(--muted); padding:1rem 0;">No subjects have been assigned to you yet, so there are no timetable sessions to show. Please contact the Studio Desk.</div>'; return; }
+  if(!lmzTutorSubjectKeys(tutor).length){ grid.innerHTML = '<div style="color:var(--muted); padding:1rem 0;">No subjects have been assigned to you yet, so there are no timetable sessions to show. Please contact the Studio Desk.</div>'; return; }
   if(!list.length){ grid.innerHTML = '<div style="color:var(--muted); padding:1rem 0;">No timetable sessions published for your subjects yet.</div>'; return; }
   const byDay = groupTimetableEntriesByDay(list);
   grid.innerHTML = DAYS_OF_WEEK.filter(d=>byDay[d].length).map(day=>`

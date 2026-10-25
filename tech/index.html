@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Welcome to TECH | Paisley TECH sign in &amp; sign up</title>
+<meta name="description" content="Sign in or create your Paisley TECH account — Digital AI Literacy. Let's build something." />
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#245F5A" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+:root{--brand:#55BFB3;--brand-deep:#245F5A;--brand-soft:#7BCBC2;--paper:#F1F9F7;--surface:#fff;--sage:#E5F2EF;--ink:#263331;--muted:#5A6E6A;--line:rgba(38,51,49,.12);--dark:#0F1A14;--gold:#F5C842;--font:'Quicksand',sans-serif;--error:#E74C3C;--success:#2EB872}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--paper);color:var(--ink);min-height:100vh;display:grid;grid-template-columns:1fr 1fr;-webkit-font-smoothing:antialiased}
+@media(max-width:900px){body{grid-template-columns:1fr}}
+a{color:var(--brand-deep);font-weight:700}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.side{background:var(--dark);color:#fff;padding:3rem;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden}
+.side::before{content:"";position:absolute;right:-20%;bottom:-30%;width:520px;height:520px;background:radial-gradient(circle,rgba(85,191,179,.3),transparent 65%)}
+.side>*{position:relative}.side h1{font-size:clamp(2.2rem,5vw,3.6rem);line-height:1.05;letter-spacing:-.02em;font-weight:800}.side h1 em{font-style:normal;color:var(--brand)}
+.side p{color:#8FA8A2;margin-top:1rem;max-width:26rem;font-weight:500}.side ul{list-style:none;margin-top:1.6rem;display:grid;gap:.6rem;font-weight:700;font-size:.92rem}.side li i{color:var(--gold);margin-right:.6rem}
+.back{display:inline-flex;gap:.5rem;align-items:center;color:var(--brand-soft);font-size:.8rem;margin-bottom:2rem;font-weight:700}
+@media(max-width:900px){.side{padding:1.6rem 1.4rem}.side ul,.side p{display:none}.side h1{font-size:1.9rem}.back{margin-bottom:.8rem}}
+.main{display:flex;align-items:flex-start;justify-content:center;padding:2.2rem 1.2rem}
+.card{width:min(480px,100%);background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:1.7rem;box-shadow:0 20px 50px rgba(36,95,90,.08)}
+.card h2{font-size:1.7rem;color:var(--brand-deep);font-weight:800;letter-spacing:-.01em}.card .sub{color:var(--muted);font-weight:600;margin:.2rem 0 1.2rem}
+.tabs{display:flex;background:var(--sage);border-radius:50px;padding:.25rem;margin-bottom:1.2rem}
+.tab{flex:1;border:0;background:transparent;font-family:var(--font);font-weight:800;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;padding:.6rem;border-radius:50px;cursor:pointer;color:var(--muted)}.tab.active{background:var(--brand-deep);color:#fff}
+.panel{display:none}.panel.active{display:block}
+.f{margin-bottom:.85rem}.f label,.q-label{display:block;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--brand-deep);margin-bottom:.3rem}
+.f input,.f select{width:100%;padding:.7rem .8rem;border:1.5px solid var(--line);border-radius:12px;font:inherit;font-size:.92rem;background:var(--paper);color:var(--ink)}
+.f input:focus,.f select:focus{outline:none;border-color:var(--brand)}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.9rem}
+.chip{position:relative}.chip input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.chip span{display:inline-block;padding:.45rem .85rem;border-radius:50px;border:1.5px solid var(--line);font-weight:700;font-size:.8rem;color:var(--muted);transition:all .2s;background:var(--paper)}
+.chip input:checked+span{background:var(--brand);border-color:var(--brand);color:#04231f}.chip input:focus-visible+span{outline:3px solid var(--gold);outline-offset:2px}
+.btn{width:100%;border:0;border-radius:50px;background:var(--brand);color:#fff;font-family:var(--font);font-weight:800;font-size:.85rem;letter-spacing:.06em;text-transform:uppercase;padding:.95rem;cursor:pointer;transition:all .3s}
+.btn:hover{background:var(--brand-deep);transform:translateY(-2px)}.btn:disabled{opacity:.6;cursor:wait;transform:none}
+.msg{display:none;padding:.7rem .9rem;border-radius:12px;font-size:.85rem;font-weight:700;margin-bottom:.9rem}.msg.show{display:block}
+.msg.err{background:rgba(231,76,60,.1);color:#b8362a}.msg.ok{background:rgba(46,184,114,.12);color:#1d8b57}
+.small{font-size:.78rem;color:var(--muted);font-weight:600;margin-top:.9rem;text-align:center}
+#guard{display:none;background:var(--sage);border-radius:14px;padding:.9rem;margin-bottom:.9rem}
+.hp{position:absolute;left:-9999px}
+</style>
+</head>
+<body>
+<aside class="side">
+  <a class="back" href="/tech"><i class="fas fa-arrow-left"></i> Back to Paisley TECH</a>
+  <h1 id="sideTitle">Welcome to <em>TECH.</em></h1>
+  <p id="sideSub">Let's build something.</p>
+  <ul><li><i class="fas fa-check"></i>No coding needed</li><li><i class="fas fa-check"></i>Learn by building real things</li><li><i class="fas fa-check"></i>A coach who gives real feedback</li></ul>
+</aside>
+
+<main class="main">
+<div class="card">
+  <h2 id="titleText">Welcome back</h2>
+  <p class="sub" id="subText">Sign in to continue your build.</p>
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="login" role="tab" type="button">Sign in</button>
+    <button class="tab" data-tab="signup" role="tab" type="button">Join TECH</button>
+  </div>
+  <div class="msg err" id="errMsg" role="alert"></div><div class="msg ok" id="okMsg" role="status"></div>
+
+  <div class="panel active" id="panel-login">
+    <div class="f"><label for="loginEmail">Email</label><input id="loginEmail" type="email" autocomplete="email" /></div>
+    <div class="f"><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" /></div>
+    <button class="btn" id="loginBtn" type="button">Sign in</button>
+    <p class="small"><a href="#" id="forgot">Forgot your password?</a></p>
+    <p class="small">Are you a TECH coach? <a href="/tutor/login.html">Sign in on the tutor page</a></p>
+  </div>
+
+  <div class="panel" id="panel-signup">
+    <div class="f"><label for="suName">Your name</label><input id="suName" autocomplete="name" maxlength="80" /></div>
+    <div class="f"><label for="suEmail">Email</label><input id="suEmail" type="email" autocomplete="email" /></div>
+    <div class="f"><label for="suPass">Password</label><input id="suPass" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" /></div>
+    <div class="f"><label for="suAge">Age group</label><select id="suAge"><option value="">Select…</option><option value="under18">Under 18</option><option value="18plus">18 or over</option></select></div>
+    <div id="guard">
+      <div class="small" style="margin:0 0 .6rem;text-align:left">Because you're under 18, we need a parent or guardian's contact details.</div>
+      <div class="f"><label for="gName">Parent / guardian name</label><input id="gName" maxlength="80" /></div>
+      <div class="f"><label for="gEmail">Parent / guardian email</label><input id="gEmail" type="email" /></div>
+      <div class="f" style="margin:0"><label for="gPhone">Parent / guardian phone</label><input id="gPhone" type="tel" /></div>
+    </div>
+    <div class="f" style="margin-bottom:.4rem"><label for="suPhone">Your phone (optional)</label><input id="suPhone" type="tel" autocomplete="tel" /></div>
+
+    <span class="q-label" style="margin-top:.9rem">What describes you?</span>
+    <div class="chips" id="idChips" role="radiogroup" aria-label="What describes you?"></div>
+    <span class="q-label">What do you want to explore? (pick any)</span>
+    <div class="chips" id="intChips"></div>
+
+    <input class="hp" id="suWebsite" tabindex="-1" autocomplete="off" aria-hidden="true" />
+    <button class="btn" id="signupBtn" type="button">Create my TECH account</button>
+    <p class="small">The Studio Desk approves new accounts, usually within a day. You'll get a coach once you're in.</p>
+  </div>
+</div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js"></script>
+<script>
+const auth = firebase.auth();
+const $ = id => document.getElementById(id);
+const IDENT = ['Student','Creator','Future entrepreneur','Researcher','Problem solver','Curious explorer'];
+const INTS = ['Create','Research','Study smarter','Start something','Solve problems','Build projects','Work faster','Understand AI','Stay safe online'];
+$('idChips').innerHTML = IDENT.map(x=>'<label class="chip"><input type="radio" name="ident" value="'+x+'"><span>'+x+'</span></label>').join('');
+$('intChips').innerHTML = INTS.map(x=>'<label class="chip"><input type="checkbox" name="int" value="'+x+'"><span>'+x+'</span></label>').join('');
+
+function hideMsgs(){ $('errMsg').classList.remove('show'); $('okMsg').classList.remove('show'); }
+function showErr(m){ hideMsgs(); $('errMsg').textContent = m; $('errMsg').classList.add('show'); }
+function showOk(m){ hideMsgs(); $('okMsg').textContent = m; $('okMsg').classList.add('show'); }
+function setLoading(b,on){ b.disabled = on; }
+function setTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active', x.id==='panel-'+t));
+  const s = t==='signup';
+  $('titleText').textContent = s ? 'Welcome to TECH.' : 'Welcome back';
+  $('subText').textContent = s ? "Let's build something." : 'Sign in to continue your build.';
+  $('sideTitle').innerHTML = s ? 'What are we <em>building?</em>' : 'Welcome to <em>TECH.</em>';
+  hideMsgs();
+}
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.tab)));
+if(new URLSearchParams(location.search).get('tab')==='signup') setTab('signup');
+$('suAge').addEventListener('change',()=>{ $('guard').style.display = $('suAge').value==='under18' ? 'block' : 'none'; });
+
+// Signed-in users go straight to the studio; the studio checks the stored studentType.
+auth.onAuthStateChanged(user=>{ if(user && !window._justSignedUp){ location.href = '/tech/dashboard.html'; } });
+
+$('loginBtn').addEventListener('click',()=>{
+  const email=$('loginEmail').value.trim(), pass=$('loginPassword').value;
+  if(!email||!pass) return showErr('Please enter your email and password.');
+  setLoading($('loginBtn'),true);
+  auth.signInWithEmailAndPassword(email,pass).then(()=>{ location.href='/tech/dashboard.html'; })
+    .catch(err=>{ setLoading($('loginBtn'),false); showErr(err.code==='auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email or password.'); });
+});
+$('forgot').addEventListener('click',e=>{
+  e.preventDefault(); const email=$('loginEmail').value.trim();
+  if(!email) return showErr('Enter your email above first, then click "Forgot your password?".');
+  auth.sendPasswordResetEmail(email).then(()=>showOk('If that email has an account, a reset link is on its way.')).catch(()=>showOk('If that email has an account, a reset link is on its way.'));
+});
+
+const BLOCKED = ['example.com','example.org','example.net','mailinator.com','guerrillamail.com','sharklasers.com','10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','trashmail.com','dispostable.com','getnada.com','maildrop.cc','throwawaymail.com','fakeinbox.com','mintemail.com','mohmal.com'];
+function isFake(a){ const m=String(a||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/); if(!m) return true; const d=m[1]; return /\.(test|invalid|localhost|local|example)$/.test(d) || BLOCKED.some(b=>d===b||d.endsWith('.'+b)); }
+const shownAt = Date.now();
+
+$('signupBtn').addEventListener('click',()=>{
+  hideMsgs();
+  if($('suWebsite').value || Date.now()-shownAt < 2500) return showErr('Please take a moment to complete the form.');
+  const name=$('suName').value.trim(), email=$('suEmail').value.trim(), pass=$('suPass').value, age=$('suAge').value, phone=$('suPhone').value.trim();
+  if(name.length<2) return showErr('Please enter your name.');
+  if(isFake(email)) return showErr('Please use your own real email address — we need to be able to reach you.');
+  if(pass.length<8) return showErr('Please choose a password of at least 8 characters.');
+  if(!age) return showErr('Please tell us your age group.');
+  const data = { name, email, studentType:'tech', phone, ageGroup:age,
+    techProfile:{ identity:(document.querySelector('input[name=ident]:checked')||{}).value||'', interests:[...document.querySelectorAll('input[name=int]:checked')].map(x=>x.value) } };
+  if(age==='under18'){
+    const g={ name:$('gName').value.trim(), email:$('gEmail').value.trim(), phone:$('gPhone').value.trim() };
+    if(!g.name||!g.phone||!/^\S+@\S+\.\S+$/.test(g.email)||isFake(g.email)) return showErr('Please give a parent or guardian name, real email and phone number.');
+    if(g.email.toLowerCase()===email.toLowerCase()) return showErr("Your parent or guardian needs their own email address.");
+    data.guardians=[g]; data.guardianName=g.name; data.guardianEmail=g.email; data.guardianPhone=g.phone; data.parentContact=[g.name,g.email,g.phone].join(' · ');
+  }
+  const btn=$('signupBtn'); setLoading(btn,true); window._justSignedUp=true;
+  auth.createUserWithEmailAndPassword(email,pass)
+    .then(c=>{ try{ c.user.sendEmailVerification().catch(()=>{}); }catch(e){} return createStudentProfile(c.user.uid,data); })
+    .then(()=>{ showOk('Welcome to TECH. Taking you to your studio…'); setTimeout(()=>{ location.href='/tech/dashboard.html'; },1100); })
+    .catch(err=>{
+      setLoading(btn,false); window._justSignedUp=false;
+      let m='Could not create your account.';
+      if(err.code==='auth/email-already-in-use') m='That email already has an account. Try signing in instead.';
+      else if(err.code==='auth/too-many-requests') m='Too many attempts from this device. Please wait a few minutes.';
+      else if(err.code==='auth/invalid-email') m='That email address is not valid.';
+      else if(err.code==='auth/weak-password') m='Please choose a stronger password.';
+      showErr(m);
+    });
+});
+</script>
+</body>
+</html>

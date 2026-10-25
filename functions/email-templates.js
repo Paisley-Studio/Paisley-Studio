@@ -367,6 +367,25 @@ function parentWelcomePhone({ parentName, student, phone }) {
   };
 }
 
+/* 6c. Parent — existing account: phone number now works as a sign-in */
+function parentPhoneLoginUpdate({ parentName, student, phone }) {
+  return {
+    subject: `You can now sign in to the Paisley Studio Parent Portal with your phone number`,
+    html: render({
+      preheader: `Your sign-in details have been updated.`,
+      heading: 'Parent portal',
+      intro: `Hi ${esc(firstName(parentName))},`,
+      body: `
+        <p style="margin:0 0 14px;">We have updated how you sign in to the Parent Portal for <strong>${esc(student.name || 'your child')}</strong>.</p>
+        <p style="margin:0 0 14px;">You can now sign in with either your <strong>email address</strong> or your <strong>phone number</strong>. Your password is now your phone number: <strong>${esc(phone)}</strong></p>
+        <p style="margin:0 0 14px;">You can change your password any time using \u201cForgot your password?\u201d on the sign-in page.</p>
+        <p style="margin:18px 0 0;font-size:13px;color:${BRAND.muted};">If you weren't expecting this, please contact the Studio Desk.</p>
+      `,
+      cta: { label: 'Open the Parent Portal', url: PORTALS.parent }
+    })
+  };
+}
+
 /* 7. Parent — existing parent, new child linked */
 function parentNewChild({ parentName, student }) {
   return {
@@ -775,6 +794,7 @@ module.exports = {
     tutorWelcome,
     parentWelcomeNew,
     parentWelcomePhone,
+    parentPhoneLoginUpdate,
     remoteStudentInvite,
     adminNewRemoteTicket,
     parentNewChild,

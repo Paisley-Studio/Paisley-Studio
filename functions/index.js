@@ -85,6 +85,8 @@ exports.onStudentSignup      = notifications.onStudentSignup;
 exports.onLiveClassScheduled = notifications.onLiveClassScheduled;
 exports.onHomeworkAssigned   = notifications.onHomeworkAssigned;
 exports.createParentAccount  = notifications.createParentAccount;
+exports.backfillParentPhonePasswords = notifications.backfillParentPhonePasswords;
+exports.parentPhoneLogin     = notifications.parentPhoneLogin;
 
 const classroom = require("./classroom");
 exports.publishScheduledLessons  = classroom.publishScheduledLessons;
@@ -121,6 +123,14 @@ exports.onTuitionRequestUpdated       = tuition.onTuitionRequestUpdated;
 exports.onTuitionMessageCreated       = tuition.onTuitionMessageCreated;
 exports.onTuitionTimetableCreated     = tuition.onTuitionTimetableCreated;
 exports.onTuitionTicketCreated        = tuition.onTuitionTicketCreated;
+
+const tech = require("./tech");
+exports.onTechStudentCreated          = tech.onTechStudentCreated;
+exports.onTechStudentActivated        = tech.onTechStudentActivated;
+exports.onTechFeedbackCreated         = tech.onTechFeedbackCreated;
+exports.onTechMessageCreated          = tech.onTechMessageCreated;
+exports.onTechShowcaseApproved        = tech.onTechShowcaseApproved;
+exports.techShare                     = tech.techShare;
 
 const work = require("./work");
 exports.onAssignmentPosted            = work.onAssignmentPosted;
