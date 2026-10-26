@@ -95,8 +95,6 @@
     return w.mode === 'manual-open' || w.mode === 'auto-open';
   }
 
-  // One submission document is reused for every attempt. The tutor's grader appends a
-  // `history` entry each time work is sent back, so history.length = rounds already returned.
   function subRound(sub) {
     var h = sub && Array.isArray(sub.history) ? sub.history : [];
     var resub = !!sub && sub.status === 'Submitted' && (h.length > 0 || !!sub.gradedAt);
@@ -110,7 +108,6 @@
     if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
     if (sub) {
       var ri = subRound(sub);
-      // k stays 'submitted' so the student filters keep working; resub/round tell the tutor which is which.
       if (ri.resub) return { k: 'submitted', resub: true, round: ri.round, cls: 'b-resub', icon: 'fa-rotate', text: 'Resubmitted \u2013 Attempt ' + ri.round + ' \u2013 awaiting grading' };
       return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-inbox', text: 'New hand-in \u2013 awaiting grading' };
     }
@@ -226,7 +223,6 @@
     return firebase.firestore.Timestamp.fromDate(d);
   }
 
-  /* Attachments (many files) + links shown on homework / classwork cards and detail screens. */
   function attLinksHtml(it) {
     it = it || {};
     var list = Array.isArray(it.attachments) ? it.attachments.slice() : [];
@@ -635,9 +631,6 @@
       }
       var btn = this; btn.disabled = true;
       
-      // Items carry their topic as `tid` (loaded from the topic's sub-collection); `topicId` only exists
-      // on some newer documents, and never on lessons. Using topicId alone built a wrong path and the
-      // server answered "That item no longer exists".
       var topicRef = it.tid || it.topicId || '';
       var typeCol = it.kind === 'lesson' || it.isClasswork === true ? 'lessons'
         : (it.kind === 'assignment' ? 'assignments'
@@ -664,16 +657,10 @@
     };
   }
 
-  // Tutor red-bubble count for one classroom. "Unattended" =
-  //   (a) work the Studio Desk posted to tutors that this tutor has not yet released, plus
-  //   (b) student hand-ins still waiting to be graded.
-  // what: 'homework' | 'exams' | 'classwork'
   async function tutorPendingCount(cid, what) {
     var d = await tutorPendingDetail(cid, what);
     return d.unreleased + d.toMark;
   }
-  // unreleased = admin-posted work this tutor still has to release to students.
-  // toMark / resub = hand-ins waiting for grading (resub = corrected work handed back in).
   async function tutorPendingDetail(cid, what) {
     var topics = await U.loadTopics(cid);
     var res, items;
@@ -699,7 +686,6 @@
     var kind = opts.kind === 'exams' ? 'exam' : 'assignment';
     var isAdmin = opts.role === 'admin';
     var title = kind === 'exam' ? 'Exam Management' : 'Homework Management';
-    // Exact scope: Key Stage + subject + Years (opts.teaching). Older tutors without it keep subjects + keyStages.
     var tutorScope = { teaching: opts.teaching, subjects: opts.subjects, keyStages: opts.keyStages };
     var tutorSubjects = lmzTutorSubjectKeys(tutorScope);
     var tutorKS = lmzTutorKeyStages(tutorScope);
@@ -804,11 +790,6 @@
       if (!isAdmin) fillTutorBubbles();
     }
     var bubbleToken = 0;
-    // Bubble on each subject card = work waiting on this tutor in that subject:
-    //   red  = total to act on (hand-ins to mark + admin work still to release)
-    //   blue = how many of those are corrected resubmissions
-    // Hand-in counts come from the portal's own live submission feed (opts.pendingFor) so the
-    // cards always agree with the sidebar bubble; a direct read is only the fallback.
     function fillTutorBubbles() {
       var token = ++bubbleToken;
       Array.prototype.forEach.call(root.querySelectorAll('.cr-card[data-a="open"]'), function (card) {
@@ -827,7 +808,6 @@
         });
       });
     }
-    // The portal tells us when its live counts change; refresh the bubbles while the subject list is showing.
     if (!isAdmin) {
       if (global.__wkPendingHandler) global.removeEventListener('wk:pending-changed', global.__wkPendingHandler);
       global.__wkPendingHandler = function () { if (S.screen === 'list' && root.isConnected) fillTutorBubbles(); };
@@ -867,8 +847,6 @@
     }
     async function refresh() { await reload(); render(); }
 
-    // Who is expected to hand this in. When a tutor released it to specific students, ONLY those
-    // students count (not everyone enrolled in the subject).
     function expectedAudience(it) {
       var aud = audienceOf(it, S.enrolled);
       if (it.releasedTo && it.releasedTo.length) {
@@ -890,13 +868,12 @@
         if (!x) return;
         if (x.status !== 'In progress' && x.status !== 'Suspended') submitted++;
         if (x.status === 'Graded') graded++;
-        if (x.status === 'Submitted') { toGrade++; if (subRound(x).resub) resub++; }   // only work still waiting for the tutor
-        if (x.status === 'Corrections') corr++;       // already actioned: sent back to the student
+        if (x.status === 'Submitted') { toGrade++; if (subRound(x).resub) resub++; }
+        if (x.status === 'Corrections') corr++;
       });
       return { total: aud.length, submitted: submitted, graded: graded, toGrade: toGrade, corr: corr, resub: resub };
     }
 
-    // Past Work = every recipient has handed in AND every piece is graded.
     function isPast(it) {
       var c = counts(it);
       return c.total > 0 && c.graded === c.total;
@@ -936,8 +913,6 @@
 
     function canEdit(it) { return isAdmin; }
 
-    // Admin-only. Rendered on EVERY assignment, classwork and exam row (and in the detail view): never conditional on state.
-    // Withdraw (safe, keeps the item) is on every row. Delete (permanent) is only for homework and exams, never classwork.
     function delBtnHtml(it) {
       if (!isAdmin) return '';
       var wd = '<button type="button" class="cr-btn sm wk-wd" data-a="withdraw" data-id="' + esc(it.id) + '" title="Removes it from every tutor, student and parent portal. Keeps the item so you can post it again." style="border-color:#D98A00;color:#9A6200;background:#FFF8E6;flex-shrink:0;white-space:nowrap"><i class="fas fa-eye-slash"></i> Withdraw</button>';
@@ -1010,7 +985,6 @@
           : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
         S.topics.forEach(function (t) {
           var rows = ITEMS.filter(function (x) { return x.tid === t.id; }).sort(function (a, b) {
-            // Work that needs marking floats to the top: resubmissions, then new hand-ins, then by deadline.
             var ca = counts(a), cb = counts(b);
             if ((cb.resub > 0) !== (ca.resub > 0)) return cb.resub > 0 ? 1 : -1;
             if ((cb.toGrade > 0) !== (ca.toGrade > 0)) return cb.toGrade > 0 ? 1 : -1;
@@ -1101,8 +1075,6 @@
           (it.description && !it.isClasswork ? '<div class="wk-box" style="margin-top:.6rem">' + esc(it.description) + '</div>' : '') +
         '</div>';
 
-        // Order: resubmissions first, then new hand-ins (longest waiting first), then work that is
-        // with the student for corrections, then graded, then not handed in.
         function rankOf(sub, st) {
           if (!sub) return 4;
           if (st.k === 'submitted') return st.resub ? 0 : 1;
@@ -1277,16 +1249,6 @@
       };
     }
 
-    // ------------------------------------------------------------------------------------
-    // WITHDRAW vs DELETE (Studio Desk only)
-    //
-    // WITHDRAW  = pull the item out of every tutor, student and parent portal. The item itself
-    //             (its text, attached files, tutor resources) is KEPT in the Studio Desk so it can be
-    //             posted again from Classroom -> Publish. Works on classwork, homework and exams.
-    //             Hand-ins and graded copies for it are cleared so a re-post starts fresh.
-    // DELETE    = hard delete of a homework / exam and everything attached to it. Cannot be undone.
-    //             Classwork is a lesson (the notes) so it only ever has Withdraw.
-    // ------------------------------------------------------------------------------------
     function isLive(d) {
       if (!d) return false;
       var a = effAudiences(d);
@@ -1294,8 +1256,6 @@
         (Array.isArray(d.releasedTo) && d.releasedTo.length > 0) || (Array.isArray(d.releasedParents) && d.releasedParents.length > 0);
     }
 
-    // Tutor-only copies of an item's files live in Resources (classroomResources/wk_<type>_<id>).
-    // Withdrawing hides them from tutors; posting the item again (or saving it) brings them back.
     async function setResourceHidden(type, id, hidden) {
       var t = type === 'lesson' ? 'classwork' : (type === 'assignment' ? 'homework' : '');
       if (!t || !id) return;
@@ -1309,15 +1269,12 @@
       } catch (e) { console.warn('resource visibility skipped:', e && (e.code || e.message)); }
     }
 
-    // Does the actual withdrawal for ONE item. No confirmation here (callers confirm).
-    // type: 'lesson' (classwork) | 'assignment' (homework) | 'exam' (flat exam).
     async function withdrawCore(it, type, subj) {
       var isFlat = type === 'exam';
       var itemRef = isFlat ? flatExamRef(it.cid, it.id) : coll(it.cid, it.tid, type).doc(it.id);
       var sn = await itemRef.collection('submissions').get();
       if (!isLive(it) && !sn.size) return { changed: false, handins: 0 };
 
-      // Only files that live in THIS item's own folders may be deleted.
       var own = [
         'classroom-files/' + subj + '/' + it.cid + '/' + (isFlat ? 'exams/' : '') + it.id + '/',
         'graded-submissions/' + subj + '/' + it.cid + '/' + it.id + '/'
@@ -1336,7 +1293,6 @@
         await b.commit();
       }
 
-      // Stop it reaching anyone. The item and its attached files stay so it can be posted again.
       await itemRef.update({
         audiences: { online: false, remote: false, tuition: false, tutors: false },
         releasedTo: [], releasedParents: [],
@@ -1344,7 +1300,6 @@
         withdrawnBy: user.uid
       });
 
-      // Bell notifications that point at this item (students, parents, tutors).
       try {
         var ids = [it.cid + '/' + (it.tid || '') + '/' + it.id, it.cid + '/' + it.id];
         for (var q = 0; q < ids.length; q++) {
@@ -1389,7 +1344,6 @@
       } catch (e) { PaisleyUI.loader.hide(true); alert('Could not withdraw: ' + (e.message || e)); return false; }
     }
 
-    // START FRESH: withdraw everything in the classrooms currently listed (respects the filters).
     function filteredClassrooms() {
       return (S.classrooms || []).filter(function (c) {
         var f = S.filters;
@@ -1448,11 +1402,8 @@
         (stats.errors.length ? '\n\nCould not withdraw ' + stats.errors.length + ' item(s):\n' + stats.errors.slice(0, 6).join('\n') : ''));
     }
 
-    // Hard delete (homework / exams only). Removes the posted item, its text and files, its tutor
-    // resources and the hand-ins. It never touches the classroom, its topics or the lesson notes.
     async function deleteItem(it) {
       if (!isAdmin) { alert('Only the Studio Desk (admin) can delete work.'); return false; }
-      // Classwork is a lesson: it can only be withdrawn, never deleted from here.
       if (kind !== 'exam' && it.isClasswork === true) return withdrawItem(it);
       var isFlat = kind === 'exam';
       var itemRef = isFlat ? flatExamRef(it.cid, it.id) : coll(it.cid, it.tid, 'assignment').doc(it.id);
@@ -1485,7 +1436,6 @@
           await b.commit();
         }
         await itemRef.delete();
-        // Bell notifications that point at this item (students, parents, tutors).
         try {
           var ids = [it.cid + '/' + (it.tid || '') + '/' + it.id, it.cid + '/' + it.id];
           for (var q = 0; q < ids.length; q++) {
@@ -1497,7 +1447,6 @@
             }
           }
         } catch (ne) { console.warn('notification cleanup skipped:', ne && (ne.code || ne.message)); }
-        // The tutor-only copy of its files in Resources goes too.
         try { if (!isFlat && global.ResourcesUI && global.ResourcesUI.removeWork) await global.ResourcesUI.removeWork('homework', it.id); } catch (re) {}
         await Promise.all(paths.map(function (pth) { return firebase.storage().ref(pth).delete().catch(function () {}); }));
         S.view = 'active';
@@ -1616,7 +1565,6 @@
       renderList();
     });
 
-    // Live refresh: keeps statuses current without a page reload.
     var refreshing = false;
     async function smartRefresh() {
       if (refreshing || !root.isConnected || S.screen !== 'class' || !S.cls) return;
@@ -1642,9 +1590,6 @@
   // STUDENT SIDE FUNCTIONS
   // =========================================================
 
-  // Firestore security rules are NOT filters: a list query is only allowed when
-  // its own constraints prove every possible result is readable by the student.
-  // So each query below repeats the rule conditions (published + audience + recipient).
   function studentQuery(baseQuery, aud, uid, withRecipients, parentUid) {
     function run(q) {
       return q.get().then(function (snap) { return snap.docs; }).catch(function (e) {
@@ -1681,14 +1626,6 @@
           }));
         }
         if (k.indexOf('lessons') !== -1) {
-          // CHANGED: the old code issued three list queries per topic that
-          // included `where('audiences.X','==',true)`. Firestore cannot prove
-          // that constraint against the `lessons/{lid}` read rule (which also
-          // does a get() on the classroom doc), so every topic's query returned
-          // permission-denied — the "lessons query skipped" flood in the
-          // console. We now issue ONE query per topic with only the constraint
-          // the rule can prove (`status == 'published'`), and filter the
-          // audience / releasedTo / releasedParents conditions in JS.
           var lessonJobs = [
             coll(cls.id, t.id, 'lesson').where('status', '==', 'published').get().catch(function (e) {
               console.warn('lessons query skipped:', e && e.code, e && e.message);
@@ -1728,8 +1665,6 @@
 
     var subs = {};
     await Promise.all(items.concat(exams).map(function (it) {
-      // Students may only read THEIR OWN submission document (Firestore rules reject listing the whole
-      // collection), so fetch exactly doc(uid). Listing it silently failed and hid every graded result.
       var c = it.kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.kind).doc(it.id).collection('submissions');
       return c.doc(uid).get().then(function (d) {
         var m = {}; if (d.exists) m[d.id] = Object.assign({ id: d.id }, d.data());
@@ -1751,7 +1686,6 @@
     return out;
   }
 
-  // Past Work for a student = work that has been submitted AND graded.
   function isGradedItem(it) { return !!(it && it.sub && it.sub.status === 'Graded'); }
 
   async function mountStudentHome(root, opts) {
@@ -1763,11 +1697,9 @@
     var subjKeys = lmzSubjectKeys(student.subjects);
     root.classList.add('cr-root');
     if (root._wkTimer) { clearInterval(root._wkTimer); root._wkTimer = null; }
-    // One cache shared by the Homework and Exams tabs: reopening a tab paints instantly.
     var CACHE = global.__wkStudentCache = global.__wkStudentCache || {};
     var S = { items: [], clsBySubject: {}, sel: null, loaded: false };
 
-    // Needs the student's action: not handed in yet, or sent back for corrections.
     function isTodo(it) {
       var st = it.sub && it.sub.status;
       if (st === 'Corrections') return true;
@@ -1808,7 +1740,6 @@
         rowActionHtml(it, 'data-a="wk-open" data-id="' + esc(it.id) + '"') + '</div>';
     }
 
-    // The subject cards need nothing from Firestore, so they paint at once; the red bubbles fill in after.
     function drawHome() {
       if (!subjKeys.length) { root.innerHTML = '<div class="cr-empty">No ' + (isEx ? 'exams' : 'homework') + ' posted yet.</div>'; return; }
       root.innerHTML = '<div class="cr-bar"><div><h3>My ' + (isEx ? 'Exams' : 'Homework') + '</h3><div class="cr-sub">Pick a subject. The red bubble shows how many ' + (isEx ? 'exams' : 'pieces of work') + ' need you; graded work waits inside the subject.</div></div></div>' +
@@ -1854,7 +1785,6 @@
     function draw() { if (S.sel) drawSubject(); else drawHome(); }
 
     async function fetchAll() {
-      // One small query per subject (not the whole classrooms collection), all subjects in parallel.
       var classLists = await Promise.all(subjKeys.map(function (k) {
         return db.collection('classrooms').where('subjectId', '==', k).get().then(function (snap) {
           return snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (c) {
@@ -1873,7 +1803,6 @@
     var loading = null, rerun = null;
     function load(silent, force) {
       if (loading) {
-        // A load is already in flight (it may have started before the student handed in): run once more right after it.
         if (force) rerun = { silent: silent, force: force };
         return loading;
       }
@@ -1882,7 +1811,7 @@
         buildFrom(per);
         try { global.dispatchEvent(new CustomEvent('wk:loaded', { detail: { kind: kind } })); } catch (e6) { /* ignore */ }
         if (!root.isConnected) { clearInterval(root._wkTimer); return; }
-        if (silent && !force && document.querySelector('.cr-overlay, .pui-ov')) return; // never redraw under an open dialog
+        if (silent && !force && document.querySelector('.cr-overlay, .pui-ov')) return;
         draw();
         if (S.focusId) tryFocus();
       }).catch(function (e) {
@@ -1895,7 +1824,6 @@
       return loading;
     }
 
-    // Deep link: jump straight to the subject that holds this item (used by "Check result" and the bell).
     function tryFocus() {
       if (!S.focusId || !S.loaded) return;
       var it = S.items.filter(function (x) { return x.id === S.focusId; })[0];
@@ -1920,22 +1848,13 @@
       }
     });
 
-    // Instant paint: cached data if we have it (bubbles included), otherwise the bare subject cards.
     if (CACHE[uid] && CACHE[uid].per) buildFrom(CACHE[uid].per);
     draw();
-    // Refresh in the background (NOT awaited, so the tab opens immediately), then keep the bubbles alive.
     load(true);
     root._wkTimer = setInterval(function () { if (!root.isConnected) clearInterval(root._wkTimer); else if (!document.hidden) load(true); }, 60000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && root.isConnected) load(true); });
   }
 
-  // =========================================================
-  // STUDENT ITEM VIEW
-  //   Three clearly separate zones:
-  //     BLUE  "Your uploaded work"          = what the student handed in
-  //     GREEN "Graded work from your tutor" = score, feedback, marked copy
-  //     AMBER "Corrections requested"       = tutor sent it back
-  // =========================================================
   function okUrl(u) { return /^https?:\/\//i.test(String(u || '')) ? String(u) : ''; }
 
   function mineSectionHtml(sub, label) {
@@ -2003,7 +1922,6 @@
         ((attLinksHtml(it) || okUrl(it.examPdfUrl)) ? '<div class="wk-box">' + attLinksHtml(it) + (!it.attachedPdfUrl && okUrl(it.examPdfUrl) ? '<a href="' + esc(it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download task / resource</a>' : '') + '</div>' : '') +
         '</div>';
 
-      // Order: result first when graded, so it is the first thing the student sees.
       var zones = '';
       if (isGraded) zones = gradedSectionHtml(sub) + mineSectionHtml(sub, 'Your uploaded work (as handed in)');
       else if (isCorr) zones = gradedSectionHtml(sub) + mineSectionHtml(sub, 'Your previous upload');
@@ -2053,8 +1971,6 @@
             var clsDoc = await U.clsRef(cid).get();
             var subjectId = clsDoc.exists ? clsDoc.data().subjectId : '';
             if (!subjectId) throw new Error('Could not find this class. Please refresh and try again.');
-            // Must match storage.rules: classroom-files/{subject}/{classroom}/{itemId}/submissions/{uid}/{file}
-            // (flat exams: classroom-files/{subject}/{classroom}/exams/{examId}/submissions/{uid}/{file})
             var path = 'classroom-files/' + subjectId + '/' + cid + '/' + (kind === 'exam' ? 'exams/' : '') + id + '/submissions/' + uidNow + '/' + cleanName(file.name);
             var task = firebase.storage().ref(path).put(file, { contentType: file.type });
             task.on('state_changed', function (s) {
@@ -2072,14 +1988,10 @@
           if (prev && prev.exists) {
             if (prev.data().status === 'Graded') throw new Error('This work has already been graded and can no longer be changed.');
             var upd = Object.assign({ textAnswer: text, updatedAt: FVs.serverTimestamp() }, fileData);
-            // CHANGED: only send status / submittedAt on an actual Corrections -> Submitted
-            // transition. A plain re-upload (previous status already 'Submitted') must NOT
-            // include 'status', because the rules only allow a status change from
-            // 'Corrections' — anything else is denied with permission-denied.
             if (prev.data().status === 'Corrections') {
               upd.status = 'Submitted';
               upd.submittedAt = FVs.serverTimestamp();
-              upd.inkData = null;   // the tutor's marks belong to the previous attempt; rules allow clearing it
+              upd.inkData = null;
             }
             try { await subRef.update(upd); } catch (we) { throw wrapWriteErr(we, 'update', subRef, prev.data().status); }
           } else {
@@ -2111,7 +2023,6 @@
     });
   }
 
-  // Turns a bare "Missing or insufficient permissions" into something that says WHICH write was refused.
   function wrapWriteErr(e, op, ref, prevStatus) {
     var code = e && e.code ? e.code : '';
     var msg = 'Your ' + (op === 'create' ? 'first hand-in' : 're-submission') + ' was refused by the database' + (code ? ' (' + code + ')' : '') + '.';
@@ -2119,7 +2030,6 @@
     var w = new Error(msg + ' Path: ' + (ref && ref.path)); w.code = code; return w;
   }
 
-  // One consistent action button for a student row: graded work gets its own green button.
   function rowActionHtml(it, onclickAttr) {
     var st = it.sub && it.sub.status;
     var label = st === 'Graded' ? 'View graded work' : (st === 'Corrections' ? 'Fix &amp; resubmit' : (it.sub ? 'View my work' : 'Open'));
@@ -2131,8 +2041,10 @@
   }
 
   // =========================================================
-  // PARENT SIDE (read-only): the parent dashboard calls this for Homework and Exams.
-  // Shows, per item, the child's own upload and the tutor's graded work as separate links.
+  // PARENT SIDE (read-only)
+  // FIX: Match classrooms by year OR keyStage.
+  // FIX: Include work released to parents (releasedParents).
+  // FIX: Load in parallel, show loader, and show explicit errors instead of failing silently.
   // =========================================================
   async function mountParentWork(root, opts) {
     injectStyle();
@@ -2142,23 +2054,51 @@
     if (!child || !child.id) { root.innerHTML = ''; return; }
     var kind = opts.kind === 'exams' ? 'exams' : 'homework';
     var student = Object.assign({ id: child.id }, child);
-    var token = (root._wkTok = (root._wkTok || 0) + 1);
-    root.innerHTML = '<div class="cr-empty">Loading ' + esc(child.name || 'your child') + '\u2019s ' + kind + '\u2026</div>';
+    var parentUid = firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
+    
+    // 1. Show the standard loader
+    root.innerHTML = U.loaderHtml('Loading ' + (kind === 'exams' ? 'exams' : 'homework') + '...');
+
     try {
+      // 2. Fetch classrooms and filter by year OR keyStage (matching DB rules)
       var clsSnap = await db.collection('classrooms').get();
       var subs = lmzSubjectKeys(student.subjects);
       var myClassrooms = clsSnap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (c) {
-        return subs.indexOf(c.subjectId) !== -1 && (student.year == null || Number(student.year) === Number(c.year)) &&
-          U.boardOf(c) === U.studentBoardFor(student, c.subjectId);
+        if (subs.indexOf(c.subjectId) === -1) return false;
+        if (U.boardOf(c) !== U.studentBoardFor(student, c.subjectId)) return false;
+        
+        // Match by year OR keyStage
+        var sYear = String(student.year || '').trim();
+        var sKs = String(student.keyStage || '').trim();
+        var cYear = String(c.year || '').trim();
+        var cKs = String(c.keyStage || '').trim();
+        if (sYear && cYear && sYear === cYear) return true;
+        if (sKs && cKs && sKs === cKs) return true;
+        return false;
       });
+
+      // 3. Load work for all classrooms in parallel
       var all = [];
-      for (var i = 0; i < myClassrooms.length; i++) {
-        var w = await loadStudentWork(myClassrooms[i], await U.loadTopics(myClassrooms[i].id), child.id, student, null, firebase.auth().currentUser.uid);
-        var pick = kind === 'exams' ? w.exams : w.assignments.concat(w.lessons);
-        pick.forEach(function (x) { x._cls = myClassrooms[i]; all.push(x); });
-      }
-      if (root._wkTok !== token) return;
-      all = all.filter(function (it) { return studentSees(student, it); });
+      await Promise.all(myClassrooms.map(async function (c) {
+        try {
+          var topics = await U.loadTopics(c.id);
+          // Pass parentUid so loadStudentWork knows to include releasedParents
+          var w = await loadStudentWork(c, topics, child.id, student, null, parentUid);
+          var pick = kind === 'exams' ? w.exams : w.assignments.concat(w.lessons);
+          pick.forEach(function (x) { x._cls = c; all.push(x); });
+        } catch (e) {
+          console.error('Failed to load work for classroom', c.id, e);
+          // Don't fail the whole page if one classroom fails
+        }
+      }));
+
+      // 4. Filter results (ensure studentSees allows releasedParents)
+      all = all.filter(function (it) { 
+        var audOk = effAudiences(it)[studentAud(student)] === true;
+        var relOk = Array.isArray(it.releasedTo) && it.releasedTo.indexOf(student.id) !== -1;
+        var relParOk = parentUid && Array.isArray(it.releasedParents) && it.releasedParents.indexOf(parentUid) !== -1;
+        return audOk || relOk || relParOk;
+      });
 
       var f = String(opts.filter || 'all').toLowerCase();
       if (f !== 'all') {
@@ -2168,8 +2108,13 @@
         });
         if (filtered.length || ['graded', 'submitted', 'pending', 'overdue', 'corrections'].indexOf(f) !== -1) all = filtered;
       }
-      if (!all.length) { root.innerHTML = '<div class="cr-empty">No ' + kind + ' to show for ' + esc(child.name || 'your child') + ' yet.</div>'; return; }
 
+      if (!all.length) { 
+        root.innerHTML = '<div class="cr-empty">No ' + kind + ' to show for ' + esc(child.name || 'your child') + ' yet.</div>'; 
+        return; 
+      }
+
+      // 5. Render
       var by = {};
       all.forEach(function (it) { var n = it._cls.subjectName || it._cls.subjectId; (by[n] = by[n] || []).push(it); });
       var h = '';
@@ -2194,14 +2139,14 @@
         h += '</div>';
       });
       root.innerHTML = h;
+
     } catch (e) {
       console.error('mountParentWork:', e);
-      root.innerHTML = '<div class="cr-empty">Could not load the ' + kind + ': ' + esc(e.message || e) + '</div>';
+      // 6. Explicit error message instead of silent failure
+      root.innerHTML = '<div class="cr-empty" style="color:#c2415f;"><i class="fas fa-triangle-exclamation"></i> Could not load the ' + kind + ': ' + esc(e.message || 'Permission denied. Please contact support.') + '</div>';
     }
   }
 
-  // Rows of homework / exams shown under each topic in the student's Classroom view.
-  // Called by classroom-helpers.js renderClass() once per topic, in topic order.
   function studentRowHtml(it) {
     var isExam = it.kind === 'exam';
     var due = dueOf(it, isExam ? 'exam' : 'assignment');
@@ -2222,13 +2167,11 @@
     var claimed = work._examsClaimed || (work._examsClaimed = {});
     exams.forEach(function (it) {
       if (claimed[it.id] || isGradedItem(it)) return;
-      // flat exams usually have no topic: show each one once, under the first topic rendered
       if (!it.topicId || it.topicId === topicId) { claimed[it.id] = 1; rows.push(it); }
     });
     return rows.map(studentRowHtml).join('');
   }
 
-  // The "Past Work" folder inside a subject: only submitted AND graded work.
   function studentPastWork(work) {
     if (!work) return '';
     var past = (work.assignments || []).concat(work.exams || []).filter(isGradedItem);
@@ -2237,7 +2180,6 @@
       '<div class="cr-note" style="margin-bottom:.4rem">Submitted and graded \u2014 open an item to see your score, feedback and marked copy.</div>' + past.map(studentRowHtml).join('') + '</details>';
   }
 
-  // Entry points that classroom-helpers.js calls from the student Classroom view.
   function openStudentItem(o) {
     o = o || {};
     openStudentDetail(o.cid, o.tid || '', o.id, o.kind === 'exam' ? 'exam' : 'assignment', o.onChange);
@@ -2247,7 +2189,6 @@
     openStudentDetail(cls.id, lesson.topicId || lesson.tid || '', lesson.id, 'lesson', onDone);
   }
 
-  // Same rule the Homework / Exams tabs use for the red bubble: does this still need the student?
   function isStudentTodo(it, isEx) {
     var st = it.sub && it.sub.status;
     if (st === 'Corrections') return true;
@@ -2276,7 +2217,7 @@
     openStudentDetail: openStudentDetail,
     openStudentItem: openStudentItem,
     openStudentLesson: openStudentLesson,
-    openSubmitWork: openStudentDetail, // Alias for old dashboard code
+    openSubmitWork: openStudentDetail,
     _h: {
       U: U, esc: esc, pill: pill,
       coll: coll, collName: collName, subName: subName,

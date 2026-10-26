@@ -47,9 +47,7 @@
       d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
   }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
-  // ---- Exam boards -------------------------------------------------
-  // Classrooms that existed before boards were introduced have NO `board`
-  // field. They are the Cambridge material, so a missing board means Cambridge.
+  
   var BOARDS = [
     { id: 'cambridge', label: 'Cambridge', isNew: false },
     { id: 'edexcel', label: 'Pearson Edexcel', isNew: true },
@@ -69,14 +67,9 @@
       return '<option value="' + esc(b.id) + '"' + (b.id === cur ? ' selected' : '') + '>' + esc(b.label) + (b.isNew ? ' (NEW)' : '') + '</option>';
     }).join('');
   }
-  // Cambridge keeps the original id so every existing classroom, lesson and
-  // piece of work stays exactly where it is.
   function classroomId(subjectId, year, board) {
     return subjectId + '_y' + year + ((board && board !== DEFAULT_BOARD) ? '_' + board : '');
   }
-  // The admin assigns boards on the student's profile:
-  //   board        = default for every subject ('' = not set -> Cambridge)
-  //   subjectBoards = { subjectId: boardId } overrides per subject
   function studentBoardFor(p, subjectId) {
     var sb = p && p.subjectBoards && p.subjectBoards[subjectId];
     var b = sb || (p && p.board);
@@ -87,7 +80,6 @@
     var b = sb || (p && p.board);
     return BOARDS.some(function (x) { return x.id === b; });
   }
-  // Admin widget: one "all subjects" select + one select per subject.
   function boardAssignHtml(p, subjectKeys, idp) {
     idp = idp || 'ba';
     var h = '<div class="cr-field"><label>Exam board \u2014 all subjects</label><select id="' + idp + 'All">' +
@@ -95,7 +87,7 @@
         return '<option value="' + esc(b.id) + '"' + ((p && p.board) === b.id ? ' selected' : '') + '>' + esc(b.label) + '</option>';
       }).join('') + '</select></div>';
     if (subjectKeys && subjectKeys.length) {
-      h += '<div class="cr-note" style="margin-bottom:.4rem">Or set a different board for individual subjects (e.g. Maths on Oxford AQA, English on Pearson Edexcel):</div>';
+      h += '<div class="cr-note" style="margin-bottom:.4rem">Or set a different board for individual subjects:</div>';
       h += subjectKeys.map(function (k) {
         var cur = p && p.subjectBoards && p.subjectBoards[k];
         return '<div class="cr-field"><label>' + esc(lmzSubjectLabel(k)) + '</label><select data-board-subj="' + esc(k) + '">' +
@@ -113,8 +105,6 @@
     root.querySelectorAll('[data-board-subj]').forEach(function (sel) { if (sel.value) map[sel.dataset.boardSubj] = sel.value; });
     return { board: all && all.value ? all.value : '', subjectBoards: map };
   }
-  // ---- Admin board switcher --------------------------------------
-  // One card per subject + year; the board is switched INSIDE the subject.
   function adminBoardKey(subjectId, year) { return 'paisley_admin_board_' + subjectId + '_' + year; }
   function getAdminBoard(subjectId, year) {
     try { var v = localStorage.getItem(adminBoardKey(subjectId, year)); return BOARDS.some(function (b) { return b.id === v; }) ? v : null; } catch (e) { return null; }
@@ -131,7 +121,7 @@
     order.forEach(function (k) {
       var g = groups[k], want = boardFilter || getAdminBoard(g[0].subjectId, g[0].year) || DEFAULT_BOARD;
       var hit = g.filter(function (c) { return boardOf(c) === want; })[0];
-      if (!hit && boardFilter) return; // filtering by a board this subject does not have yet
+      if (!hit && boardFilter) return;
       out.push(hit || g.filter(function (c) { return boardOf(c) === DEFAULT_BOARD; })[0] || g[0]);
     });
     return out;
@@ -143,7 +133,6 @@
         (on ? '<i class="fas fa-check"></i> ' : '') + esc(b.label) + (b.isNew ? ' <span class="cr-board-new">NEW</span>' : '') + '</button>';
     }).join('') + '</div>';
   }
-  // Returns the classroom id to open for `board`, creating it (after a confirm) the first time.
   async function switchBoardTarget(list, cls, board, user) {
     var hit = (list || []).filter(function (c) { return c.subjectId === cls.subjectId && Number(c.year) === Number(cls.year) && c.keyStage === cls.keyStage && boardOf(c) === board; })[0];
     if (!hit) {
@@ -233,7 +222,6 @@
   }
 
   var AUD_NAMES = { online: 'Online', remote: 'Remote', tuition: 'Tuition', tutors: 'Tutors' };
-  // Which audience a student record belongs to: online (default), remote, or tuition (CBC).
   function audFor(p) { var t = p && p.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
   function isCbcStage(ks) { return /^CBC\b/i.test(String(ks || '')); }
   function effAud(l) {
@@ -414,8 +402,6 @@
     return snapDocs(snap).sort(byOrder);
   }
 
-  // Fetch every topic's lessons CONCURRENTLY (was one awaited query per topic,
-  // one after another). Result order is still topic order.
   async function loadLessonsForTopics(cid, topics, publishedOnly, aud) {
     var parts = await Promise.all(topics.map(async function (t) {
       var q = lessonsRef(cid, t.id);
@@ -436,13 +422,6 @@
     return loadLessonsForTopics(cid, topics, publishedOnly, aud);
   }
 
-  /* ---------------------------------------------------------
-     Short-lived in-memory cache (student/parent read paths only).
-     Identical requests made close together (login badge count,
-     Classroom, Homework, Exams) share ONE Firestore round trip.
-     In-flight requests are de-duplicated; failures are not cached.
-     Manager/tutor screens keep using the uncached loaders above.
-  --------------------------------------------------------- */
   var MEMO_TTL = 60000;
   var _memo = {};
   function memo(key, fn, ttl) {
@@ -473,7 +452,6 @@
     }).then(copyArr);
   }
 
-  // Same spinner look as the rest of the portal, usable inside any cr-root.
   function loaderHtml(msg) {
     if (!document.getElementById('cr-spin-keyframe')) {
       var k = document.createElement('style');
@@ -654,7 +632,6 @@
     var scopeBanner = isScoped
       ? '<div class="cr-scope-banner"><i class="fas ' + (scope === 'tuition' ? 'fa-graduation-cap' : 'fa-house-laptop') + '"></i> <b>Classwork — ' + scopeName + ' ' + (scope === 'tuition' ? 'students' : 'students') + ' only.</b> Everything saved here is posted to ' + scopeWho + '. ' + (scope === 'tuition' ? 'Online and remote students' : 'Online students') + ' and tutors will not see it.</div>'
       : '';
-    // Exact scope: Key Stage + subject + Years (opts.teaching). Older tutors without it keep subjects + keyStages.
     var tutorScope = { teaching: opts.teaching, subjects: opts.subjects, keyStages: opts.keyStages };
     var tutorSubjects = lmzTutorSubjectKeys(tutorScope);
     var tutorKS = lmzTutorKeyStages(tutorScope);
@@ -756,7 +733,6 @@
       root.innerHTML = '<div class="cr-empty">Loading classrooms…</div>';
       try {
         if (isAdmin) {
-          // CBC classrooms live only in the Tuition panel; British ones never show there.
           S.classrooms = snapDocs(await db.collection('classrooms').get()).filter(function (c) {
             return scope === 'tuition' ? isCbcStage(c.keyStage) : !isCbcStage(c.keyStage);
           });
@@ -902,7 +878,7 @@
         S.cls = Object.assign({ id: doc.id }, doc.data());
         var audForLoad = isAdmin ? null : 'tutors';
         var topicsOpen = await loadTopics(cid);
-        S.topics = topicsOpen; S.lessons = await loadLessonsForTopics(cid, topicsOpen, false, audForLoad); // topics fetched once, not twice
+        S.topics = topicsOpen; S.lessons = await loadLessonsForTopics(cid, topicsOpen, false, audForLoad);
       } catch (e) {
         console.error('openClassroom:', e);
         root.innerHTML = '<div class="cr-empty">Could not open this classroom: ' + esc(e.message || e) + '</div>';
@@ -1357,13 +1333,6 @@
         if (isNew || (lesson && lesson.topicId !== topicId)) {
           data.order = siblings.reduce(function (a, l) { return Math.max(a, l.order || 0); }, 0) + 1;
         }
-        // CHANGED: set tutorId / tutorName so the cloud function's
-        // `handleWorkWrite` in functions/work.js can notify the right
-        // tutor when a student hands in or resubmits this lesson.
-        // Lessons previously had no `tutorId` at all, so the guard
-        //   `if (item.tutorId) { W.notify(...) }`
-        // silently did nothing for every classwork submission. Legacy
-        // lessons are backfilled on the next save.
         if (isNew || !(lesson && lesson.tutorId)) {
           data.tutorId = user.uid;
           data.tutorName = user.name || '';
@@ -1519,9 +1488,6 @@
     });
     root.addEventListener('change', function (e) {
       var f = e.target.dataset && e.target.dataset.f; if (!f) return;
-      // Only this manager's own filters (f-*, l-*) belong here. Other controls inside this root —
-      // e.g. the Publish tab's Key Stage / Year / Subject / Topic filters — manage themselves.
-      // Falling through to renderList() re-mounted the Publish tab on every change and wiped the filters.
       if (f.indexOf('f-') !== 0 && f.indexOf('l-') !== 0) return;
       if (f === 'f-subject') S.filters.subject = e.target.value;
       else if (f === 'f-ks') S.filters.ks = e.target.value;
@@ -1560,8 +1526,6 @@
         return;
       }
 
-      // The class cards need nothing from Firestore, so they paint immediately
-      // (no blank tab) instead of waiting for the red pending-count badges.
       root.innerHTML = '<div class="cr-bar"><div><h3>My Classes</h3><div class="cr-sub">Lessons, notes and resources for the subjects you take.</div></div></div>' +
         '<div class="cr-grid">' + subjects.map(function (k) {
           return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '">' +
@@ -1570,8 +1534,6 @@
             (boardAssigned(profile, k) ? '<div style="margin-top:.4rem">' + boardBadge({ board: studentBoardFor(profile, k) }) + '</div>' : '') + '</button>';
         }).join('') + '</div>';
 
-      // Badges are filled in per subject as each one resolves, using the shared
-      // cache so the login badge count and the Homework/Exams tabs reuse the data.
       subjects.forEach(function (k) {
         (async function () {
           try {
@@ -1588,7 +1550,7 @@
               return true;
             }).length : 0;
             var count = pLessons + pHomework + pExams;
-            if (token !== homeToken || !count) return; // user already navigated away / nothing pending
+            if (token !== homeToken || !count) return;
             var card = null;
             root.querySelectorAll('.cr-card[data-a="open"]').forEach(function (c) { if (c.dataset.s === k) card = c; });
             if (card && !card.querySelector('.cr-badge-red')) card.insertAdjacentHTML('afterbegin', '<div class="cr-badge-red">' + count + '</div>');
@@ -1598,8 +1560,8 @@
     }
 
     async function openSubject(subjectId) {
-      homeToken++; // cancel any badge fills still running for the home screen
-      var board = studentBoardFor(profile, subjectId); // assigned by the admin
+      homeToken++;
+      var board = studentBoardFor(profile, subjectId);
       S.board = board;
       root.innerHTML = loaderHtml('Loading\u2026');
       try {
@@ -1607,7 +1569,6 @@
         if (!cls) { S.cls = { subjectId: subjectId, subjectName: lmzSubjectLabel(subjectId), year: year, board: board }; S.topics = []; S.lessons = []; S.work = { assignments: [], exams: [], lessons: [] }; return renderClass(); }
         var topics = await loadTopicsCached(cls.id);
         var emptyWork = { assignments: [], exams: [], lessons: [] };
-        // Lessons and the student's work are fetched together (both need only the topic list).
         var res = await Promise.all([
           loadLessonsCached(cls.id, topics, AUD),
           global.WorkUI ? global.WorkUI.loadStudentWork(cls, topics, opts.uid, profile).catch(function () { return emptyWork; }) : emptyWork
@@ -1706,7 +1667,6 @@
         h += '<div class="cr-note" style="color:#a86b00; font-weight:700;"><i class="fas fa-rotate-left"></i> Your tutor asked for corrections</div>' +
           '<div style="margin-top:.6rem"><button type="button" class="cr-btn primary" data-a="upload-classwork"><i class="fas fa-upload"></i> Fix &amp; resubmit</button>' + checkBtn + '</div>';
       } else if (st) {
-        // Already handed in: no submit button, just the status and a way to see it under Homework.
         h += '<div class="cr-note" style="color:#1d8b57; font-weight:700;"><i class="fas fa-circle-check"></i> Submitted \u2014 awaiting grading</div>' +
           '<div style="margin-top:.6rem">' + checkBtn.replace(' style="margin-left:.5rem"', '').replace('class="cr-btn"', 'class="cr-btn primary"') + '</div>';
       } else {
@@ -1764,10 +1724,15 @@
     return { reload: renderHome };
   }
 
+  // =========================================================
+  // PARENT CLASSROOM VIEW
+  // FIX: Accept parentId, filter by releasedParents, handle per-topic failures gracefully.
+  // =========================================================
   function mountParent(root, opts) {
     injectStyle();
     root.classList.add('cr-root');
     var child = opts.child || {};
+    var parentId = opts.parentId || (firebase.auth().currentUser ? firebase.auth().currentUser.uid : null);
     var AUD = audFor(child);
     var subjects = lmzSubjectKeys(child.subjects);
     var year = child.year != null && child.year !== '' ? Number(child.year) : null;
@@ -1781,28 +1746,44 @@
           return '<button type="button" class="cr-card" data-a="open" data-s="' + esc(k) + '"><div class="ic"><i class="fas fa-chalkboard"></i></div><h4>' + esc(lmzSubjectLabel(k)) + '</h4><div class="meta">' + (year ? 'Year ' + esc(year) : esc(ksShort(child.keyStage))) + '</div></button>';
         }).join('') + '</div>';
     }
+
     async function openSubject(k) {
-      var pboard = studentBoardFor(child, k); // assigned by the admin
+      var pboard = studentBoardFor(child, k);
       root.innerHTML = loaderHtml('Loading\u2026');
       try {
         var cls = await findClassroomCached(k, year, child.keyStage, pboard);
         if (!cls) { S.cls = { subjectId: k, subjectName: lmzSubjectLabel(k), year: year, board: pboard }; S.topics = []; S.lessons = []; }
-        else { var pTopics = await loadTopicsCached(cls.id); var pLessons = await loadLessonsCached(cls.id, pTopics, AUD); S.cls = cls; S.topics = pTopics; S.lessons = pLessons; }
-      } catch (e) { console.error('parent classroom:', e); root.innerHTML = '<div class="cr-crumb"><a data-a="home">Subjects</a></div><div class="cr-panel"><div class="cr-empty">Could not load this subject.</div></div>'; return; }
+        else { 
+          S.cls = cls; 
+          S.topics = await loadTopicsCached(cls.id); 
+          S.lessons = await loadLessonsCached(cls.id, S.topics, AUD); 
+        }
+      } catch (e) {
+        console.error('parent classroom:', e); 
+        root.innerHTML = '<div class="cr-crumb"><a data-a="home">Subjects</a></div><div class="cr-panel"><div class="cr-empty">Could not load this subject: ' + esc(e.message || e) + '</div></div>'; 
+        return; 
+      }
       list();
     }
+
     function list() {
       S.open = null;
       var h = '<div class="cr-crumb"><a data-a="home">Subjects</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(displayName(S.cls)) + '</span></div>' +
         (boardAssigned(child, S.cls.subjectId) ? '<div class="cr-board-row">' + boardBadge(S.cls) + '</div>' : '');
       var any = false;
       S.topics.forEach(function (t) {
-        var ls = S.lessons.filter(function (l) { return l.topicId === t.id; }).sort(byOrder);
-        if (!ls.length) return; any = true;
-        h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t">' + esc(t.title) + '</span></div>' + ls.map(function (l) {
-          return '<div class="cr-lesson student" data-a="lesson" data-id="' + esc(l.id) + '" tabindex="0" role="button"><span class="tt">' + esc(l.title) + '<small>' + esc(fmtDate(l.publishedAt || l.createdAt)) + '</small></span>' +
-            (l.attachments && l.attachments.length ? '<span class="cr-note"><i class="fas fa-paperclip"></i> ' + l.attachments.length + '</span>' : '') + '</div>';
-        }).join('') + '</div>';
+        try {
+          var ls = S.lessons.filter(function (l) { return l.topicId === t.id; }).sort(byOrder);
+          if (!ls.length) return; 
+          any = true;
+          h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t">' + esc(t.title) + '</span></div>' + ls.map(function (l) {
+            return '<div class="cr-lesson student" data-a="lesson" data-id="' + esc(l.id) + '" tabindex="0" role="button"><span class="tt">' + esc(l.title) + '<small>' + esc(fmtDate(l.publishedAt || l.createdAt)) + '</small></span>' +
+              (l.attachments && l.attachments.length ? '<span class="cr-note"><i class="fas fa-paperclip"></i> ' + l.attachments.length + '</span>' : '') + '</div>';
+          }).join('') + '</div>';
+        } catch (topicErr) {
+          console.warn('Failed to render topic', t.id, topicErr);
+          h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t">' + esc(t.title) + '</span></div><div class="cr-empty" style="color:#c2415f;">Could not load items for this topic.</div></div>';
+        }
       });
       root.innerHTML = h + (any ? '' : '<div class="cr-panel"><div class="cr-empty">Nothing has been released to ' + esc(child.name || 'your child') + ' in this subject yet.</div></div>');
     }

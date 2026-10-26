@@ -11,24 +11,51 @@
      remote  : slots of linked children who are remote students
      tuition : slots of linked children who are CBC tuition students
 
-   Splitting by student type keeps a parent of an online child from
-   reading remote-only content (and vice-versa) without merging their
-   access. A child with no studentType is an online student.
-
    FIX (parents could not see work their children could see):
-   a student is allowed into a classroom when the SUBJECT matches and
-   either the YEAR or the KEY STAGE matches (see classStudentMay in
-   firestore.rules). The old code only built "<student keyStage>|<subject>"
-   from the student's own keyStage text, so whenever the classroom's
-   keyStage text differed from the student's (e.g. "Key Stage 3" vs
-   "Key Stage 3 (Years 7-9)"), or the student matched by year, or the
-   student had no keyStage at all, the parent got NO slot and every
-   homework / exam query was silently refused. Slots are now built from
-   the real classrooms each child can enter, plus the old keyStage slots.
+   1. A student is allowed into a classroom when the SUBJECT matches and
+      either the YEAR or the KEY STAGE matches. The old code only built
+      "<student keyStage>|<subject>" from the student's own keyStage text,
+      so whenever the classroom's keyStage text differed from the
+      student's, or the student matched by year, the parent got NO slot.
+      Slots are now built from the real classrooms each child can enter.
+   2. Subject names are normalized. If a student profile says "maths"
+      but the classroom uses "mathematics", the slot is now built as
+      "Key Stage X|mathematics" so the rules match.
 ========================================================= */
 const admin = require("firebase-admin");
 
 const norm = (v) => String(v == null ? "" : v).trim();
+
+// Map display names / aliases to the standard subject keys used by classrooms
+const SUBJECT_ALIASES = {
+  'maths': 'mathematics',
+  'math': 'mathematics',
+  'english language': 'english',
+  'english literature': 'english',
+  'science': 'science',
+  'biology': 'biology',
+  'chemistry': 'chemistry',
+  'physics': 'physics',
+  'history': 'history',
+  'geography': 'geography',
+  'computer science': 'computing',
+  'computing': 'computing',
+  'ict': 'computing',
+  'business studies': 'business',
+  'business': 'business',
+  'economics': 'economics',
+  'art': 'art',
+  'art & design': 'art',
+  'music': 'music',
+  'physical education': 'pe',
+  'pe': 'pe'
+};
+
+function normalizeSubject(subject) {
+  if (!subject) return 'unknown';
+  const s = String(subject).trim().toLowerCase();
+  return SUBJECT_ALIASES[s] || s;
+}
 
 async function rebuildParentAccess(parentUid) {
   const db = admin.firestore();
@@ -38,7 +65,7 @@ async function rebuildParentAccess(parentUid) {
   const ref = db.collection("parentAccess").doc(parentUid);
   if (!studentIds.length) { await ref.delete().catch(() => {}); return 0; }
 
-  // Students and classrooms are read once, in parallel (was one awaited read per child).
+  // Students and classrooms are read once, in parallel
   const [stuSnaps, clsSnap] = await Promise.all([
     Promise.all(studentIds.map((id) => db.collection("students").doc(id).get())),
     db.collection("classrooms").get()
@@ -51,11 +78,15 @@ async function rebuildParentAccess(parentUid) {
     const s = stu.data() || {};
     const bucket = s.studentType === "remote" ? remote : (s.studentType === "tuition" ? tuition : online);
     const add = (slot) => { all.add(slot); bucket.add(slot); };
-    const subjects = Array.isArray(s.subjects) ? s.subjects.filter(Boolean) : [];
+    
+    // Normalize the student's subjects
+    const rawSubjects = Array.isArray(s.subjects) ? s.subjects.filter(Boolean) : [];
+    const subjects = rawSubjects.map(normalizeSubject);
+    
     const sKs = norm(s.keyStage);
     const sYear = s.year == null || s.year === "" ? null : Number(s.year);
 
-    // Old behaviour (kept): the child's own keyStage text.
+    // Old behaviour (kept as fallback): the child's own keyStage text.
     if (sKs) {
       if (!subjects.length) add(sKs + "|*");
       else subjects.forEach((id) => add(sKs + "|" + id));
@@ -64,10 +95,13 @@ async function rebuildParentAccess(parentUid) {
     // New: every real classroom this child may enter (same test as classStudentMay in the rules).
     if (subjects.length) {
       for (const c of classrooms) {
-        if (subjects.indexOf(c.subjectId) === -1) continue;
+        // Normalize the classroom subject to match
+        const cSubject = normalizeSubject(c.subjectId);
+        if (subjects.indexOf(cSubject) === -1) continue;
+        
         const yearMatch = sYear != null && c.year != null && Number(c.year) === sYear;
         const ksMatch = sKs && norm(c.keyStage) === sKs;
-        if (yearMatch || ksMatch) add(c.keyStage + "|" + c.subjectId);
+        if (yearMatch || ksMatch) add(c.keyStage + "|" + cSubject);
       }
     }
   }
