@@ -74,7 +74,6 @@ a{color:var(--brand-deep);font-weight:700}
     <div class="f"><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" /></div>
     <button class="btn" id="loginBtn" type="button">Sign in</button>
     <p class="small"><a href="#" id="forgot">Forgot your password?</a></p>
-    
   </div>
 
   <div class="panel" id="panel-signup">
@@ -108,106 +107,113 @@ a{color:var(--brand-deep);font-weight:700}
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js"></script>
 <script>
-const auth = firebase.auth();
-const db = firebase.firestore();
-const $ = id => document.getElementById(id);
-const IDENT = ['Student','Creator','Future entrepreneur','Researcher','Problem solver','Curious explorer'];
-const INTS = ['Create','Research','Study smarter','Start something','Solve problems','Build projects','Work faster','Understand AI','Stay safe online'];
+// REMOVED `const db = firebase.firestore();` because lms-helpers.js likely already declares it, causing the SyntaxError.
 
-$('idChips').innerHTML = IDENT.map(x=>'<label class="chip"><input type="radio" name="ident" value="'+x+'"><span>'+x+'</span></label>').join('');
-$('intChips').innerHTML = INTS.map(x=>'<label class="chip"><input type="checkbox" name="int" value="'+x+'"><span>'+x+'</span></label>').join('');
-
-function hideMsgs(){ $('errMsg').classList.remove('show'); $('okMsg').classList.remove('show'); }
-function showErr(m){ hideMsgs(); $('errMsg').textContent = m; $('errMsg').classList.add('show'); }
-function showOk(m){ hideMsgs(); $('okMsg').textContent = m; $('okMsg').classList.add('show'); }
-function setLoading(b,on){ b.disabled = on; }
-
-function setTab(t){
-  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
-  document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active', x.id==='panel-'+t));
-  const s = t==='signup';
-  $('titleText').textContent = s ? 'Welcome to TECH.' : 'Welcome back';
-  $('subText').textContent = s ? "Let's build something." : 'Sign in to continue your build.';
-  $('sideTitle').innerHTML = s ? 'What are we <em>building?</em>' : 'Welcome to <em>TECH.</em>';
-  hideMsgs();
-}
-
-document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.tab)));
-
-// Check URL parameter for signup tab
-const urlParams = new URLSearchParams(location.search);
-if(urlParams.get('tab') === 'signup') {
-  setTab('signup');
-}
-
-$('suAge').addEventListener('change',()=>{ $('guard').style.display = $('suAge').value==='under18' ? 'block' : 'none'; });
-
-auth.onAuthStateChanged(async user => { 
-  if(user && !window._justSignedUp){ 
-    try {
-      const snap = await db.collection('students').doc(user.uid).get();
-      if (snap.exists) {
-        location.href = '/tech/dashboard.html'; 
-      } else {
-        await auth.signOut();
-        showErr('We couldn\'t find your student profile. Please sign up again.');
-      }
-    } catch (e) {
-      console.warn('Profile check failed', e);
-    }
-  } 
-});
-
-$('loginBtn').addEventListener('click',()=>{
-  const email=$('loginEmail').value.trim(), pass=$('loginPassword').value;
-  if(!email||!pass) return showErr('Please enter your email and password.');
-  setLoading($('loginBtn'),true);
-  auth.signInWithEmailAndPassword(email,pass).then(()=>{ location.href='/tech/dashboard.html'; })
-    .catch(err=>{ setLoading($('loginBtn'),false); showErr(err.code==='auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email or password.'); });
-});
-
-$('forgot').addEventListener('click',e=>{
-  e.preventDefault(); const email=$('loginEmail').value.trim();
-  if(!email) return showErr('Enter your email above first, then click "Forgot your password?".');
-  auth.sendPasswordResetEmail(email).then(()=>showOk('If that email has an account, a reset link is on its way.')).catch(()=>showOk('If that email has an account, a reset link is on its way.'));
-});
-
-const BLOCKED = ['example.com','example.org','example.net','mailinator.com','guerrillamail.com','sharklasers.com','10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','trashmail.com','dispostable.com','getnada.com','maildrop.cc','throwawaymail.com','fakeinbox.com','mintemail.com','mohmal.com'];
-function isFake(a){ const m=String(a||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/); if(!m) return true; const d=m[1]; return /\.(test|invalid|localhost|local|example)$/.test(d) || BLOCKED.some(b=>d===b||d.endsWith('.'+b)); }
-const shownAt = Date.now();
-
-$('signupBtn').addEventListener('click',()=>{
-  hideMsgs();
-  if($('suWebsite').value || Date.now()-shownAt < 2500) return showErr('Please take a moment to complete the form.');
-  const name=$('suName').value.trim(), email=$('suEmail').value.trim(), pass=$('suPass').value, age=$('suAge').value, phone=$('suPhone').value.trim();
-  if(name.length<2) return showErr('Please enter your name.');
-  if(isFake(email)) return showErr('Please use your own real email address — we need to be able to reach you.');
-  if(pass.length<8) return showErr('Please choose a password of at least 8 characters.');
-  if(!age) return showErr('Please tell us your age group.');
+document.addEventListener('DOMContentLoaded', () => {
+  const auth = firebase.auth();
+  // Use the db variable already provided by lms-helpers.js or define it safely here if not
+  const db = window.db || firebase.firestore(); 
   
-  const data = { name, email, studentType:'tech', phone, ageGroup:age, status:'Pending', 
-    techProfile:{ identity:(document.querySelector('input[name=ident]:checked')||{}).value||'', interests:[...document.querySelectorAll('input[name=int]:checked')].map(x=>x.value) } };
-  
-  if(age==='under18'){
-    const g={ name:$('gName').value.trim(), email:$('gEmail').value.trim(), phone:$('gPhone').value.trim() };
-    if(!g.name||!g.phone||!/^\S+@\S+\.\S+$/.test(g.email)||isFake(g.email)) return showErr('Please give a parent or guardian name, real email and phone number.');
-    if(g.email.toLowerCase()===email.toLowerCase()) return showErr("Your parent or guardian needs their own email address.");
-    data.guardians=[g]; data.guardianName=g.name; data.guardianEmail=g.email; data.guardianPhone=g.phone; data.parentContact=[g.name,g.email,g.phone].join(' · ');
+  const $ = id => document.getElementById(id);
+  const IDENT = ['Student','Creator','Future entrepreneur','Researcher','Problem solver','Curious explorer'];
+  const INTS = ['Create','Research','Study smarter','Start something','Solve problems','Build projects','Work faster','Understand AI','Stay safe online'];
+
+  $('idChips').innerHTML = IDENT.map(x=>'<label class="chip"><input type="radio" name="ident" value="'+x+'"><span>'+x+'</span></label>').join('');
+  $('intChips').innerHTML = INTS.map(x=>'<label class="chip"><input type="checkbox" name="int" value="'+x+'"><span>'+x+'</span></label>').join('');
+
+  function hideMsgs(){ $('errMsg').classList.remove('show'); $('okMsg').classList.remove('show'); }
+  function showErr(m){ hideMsgs(); $('errMsg').textContent = m; $('errMsg').classList.add('show'); }
+  function showOk(m){ hideMsgs(); $('okMsg').textContent = m; $('okMsg').classList.add('show'); }
+  function setLoading(b,on){ b.disabled = on; }
+
+  function setTab(t){
+    document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active', x.id==='panel-'+t));
+    const s = t==='signup';
+    $('titleText').textContent = s ? 'Welcome to TECH.' : 'Welcome back';
+    $('subText').textContent = s ? "Let's build something." : 'Sign in to continue your build.';
+    $('sideTitle').innerHTML = s ? 'What are we <em>building?</em>' : 'Welcome to <em>TECH.</em>';
+    hideMsgs();
   }
-  
-  const btn=$('signupBtn'); setLoading(btn,true); window._justSignedUp=true;
-  auth.createUserWithEmailAndPassword(email,pass)
-    .then(c=>{ try{ c.user.sendEmailVerification().catch(()=>{}); }catch(e){} return db.collection('students').doc(c.user.uid).set(data); })
-    .then(()=>{ showOk('Welcome to TECH. Taking you to your studio…'); setTimeout(()=>{ location.href='/tech/dashboard.html'; },1100); })
-    .catch(err=>{
-      setLoading(btn,false); window._justSignedUp=false;
-      let m='Could not create your account.';
-      if(err.code==='auth/email-already-in-use') m='That email already has an account. Try signing in instead.';
-      else if(err.code==='auth/too-many-requests') m='Too many attempts from this device. Please wait a few minutes.';
-      else if(err.code==='auth/invalid-email') m='That email address is not valid.';
-      else if(err.code==='auth/weak-password') m='Please choose a stronger password.';
-      showErr(m);
-    });
+
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.tab)));
+
+  // Check URL parameter for signup tab
+  const urlParams = new URLSearchParams(location.search);
+  if(urlParams.get('tab') === 'signup') {
+    // Small delay to ensure DOM is fully ready and overriding any default active states
+    setTimeout(() => setTab('signup'), 10);
+  }
+
+  $('suAge').addEventListener('change',()=>{ $('guard').style.display = $('suAge').value==='under18' ? 'block' : 'none'; });
+
+  auth.onAuthStateChanged(async user => { 
+    if(user && !window._justSignedUp){ 
+      try {
+        const snap = await db.collection('students').doc(user.uid).get();
+        if (snap.exists) {
+          location.href = '/tech/dashboard.html'; 
+        } else {
+          await auth.signOut();
+          showErr('We couldn\'t find your student profile. Please sign up again.');
+        }
+      } catch (e) {
+        console.warn('Profile check failed', e);
+      }
+    } 
+  });
+
+  $('loginBtn').addEventListener('click',()=>{
+    const email=$('loginEmail').value.trim(), pass=$('loginPassword').value;
+    if(!email||!pass) return showErr('Please enter your email and password.');
+    setLoading($('loginBtn'),true);
+    auth.signInWithEmailAndPassword(email,pass).then(()=>{ location.href='/tech/dashboard.html'; })
+      .catch(err=>{ setLoading($('loginBtn'),false); showErr(err.code==='auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email or password.'); });
+  });
+
+  $('forgot').addEventListener('click',e=>{
+    e.preventDefault(); const email=$('loginEmail').value.trim();
+    if(!email) return showErr('Enter your email above first, then click "Forgot your password?".');
+    auth.sendPasswordResetEmail(email).then(()=>showOk('If that email has an account, a reset link is on its way.')).catch(()=>showOk('If that email has an account, a reset link is on its way.'));
+  });
+
+  const BLOCKED = ['example.com','example.org','example.net','mailinator.com','guerrillamail.com','sharklasers.com','10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','trashmail.com','dispostable.com','getnada.com','maildrop.cc','throwawaymail.com','fakeinbox.com','mintemail.com','mohmal.com'];
+  function isFake(a){ const m=String(a||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/); if(!m) return true; const d=m[1]; return /\.(test|invalid|localhost|local|example)$/.test(d) || BLOCKED.some(b=>d===b||d.endsWith('.'+b)); }
+  const shownAt = Date.now();
+
+  $('signupBtn').addEventListener('click',()=>{
+    hideMsgs();
+    if($('suWebsite').value || Date.now()-shownAt < 2500) return showErr('Please take a moment to complete the form.');
+    const name=$('suName').value.trim(), email=$('suEmail').value.trim(), pass=$('suPass').value, age=$('suAge').value, phone=$('suPhone').value.trim();
+    if(name.length<2) return showErr('Please enter your name.');
+    if(isFake(email)) return showErr('Please use your own real email address — we need to be able to reach you.');
+    if(pass.length<8) return showErr('Please choose a password of at least 8 characters.');
+    if(!age) return showErr('Please tell us your age group.');
+    
+    const data = { name, email, studentType:'tech', phone, ageGroup:age, status:'Pending', 
+      techProfile:{ identity:(document.querySelector('input[name=ident]:checked')||{}).value||'', interests:[...document.querySelectorAll('input[name=int]:checked')].map(x=>x.value) } };
+    
+    if(age==='under18'){
+      const g={ name:$('gName').value.trim(), email:$('gEmail').value.trim(), phone:$('gPhone').value.trim() };
+      if(!g.name||!g.phone||!/^\S+@\S+\.\S+$/.test(g.email)||isFake(g.email)) return showErr('Please give a parent or guardian name, real email and phone number.');
+      if(g.email.toLowerCase()===email.toLowerCase()) return showErr("Your parent or guardian needs their own email address.");
+      data.guardians=[g]; data.guardianName=g.name; data.guardianEmail=g.email; data.guardianPhone=g.phone; data.parentContact=[g.name,g.email,g.phone].join(' · ');
+    }
+    
+    const btn=$('signupBtn'); setLoading(btn,true); window._justSignedUp=true;
+    auth.createUserWithEmailAndPassword(email,pass)
+      .then(c=>{ try{ c.user.sendEmailVerification().catch(()=>{}); }catch(e){} return db.collection('students').doc(c.user.uid).set(data); })
+      .then(()=>{ showOk('Welcome to TECH. Taking you to your studio…'); setTimeout(()=>{ location.href='/tech/dashboard.html'; },1100); })
+      .catch(err=>{
+        setLoading(btn,false); window._justSignedUp=false;
+        let m='Could not create your account.';
+        if(err.code==='auth/email-already-in-use') m='That email already has an account. Try signing in instead.';
+        else if(err.code==='auth/too-many-requests') m='Too many attempts from this device. Please wait a few minutes.';
+        else if(err.code==='auth/invalid-email') m='That email address is not valid.';
+        else if(err.code==='auth/weak-password') m='Please choose a stronger password.';
+        showErr(m);
+      });
+  });
 });
 </script>
 </body>
