@@ -8,7 +8,39 @@
 ========================================================= */
 (function (g) {
   'use strict';
-  var T = g.TechData, esc = T.esc;
+  var T = g.TechData || g.TechUI || {}, esc = T.esc;
+  // compat: the admin module expects a few helpers the shared TechUI doesn't export
+  T.TOOL_CATS = T.TOOL_CATS || { 'Think': 1, 'Work': 1, 'Create': 1, 'Discover': 1, 'Solve': 1, 'Communicate': 1, 'Learn': 1, 'Protect': 1, 'Build': 1 };
+  T.unpublish = T.unpublish || function (id) {
+    var db = firebase.firestore(), b = db.batch();
+    b.delete(db.collection('techShowcase').doc(id));
+    b.set(db.collection('techProjects').doc(id), { showcase: 'none' }, { merge: true });
+    return b.commit();
+  };
+  if (g.TechUI && !g.TechUI.openProject) g.TechUI.openProject = function (id, o) {
+    var db = firebase.firestore();
+    db.collection('techProjects').doc(id).get().then(function (d) {
+      if (!d.exists) return alert('Build not found.');
+      var p = d.data(), ov = document.createElement('div'); ov.className = 'tx-ov';
+      ov.innerHTML = '<div class="tx-modal" style="max-width:560px"><h3>' + esc(p.title || 'Untitled build') + '</h3>' +
+        '<div class="tx-muted tx-small">by ' + esc(p.ownerName || 'Student') + ' · ' + esc(p.status || '') + ' · ' + (p.progress || 0) + '%</div>' +
+        '<p style="margin:.8rem 0">' + esc(p.brief || p.description || 'No description yet.') + '</p>' +
+        (T.safeUrl(p.workUrl) ? '<p><a href="' + esc(T.safeUrl(p.workUrl)) + '" target="_blank" rel="noopener">Open the build</a></p>' : '') +
+        '<div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">' +
+        (p.showcase === 'requested' ? '<button class="tx-btn" data-pub>Publish to TECH Wall</button>' : '') +
+        '<button class="tx-btn ghost" data-x>Close</button></div></div>';
+      document.body.appendChild(ov);
+      ov.addEventListener('click', function (e) {
+        if (e.target === ov || e.target.hasAttribute('data-x')) ov.remove();
+        else if (e.target.hasAttribute('data-pub')) {
+          var b = db.batch();
+          b.set(db.collection('techShowcase').doc(id), { buildId: id, title: p.title || 'Untitled build', description: String(p.brief || p.description || '').slice(0, 600), displayName: T.firstName(p.ownerName), category: p.category || 'Other', skills: (p.skills || []).slice(0, 8), coverUrl: p.coverUrl || '', previewUrl: T.safeUrl(p.workUrl), featured: false, approvedBy: o.uid, approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          b.set(db.collection('techProjects').doc(id), { showcase: 'approved' }, { merge: true });
+          b.commit().then(function () { ov.remove(); }).catch(function (er) { alert(er.message); });
+        }
+      });
+    });
+  };
   var DAY = 864e5;
   var CATS = [['AI assistants', /assistant|chatbot|buddy|bot/i], ['Websites', /web|site|landing/i], ['Games', /game|play/i], ['Creative projects', /creative|campaign|film|video|music|image|story|brand/i],
     ['Research projects', /research|science|investig|study/i], ['Business projects', /business|shop|market|startup|budget|finance/i], ['Apps', /\bapp\b|mobile|dashboard/i]];

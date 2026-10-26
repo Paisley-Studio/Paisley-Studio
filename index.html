@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Paisley Studio-Online Homeschooling Solution</title>
+  <title>Paisley Studio | Online IGCSE, CBC Tuition &amp; AI-Led Digital Literacy</title>
 
   <!-- ===== PRIMARY META TAGS ===== -->
-  <meta name="description" content="Paisley Studio delivers the National Curriculum for England online, from Key Stage 2 through Key Stage 5, with IGCSE and A-Level preparation, qualified tutors, and a flexible learning schedule." />
+  <meta name="description" content="Paisley Studio: online IGCSE and A-Level, CBC tuition for Grades 1–12, and AI-led digital literacy for kids and teens. Qualified tutors, live classes, flexible learning from Kenya." />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://paisleystudio.online/" />
 
   <!-- ===== OPEN GRAPH / SOCIAL META ===== -->
-  <meta property="og:title" content="Paisley Studio-Online Homeschooling Solution" />
-  <meta property="og:description" content="Online British Curriculum school for Key Stage 2 through Key Stage 5. IGCSE and A-Level preparation. Qualified tutors. Enrol your child today." />
+  <meta property="og:title" content="Paisley Studio | IGCSE, CBC Tuition &amp; AI-Led Digital Literacy" />
+  <meta property="og:description" content="Three ways to learn online: IGCSE and A-Level, CBC tuition, and AI-led digital literacy. Qualified tutors. Enrol today." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://paisleystudio.online/" />
   <meta property="og:image" content="https://paisleystudio.online/wp-content/uploads/2026/05/cropped-Paisely-logo-Resized.png" />
@@ -25,13 +25,13 @@
 
   <!-- ===== TWITTER CARD ===== -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Paisley Studio-Online Homeschooling Solution" />
-  <meta name="twitter:description" content="Online British Curriculum school for Key Stage 2 through Key Stage 5. IGCSE and A-Level preparation." />
+  <meta name="twitter:title" content="Paisley Studio | IGCSE, CBC Tuition &amp; AI-Led Digital Literacy" />
+  <meta name="twitter:description" content="IGCSE, CBC tuition and AI-led digital literacy, all online with qualified tutors." />
   <meta name="twitter:image" content="https://paisleystudio.online/wp-content/uploads/2026/05/cropped-Paisely-logo-Resized.png" />
   <meta name="twitter:site" content="@paisleystudio" />
 
   <!-- ===== ADDITIONAL SEO ===== -->
-  <meta name="keywords" content="British curriculum online, homeschooling UK, Key Stage 2, Key Stage 3, Key Stage 4, Key Stage 5, IGCSE online, A-Level online, online school Kenya, National Curriculum England, qualified tutors, flexible learning, Paisley Studio" />
+  <meta name="keywords" content="CBC tuition Kenya, CBC revision online, CBC online tutors, AI digital literacy, AI for kids, AI literacy Kenya, British curriculum online, homeschooling UK, Key Stage 2, Key Stage 3, Key Stage 4, Key Stage 5, IGCSE online, A-Level online, online school Kenya, National Curriculum England, qualified tutors, flexible learning, Paisley Studio" />
   <meta name="author" content="Paisley Studio" />
   <meta name="geo.region" content="KE" />
   <meta name="geo.placename" content="Nairobi" />
@@ -46,7 +46,8 @@
     "name": "Paisley Studio",
     "url": "https://paisleystudio.online",
     "logo": "https://paisleystudio.online/wp-content/uploads/2026/05/cropped-Paisely-logo-Resized.png",
-    "description": "Paisley Studio delivers the National Curriculum for England online, from Key Stage 2 through Key Stage 5, with qualified tutors, IGCSE and A-Level preparation, and a flexible learning schedule.",
+    "description": "Paisley Studio offers online IGCSE and A-Level, CBC tuition for Grades 1-12, and AI-led digital literacy for children and teens, with qualified tutors and flexible learning.",
+    "knowsAbout": ["IGCSE", "A-Level", "CBC", "Competency Based Curriculum", "AI digital literacy", "National Curriculum for England"],
     "address": {
       "@type": "PostalAddress",
       "addressLocality": "Nairobi",
@@ -458,6 +459,8 @@
     .btn-ghost:hover { border-color:var(--brand); color:var(--brand); transform:translateY(-3px); }
     .btn-outline { background:transparent; border:2px solid var(--brand); color:var(--brand); }
     .btn-outline:hover { background:var(--brand); color:#fff; transform:translateY(-3px); }
+    .btn-outline-light { background:transparent; border:2px solid #fff; color:#fff; }
+    .btn-outline-light:hover { background:#fff; color:var(--brand-deep); transform:translateY(-3px); }
     .btn-success { background:var(--success); color:#fff; }
     .btn-success:hover { background:#239B5E; transform:translateY(-3px); box-shadow:0 10px 30px rgba(46,184,114,.3); }
 
@@ -1358,7 +1361,7 @@
     }
     .footer-top {
       display:grid;
-      grid-template-columns:2fr 1fr 1fr 1.5fr;
+      grid-template-columns:2.5fr 1fr 1fr 1.5fr;
       gap:2.5rem;
       padding-bottom:2.6rem;
       border-bottom:1px solid var(--dark-line);
@@ -1371,7 +1374,7 @@
     }
     .footer-brand .logo-word { color:#fff; }
     .footer-brand .logo-word span { color:var(--dark-muted); }
-    .footer-brand p { margin-top:1rem; max-width:22rem; font-size:.9rem; color:var(--dark-muted); }
+    .footer-brand p { margin-top:1rem; max-width:26rem; font-size:.9rem; color:var(--dark-muted); }
     .footer-brand .contact-info {
       margin-top:1.2rem;
       display:flex;
@@ -1669,6 +1672,42 @@
       .result-card .student-name { font-size: .85rem; }
       .result-card .student-country { font-size: .6rem; }
     }
+
+    /* ===== Hero text rotator (image stays fixed) + programmes ===== */
+    .hslides{display:grid}
+    .hslide{grid-area:1/1;opacity:0;visibility:hidden;transform:translateY(10px);transition:opacity .7s ease,transform .7s ease,visibility 0s .7s}
+    .hslide.on{opacity:1;visibility:visible;transform:none;transition:opacity .7s ease,transform .7s ease}
+    .hslide-link{display:inline-block;margin-top:1.1rem}
+    .hdots{display:flex;gap:.5rem;margin-top:1.4rem}
+    .hdots button{width:12px;height:12px;border-radius:50%;border:0;background:var(--line);cursor:pointer;padding:0;transition:all .3s}
+    .hdots button.on{background:var(--brand);width:32px;border-radius:8px}
+    .feat-split{display:grid;grid-template-columns:1.2fr .8fr;gap:2.4rem;align-items:center}
+    .feat-list{list-style:none;padding:0;margin:1rem 0 0;display:grid;gap:.5rem}
+    .feat-list li{color:var(--muted);display:flex;gap:.6rem;align-items:center}.feat-list i{color:var(--brand)}
+    
+    /* Updated feat-cta to force side-by-side */
+    .feat-cta {
+      display: flex;
+      flex-wrap: nowrap; 
+      gap: 0.7rem;
+      margin-top: 1.4rem;
+      align-items: center;
+    }
+    .feat-cta .btn {
+      white-space: nowrap;
+      padding-left: 1.2rem;
+      padding-right: 1.2rem;
+    }
+    
+    .feat-panel{background:var(--brand-deep);color:#fff;border-radius:16px;padding:2.2rem 1.8rem;display:flex;flex-direction:column;gap:.6rem;align-items:flex-start}
+    .feat-panel h3{color:#fff;font-size:1.4rem}.feat-panel p{color:rgba(255,255,255,.85);line-height:1.6}
+    @media(max-width:820px){.feat-split{grid-template-columns:1fr}}
+    .prog-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.2rem;margin-top:2.4rem}
+    .prog-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1.6rem 1.4rem;display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;transition:all .4s cubic-bezier(.16,1,.3,1)}
+    .prog-card:hover{transform:translateY(-6px);border-color:var(--brand);box-shadow:0 16px 40px rgba(85,191,179,.14)}
+    .prog-card h3{font-size:1.35rem;color:var(--brand-deep)}.prog-card p{color:var(--muted);line-height:1.65;flex:1;margin-bottom:.8rem}
+    .prog-card.dark{background:var(--brand-deep);border-color:var(--brand-deep)}.prog-card.dark h3,.prog-card.dark p{color:#fff}
+    @media(prefers-reduced-motion:reduce){.hslide{transition:none}}
   </style>
 </head>
 <body>
@@ -1692,11 +1731,13 @@
       <a href="key-stage-3.html">Key Stage 3</a>
       <a href="key-stage-4.html">Key Stage 4</a>
       <a href="key-stage-5.html">Key Stage 5</a>
+      <a href="tuition.html">CBC</a>
+      <a href="tech.html">AI Literacy</a>
       <a href="why-paisley.html">Why Paisley</a>
     </nav>
     <div class="header-cta">
       <a href="#contact" class="link-underline">Contact</a>
-      <a href="tuition.html" class="btn btn-primary">Explore</a>
+      <a href="programmes.html" class="btn btn-primary">Explore</a>
     </div>
     <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav">
       <i class="fas fa-bars"></i>
@@ -1712,13 +1753,15 @@
   <a href="key-stage-3.html">Key Stage 3</a>
   <a href="key-stage-4.html">Key Stage 4</a>
   <a href="key-stage-5.html">Key Stage 5</a>
+  <a href="tuition.html">CBC Tuition</a>
+  <a href="tech.html">AI Literacy</a>
   <a href="#why-us">Why Paisley</a>
   <a href="#faq">FAQs</a>
   <div class="mobile-cta-group">
     <a href="student/index.html" class="link-underline"><i class="fas fa-user-graduate"></i> Student Login</a>
     <a href="parent/index.html" class="link-underline"><i class="fas fa-user-group"></i> Parent Portal</a>
     <a href="#contact" class="link-underline">Contact</a>
-    <a href="tuition.html" class="btn btn-primary">Explore</a>
+    <a href="programmes.html" class="btn btn-primary">Explore</a>
   </div>
 </div>
 
@@ -1728,16 +1771,40 @@
   <section class="hero-wrapper" id="top">
     <div class="container hero">
       <div class="hero-copy">
-        <div class="hero-badge animate-float">
-          <i class="fas fa-graduation-cap"></i>
-          Online British Curriculum School
+        <div class="hslides" id="hSlides" aria-live="polite">
+          <div class="hslide on">
+            <div class="hero-badge"><i class="fas fa-globe-africa"></i> Online School, Worldwide</div>
+            <h1 class="hero-title">An online education your child can follow <span class="highlight">from anywhere.</span></h1>
+            <p class="hero-text">Paisley Studio brings live classes, qualified tutors and marked work to learners across Kenya and around the world. Pick IGCSE and A-Level, CBC tuition or AI-led digital literacy, and learn from any country, on any device.</p>
+          </div>
+          <div class="hslide">
+            <div class="hero-badge"><i class="fas fa-graduation-cap"></i> Online British Curriculum School</div>
+            <h1 class="hero-title">A British education, <span class="highlight">delivered online.</span></h1>
+            <p class="hero-text">Paisley Studio delivers the National Curriculum for England online, instructor-led or self-paced, for pupils from Key Stage 2 through Key Stage 5, with coursework, assignments, IGCSE and A-Level examinations marked by our tutors.</p>
+            <a href="#key-stages" class="link-underline hslide-link">See the Key Stages <i class="fas fa-arrow-right"></i></a>
+          </div>
+          <div class="hslide">
+            <div class="hero-badge"><i class="fas fa-user-graduate"></i> IGCSE Online</div>
+            <h1 class="hero-title">IGCSE, fully online and <span class="highlight">taught live.</span></h1>
+            <p class="hero-text">Live classes, dedicated tutors, mock exams and marked homework, with a parent dashboard to follow every step.</p>
+            <a href="key-stage-4.html" class="link-underline hslide-link">Explore IGCSE <i class="fas fa-arrow-right"></i></a>
+          </div>
+          <div class="hslide">
+            <div class="hero-badge"><i class="fas fa-book-open-reader"></i> CBC Tuition</div>
+            <h1 class="hero-title">CBC revision that <span class="highlight">gets results.</span></h1>
+            <p class="hero-text">Tested revision material, tutor marking and live support for Grades 1 to 12, all in one place.</p>
+            <a href="tuition.html" class="link-underline hslide-link">Explore CBC tuition <i class="fas fa-arrow-right"></i></a>
+          </div>
+          <div class="hslide">
+            <div class="hero-badge"><i class="fas fa-robot"></i> AI-Led Digital Literacy</div>
+            <h1 class="hero-title">Learn to use AI <span class="highlight">the smart way.</span></h1>
+            <p class="hero-text">Kids learn to think, create and build with AI, guided by a friendly coach. No coding needed.</p>
+            <a href="tech.html" class="link-underline hslide-link">Explore AI literacy <i class="fas fa-arrow-right"></i></a>
+          </div>
         </div>
-        <h1 class="hero-title anim-fade-up" style="animation-delay:0.1s;">
-          A British education your child can follow <span class="highlight">from anywhere.</span>
-        </h1>
-        <p class="hero-text anim-fade-up" style="animation-delay:0.25s;">Paisley Studio delivers the National Curriculum for England online, instructor-led or self-paced, for pupils from Key Stage 2 through Key Stage 5, with coursework, assignments, IGCSE and A-Level examinations marked by our tutors.</p>
+        <div class="hdots" id="hDots" aria-label="Slides"><button class="on" aria-label="Learn from anywhere"></button><button aria-label="British curriculum"></button><button aria-label="IGCSE"></button><button aria-label="CBC"></button><button aria-label="AI literacy"></button></div>
         <div class="hero-actions">
-          <a href="tuition.html" class="btn btn-primary anim-fade-up" style="animation-delay:0.4s;"><i class="fas fa-arrow-right"></i> Start Learning Today</a>
+          <a href="programmes.html" class="btn btn-primary anim-fade-up" style="animation-delay:0.4s;"><i class="fas fa-arrow-right"></i> Start Learning Today</a>
           <a href="teach-with-us.html" class="btn btn-ghost anim-fade-up" style="animation-delay:0.5s;"><i class="fas fa-chalkboard-teacher"></i> Become A Tutor</a>
         </div>
         <div class="hero-stats">
@@ -1773,6 +1840,8 @@
       <span class="ticker-item"><i class="fas fa-trophy"></i> Key Stage 4, Years 10-11</span>
       <span class="ticker-item"><i class="fas fa-star"></i> Key Stage 5, Years 12-13</span>
       <span class="ticker-item"><i class="fas fa-user-graduate"></i> IGCSE Preparation</span>
+      <span class="ticker-item"><i class="fas fa-book-open-reader"></i> CBC Tuition</span>
+      <span class="ticker-item"><i class="fas fa-robot"></i> AI-Led Digital Literacy</span>
       <span class="ticker-item"><i class="fas fa-university"></i> A-Level Preparation</span>
       <span class="ticker-item"><i class="fas fa-chalkboard-user"></i> Qualified Tutors</span>
       <span class="ticker-item"><i class="fas fa-clock"></i> Flexible Schedule</span>
@@ -1803,6 +1872,39 @@
           <div class="stat-num">4</div>
           <div class="stat-label">Key Stages</div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== OUR PROGRAMMES ===== -->
+  <section class="section" id="programmes">
+    <div class="container">
+      <div class="reveal" style="text-align:center;">
+        <span class="section-label" style="justify-content:center;"><i class="fas fa-compass"></i> What We Teach</span>
+        <h2 class="section-heading" style="margin:0 auto;">Three ways to learn with Paisley.</h2>
+      </div>
+      <div class="prog-grid">
+        <article class="prog-card reveal" >
+          <span class="stage-icon"><i class="fas fa-book-open-reader"></i></span>
+          <span class="stage-tag">CBC</span>
+          <h3>CBC tuition</h3>
+          <p>Tested revision material, tutor marking, live classes and parent tracking for Grades 1 to 12.</p>
+          <a href="tuition.html" class="btn btn-primary">Explore CBC</a>
+        </article>
+        <article class="prog-card dark reveal" style="transition-delay:.1s;">
+          <span class="stage-icon"><i class="fas fa-user-graduate"></i></span>
+          <span class="stage-tag">IGCSE</span>
+          <h3>Fully online IGCSE</h3>
+          <p>Live classes, dedicated tutors, mock exams and marked assignments, from the first lesson to the final exam.</p>
+          <a href="key-stage-4.html" class="btn btn-outline-light">Explore IGCSE</a>
+        </article>
+        <article class="prog-card reveal" style="transition-delay:.2s;">
+          <span class="stage-icon"><i class="fas fa-robot"></i></span>
+          <span class="stage-tag">Digital Literacy</span>
+          <h3>AI-led digital literacy</h3>
+          <p>Learn to think, create and build with AI. Hands-on, friendly coaching, and no coding needed.</p>
+          <a href="tech.html" class="btn btn-primary">Explore AI literacy</a>
+        </article>
       </div>
     </div>
   </section>
@@ -1876,6 +1978,60 @@
           </div>
           <a href="key-stage-5.html" class="link-underline">Learn more about KS5 <i class="fas fa-arrow-right" style="font-size:0.6rem;"></i></a>
         </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CBC SECTION ===== -->
+  <section class="section" id="cbc">
+    <div class="container">
+      <div class="feat-split">
+        <div class="reveal">
+          <span class="section-label"><i class="fas fa-book-open-reader"></i> CBC Tuition</span>
+          <h2 class="section-heading">CBC tuition for Grades 1 to 12, taught live.</h2>
+          <p class="section-sub">Tested revision material, tutor-marked assignments and live classes aligned to the Kenyan Competency Based Curriculum, with a parent dashboard to follow progress.</p>
+          <ul class="feat-list">
+            <li><i class="fas fa-check"></i> Live classes and recorded lessons</li>
+            <li><i class="fas fa-check"></i> Revision papers marked by qualified tutors</li>
+            <li><i class="fas fa-check"></i> Parent tracking for every learner</li>
+          </ul>
+          <div class="feat-cta">
+            <a href="tuition.html" class="btn btn-primary"><i class="fas fa-arrow-right"></i> Explore CBC tuition</a>
+            <a href="tuition/index.html" class="btn btn-ghost">Student login</a>
+          </div>
+        </div>
+        <div class="feat-panel reveal" style="transition-delay:.1s;">
+          <span class="stage-icon"><i class="fas fa-book-open-reader"></i></span>
+          <h3>Grades 1 to 12</h3>
+          <p>Primary, Junior and Senior school, all in one place.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== AI LITERACY SECTION ===== -->
+  <section class="section" id="ai-literacy" style="background:var(--surface,#f6faf9);">
+    <div class="container">
+      <div class="feat-split">
+        <div class="feat-panel reveal">
+          <span class="stage-icon"><i class="fas fa-robot"></i></span>
+          <h3>Meet PAISLEY AI</h3>
+          <p>Your child's friendly AI coach, guiding every hands-on lesson.</p>
+        </div>
+        <div class="reveal" style="transition-delay:.1s;">
+          <span class="section-label"><i class="fas fa-robot"></i> AI-Led Digital Literacy</span>
+          <h2 class="section-heading">Kids learn to think, create and build with AI.</h2>
+          <p class="section-sub">Hands-on projects, safe and responsible AI habits, and a friendly coach. No coding needed.</p>
+          <ul class="feat-list">
+            <li><i class="fas fa-check"></i> Project-based lessons for kids and teens</li>
+            <li><i class="fas fa-check"></i> Safe, responsible AI use</li>
+            <li><i class="fas fa-check"></i> Skills for school and for life</li>
+          </ul>
+          <div class="feat-cta">
+            <a href="tech.html" class="btn btn-primary"><i class="fas fa-arrow-right"></i> Explore AI literacy</a>
+            <a href="tech/index.html" class="btn btn-ghost">Student login</a>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -2172,13 +2328,22 @@
     <div class="footer-top">
       <div class="footer-brand">
         <span class="logo-word">Paisley Studio<span>Online Homeschool Solution</span></span>
-        <p>An online homeschooling solution delivering the National Curriculum for England from Key Stage 2 through Key Stage 5, with IGCSE and A-Level preparation.</p>
+        <p>An online homeschooling solution delivering the British Curriculum (IGCSE & A-Level), CBC tuition for Grades 1–12, and AI-led digital literacy. Flexible learning for families worldwide.</p>
         <div class="contact-info">
           <a href="mailto:info@paisleystudio.online"><i class="fas fa-envelope"></i> info@paisleystudio.online</a>
           <a href="tel:+254 729 981 933"><i class="fas fa-phone"></i> +254 729 981 933</a>
           <a href="#"><i class="fas fa-map-marker-alt"></i> Nairobi, Kenya</a>
         </div>
       </div>
+      
+      <!-- NEW COLUMN: Programmes -->
+      <div class="footer-col">
+        <h6>Programmes</h6>
+        <a href="key-stage-4.html">IGCSE & A-Level</a>
+        <a href="tuition.html">CBC Tuition</a>
+        <a href="tech.html">AI Literacy</a>
+      </div>
+
       <div class="footer-col">
         <h6>Key Stages</h6>
         <a href="key-stage-2.html">Key Stage 2</a>
@@ -2186,15 +2351,7 @@
         <a href="key-stage-4.html">Key Stage 4</a>
         <a href="key-stage-5.html">Key Stage 5</a>
       </div>
-      <div class="footer-col">
-        <h6>Site</h6>
-        <a href="key-stage-2.html">Key Stage 2</a>
-        <a href="key-stage-3.html">Key Stage 3</a>
-        <a href="key-stage-4.html">Key Stage 4</a>
-        <a href="key-stage-5.html">Key Stage 5</a>
-        <a href="#why-us">Why Paisley</a>
-        <a href="#faq">FAQs</a>
-      </div>
+      
       <div class="footer-col">
         <h6>Connect</h6>
         <a href="#contact">Contact Us</a>
@@ -2211,7 +2368,7 @@
     </div>
     <div class="footer-bottom">
       <span>Â© <span id="yearNow"></span> Paisley Studio. All rights reserved.</span>
-      <span>British Curriculum Online, Homeschooling Reimagined</span>
+      <span>British Curriculum, CBC & AI Literacy Online</span>
     </div>
   </div>
 </footer>
@@ -2574,5 +2731,17 @@ document.querySelector('.footer-newsletter .btn')?.addEventListener('click', fun
 });
 </script>
 
+
+<script>
+/* Hero: text fades IGCSE -> CBC -> AI literacy; the child image stays put */
+(function(){
+  var sl=[].slice.call(document.querySelectorAll('.hslide')),dt=[].slice.call(document.querySelectorAll('#hDots button')),i=0,t;
+  if(!sl.length)return;
+  function go(n){i=n;sl.forEach(function(e,j){e.classList.toggle('on',j===n)});dt.forEach(function(b,j){b.classList.toggle('on',j===n)})}
+  function run(){clearInterval(t);if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)t=setInterval(function(){go((i+1)%sl.length)},6000)}
+  dt.forEach(function(b,j){b.addEventListener('click',function(){go(j);run()})});
+  run();
+})();
+</script>
 </body>
 </html>

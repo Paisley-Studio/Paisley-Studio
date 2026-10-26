@@ -68,9 +68,9 @@
 <script src="../js/admin/remote-students.js"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script src="../js/admin/tuition.js"></script>
-<link rel="stylesheet" href="../js/tech/tech.css" />
-<script src="../js/tech/tech-helpers.js"></script>
-<script src="../js/admin/tech.js"></script>
+<link rel="stylesheet" href="../js/tech/tech.css?v=1" />
+<script src="../js/classroom/tech-helpers.js?v=tech1"></script>
+<script src="../js/admin/tech.js?v=tech2"></script>
 
 <style>
   :root{
@@ -1351,6 +1351,7 @@ document.getElementById('menuToggle').addEventListener('click', ()=>{
     host.innerHTML = '';
     const box = document.createElement('div');
     host.appendChild(box);
+    if(typeof TechAdmin==='undefined'){ box.innerHTML='<div style="padding:2rem;font-weight:700;color:#b8362a">Tech Studio failed to load. Check that js/classroom/tech-helpers.js and js/admin/tech.js are deployed.</div>'; return; }
     techInstance = TechAdmin.mount(box, { uid: u.uid, name: 'Studio Desk' });
   });
   if(location.hash === '#tech'){
