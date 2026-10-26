@@ -762,7 +762,7 @@ function initTeachPicker(t){
     const subs = lmzSubjectsForKeyStage(active);
     const cur = map[active] || {};
     const yrs = lmzYearsForKeyStage(active);
-    const word = lmzIsCbcBand(active) ? 'Grade' : 'Year';
+    const word = lmzIsCbcBand(active) ? 'Grade' : (lmzIsTechBand(active) ? 'Level' : 'Year');
     const rows = subs.map(s=>{
       const on = !!cur[s.id];
       return `<div class="tp-row${on?' on':''}">
@@ -772,7 +772,7 @@ function initTeachPicker(t){
     }).join('');
     return `<div class="tp-panel">
       <div class="tp-panel-head">
-        <div><h4>${escapeHtml(active.replace(/^CBC\s+/, 'CBC \u00b7 '))}</h4><small>Subjects offered at this stage. Tick the ones this tutor takes, then choose the ${word}s.</small></div>
+        <div><h4>${escapeHtml(active.replace(/^(CBC|TECH)\s+/, '$1 \u00b7 '))}</h4><small>Subjects offered at this stage. Tick the ones this tutor takes, then choose the ${word}s.</small></div>
         <div><button type="button" class="tp-link" data-tp-all>Select all</button><button type="button" class="tp-link" data-tp-none>Clear</button></div>
       </div>
       ${rows || '<div class="tp-empty">No subjects are set up for this stage yet.</div>'}
@@ -790,9 +790,10 @@ function initTeachPicker(t){
 
   function paint(){
     host.innerHTML = `<div class="tp">
-      <div class="tp-intro">Choose a Key Stage, tick the subjects this tutor takes, then pick the Years. The tutor sees <b>only</b> the Key Stage, subject and Years set here.</div>
+      <div class="tp-intro">Choose a Key Stage (or TECH for AI coaches), tick the subjects this tutor takes, then pick the Years or Levels. The tutor sees <b>only</b> the Key Stage, subject and Years set here.</div>
       <div><div class="tp-grouplabel">British curriculum</div><div class="tp-pills">${KEY_STAGES.map(pill).join('')}</div></div>
       <div><div class="tp-grouplabel">CBC \u00b7 Tuition</div><div class="tp-pills">${CBC_BANDS.map(pill).join('')}</div></div>
+      <div><div class="tp-grouplabel">TECH \u00b7 Digital AI Literacy</div><div class="tp-pills">${TECH_BANDS.map(pill).join('')}</div></div>
       ${panel()}
       <div><div class="tp-grouplabel">Assigned (${total()})</div>${summary()}</div>
       ${lost.length ? `<div class="tp-lost"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> These older entries do not fit any Key Stage and will be dropped when you save: <b>${lost.map(s=>escapeHtml(lmzSubjectLabel(s))).join(', ')}</b>.</div>` : ''}

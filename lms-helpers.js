@@ -1099,7 +1099,9 @@ function getMyActiveAttemptForExam(examId) {
 
 var LMZ_KEY_STAGE_YEARS = { 2: [3, 4, 5, 6], 3: [7, 8, 9], 4: [10, 11], 5: [12, 13],
   // CBC (Kenya) bands — numbers 21-24 never collide with the British Key Stages.
-  21: [1, 2, 3], 22: [4, 5, 6], 23: [7, 8, 9], 24: [10, 11, 12] };
+  21: [1, 2, 3], 22: [4, 5, 6], 23: [7, 8, 9], 24: [10, 11, 12],
+  // TECH (Digital AI Literacy) — one programme, seven levels (AI Aware … AI Guru).
+  31: [1, 2, 3, 4, 5, 6, 7] };
 
 // CBC learning bands. The band name is stored in `keyStage` and the Grade in
 // `year`, so the existing classroom / homework / exam machinery works unchanged.
@@ -1111,6 +1113,11 @@ var CBC_BANDS = [
   'CBC Senior School (Grades 10-12)'
 ];
 function lmzIsCbcBand(ks) { return /^CBC\b/i.test(String(ks || '')); }
+
+// TECH — Digital AI Literacy. Coaches are tutors who tick this discipline; the level plays the role of the Year.
+// Not part of KEY_STAGES or CBC_BANDS, so it never leaks into online or tuition flows.
+var TECH_BANDS = ['TECH Digital AI Literacy (Levels 1-7)'];
+function lmzIsTechBand(ks) { return /^TECH\b/i.test(String(ks || '')); }
 
 var LMZ_SUBJECTS = [
   { id: 'english',            name: 'English',            keyStages: [2, 3, 4, 5] },
@@ -1132,6 +1139,16 @@ var LMZ_SUBJECTS = [
 
   // ---- CBC (tuition) subjects. Ids are prefixed `cbc-` and names start with "CBC"
   // so they can never be confused with the British subjects of the same name. ----
+  // ---- TECH (Digital AI Literacy) subjects. Ids are prefixed `tech-`. ----
+  { id: 'tech-ai-literacy',       name: 'TECH AI Literacy',               keyStages: [31] },
+  { id: 'tech-prompting',         name: 'TECH Prompting and AI Tools',    keyStages: [31] },
+  { id: 'tech-research-safety',   name: 'TECH Research, Ethics and Safety', keyStages: [31] },
+  { id: 'tech-creative-ai',       name: 'TECH Creative AI',               keyStages: [31] },
+  { id: 'tech-web-apps',          name: 'TECH Websites and Apps',         keyStages: [31] },
+  { id: 'tech-ai-assistants',     name: 'TECH Building AI Assistants',    keyStages: [31] },
+  { id: 'tech-data-automation',   name: 'TECH Data and Automation',       keyStages: [31] },
+  { id: 'tech-projects',          name: 'TECH Capstone Projects',         keyStages: [31] },
+
   { id: 'cbc-english',            name: 'CBC English',                    keyStages: [21, 22, 23, 24] },
   { id: 'cbc-kiswahili',          name: 'CBC Kiswahili',                  keyStages: [21, 22, 23, 24] },
   { id: 'cbc-mathematics',        name: 'CBC Mathematics',                keyStages: [21, 22, 23, 24] },
@@ -1154,6 +1171,7 @@ var LMZ_SUBJECTS = [
 ];
 
 function lmzKeyStageNumber(ks) {
+  if (/^TECH\b/i.test(String(ks || ''))) return 31;
   var cbc = /^CBC\s+(Lower|Upper|Junior|Senior)/i.exec(String(ks || ''));
   if (cbc) return { lower: 21, upper: 22, junior: 23, senior: 24 }[cbc[1].toLowerCase()];
   var m = /Key Stage\s*(\d)/i.exec(String(ks || ''));
@@ -1251,7 +1269,7 @@ function lmzSubjectWriteFields(list) {
 // Studio Desk next saves them.
 // =========================================================
 function lmzTeachingKeyStages() {
-  return KEY_STAGES.concat(typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : []);
+  return KEY_STAGES.concat(typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : [], typeof TECH_BANDS !== 'undefined' ? TECH_BANDS : []);
 }
 
 // Tidy raw entries: one per Key Stage + subject, Years limited to that stage's Years.
@@ -1339,7 +1357,7 @@ function lmzTeachingWriteFields(list) {
 // "Year 7", "Years 7-9", "Years 7, 9", "Grades 4-6"
 function lmzYearsLabel(keyStage, years) {
   var all = lmzYearsForKeyStage(keyStage), ys = (years && years.length ? years : all).slice().sort(function (a, b) { return a - b; });
-  var word = lmzIsCbcBand(keyStage) ? 'Grade' : 'Year';
+  var word = lmzIsCbcBand(keyStage) ? 'Grade' : (lmzIsTechBand(keyStage) ? 'Level' : 'Year');
   if (!ys.length) return '';
   if (ys.length === 1) return word + ' ' + ys[0];
   var runs = [], start = ys[0], prev = ys[0];
@@ -1354,6 +1372,7 @@ function lmzYearsLabel(keyStage, years) {
 // "Key Stage 3", "KS4 IGCSE" style short names.
 function lmzKeyStageShort(ks) {
   var s = String(ks || '');
+  if (lmzIsTechBand(s)) return 'TECH';
   if (lmzIsCbcBand(s)) return s.replace(/^CBC\s+/i, '').replace(/\s*\(.*/, '');
   return s.replace(/\s*\(.*/, '');
 }

@@ -441,6 +441,8 @@ exports.onStudentActivated = onDocumentUpdated(
     if (afterStatus !== "active") return;
     if (beforeStatus !== "pending") return;
     const student = after;
+    // TECH students get their own welcome (functions/tech.js → onTechStudentActivated) with the TECH sign-in link.
+    if (student.studentType === "tech") return;
     if (!student.email) return;
     try {
       await admin.firestore().collection("personalNotifications").add({
