@@ -226,6 +226,18 @@ service firebase.storage {
       allow delete: if isSignedIn() && request.auth.uid == uid;
     }
 
+    // =====================================================
+    // PAISLEY TECH — build files (techBuilds/{studentId}/{buildId}/{file})
+    // =====================================================
+    match /techBuilds/{studentId}/{buildId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == studentId || isAdmin() || isTutor());
+      allow create, update: if isSignedIn() && (request.auth.uid == studentId || isAdmin()) &&
+        underSizeLimit() &&
+        !request.resource.contentType.matches('text/html') &&
+        !request.resource.contentType.matches('.*javascript.*');
+      allow delete: if isSignedIn() && (request.auth.uid == studentId || isAdmin());
+    }
+
     // Default deny
     match /{allPaths=**} {
       allow read, write: if false;

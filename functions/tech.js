@@ -58,7 +58,7 @@ exports.onTechStudentCreated = onDocumentCreated(
       await bell(a.id, "admin", "tech_signup", "New TECH account", msg, "students", event.params.studentId);
       await email(a.email, `New TECH account — ${s.name || "student"}`, {
         preheader: msg, heading: "Admin alert", intro: "New TECH account",
-        body: `<p style="margin:0 0 8px;"><strong>${esc(s.name)}</strong> (${esc(s.email)}) registered for Paisley TECH.</p><p style="margin:0;">${esc((s.techProfile && s.techProfile.identity) || "")}${s.ageGroup === "u18" ? " · under 18" : ""}</p>`,
+        body: `<p style="margin:0 0 8px;"><strong>${esc(s.name)}</strong> (${esc(s.email)}) registered for Paisley TECH.</p><p style="margin:0;">${esc((s.techProfile && s.techProfile.identity) || "")}${/^u/.test(s.ageGroup || "") ? " · under 18" : ""}</p>`,
         cta: { label: "Open TECH panel", url: PORTALS.admin + "#tech" }
       });
     }
@@ -78,7 +78,7 @@ exports.onTechStudentActivated = onDocumentUpdated(
       body: `<p style="margin:0;">Your account is approved. Open your studio, pick a mission or start your own idea, and build something.</p>`,
       cta: { label: "Open TECH Studio", url }
     });
-    if (a.ageGroup === "u18" && a.guardianEmail) {
+    if (/^u/.test(a.ageGroup || "") && a.guardianEmail) {
       await email(a.guardianEmail, "Your child’s Paisley TECH account is active", {
         preheader: "Paisley TECH account approved.", heading: "TECH account approved",
         intro: `${esc(a.name || "Your child")} can now use Paisley TECH.`,
@@ -89,17 +89,17 @@ exports.onTechStudentActivated = onDocumentUpdated(
 );
 
 exports.onTechFeedbackCreated = onDocumentCreated(
-  { document: "techProjects/{pid}/feedback/{fid}", region: LOCATION },
+  { document: "techBuilds/{pid}/feedback/{fid}", region: LOCATION },
   async (event) => {
     const f = event.data.data() || {};
-    const p = (await admin.firestore().collection("techProjects").doc(event.params.pid).get()).data();
+    const p = (await admin.firestore().collection("techBuilds").doc(event.params.pid).get()).data();
     if (!p) return;
     const preview = String(f.text || "").slice(0, 140);
     if (f.role === "student") {
-      for (const c of p.coachIds || []) await bell(c, "tutor", "tech_feedback", `${p.ownerName || "A builder"} replied`, `${p.title}: ${preview}`, "techProjects", event.params.pid);
+      if (p.tutorId) await bell(p.tutorId, "tutor", "tech_feedback", `${p.studentName || "A builder"} replied`, `${p.title}: ${preview}`, "techBuilds", event.params.pid);
     } else {
-      const title = f.type === "approved" ? "Build approved" : f.type === "changes" ? "Changes requested" : "New feedback";
-      await bell(p.ownerId, "student", "tech_feedback", title, `${p.title}: ${preview}`, "techProjects", event.params.pid);
+      const title = f.kind === "approved" ? "Build approved" : f.kind === "changes" ? "Changes requested" : "New feedback";
+      await bell(p.studentId, "student", "tech_feedback", title, `${p.title}: ${preview}`, "techBuilds", event.params.pid);
     }
   }
 );
@@ -119,11 +119,11 @@ exports.onTechMessageCreated = onDocumentCreated(
 );
 
 exports.onTechShowcaseApproved = onDocumentUpdated(
-  { document: "techProjects/{pid}", region: LOCATION },
+  { document: "techBuilds/{pid}", region: LOCATION },
   async (event) => {
     const b = event.data.before.data() || {}, a = event.data.after.data() || {};
     if (b.showcase === "approved" || a.showcase !== "approved") return;
-    await bell(a.ownerId, "student", "tech_showcase", "You’re on the TECH Wall", `${a.title} is now public. Share it with your family and friends.`, "techProjects", event.params.pid);
+    await bell(a.studentId, "student", "tech_showcase", "You’re on the TECH Wall", `${a.title} is now public. Share it with your family and friends.`, "techBuilds", event.params.pid);
   }
 );
 

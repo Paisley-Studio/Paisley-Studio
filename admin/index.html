@@ -68,9 +68,8 @@
 <script src="../js/admin/remote-students.js"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script src="../js/admin/tuition.js"></script>
-<link rel="stylesheet" href="../js/tech/tech.css?v=1" />
-<script src="../js/classroom/tech-helpers.js?v=tech1"></script>
-<script src="../js/admin/tech.js?v=tech2"></script>
+<script src="../js/tech/tech-helpers.js?v=tech2"></script>
+<script src="../js/admin/tech.js?v=tech3"></script>
 
 <style>
   :root{
@@ -1281,7 +1280,7 @@ const titles = {
   exmgmt: ['Exam Management', 'AI-tracked and PDF-upload exams by subject and topic'],
   remotestudents: ['Remote Students', 'Admissions, parents, remote classroom delivery, submissions and grading'],
     tuition: ['Tuition', 'CBC tuition: applications, tutors, timetable, classroom delivery and marking'],
-  tech: ['TECH', 'Digital AI Literacy: students, coaches, paths, missions, builds and the TECH Wall'],
+  tech: ['TECH', 'Digital AI Literacy: applications, builders, coaches, missions, builds and the TECH Wall'],
   studentmgmt: ['Student Management', 'Accounts, results, homework, exams and submissions'],
   content: ['Timetable & Notices', 'Announcements and timetables by Key Stage'],
   liveclasses: ['Live Classes', 'Schedule and run Jitsi Meet sessions'],
@@ -1351,7 +1350,7 @@ document.getElementById('menuToggle').addEventListener('click', ()=>{
     host.innerHTML = '';
     const box = document.createElement('div');
     host.appendChild(box);
-    if(typeof TechAdmin==='undefined'){ box.innerHTML='<div style="padding:2rem;font-weight:700;color:#b8362a">Tech Studio failed to load. Check that js/classroom/tech-helpers.js and js/admin/tech.js are deployed.</div>'; return; }
+    if(typeof TechAdmin==='undefined' || typeof TechUI==='undefined'){ box.innerHTML='<div style="padding:2rem;font-weight:700;color:#b8362a">Tech Studio failed to load. Check that js/tech/tech-helpers.js and js/admin/tech.js are deployed.</div>'; return; }
     techInstance = TechAdmin.mount(box, { uid: u.uid, name: 'Studio Desk' });
   });
   if(location.hash === '#tech'){
