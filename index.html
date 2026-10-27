@@ -327,7 +327,7 @@
     .anim-fade-up { opacity: 0; animation: fadeInUp 0.8s cubic-bezier(.16,1,.3,1) forwards; }
     .anim-scale-up { opacity: 0; animation: scaleUp 0.7s cubic-bezier(.16,1,.3,1) forwards; }
 
-    /* ===== SCROLL REVEAL â€” plays every time an element enters/leaves the viewport ===== */
+    /* ===== SCROLL REVEAL ===== */
     .reveal {
       opacity: 0;
       transform: translateY(46px);
@@ -536,7 +536,7 @@
       white-space: nowrap;
     }
 
-    /* Responsive Logo â€” scales smoothly, never crushed down to unreadable sizes */
+    /* Responsive Logo */
     @media(max-width: 768px) {
       .logo-img {
         width: clamp(56px, 16vw, 78px);
@@ -1685,7 +1685,6 @@
     .feat-list{list-style:none;padding:0;margin:1rem 0 0;display:grid;gap:.5rem}
     .feat-list li{color:var(--muted);display:flex;gap:.6rem;align-items:center}.feat-list i{color:var(--brand)}
     
-    /* Updated feat-cta to force side-by-side */
     .feat-cta {
       display: flex;
       flex-wrap: nowrap; 
@@ -1701,7 +1700,34 @@
     
     .feat-panel{background:var(--brand-deep);color:#fff;border-radius:16px;padding:2.2rem 1.8rem;display:flex;flex-direction:column;gap:.6rem;align-items:flex-start}
     .feat-panel h3{color:#fff;font-size:1.4rem}.feat-panel p{color:rgba(255,255,255,.85);line-height:1.6}
+    
+    /* ===== PAISLEY AI humanoid (UPDATED THEME COLORS FOR BUBBLES) ===== */
+    .pbot{display:flex;flex-direction:column;align-items:center;text-align:center;width:100%}
+    .pbot-stage{position:relative;width:100%;max-width:440px;height:clamp(300px,42vw,420px)}
+    .pbot-b{position:absolute;border-radius:50%;animation:pbAbf 9s ease-in-out infinite}
+    
+    /* Strictly Paisley Studio Theme Colors */
+    .pbot-b1{width:62%;aspect-ratio:1/.97;background:var(--brand);left:16%;top:2%;border-radius:52% 48% 55% 45%}
+    .pbot-b2{width:40%;aspect-ratio:1;background:var(--gold);left:2%;top:44%;animation-delay:1.5s}
+    .pbot-b3{width:58%;aspect-ratio:1;background:var(--brand-soft);right:-2%;top:20%;animation-delay:3s}
+    .pbot-b4{width:46%;aspect-ratio:1/.87;background:var(--brand-deep);right:10%;bottom:-6%;border-radius:50% 50% 40% 60%;animation-delay:4.5s}
+    
+    .pbot-bw{position:absolute;left:50%;bottom:0;height:100%;width:78%;transform:translateX(-50%);display:flex;align-items:flex-end;justify-content:center;animation:pbBotf 5s ease-in-out infinite}
+    .pbot-fb{height:88%;width:auto;max-width:100%}
+    .pbot-fe{transform-box:fill-box;transform-origin:center;animation:pbFeb 7s infinite}
+    .pbot-fh{opacity:0;animation:pbHp 7s infinite}
+    .pbot-fm{transform-box:fill-box;transform-origin:center;animation:pbFsm 7s infinite}
+    @keyframes pbAbf{50%{translate:0 -16px}}
+    @keyframes pbBotf{50%{translate:0 -12px}}
+    @keyframes pbFeb{0%,84%{transform:scaleY(1)}85.5%{transform:scaleY(.06)}87.5%{transform:scaleY(1)}94%{transform:scaleY(1)}95.5%{transform:scaleY(.06)}98.5%{transform:scaleY(.06)}100%{transform:scaleY(1)}}
+    @keyframes pbFsm{0%,95%{transform:none}97%,98.6%{transform:scale(1.45,1.6)}100%{transform:none}}
+    @keyframes pbHp{0%,95.5%{opacity:0}96.5%,98%{opacity:1}99%,100%{opacity:0}}
+    .pbot-cap{margin-top:2rem;max-width:26rem}
+    .pbot-cap h3{font-size:1.4rem;color:var(--brand-deep)}
+    .pbot-cap p{color:var(--muted);line-height:1.6;margin-top:.3rem;font-size:.98rem}
+    @media(prefers-reduced-motion:reduce){.pbot-b,.pbot-bw,.pbot-fe,.pbot-fh,.pbot-fm{animation:none!important}}
     @media(max-width:820px){.feat-split{grid-template-columns:1fr}}
+    
     .prog-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.2rem;margin-top:2.4rem}
     .prog-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1.6rem 1.4rem;display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;transition:all .4s cubic-bezier(.16,1,.3,1)}
     .prog-card:hover{transform:translateY(-6px);border-color:var(--brand);box-shadow:0 16px 40px rgba(85,191,179,.14)}
@@ -1902,7 +1928,7 @@
           <span class="stage-icon"><i class="fas fa-robot"></i></span>
           <span class="stage-tag">Digital Literacy</span>
           <h3>AI-led digital literacy</h3>
-          <p>Learn to think, create and build with AI. Hands-on, friendly coaching, and no prior coding  experience needed.</p>
+          <p>Learn to think, create and build with AI. Hands-on, friendly coaching, and no coding needed.</p>
           <a href="tech.html" class="btn btn-primary">Explore AI literacy</a>
         </article>
       </div>
@@ -2013,15 +2039,32 @@
   <section class="section" id="ai-literacy" style="background:var(--surface,#f6faf9);">
     <div class="container">
       <div class="feat-split">
-        <div class="feat-panel reveal">
-          <span class="stage-icon"><i class="fas fa-robot"></i></span>
-          <h3>Meet PAISLEY AI</h3>
-          <p>Your child's friendly AI coach, guiding every hands-on lesson.</p>
+        <div class="pbot reveal">
+          <div class="pbot-stage" aria-hidden="false">
+            <span class="pbot-b pbot-b1"></span><span class="pbot-b pbot-b2"></span><span class="pbot-b pbot-b3"></span><span class="pbot-b pbot-b4"></span>
+            <div class="pbot-bw"><svg class="pbot-fb" viewBox="0 0 200 250" role="img" aria-label="PAISLEY AI, a friendly humanoid robot coach">
+              <rect x="62" y="150" width="76" height="82" rx="28" fill="#fff" stroke="#dbe3ee" stroke-width="3"/>
+              <rect x="82" y="172" width="36" height="30" rx="8" fill="#0b1226"/>
+              <text x="100" y="196" text-anchor="middle" font-family="Quicksand,sans-serif" font-weight="700" font-size="20" fill="#FFCC00">AI</text>
+              <rect x="26" y="18" width="148" height="124" rx="48" fill="#fff" stroke="#dbe3ee" stroke-width="3"/>
+              <circle cx="26" cy="80" r="14" fill="#fff" stroke="#dbe3ee" stroke-width="3"/>
+              <circle cx="174" cy="80" r="14" fill="#fff" stroke="#dbe3ee" stroke-width="3"/>
+              <rect x="42" y="38" width="116" height="84" rx="34" fill="#0b1226"/>
+              <circle class="pbot-fe" cx="80" cy="76" r="11" fill="#FFCC00"/>
+              <circle class="pbot-fe" cx="120" cy="76" r="11" fill="#FFCC00"/>
+              <path class="pbot-fh" d="M69 80q11-14 22 0M109 80q11-14 22 0" fill="none" stroke="#FFCC00" stroke-width="4.5" stroke-linecap="round"/>
+              <path class="pbot-fm" d="M88 100q12 9 24 0" fill="none" stroke="#FFCC00" stroke-width="4" stroke-linecap="round"/>
+            </svg></div>
+          </div>
+          <div class="pbot-cap">
+            <h3>Meet PAISLEY AI</h3>
+            <p>Your child's friendly AI coach, guiding every hands-on lesson.</p>
+          </div>
         </div>
         <div class="reveal" style="transition-delay:.1s;">
           <span class="section-label"><i class="fas fa-robot"></i> AI-Led Digital Literacy</span>
           <h2 class="section-heading">Kids learn to think, create and build with AI.</h2>
-          <p class="section-sub">Hands-on projects, safe and responsible AI habits, and a friendly coach. No prior coding experience needed.</p>
+          <p class="section-sub">Hands-on projects, safe and responsible AI habits, and a friendly coach. No coding needed.</p>
           <ul class="feat-list">
             <li><i class="fas fa-check"></i> Project-based lessons for kids and teens</li>
             <li><i class="fas fa-check"></i> Safe, responsible AI use</li>
@@ -2637,9 +2680,7 @@ document.getElementById('contactForm')?.addEventListener('submit', function(e) {
   // Prepare form data
   const formData = new FormData(this);
   
-  // Send to FormSubmit's AJAX endpoint (returns JSON with CORS headers,
-  // unlike the plain /90d6... endpoint which is meant for classic
-  // full-page form posts and will fail when read via fetch()).
+  // Send to FormSubmit's AJAX endpoint
   fetch(this.action, {
     method: 'POST',
     headers: { 'Accept': 'application/json' },
