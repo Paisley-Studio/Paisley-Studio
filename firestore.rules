@@ -769,30 +769,15 @@ service cloud.firestore {
         allow delete: if isAdmin();
 
         match /lessons/{lid} {
-          // CHANGED: `read` is now decided entirely from the document + request,
-          // with NO `get()` of the classroom doc. Firestore cannot evaluate
-          // `get()`-based helpers for a `where()` list query, which is why every
-          // topic's `where('status','==','published')` query was returning
-          // permission-denied. The client (work-helpers.js) does the audience
-          // membership check in JS; the rules keep the security-critical part:
-          //   - the lesson must be published
-          //   - the lesson must have been posted to the caller's audience, OR
-          //     explicitly released to them (releasedTo / releasedParents)
-          //   - staff (admin / tutor) can always read
-          // A single-document `get` on a lesson still passes through this rule,
-          // so nothing else weakens.
           allow read: if isAdmin()
             || isTutor()
             || (
                  resource.data.status == 'published'
                  && (
-                      // Audience flags written by the lesson editor
                       (resource.data.audiences.online == true)
                    || (resource.data.audiences.remote == true)
                    || (resource.data.audiences.get('tuition', false) == true)
-                      // Explicit per-student release
                    || (('releasedTo' in resource.data) && request.auth.uid in resource.data.releasedTo)
-                      // Parent release
                    || (('releasedParents' in resource.data) && request.auth.uid in resource.data.releasedParents)
                     )
                );
@@ -824,7 +809,7 @@ service cloud.firestore {
             allow read: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               activeGrant('homework', aid) ||
-              (isSignedIn() && resource.data.studentId == request.auth.uid) || // FIXED
+              (isSignedIn() && resource.data.studentId == request.auth.uid) ||
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
@@ -848,7 +833,7 @@ service cloud.firestore {
             allow read: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               activeGrant('exam', eid) ||
-              (isSignedIn() && resource.data.studentId == request.auth.uid) || // FIXED
+              (isSignedIn() && resource.data.studentId == request.auth.uid) ||
               isOwner(sid) ||
               isParentOf(sid);
             allow create: if newStudentWork(sid) &&
@@ -885,7 +870,7 @@ service cloud.firestore {
           allow read: if isAdmin() ||
             classTutorSubject(classroomData(cid).subjectId) ||
             activeGrant('exam', eid) ||
-            (isSignedIn() && resource.data.studentId == request.auth.uid) || // FIXED
+            (isSignedIn() && resource.data.studentId == request.auth.uid) ||
             isOwner(studentId) ||
             isParentOf(studentId);
 
@@ -951,16 +936,24 @@ service cloud.firestore {
         request.resource.data.showcase == 'none' &&
         request.resource.data.reviewState == 'none';
       allow update: if isAdmin() ||
-        // builder: cannot change ownership/coach or approve themselves onto the Wall
+        // builder: cannot change ownership/coach, cannot approve themselves onto the Wall,
+        // cannot grant themselves mastery, and cannot request review without an AI reflection.
         (techStudentActive() && resource.data.studentId == request.auth.uid &&
           request.resource.data.studentId == resource.data.studentId &&
           request.resource.data.tutorId == resource.data.tutorId &&
           request.resource.data.showcase in ['none', 'requested'] &&
           request.resource.data.reviewState in ['none', 'requested', 'changes'] &&
-          (resource.data.showcase != 'approved' || request.resource.data.showcase == 'approved')) ||
+          (resource.data.showcase != 'approved' || request.resource.data.showcase == 'approved') &&
+          // mastery can only be cleared by the builder, never set to 'approved'
+          (!(('mastery' in request.resource.data) && request.resource.data.mastery != resource.data.get('mastery', 'none')) ||
+            request.resource.data.mastery == 'none') &&
+          // requesting review requires an aiReflection field to be present
+          (!(('reviewState' in request.resource.data.diff(resource.data).affectedKeys()) &&
+             request.resource.data.reviewState == 'requested') ||
+            (('aiReflection' in request.resource.data) && request.resource.data.aiReflection != null))) ||
         // coach: review only
         (isTutor() && resource.data.tutorId == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewState', 'showcase', 'updatedAt']) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewState', 'showcase', 'mastery', 'masteryNote', 'masteryAt', 'masteryBy', 'updatedAt']) &&
           request.resource.data.showcase == resource.data.showcase);
       allow delete: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid && resource.data.showcase != 'approved');
@@ -980,6 +973,36 @@ service cloud.firestore {
     match /techShowcase/{id} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
+    }
+
+    // =====================================================
+    // PAISLEY TECH — per-discipline progression (Cloud Function writes only)
+    // =====================================================
+    // Shape: techProgress/{uid} = {
+    //   levels: { Coding: 3, Writing: 2, Music: 1, ... },
+    //   masteryCount: { Coding: 2, Writing: 1, ... },
+    //   updatedAt, updatedBy
+    // }
+    // Readable by the student, their assigned coach, and admins.
+    match /techProgress/{uid} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && request.auth.uid == uid) ||
+        (isSignedIn() && isTutor() &&
+          exists(/databases/$(database)/documents/students/$(uid)) &&
+          get(/databases/$(database)/documents/students/$(uid)).data.techCoachId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // =====================================================
+    // PAISLEY TECH — family-share tokens (admin/coach only)
+    // =====================================================
+    // Shape: shareTokens/{buildId} = { token, createdBy, createdAt, revoked }
+    // The public share page is served by the techShare Cloud Function,
+    // which reads this collection via Admin SDK. No public read here.
+    match /shareTokens/{buildId} {
+      allow read, create, update, delete: if isAdmin() ||
+        (isTutor() && exists(/databases/$(database)/documents/techBuilds/$(buildId)) &&
+          get(/databases/$(database)/documents/techBuilds/$(buildId)).data.tutorId == request.auth.uid);
     }
 
     match /techChats/{chatId} {
