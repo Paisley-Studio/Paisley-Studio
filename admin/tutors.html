@@ -273,6 +273,8 @@
             <button class="chip-btn" data-filter="Key Stage 3 (Years 7-9)" type="button">KS3</button>
             <button class="chip-btn" data-filter="Key Stage 4 (Years 10-11) — IGCSE" type="button">KS4</button>
             <button class="chip-btn" data-filter="Key Stage 5 (Years 12-13) — A-Level" type="button">KS5</button>
+            <button class="chip-btn" data-filter="CBC" type="button">CBC</button>
+            <button class="chip-btn" data-filter="TECH" type="button">TECH</button>
             <button class="chip-btn active" data-filter="all" type="button">All</button>
           </div>
         </div>
@@ -305,7 +307,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js?v=scope1"></script>
+<script src="../lms-helpers.js?v=scope2"></script>
 <script>
 const auth = firebase.auth();
 
@@ -471,7 +473,11 @@ function renderTutorAccounts(){
   const body = document.getElementById('tutorAcctBody');
   let list = DB.tutorAccounts.slice();
   if(tutorStatusFilter !== 'all') list = list.filter(t=>(t.status||'Active') === tutorStatusFilter);
-  if(tutorAcctKSFilter !== 'all') list = list.filter(t=>(t.keyStages||[]).indexOf(tutorAcctKSFilter) !== -1);
+  if(tutorAcctKSFilter !== 'all') list = list.filter(t=>{
+    const ks = lmzTutorKeyStages(t);
+    if(tutorAcctKSFilter === 'CBC' || tutorAcctKSFilter === 'TECH') return ks.some(k=>k.indexOf(tutorAcctKSFilter) === 0);
+    return ks.indexOf(tutorAcctKSFilter) !== -1;
+  });
   list.sort((a,b)=>(b.date||0)-(a.date||0));
 
   document.getElementById('statTutorTotal').textContent = DB.tutorAccounts.length;
@@ -792,8 +798,8 @@ function initTeachPicker(t){
     host.innerHTML = `<div class="tp">
       <div class="tp-intro">Choose a Key Stage (or TECH for AI coaches), tick the subjects this tutor takes, then pick the Years or Levels. The tutor sees <b>only</b> the Key Stage, subject and Years set here.</div>
       <div><div class="tp-grouplabel">British curriculum</div><div class="tp-pills">${KEY_STAGES.map(pill).join('')}</div></div>
-      <div><div class="tp-grouplabel">CBC \u00b7 Tuition</div><div class="tp-pills">${CBC_BANDS.map(pill).join('')}</div></div>
-      <div><div class="tp-grouplabel">TECH \u00b7 Digital AI Literacy</div><div class="tp-pills">${TECH_BANDS.map(pill).join('')}</div></div>
+      <div><div class="tp-grouplabel">CBC \u00b7 Tuition</div><div class="tp-pills">${(typeof CBC_BANDS!=='undefined'?CBC_BANDS:[]).map(pill).join('')}</div></div>
+      <div><div class="tp-grouplabel">TECH \u00b7 Digital AI Literacy</div><div class="tp-pills">${(typeof TECH_BANDS!=='undefined'?TECH_BANDS:[]).map(pill).join('')}</div></div>
       ${panel()}
       <div><div class="tp-grouplabel">Assigned (${total()})</div>${summary()}</div>
       ${lost.length ? `<div class="tp-lost"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> These older entries do not fit any Key Stage and will be dropped when you save: <b>${lost.map(s=>escapeHtml(lmzSubjectLabel(s))).join(', ')}</b>.</div>` : ''}

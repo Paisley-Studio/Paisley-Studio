@@ -1,7 +1,7 @@
 // Paisley Studio Service Worker
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v7-delete'; // Bumped to force browsers to drop the old broken cache
+const CACHE_NAME = 'paisley-studio-v8-fresh-js'; // Bumped to force browsers to drop the old broken cache
 const CACHE_URLS = ['./', './index.html'];
 
 // Hosts that must NEVER be intercepted by the service worker.
@@ -79,7 +79,20 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 5) Cache-first for same-origin assets
+  // 5a) Network-first for scripts/styles so helper files (lms-helpers.js etc.) never go stale
+  if (/\.(js|css)(\?|$)/.test(new URL(url).pathname + new URL(url).search)) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response.ok) { const copy = response.clone(); caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)); }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // 5) Cache-first for other same-origin assets
   event.respondWith(
     caches.match(event.request).then(cached => {
       return cached || fetch(event.request).then(response => {
