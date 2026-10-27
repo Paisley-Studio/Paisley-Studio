@@ -50,12 +50,113 @@
     
     /* Header */
     .site-header{position:sticky;top:0;z-index:1000;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
-    .header-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.7rem 0}
+    .header-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.7rem 0; position: relative; z-index: 1002;}
     .logo{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.15rem;color:var(--brand-deep)}.logo b{background:var(--brand);color:#04231f;border-radius:7px;padding:.05rem .5rem;font-size:.85rem}
+    
     .main-nav{display:flex;gap:1.5rem}.main-nav a{font-weight:700;font-size:.86rem;color:var(--brand-deep);position:relative}.main-nav a:hover{color:var(--brand)}
     .header-cta{display:flex;gap:1rem;align-items:center}.header-cta .signin{font-weight:800;font-size:.85rem;color:var(--brand-deep)}.header-cta .btn{padding:.45rem .95rem;font-size:.68rem}
-    @media(max-width:860px){.main-nav{display:none}}
     
+    /* Menu Toggle Button (Hamburger -> X) */
+    .menu-toggle {
+      display: none;
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--brand-deep);
+      cursor: pointer;
+      padding: 0.4rem;
+      border-radius: 8px;
+      transition: background 0.2s;
+      z-index: 1002; /* Stay above the menu */
+    }
+    .menu-toggle:hover {
+      background: var(--sage);
+    }
+
+    /* Mobile Nav Dropdown */
+    .mobile-nav {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #fff;
+      z-index: 1001;
+      padding: 0 1.5rem;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(.16,1,.3,1), padding 0.3s ease;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      border-top: 1px solid var(--line);
+      flex-direction: column;
+    }
+    .mobile-nav.active {
+      display: flex;
+      max-height: 100vh;
+      padding: 1rem 1.5rem 1.5rem;
+      overflow-y: auto;
+    }
+    .mobile-nav a {
+      display: block;
+      padding: 0.8rem 0;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--brand-deep);
+      border-bottom: 1px solid var(--line);
+      transition: color 0.2s, padding-left 0.2s;
+    }
+    .mobile-nav a:last-child {
+      border-bottom: none;
+    }
+    .mobile-nav a:hover {
+      color: var(--brand);
+      padding-left: 0.4rem;
+    }
+    .mobile-nav .mobile-cta {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+    .mobile-nav .mobile-cta .btn {
+      width: 100%;
+      padding: 0.7rem;
+      font-size: 0.75rem;
+      text-align: center; /* ADDED THIS LINE TO CENTER THE WORD HOME */
+    }
+    .mobile-nav .mobile-cta .signin-mobile {
+      text-align: center;
+      font-weight: 800;
+      font-size: 0.85rem;
+      color: var(--brand-deep);
+      padding: 0.4rem;
+      border-bottom: none;
+    }
+
+    /* Mobile Overlay (subtle background dim) */
+    .mobile-nav-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(36, 95, 90, 0.2);
+      z-index: 999;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .mobile-nav-overlay.active {
+      display: block;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Responsive Breakpoints */
+    @media(max-width: 860px) {
+      .main-nav { display: none; }
+      .header-cta { display: none; }
+      .menu-toggle { display: block; }
+    }
+
     /* Page Hero */
     .page-hero{padding:clamp(2.2rem,5vw,3.6rem) 0 1.2rem;text-align:center;background:var(--paper)}
     .page-hero h1{font-size:clamp(2rem,4.6vw,3.2rem);margin:.9rem 0 .6rem}.page-hero h1 em{font-style:normal;color:var(--brand)}
@@ -78,7 +179,6 @@
     .pg li{display:flex;gap:.55rem;align-items:flex-start;font-weight:700;font-size:.84rem}
     .pg li i{flex:0 0 22px;height:22px;border-radius:7px;background:var(--brand);color:#04231f;display:grid;place-items:center;font-size:.62rem;margin-top:.05rem}
     
-    /* UPDATED: Force buttons in one line */
     .pg .acts{
       display: flex;
       flex-direction: row;
@@ -94,7 +194,6 @@
       white-space: nowrap;
     }
 
-    /* Dark Card Overrides (using brand-deep instead of near-black) */
     .pg.dark {
       background: var(--brand-deep);
       color: #fff;
@@ -152,7 +251,7 @@
     .site-footer{background:var(--dark);color:#8FA8A2;padding:1.6rem 0;font-size:.85rem;font-weight:600}.site-footer .container{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}.site-footer nav{display:flex;gap:1.2rem;flex-wrap:wrap}.site-footer a:hover{color:var(--brand)}
 
     /* =========================================
-       SERIOUS ANIMATIONS (From Index File)
+       ANIMATIONS
        ========================================= */
     .reveal {
       opacity: 0;
@@ -161,22 +260,6 @@
       will-change: transform, opacity;
     }
     .reveal.in { opacity: 1; transform: translateY(0); }
-
-    .reveal-left {
-      opacity: 0;
-      transform: translateX(-64px);
-      transition: opacity 0.7s cubic-bezier(.16,1,.3,1), transform 0.7s cubic-bezier(.16,1,.3,1);
-      will-change: transform, opacity;
-    }
-    .reveal-left.in { opacity: 1; transform: translateX(0); }
-
-    .reveal-right {
-      opacity: 0;
-      transform: translateX(64px);
-      transition: opacity 0.7s cubic-bezier(.16,1,.3,1), transform 0.7s cubic-bezier(.16,1,.3,1);
-      will-change: transform, opacity;
-    }
-    .reveal-right.in { opacity: 1; transform: translateX(0); }
 
     .reveal-scale {
       opacity: 0;
@@ -195,7 +278,7 @@
     .reveal-rotate.in { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
 
     @media(prefers-reduced-motion:reduce){
-      .reveal, .reveal-left, .reveal-right, .reveal-scale, .reveal-rotate {
+      .reveal, .reveal-scale, .reveal-rotate {
         opacity:1; transform:none; transition:none;
       }
     }
@@ -213,10 +296,33 @@
 <header class="site-header">
   <div class="container header-inner">
     <a href="index.html" class="logo" aria-label="Paisley Studio home"><img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" width="38" height="38"><span>Paisley Studio</span></a>
+    
+    <!-- Desktop Nav -->
     <nav class="main-nav" aria-label="Primary"><a href="key-stage-4.html">IGCSE</a><a href="tuition.html">CBC</a><a href="tech.html">AI Literacy</a><a href="why-paisley.html">Why Paisley</a></nav>
     <div class="header-cta"><a href="index.html#contact" class="signin">Contact</a><a href="index.html" class="btn btn-primary">Home</a></div>
+
+    <!-- Mobile Menu Toggle (Changes to X via JS) -->
+    <button class="menu-toggle" aria-label="Open menu" aria-expanded="false">
+      <i class="fas fa-bars"></i>
+    </button>
   </div>
+
+  <!-- Mobile Nav Dropdown (Inside header for perfect positioning) -->
+  <nav class="mobile-nav" aria-label="Mobile menu">
+    <a href="key-stage-4.html">IGCSE</a>
+    <a href="tuition.html">CBC</a>
+    <a href="tech.html">AI Literacy</a>
+    <a href="why-paisley.html">Why Paisley</a>
+    <div class="mobile-cta">
+      <a href="index.html#contact" class="signin-mobile">Contact</a>
+      <a href="index.html" class="btn btn-primary">Home</a>
+    </div>
+  </nav>
 </header>
+
+<!-- Mobile Overlay (Placed outside header to cover the page) -->
+<div class="mobile-nav-overlay"></div>
+
 <main id="main-content">
 <section class="page-hero">
   <div class="container">
@@ -354,22 +460,51 @@
 <script>
   document.getElementById('yr').textContent = new Date().getFullYear();
 
-  // ============================================================
-  // SCROLL REVEAL ANIMATIONS (From Index File)
-  // ============================================================
-  const revealElements = document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-scale, .reveal-fade, .reveal-rotate');
-
+  // Scroll reveal
+  const revealElements = document.querySelectorAll('.reveal, .reveal-scale, .reveal-rotate');
   const revealObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-      // Toggle 'in' class based on intersection
       entry.target.classList.toggle('in', entry.isIntersecting);
     });
-  }, {
-    threshold: 0.15,
-    rootMargin: '0px 0px -40px 0px'
-  });
-
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
   revealElements.forEach(el => revealObserver.observe(el));
+
+  // Mobile nav functionality
+  const menuToggle = document.querySelector('.menu-toggle');
+  const menuIcon = menuToggle.querySelector('i');
+  const mobileNav = document.querySelector('.mobile-nav');
+  const overlay = document.querySelector('.mobile-nav-overlay');
+  const mobileLinks = document.querySelectorAll('.mobile-nav a');
+
+  function toggleMenu() {
+    const isOpen = mobileNav.classList.contains('active');
+    
+    if (isOpen) {
+      // Close menu
+      mobileNav.classList.remove('active');
+      overlay.classList.remove('active');
+      menuToggle.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+      // Change icon back to bars
+      menuIcon.classList.remove('fa-times');
+      menuIcon.classList.add('fa-bars');
+    } else {
+      // Open menu
+      mobileNav.classList.add('active');
+      overlay.classList.add('active');
+      menuToggle.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+      // Change icon to X
+      menuIcon.classList.remove('fa-bars');
+      menuIcon.classList.add('fa-times');
+    }
+  }
+
+  menuToggle.addEventListener('click', toggleMenu);
+  overlay.addEventListener('click', toggleMenu);
+  
+  // Close menu when a link is clicked
+  mobileLinks.forEach(link => link.addEventListener('click', toggleMenu));
 </script>
 </body>
 </html>
