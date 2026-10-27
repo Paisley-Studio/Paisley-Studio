@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Welcome to PAISLEY TECH | Paisley TECH sign in &amp; sign up</title>
 <meta name="description" content="Sign in or create your Paisley TECH account — Digital AI Literacy. Let's build something." />
 <meta name="robots" content="noindex" />
@@ -47,6 +47,45 @@ a{color:var(--brand-deep);font-weight:700}
 .small{font-size:.78rem;color:var(--muted);font-weight:600;margin-top:.9rem;text-align:center}
 #guard{display:none;background:var(--sage);border-radius:14px;padding:.9rem;margin-bottom:.9rem}
 .hp{position:absolute;left:-9999px}
+
+/* ---------- Responsive upgrade ---------- */
+html{-webkit-text-size-adjust:100%}
+body{min-height:100vh;min-height:100dvh}
+.side,.main,.card{min-width:0}
+.side{position:sticky;top:0;align-self:start;height:100vh;height:100dvh;overflow:hidden;padding:clamp(1.6rem,4vw,3rem)}
+.side h1{white-space:normal;text-wrap:balance;overflow-wrap:anywhere}
+.main{padding:clamp(1rem,3vw,2.2rem) clamp(.8rem,3vw,1.2rem);padding-bottom:calc(clamp(1rem,3vw,2.2rem) + env(safe-area-inset-bottom,0px))}
+.card{margin:auto;padding:clamp(1.1rem,4vw,1.7rem)}
+.card h2{font-size:clamp(1.4rem,5vw,1.7rem)}
+.tab{display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.2;min-height:44px;padding:.55rem .4rem}
+.f input,.f select{min-height:46px}
+.btn{min-height:50px}
+.chip span{min-height:38px;display:inline-flex;align-items:center}
+@media(min-width:1400px){.card{width:min(520px,100%)}}
+@media(max-width:900px){
+  .side{position:static;height:auto;overflow:visible;padding:1.2rem 1.2rem 1.4rem;padding-top:calc(1.2rem + env(safe-area-inset-top,0px));border-radius:0 0 26px 26px}
+  .side h1{font-size:clamp(1.25rem,5.4vw,1.7rem)}
+  .main{align-items:flex-start;padding-top:1.2rem}
+}
+@media(max-width:600px){
+  .f input,.f select{font-size:16px}
+  .tab{font-size:.72rem;letter-spacing:.03em}
+  .chips{gap:.45rem}
+  .chip span{font-size:.82rem;padding:.4rem .85rem}
+  .card{border-radius:20px}
+}
+@media(max-width:360px){
+  .main{padding-left:.6rem;padding-right:.6rem}
+  .card{padding:1rem .9rem}
+  .tab{font-size:.66rem;padding:.5rem .25rem}
+  .chip span{font-size:.78rem;padding:.35rem .7rem}
+}
+@media(max-width:900px) and (max-height:480px){
+  .side{padding:.7rem 1.2rem;border-radius:0 0 18px 18px}
+  .back{margin-bottom:.3rem}
+  .side h1{font-size:1.1rem}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -144,6 +183,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Small delay to ensure DOM is fully ready and overriding any default active states
     setTimeout(() => setTab('signup'), 10);
   }
+
+  [['loginEmail','loginBtn'],['loginPassword','loginBtn'],['suName','signupBtn'],['suEmail','signupBtn'],['suPass','signupBtn'],['suPhone','signupBtn'],['gName','signupBtn'],['gEmail','signupBtn'],['gPhone','signupBtn']].forEach(([i,b])=>{
+    const el=$(i); if(!el) return; el.setAttribute('enterkeyhint','go');
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $(b).click(); } });
+  });
 
   $('suAge').addEventListener('change',()=>{ $('guard').style.display = $('suAge').value==='under18' ? 'block' : 'none'; });
 
