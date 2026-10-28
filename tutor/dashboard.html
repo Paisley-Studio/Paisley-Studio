@@ -210,7 +210,7 @@
           <div class="panel-head"><div><h3>My students</h3><div class="sub">Students assigned to you by the Studio Desk</div></div></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Student</th><th>Subjects I teach them</th><th>Key Stage</th><th>Parent Contact</th><th>Status</th><th>Results</th><th>Signed up</th></tr></thead>
+              <thead><tr><th>Student</th><th>Subjects I teach them</th><th>Key Stage</th><th>Parent / Guardian</th><th>Status</th><th>Results</th><th>Signed up</th></tr></thead>
               <tbody id="studentBody"></tbody>
             </table>
           </div>
@@ -350,6 +350,20 @@ const acc = {
   examResults: {}, tickets: {}, notifications: {}, timetables: {}, grants: {}, homework: {}
 };
 
+// Tutors may see parent NAMES only - never email or phone.
+function parentNamesOnly(s){
+  const names = [];
+  if (Array.isArray(s.guardians)) s.guardians.forEach(g=>{ if (g && g.name) names.push(String(g.name).trim()); });
+  if (!names.length && s.guardianName) names.push(String(s.guardianName).trim());
+  if (!names.length && s.parentContact) {
+    // legacy string "Name · email · phone | Name2 · ..." -> keep only the name part
+    String(s.parentContact).split('|').forEach(part=>{
+      const n = part.split('·')[0].trim();
+      if (n && !/@/.test(n) && !/^[+\d\s()-]{6,}$/.test(n)) names.push(n);
+    });
+  }
+  return names.length ? names.join(', ') : 'Parent';
+}
 function isMyStudent(id){ return DB.students.some(s=>s.id===id); }
 function isMyKeyStage(ks){ return !ks || myKeyStages.indexOf(ks) !== -1; }
 function isMine(rec){ return rec && rec.tutorId === tutor.id; }
@@ -1105,7 +1119,7 @@ function renderStudents(){
       <td><div class="cell-name">${escapeHtml(s.name||'—')}</div><div class="cell-sub">${escapeHtml(s.email||'')}</div></td>
       <td>${subjHtml}</td>
       <td>${escapeHtml(shortKS(s.keyStage))}</td>
-      <td>${escapeHtml(s.parentContact||'—')}</td>
+      <td>${escapeHtml(parentNamesOnly(s))}<div class="cell-sub">Parent of ${escapeHtml(s.name||'—')}</div></td>
       <td><span class="badge ${s.status==='Active'?'b-confirmed':'b-pending'}">${escapeHtml(s.status||'Pending')}</span></td>
       <td>${results.length}</td>
       <td>${fmtDate(s.date)}</td>

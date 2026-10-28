@@ -1504,6 +1504,18 @@ function lmzRoomHtml(room) {
   return esc(String(room || '').trim() || '—');
 }
 
+// Parents must NOT get a clickable join link. If the room is a meeting URL
+// we show plain text only; ordinary room names are shown as-is.
+function lmzRoomHtmlNoJoin(room) {
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  if (lmzMeetingUrl(room)) return '<span title="Online class - students join from their own portal">Online class</span>';
+  return esc(String(room || '').trim() || '\u2014');
+}
+
 function lmzInjectJoinStyle() {
   if (typeof document === 'undefined' || document.getElementById('lmz-join-style')) return;
   var st = document.createElement('style');

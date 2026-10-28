@@ -753,7 +753,7 @@ function renderClasses(){
     <div style="margin-bottom:1rem;">
       <strong style="color:var(--brand-deep); display:block; margin-bottom:.4rem;">${escapeHtml(day)}</strong>
       <table><thead><tr><th>Time</th><th>Subject</th><th>Tutor</th><th>Room</th></tr></thead><tbody>
-        ${byDay[day].map(e=>`<tr><td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td><td>${escapeHtml(e.subjectName||'')}</td><td>${escapeHtml(e.tutorName||'—')}</td><td>${lmzRoomHtml(e.room)}</td></tr>`).join('')}
+        ${byDay[day].map(e=>`<tr><td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td><td>${escapeHtml(e.subjectName||'')}</td><td>${escapeHtml(e.tutorName||'—')}</td><td>${lmzRoomHtmlNoJoin(e.room)}</td></tr>`).join('')}
       </tbody></table>
     </div>`).join('');
 }
