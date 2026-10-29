@@ -55,7 +55,7 @@ async function check(user){
   if (d.exists && d.data().status === 'Active') { location.href = '/tech/coach/dashboard.html'; return; }
   await auth.signOut();
   $('go').disabled = false;
-  show('errMsg', d.exists ? 'This coach account is paused. Please contact the Studio Desk.' : 'This login is not a TECH coach account. Builders and guardians have their own sign-in pages below.');
+  show('errMsg', d.exists ? 'This coach account is paused. Please contact the Studio Desk.' : '');
 }
 auth.onAuthStateChanged(u => { if (u) check(u).catch(e => show('errMsg', 'Could not sign in: ' + (e.message || e.code))); });
 
