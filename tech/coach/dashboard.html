@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
-<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech5" />
+<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech6" />
 </head>
 <body>
 <div id="gate"><div class="spin" role="status" aria-label="Loading"></div><p>Opening the coach portal…</p></div>
@@ -54,6 +54,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="/firebase-config.js"></script>
 <script src="/js/tech/tech-helpers.js?v=tech5"></script>
+<script src="/js/tech/coach-access.js?v=tech6"></script>
 <script src="/js/tech/writing-studio.js"></script>
 <script src="/js/tech/code-lab.js"></script>
 <script src="/js/tech/upload-pad.js"></script>
@@ -90,15 +91,16 @@ function label(b){
   return [T.STATUS_LABEL[b.status]||b.status||'Idea',''];
 }
 function gate(title,body,btn){ $('shell').hidden=true; $('gate').hidden=false; $('gate').innerHTML='<div class="gate-card"><h1>'+title+'</h1><p>'+body+'</p>'+(btn||'')+'</div>'; }
-function leave(){ auth.signOut().finally(()=>{ location.href='/tech/coach/index.html'; }); }
+function leave(){ const to='/tech/coach/'+(S.me&&S.me.slug?encodeURIComponent(S.me.slug):'index.html'); auth.signOut().finally(()=>{ location.href=to; }); }
 document.addEventListener('click',e=>{ if(e.target.closest('#gSign')) leave(); });
 
 auth.onAuthStateChanged(async user=>{
   if(!user){ location.href='/tech/coach/index.html'; return; }
   S.uid=user.uid;
-  let d; try{ d=await db.collection('techCoaches').doc(user.uid).get(); }catch(e){ return gate('Could not open the coach portal',esc(T.errMsg(e))); }
-  if(!d.exists||d.data().status!=='Active') return gate('Not a coach account','This login is not an active TECH coach account. Please contact the Studio Desk.','<button class="btn" id="gSign" type="button">Sign out</button>');
-  S.me=Object.assign({id:d.id},d.data());
+  let r; try{ r=await TechCoachAccess.resolve(user); }catch(e){ return gate('Could not open the coach portal',esc(T.errMsg(e))); }
+  if(r.state==='paused') return gate('Coach account paused','Please contact the Studio Desk.','<button class="btn" id="gSign" type="button">Sign out</button>');
+  if(r.state!=='active') return gate('Not a coach account','There is no TECH coach account for '+esc(user.email||'this login')+'. Ask the Studio Desk to add you on the Tutors page with exactly this email.','<button class="btn" id="gSign" type="button">Sign out</button>');
+  S.me=r.coach;
   boot();
 });
 

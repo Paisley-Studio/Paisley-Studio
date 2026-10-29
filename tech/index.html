@@ -99,6 +99,24 @@ body{min-height:100vh;min-height:100dvh}
   .side h1{font-size:1.1rem}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- Light side panel with photo (replaces the dark panel) ---------- */
+.side{background:linear-gradient(165deg,#F4FBF9 0%,#DDF0EC 48%,#A9DDD5 100%);color:var(--ink);justify-content:flex-start}
+.side::before{right:-12%;bottom:-18%;width:min(620px,95%);height:auto;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.85),rgba(255,255,255,0) 68%)}
+.side>*{z-index:1}
+.side h1{color:var(--brand-deep)}
+.side h1 em{color:#1E8277}
+.side p{color:var(--muted);font-weight:600}
+.side li i{color:var(--brand-deep)}
+.back{color:var(--brand-deep)}
+.side>.side-art{position:absolute;z-index:0;right:0;bottom:0;width:min(78%,500px);pointer-events:none;line-height:0}
+.side-art img{width:100%;height:auto;max-height:60vh;object-fit:contain;object-position:right bottom;display:block;margin-left:auto}
+@media(max-width:900px){
+  .side{overflow:hidden;min-height:172px;padding-right:150px}
+  .side>.side-art{width:140px}
+  .side-art img{max-height:150px}
+}
+@media(max-width:360px){.side{padding-right:1.2rem}.side>.side-art{display:none}}
 </style>
 </head>
 <body>
@@ -111,6 +129,10 @@ body{min-height:100vh;min-height:100dvh}
     <li><i class="fas fa-check"></i>Learn by building real things</li>
     <li><i class="fas fa-check"></i>A coach who gives real feedback</li>
   </ul>
+  <picture class="side-art">
+    <source srcset="/img/app/hero.webp" type="image/webp" />
+    <img src="/img/hero.png" alt="" width="476" height="560" decoding="async" />
+  </picture>
 </aside>
 
 <main class="main">

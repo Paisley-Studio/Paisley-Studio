@@ -103,6 +103,10 @@
         "destination": "/tech/coach/dashboard.html"
       },
       {
+        "source": "/tech/coach/:slug",
+        "destination": "/tech/coach/index.html"
+      },
+      {
         "source": "/tech/parent",
         "destination": "/tech/parent/index.html"
       },

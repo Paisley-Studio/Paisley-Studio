@@ -156,6 +156,8 @@ TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH
 |---|---|---|---|
 | `techStudents/{uid}` | the account itself, `status: 'Pending'`, no coach (any signed-in account, so IGCSE / CBC / remote students can join) | owner, admin, their coach (`coachId`), linked guardians | owner: `phone`, `techProfile`, `lastLoginAt` only; admin everything |
 | `techCoaches/{uid}` | admin (via `createTechCoach`) | owner, admin | owner: `phone`, `bio`; admin everything. `status != 'Active'` removes all coach access |
+| `techCoachInvites/{email}` | admin (Tutors page) | admin, the invited email | admin; the invitee may only set `uid`/`claimedAt`. While it exists, the invitee may create their own `techCoaches/{uid}` (Active, same email and slug; pinned to `uid` when the desk created the login) |
+| `techCoachSlugs/{slug}` (coach link `/tech/coach/{slug}`) | admin | anyone | admin |
 | `techGuardianLinks/{parentUid}_{studentUid}` | admin / Cloud Functions | the guardian, admin | admin |
 | `techGuardianChats/{parentUid}_{studentUid}` (+ `messages`) | the linked guardian (coachId must be the builder's current coach), or that coach | guardian, the chat's coach, admin | participants: last-message fields only. Message `senderRole` must match the sender |
 | `techNotifications` | Cloud Functions only | recipient, admin | recipient may only flip `read` |

@@ -950,11 +950,52 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Coach invites, keyed by lower-case email, written by the Studio Desk (Tutors page).
+    // The invited person claims it on their first sign-in at /tech/coach/{slug}, which creates
+    // their techCoaches doc. So a coach never depends on a Cloud Function, and an existing
+    // Paisley login (e.g. a tutor) becomes a coach with its own password. When the desk
+    // created the login itself, the invite holds that uid and only that login can claim it.
+    function hasEmail() {
+      return isSignedIn() && ('email' in request.auth.token) && request.auth.token.email is string;
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function techInvite() {
+      return get(/databases/$(database)/documents/techCoachInvites/$(myEmail())).data;
+    }
+    function canClaimCoach(uid) {
+      return isOwner(uid) && hasEmail() &&
+        exists(/databases/$(database)/documents/techCoachInvites/$(myEmail())) &&
+        techInvite().get('uid', request.auth.uid) == request.auth.uid &&
+        techInvite().get('revoked', false) != true;
+    }
+    match /techCoachInvites/{email} {
+      allow read: if isAdmin() || (hasEmail() && myEmail() == email);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (hasEmail() && myEmail() == email &&
+          resource.data.get('uid', request.auth.uid) == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'claimedAt']) &&
+          request.resource.data.uid == request.auth.uid);
+    }
+
+    // Public lookup behind a coach's personal link /tech/coach/{slug}
+    // (same idea as the tutor link /tutor/{slug}): { slug, name, email, status, coachId? }.
+    match /techCoachSlugs/{slug} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /techCoaches/{uid} {
       allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAdmin() ||
+        (canClaimCoach(uid) &&
+          request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'disciplines', 'bio', 'slug', 'status', 'createdAt', 'updatedAt', 'createdBy', 'claimedFromInvite']) &&
+          request.resource.data.status == 'Active' &&
+          request.resource.data.get('slug', '') == techInvite().get('slug', '') &&
+          request.resource.data.email.lower() == myEmail());
       allow update: if isAdmin() ||
         (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'bio', 'updatedAt', 'lastLoginAt']));
-      allow create, delete: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Written by Cloud Functions / admins only.

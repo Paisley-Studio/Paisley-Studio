@@ -227,12 +227,12 @@
 
     /* ---------------- coaches ---------------- */
     function coaches(b) {
-      var h = '<div class="cr-bar"><div><h3>TECH coaches</h3><div class="cr-sub">Coaches are separate from tutors. They sign in at /tech/coach and see only their own builders, projects and families.</div></div><button type="button" class="cr-btn primary" data-a="new-coach"><i class="fas fa-plus"></i> Add coach</button></div>';
+      var h = '<div class="cr-bar"><div><h3>TECH coaches</h3><div class="cr-sub">Coaches are separate from tutors. Each signs in at their own link /tech/coach/{slug} and sees only their own builders, projects and families. You can also create and edit coaches on the Tutors page.</div></div><button type="button" class="cr-btn primary" data-a="new-coach"><i class="fas fa-plus"></i> Add coach</button></div>';
       if (!S.coaches.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No TECH coaches yet. Add your first coach to start pairing builders.</div></div>'; return; }
       b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Coach</th><th>Status</th><th>Builders</th><th>Waiting reviews</th><th>Disciplines</th><th></th></tr></thead><tbody>' + S.coaches.map(function (c) {
         var nb = S.students.filter(function (s) { return s.coachId === c.id && s.status === 'Active'; }).length;
         var nr = S.builds.filter(function (x) { return x.coachId === c.id && (x.reviewState === 'requested' || x.showcase === 'requested' || x.mastery === 'requested'); }).length;
-        return '<tr><td><b>' + esc(c.name) + '</b><div class="cr-note">' + esc(c.email || '') + (c.phone ? ' · ' + esc(c.phone) : '') + '</div>' + (c.migratedFromTutor ? '<span class="badge b-plain">Was a tutor coach</span>' : '') + '</td>' +
+        return '<tr><td><b>' + esc(c.name) + '</b><div class="cr-note">' + esc(c.email || '') + (c.phone ? ' · ' + esc(c.phone) : '') + '</div><div class="cr-note">' + (c.slug ? 'Link: /tech/coach/' + esc(c.slug) : 'No personal link yet (set one on the Tutors page)') + '</div>' + (c.migratedFromTutor ? '<span class="badge b-plain">Was a tutor coach</span>' : '') + '</td>' +
           '<td>' + badge(c.status === 'Active' ? 'Active' : 'Inactive') + '</td><td>' + nb + '</td><td>' + nr + '</td><td class="cr-note">' + esc((c.disciplines || []).join(', ') || '—') + '</td>' +
           '<td><div class="cr-actions">' + (c.status === 'Active'
             ? '<button type="button" class="cr-btn sm danger" data-a="coach-off" data-id="' + esc(c.id) + '" title="Pause coach"><i class="fas fa-pause"></i></button>'

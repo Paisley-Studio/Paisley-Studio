@@ -256,7 +256,7 @@
           You remain in charge.
           <br><br>
           <strong>TECH coaches</strong> are created here too: click <strong>Create TECH coach</strong> (or switch the account type in the create window).
-          They do <em>not</em> get the Tutor Portal. They sign in at <span class="copy-link" id="coachUrlHint">/tech/coach</span>, where they see only the TECH builders you pair with them (in Admin → Tech Studio → Builders), those builders' projects and families.
+          They do <em>not</em> get the Tutor Portal. They sign in at their own link <span class="copy-link" id="coachUrlHint">/tech/coach/{slug}</span>, where they see only the TECH builders you pair with them (in Admin → Tech Studio → Builders), those builders' projects and families.
         </div>
       </div>
 
@@ -298,7 +298,7 @@
         <div class="table-toolbar">
           <div>
             <div class="cell-name" style="font-size:1rem;"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> TECH coaches</div>
-            <div class="cell-sub">Separate from tutors. Their portal is <span class="copy-link">/tech/coach</span>; they never see the Tutor Portal or IGCSE / CBC classrooms.</div>
+            <div class="cell-sub">Separate from tutors. Each has a personal link <span class="copy-link">/tech/coach/{slug}</span>; they never see the Tutor Portal or IGCSE / CBC classrooms.</div>
           </div>
           <button class="btn btn-primary btn-sm" id="addCoachBtn2" type="button" style="margin-left:auto;"><i class="fas fa-plus" aria-hidden="true"></i> Create TECH coach</button>
         </div>
@@ -385,7 +385,7 @@ auth.onAuthStateChanged(function(user){
 function grantAdminAccess(){
   document.body.classList.add('authed');
   document.getElementById('baseUrlHint').textContent = location.origin + '/tutor/{slug}';
-  document.getElementById('coachUrlHint').textContent = location.origin + '/tech/coach';
+  document.getElementById('coachUrlHint').textContent = location.origin + '/tech/coach/{slug}';
   if(!listenersStarted){ listenersStarted = true; initFirestore(); }
 }
 
@@ -984,6 +984,8 @@ function openCreateTutor(){
 ========================================================= */
 const TECH_DISCIPLINES = ['Coding','AI','Writing','Research','Design','Media','Music','Entrepreneurship']; // = TechUI.DISCIPLINES
 
+function coachLink(slug){ return location.origin + '/tech/coach/' + (slug || ''); }
+
 function coachFormHtml(c, isNew){
   c = c || {};
   const ds = c.disciplines || [];
@@ -993,7 +995,8 @@ function coachFormHtml(c, isNew){
       <div class="form-field"><label>Phone</label><input type="text" id="cPhone" value="${escapeHtml(c.phone||'')}" placeholder="+254…" /></div>
       ${isNew?`<div class="form-field full"><label>Password (at least 6 characters)</label>
         <input type="password" id="cPassword" placeholder="Set an initial password" autocomplete="new-password" />
-        <div class="field-hint"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>Shown once after you click Create. Copy it and send it to the coach.</span></div></div>`:''}
+        <div class="field-hint"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>Shown once after you click Create. Copy it and send it to the coach with their link. Not needed if this email already has a Paisley login.</span></div></div>`:''}
+      <div class="form-field full"><label>Login slug — their link becomes /tech/coach/{slug}</label><input type="text" id="cSlug" value="${escapeHtml(c.slug||'')}" placeholder="brian-otieno" /></div>
       <div class="form-field full"><label>Disciplines they coach</label>
         <div class="filter-chips" id="cDisc">${TECH_DISCIPLINES.map(d=>`<label class="chip-btn ${ds.indexOf(d)!==-1?'active':''}" style="cursor:pointer;"><input type="checkbox" value="${d}" ${ds.indexOf(d)!==-1?'checked':''} style="margin-right:.35rem;" /> ${d}</label>`).join('')}</div></div>
     </div>`;
@@ -1004,62 +1007,102 @@ function readCoachDisciplines(){
 function wireDisciplineChips(){
   document.querySelectorAll('#cDisc input').forEach(i=>i.addEventListener('change', ()=>i.parentElement.classList.toggle('active', i.checked)));
 }
+// Slugs live in techCoachSlugs/{slug} (a public lookup for the sign-in page), separate from tutor slugs.
+async function isCoachSlugTaken(slug, ignoreCoachId){
+  const d = await db.collection('techCoachSlugs').doc(slug).get();
+  return d.exists && (!ignoreCoachId || d.data().coachId !== ignoreCoachId);
+}
 
 function openCreateCoach(){
   openWideModal('Create TECH coach', acctTypeHtml('coach') + coachFormHtml(null, true), `
     <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
     <button class="btn btn-primary btn-sm" id="createCoachConfirm" type="button"><i class="fas fa-check" aria-hidden="true"></i> Create TECH coach</button>`);
   wireAcctType(); wireDisciplineChips();
+  const nameEl = document.getElementById('cName'), slugEl = document.getElementById('cSlug');
+  let slugTouched = false;
+  slugEl.addEventListener('input', ()=>{ slugTouched = true; });
+  nameEl.addEventListener('input', ()=>{ if(!slugTouched) slugEl.value = tutorSlugify(nameEl.value); });
   document.getElementById('createCoachConfirm').addEventListener('click', createCoach);
 }
 
+/* Create a TECH coach.
+   1. Save an invite (techCoachInvites/{email}) and the personal link (techCoachSlugs/{slug}).
+   2. Create their login with the password you set (on a throwaway app, so you stay signed in),
+      then their techCoaches record.
+   If the email already has a Paisley login, or step 2's record cannot be saved, the invite
+   stays: the coach's first sign-in at their link creates the record (js/tech/coach-access.js). */
 async function createCoach(){
   const name = document.getElementById('cName').value.trim();
   const email = document.getElementById('cEmail').value.trim();
   const phone = document.getElementById('cPhone').value.trim();
   const password = document.getElementById('cPassword').value;
+  const slug = tutorSlugify(document.getElementById('cSlug').value);
   const disciplines = readCoachDisciplines();
   const btn = document.getElementById('createCoachConfirm');
   if(!name){ alert('Please enter the coach\'s full name.'); return; }
   if(!/^\S+@\S+\.\S+$/.test(email)){ alert('Please enter a valid email address.'); return; }
-  if(!password || password.length < 6){ alert('Please set a password of at least 6 characters.'); return; }
+  if(!slug){ alert('Please set a login slug.'); return; }
+  if(password && password.length < 6){ alert('Please set a password of at least 6 characters.'); return; }
+  if(!password && !await PaisleyUI.confirm('No password set.\n\nOnly do this if ' + email + ' already has a Paisley login (for example a tutor, admin or parent). They will use that login\'s password at their coach link.\n\nContinue without a password?')) return;
   const reset = ()=>{ btn.disabled = false; btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Create TECH coach'; };
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Creating…';
-  const url = location.origin + '/tech/coach';
+
+  const FV = firebase.firestore.FieldValue, key = email.toLowerCase(), url = coachLink(slug);
+  const inviteRef = db.collection('techCoachInvites').doc(key), slugRef = db.collection('techCoachSlugs').doc(slug);
   try{
-    const secAuth = getSecondaryAuth();
-    const cred = await secAuth.createUserWithEmailAndPassword(email, password);
-    const uid = cred.user.uid;
-    await secAuth.signOut();
-    const FV = firebase.firestore.FieldValue;
-    await db.collection('techCoaches').doc(uid).set({ name, email, phone, disciplines, bio:'', status:'Active',
-      createdAt: FV.serverTimestamp(), updatedAt: FV.serverTimestamp(), createdBy: auth.currentUser ? auth.currentUser.uid : '' });
+    if(await isCoachSlugTaken(slug)) { reset(); alert('That slug is already used by another coach. Pick a different one.'); return; }
+    await inviteRef.set({ name, email, phone, disciplines, slug, revoked: false, createdBy: auth.currentUser ? auth.currentUser.uid : '', createdAt: FV.serverTimestamp() });
+    await slugRef.set({ slug, name, email, status: 'Active', updatedAt: FV.serverTimestamp() });
+  }catch(err){
+    reset();
+    alert('Could not save the coach invite: ' + (err.message || err) + '\n\nIf this says "permissions", deploy the latest Firestore rules (firebase deploy --only firestore:rules) and make sure your login has an admins/{your uid} document.');
+    return;
+  }
+
+  if(!password){
     closeModal();
-    const message =
-      'TECH COACH ACCOUNT CREATED\n\n' +
-      'Name:     ' + name + '\n' +
-      'Email:    ' + email + '\n' +
-      'Password: ' + password + '\n' +
-      'Sign-in:  ' + url + '\n\n' +
-      'Copy or screenshot this message NOW and send it to the coach. ' +
-      'For their safety, this password will not be shown again.\n\n' +
-      'Next: pair TECH builders with this coach in Admin → Tech Studio → Builders.';
-    PaisleyUI.alert(message, { type:'success', title:'TECH coach created', sticky:true, okLabel:'I have copied it' });
-    try { if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(message).catch(()=>{}); } catch(e) {}
+    PaisleyUI.alert('TECH COACH ADDED\n\nName:     ' + name + '\nEmail:    ' + email + '\nSign-in:  ' + url + '\n\nSend them this link. They sign in with the password of their existing Paisley login, and become a TECH coach on that first sign-in.', { type:'success', title:'TECH coach added', sticky:true });
+    return;
+  }
+
+  const secAuth = getSecondaryAuth();
+  let uid = null;
+  try{
+    const cred = await secAuth.createUserWithEmailAndPassword(email, password);
+    uid = cred.user.uid;
   }catch(err){
     if(err && err.code === 'auth/email-already-in-use'){
-      const ok = await PaisleyUI.confirm('That email already has a Paisley sign-in (for example a tutor, admin or parent).\n\nMake that same account a TECH coach? They will sign in at /tech/coach with the password they already use; the password you typed here is not used.');
-      if(!ok){ reset(); return; }
-      try{
-        await firebase.functions().httpsCallable('createTechCoach')({ name, email, phone, disciplines });
-        closeModal();
-        alert('TECH coach role added to ' + email + '.\n\nThey sign in at ' + url + ' with the password they already use.');
-      }catch(e2){ reset(); alert('Could not add the TECH coach role: ' + (e2.message || e2)); }
+      closeModal();
+      PaisleyUI.alert('TECH COACH ADDED\n\n' + email + ' already has a Paisley sign-in (for example a tutor, admin or parent login).\n\nThey sign in at ' + url + ' with the password they already use, and become a TECH coach on that first sign-in. The password you typed here is not used.', { type:'success', title:'TECH coach added', sticky:true });
       return;
     }
     reset();
-    alert('Could not create the TECH coach: ' + (err.message || err));
+    inviteRef.delete().catch(()=>{}); slugRef.delete().catch(()=>{});
+    alert('Could not create the coach login: ' + (err.message || err));
+    return;
   }
+  try{
+    await db.collection('techCoaches').doc(uid).set({ name, email, phone, disciplines, slug, bio:'', status:'Active',
+      createdAt: FV.serverTimestamp(), updatedAt: FV.serverTimestamp(), createdBy: auth.currentUser ? auth.currentUser.uid : '' });
+    await Promise.all([inviteRef.update({ uid, claimedAt: FV.serverTimestamp() }), slugRef.set({ coachId: uid }, { merge: true })]);
+  }catch(e){
+    // The login exists; the invite (now pinned to this uid) creates the record on first sign-in.
+    console.warn('Coach record will be created on first sign-in:', e);
+    inviteRef.set({ uid }, { merge: true }).catch(()=>{});
+  }
+  secAuth.signOut().catch(()=>{});
+  closeModal();
+  const message =
+    'TECH COACH ACCOUNT CREATED\n\n' +
+    'Name:     ' + name + '\n' +
+    'Email:    ' + email + '\n' +
+    'Password: ' + password + '\n' +
+    'Sign-in:  ' + url + '\n\n' +
+    'Copy or screenshot this message NOW and send it to the coach. ' +
+    'For their safety, this password will not be shown again.\n\n' +
+    'Next: pair TECH builders with this coach in Admin → Tech Studio → Builders.';
+  PaisleyUI.alert(message, { type:'success', title:'TECH coach created', sticky:true, okLabel:'I have copied it' });
+  try { if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(message).catch(()=>{}); } catch(e) {}
 }
 
 function renderCoaches(){
@@ -1070,14 +1113,16 @@ function renderCoaches(){
     body.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:1.4rem;">No TECH coaches yet. Click <strong>Create TECH coach</strong>.</td></tr>';
     return;
   }
-  const url = location.origin + '/tech/coach';
   body.innerHTML = list.map(c=>{
     const n = DB.techStudents.filter(s=>s.coachId === c.id && s.status === 'Active').length;
     const active = c.status === 'Active';
+    const linkCell = c.slug
+      ? `<span class="copy-link">/tech/coach/${escapeHtml(c.slug)}</span>
+         <button class="mini-btn" title="Copy full coach link" type="button" onclick="copyUrl('${escapeHtml(coachLink(c.slug))}')"><i class="fas fa-copy" aria-hidden="true"></i></button>`
+      : `<button class="mini-btn" title="Give this coach a personal link" type="button" onclick="editCoach('${c.id}')"><i class="fas fa-link" aria-hidden="true"></i> Set link</button>`;
     return `<tr>
       <td><div class="cell-name">${escapeHtml(c.name||'—')}</div><div class="cell-sub">${escapeHtml(c.email||'')}${c.migratedFromTutor?' · was a tutor coach':''}</div></td>
-      <td><span class="copy-link">/tech/coach</span>
-          <button class="mini-btn" title="Copy coach sign-in URL" type="button" onclick="copyUrl('${escapeHtml(url)}')"><i class="fas fa-copy" aria-hidden="true"></i></button></td>
+      <td>${linkCell}</td>
       <td>${escapeHtml((c.disciplines||[]).join(', ') || '—')}</td>
       <td>${n}</td>
       <td><span class="badge ${active?'b-confirmed':'b-declined'}">${active?'Active':'Paused'}</span></td>
@@ -1094,15 +1139,21 @@ function renderCoaches(){
 
 window.editCoach = (id) => {
   const c = DB.techCoaches.find(x=>x.id===id); if(!c) return;
-  openWideModal('Edit TECH coach — ' + (c.name||''), coachFormHtml(c, false), `
+  openWideModal('Edit TECH coach — ' + (c.name||''), coachFormHtml({ ...c, slug: c.slug || tutorSlugify(c.name||'') }, false), `
     <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
     <button class="btn btn-primary btn-sm" id="saveCoachBtn" type="button"><i class="fas fa-floppy-disk" aria-hidden="true"></i> Save</button>`);
   wireDisciplineChips();
-  document.getElementById('saveCoachBtn').addEventListener('click', ()=>{
+  document.getElementById('saveCoachBtn').addEventListener('click', async ()=>{
     const name = document.getElementById('cName').value.trim();
+    const slug = tutorSlugify(document.getElementById('cSlug').value);
     if(!name){ alert('Please enter the coach\'s name.'); return; }
-    const d = { name, phone: document.getElementById('cPhone').value.trim(), disciplines: readCoachDisciplines(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
-    db.collection('techCoaches').doc(id).update(d).then(async ()=>{
+    if(!slug){ alert('Please set a login slug.'); return; }
+    const FV = firebase.firestore.FieldValue;
+    try{
+      if(slug !== c.slug && await isCoachSlugTaken(slug, id)){ alert('That slug is already used by another coach.'); return; }
+      await db.collection('techCoaches').doc(id).update({ name, slug, phone: document.getElementById('cPhone').value.trim(), disciplines: readCoachDisciplines(), updatedAt: FV.serverTimestamp() });
+      await db.collection('techCoachSlugs').doc(slug).set({ slug, name, email: c.email || '', status: c.status || 'Active', coachId: id, updatedAt: FV.serverTimestamp() });
+      if(c.slug && c.slug !== slug) await db.collection('techCoachSlugs').doc(c.slug).delete();
       // Keep the coach's name on their builders in step (shown in the builder studio and guardian portal).
       if(name !== c.name){
         const snap = await db.collection('techStudents').where('coachId','==',id).get();
@@ -1110,14 +1161,16 @@ window.editCoach = (id) => {
         snap.docs.forEach(s=>batch.update(s.ref, { coachName: name }));
         await batch.commit();
       }
-    }).then(closeModal).catch(err=>alert('Could not save: ' + err.message));
+      closeModal();
+      if(slug !== c.slug) alert('Coach link: ' + coachLink(slug));
+    }catch(err){ alert('Could not save: ' + err.message); }
   });
 };
 
 window.resetCoachPassword = async (id) => {
   const c = DB.techCoaches.find(x=>x.id===id); if(!c || !c.email) return;
   if(!await PaisleyUI.confirm('Send a password reset email to ' + c.email + '?')) return;
-  auth.sendPasswordResetEmail(c.email, { url: window.location.origin + '/tech/coach/index.html' })
+  auth.sendPasswordResetEmail(c.email, { url: coachLink(c.slug) })
     .then(()=>alert('Password reset email sent to ' + c.email + '.'))
     .catch(err=>alert('Could not send the reset email: ' + err.message));
 };
@@ -1126,7 +1179,9 @@ window.setCoachStatus = async (id, status) => {
   const c = DB.techCoaches.find(x=>x.id===id); if(!c) return;
   const pausing = status !== 'Active';
   if(!await PaisleyUI.confirm((pausing ? 'Pause ' : 'Reactivate ') + (c.name||'this coach') + '?' + (pausing ? '\n\nThey will not be able to open the coach portal until you reactivate them. Their builders keep their projects.' : ''))) return;
-  db.collection('techCoaches').doc(id).update({ status, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+  const FV = firebase.firestore.FieldValue;
+  db.collection('techCoaches').doc(id).update({ status, updatedAt: FV.serverTimestamp() })
+    .then(()=> c.slug ? db.collection('techCoachSlugs').doc(c.slug).set({ status, updatedAt: FV.serverTimestamp() }, { merge: true }) : null)
     .catch(err=>alert('Could not update: ' + err.message));
 };
 

@@ -33,6 +33,9 @@ test.before(async () => {
     await db.doc("techProgress/kid1").set({ levels: { AI: 2 } });
     await db.doc("techContent/c1").set({ title: "M", status: "published", createdBy: "coach1" });
     await db.doc("techNotifications/n1").set({ recipientId: "mum", recipientRole: "guardian", title: "t", read: false });
+    await db.doc("techCoachInvites/new@x.com").set({ name: "New Coach", email: "New@x.com", slug: "new-coach", uid: "nc1" });
+    await db.doc("techCoachInvites/tutor@x.com").set({ name: "Tutor Coach", email: "tutor@x.com", slug: "tutor-coach" });
+    await db.doc("techCoachSlugs/new-coach").set({ slug: "new-coach", name: "New Coach", email: "new@x.com", status: "Active" });
   });
 });
 test.after(async () => { await env.cleanup(); });
@@ -143,6 +146,33 @@ test("family share links: the builder and their coach only", async () => {
   await assertSucceeds(as("coach1").doc("shareTokens/b1").set({ revoked: true }, { merge: true }));
   await assertFails(as("kid2").doc("shareTokens/b1").get());
   await assertFails(as("mum").doc("shareTokens/b1").get());
+});
+
+const asEmail = (uid, email) => env.authenticatedContext(uid, { email }).firestore();
+const coachDoc = (email, slug) => ({ name: "C", email, phone: "", disciplines: [], bio: "", slug, status: "Active" });
+
+test("an invited coach claims their coach account on first sign-in", async () => {
+  await assertSucceeds(asEmail("nc1", "new@x.com").doc("techCoachInvites/new@x.com").get());
+  await assertSucceeds(asEmail("nc1", "new@x.com").doc("techCoaches/nc1").set(coachDoc("New@x.com", "new-coach")));
+  await assertSucceeds(asEmail("nc1", "new@x.com").doc("techCoachInvites/new@x.com").update({ uid: "nc1" }));
+});
+
+test("an existing login (no uid on the invite) can claim it too", async () => {
+  await assertSucceeds(asEmail("t9", "tutor@x.com").doc("techCoaches/t9").set(coachDoc("tutor@x.com", "tutor-coach")));
+});
+
+test("coach claims are locked to the invited email, uid, slug and Active status", async () => {
+  await assertFails(asEmail("other", "new@x.com").doc("techCoaches/other").set(coachDoc("new@x.com", "new-coach")));
+  await assertFails(asEmail("x1", "nobody@x.com").doc("techCoaches/x1").set(coachDoc("nobody@x.com", "")));
+  await assertFails(asEmail("t8", "tutor@x.com").doc("techCoaches/t8").set({ ...coachDoc("tutor@x.com", "tutor-coach"), status: "Inactive" }));
+  await assertFails(asEmail("t7", "tutor@x.com").doc("techCoaches/t7").set(coachDoc("tutor@x.com", "someone-else")));
+  await assertFails(asEmail("x2", "nobody@x.com").doc("techCoachInvites/tutor@x.com").get());
+});
+
+test("coach links are public to read, admin-only to write", async () => {
+  await assertSucceeds(env.unauthenticatedContext().firestore().doc("techCoachSlugs/new-coach").get());
+  await assertFails(as("coach1").doc("techCoachSlugs/mine").set({ name: "x" }));
+  await assertSucceeds(as("admin1").doc("techCoachSlugs/mine").set({ name: "x" }));
 });
 
 test("coach accounts are created by admins only", async () => {

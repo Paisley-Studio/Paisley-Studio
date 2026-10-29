@@ -506,6 +506,25 @@ exports.onTechGuardianMessageCreated = onDocumentCreated(
 /* =========================================================
    Admin callables
 ========================================================= */
+/* Personal coach link /tech/coach/{slug}: techCoachSlugs/{slug} = { slug, name, email, status, coachId }.
+   Same slug rules as tutors (lms-helpers tutorSlugify); a taken slug gets -2, -3, … */
+function slugify(s) {
+  return String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+}
+async function claimCoachSlug(db, coachId, wanted, coach) {
+  const base = slugify(wanted) || "coach";
+  for (let n = 1; n < 50; n++) {
+    const slug = n === 1 ? base : base + "-" + n;
+    const ref = db.collection("techCoachSlugs").doc(slug);
+    const snap = await ref.get();
+    if (snap.exists && snap.data().coachId && snap.data().coachId !== coachId) continue;
+    await ref.set({ slug, coachId, name: coach.name || "", email: coach.email || "", status: coach.status || "Active", updatedAt: FV().serverTimestamp() }, { merge: true });
+    return slug;
+  }
+  return "";
+}
+
 async function requireAdmin(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "You must be signed in.");
   if (!(await admin.firestore().collection("admins").doc(request.auth.uid).get()).exists) throw new HttpsError("permission-denied", "Admins only.");
@@ -528,8 +547,10 @@ exports.createTechCoach = onCall(
     }
     if ((await db.collection("techStudents").doc(uid).get()).exists) throw new HttpsError("failed-precondition", "That email belongs to a TECH builder. Coaches need their own login.");
     const ref = db.collection("techCoaches").doc(uid);
-    const existed = (await ref.get()).exists;
+    const prev = await ref.get(), existed = prev.exists;
+    const slug = (existed && prev.data().slug) || await claimCoachSlug(db, uid, d.slug || name, { name, email: mail, status: "Active" });
     await ref.set({
+      slug,
       name, email: mail, phone: String(d.phone || "").trim().slice(0, 40),
       disciplines: (Array.isArray(d.disciplines) ? d.disciplines : []).filter((x) => TECH_DISCIPLINES.indexOf(x) !== -1),
       bio: String(d.bio || "").slice(0, 600), status: "Active", updatedAt: FV().serverTimestamp(),
@@ -549,10 +570,10 @@ exports.createTechCoach = onCall(
       emailSent = await email(mail, "You're now a Paisley TECH coach", {
         preheader: "Use your existing Paisley login.", heading: "Welcome, coach.", intro: `Hi ${esc(first(name))}, you're now a Paisley TECH coach.`,
         body: `<p style="margin:0;">Sign in to the TECH coach portal with your existing Paisley email and password.</p>`,
-        cta: { label: "Open the coach portal", url: PORTALS.techCoach }
+        cta: { label: "Open your coach link", url: APP + "/tech/coach/" + slug }
       });
     }
-    return { uid, created, emailSent };
+    return { uid, created, emailSent, slug };
   }
 );
 
@@ -648,7 +669,8 @@ exports.migrateTechArchitecture = onCall(
       out.coaches++;
       if (dryRun) continue;
       const td = t.data() || {};
-      await ref.set({ name: td.name || "", email: td.email || "", phone: td.phone || "", disciplines: [], bio: "", status: "Active", migratedFromTutor: true, createdAt: FV().serverTimestamp() });
+      const slug = await claimCoachSlug(db, id, td.slug || td.name, { name: td.name, email: td.email, status: "Active" });
+      await ref.set({ name: td.name || "", email: td.email || "", phone: td.phone || "", disciplines: [], bio: "", slug, status: "Active", migratedFromTutor: true, createdAt: FV().serverTimestamp() });
     }
     return out;
   }
