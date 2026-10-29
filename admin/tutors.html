@@ -24,6 +24,9 @@
 
   #loginOverlay{position:fixed; inset:0; background:linear-gradient(160deg,var(--paper) 0%, var(--sage) 100%); display:flex; align-items:center; justify-content:center; z-index:100; padding:2rem 1.2rem;}
   body.authed #loginOverlay{display:none;}
+  body.auth-pending #loginOverlay{display:none;}
+  #authPending{display:none; position:fixed; inset:0; align-items:center; justify-content:center; gap:.6rem; color:var(--brand-deep); font-weight:700; background:var(--paper); z-index:99;}
+  body.auth-pending #authPending{display:flex;}
   .login-card{width:100%; max-width:400px; background:var(--surface); border-radius:20px; border:1px solid var(--line); box-shadow:0 30px 70px rgba(36,95,90,.14); padding:2.4rem 2rem;}
   .login-card h1{font-size:1.3rem; color:var(--brand-deep); margin:0 0 .3rem;}
   .login-card p{color:var(--muted); font-size:.86rem; margin:0 0 1.6rem;}
@@ -194,7 +197,8 @@
   }
 </style>
 </head>
-<body>
+<body class="auth-pending">
+<div id="authPending" role="status"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Checking your admin sign-in…</div>
 
 <div id="loginOverlay">
   <div class="login-card">
@@ -357,7 +361,10 @@ function getSecondaryAuth(){
 }
 
 /* ---------- AUTH GATE ---------- */
+// Firebase keeps the admin signed in across every admin page (same project, local
+// persistence). The login card only shows once Firebase confirms nobody is signed in.
 auth.onAuthStateChanged(function(user){
+  document.body.classList.remove('auth-pending');
   if(!user){
     document.body.classList.remove('authed');
     return;
@@ -472,28 +479,45 @@ function initFirestore(){
       stale.forEach(d=>batch.update(d.ref, lmzSubjectWriteFields(d.data().subjects)));
       batch.commit().catch(e=>console.warn('tutor subject normalisation skipped:', e));
     }
-  }, handleErr);
+  }, handleErr('tutorAccounts'));
 
   db.collection('students').onSnapshot(snap=>{
     DB.students = snap.docs.map(d=>({ id:d.id, ...d.data() }));
     renderTutorAccounts();
-  }, handleErr);
+  }, handleErr('students'));
 
   // TECH coaches live in their own collection (techCoaches), not tutorAccounts.
   db.collection('techCoaches').onSnapshot(snap=>{
     DB.techCoaches = snap.docs.map(d=>({ id:d.id, ...d.data(), date: toDate(d.data().createdAt) }));
     renderCoaches();
-  }, handleErr);
+  }, coachErr);
   db.collection('techStudents').onSnapshot(snap=>{
     DB.techStudents = snap.docs.map(d=>({ id:d.id, coachId: d.data().coachId || '', status: d.data().status || '' }));
     renderCoaches();
-  }, handleErr);
+  }, coachErr);
 }
-function handleErr(err){
-  console.error('Firestore error:', err);
-  const note = document.getElementById('setupNote');
-  note.classList.add('warn');
-  note.innerHTML = '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i><div><strong>Can\'t read data yet.</strong> Check that your Firestore rules allow admins to read <code>tutorAccounts</code> and <code>students</code>. Console error: <code>' + escapeHtml(err.message || err) + '</code></div>';
+// Tutor listeners: name the collection that was refused. The rules treat a user as an
+// admin only when admins/{their uid} exists, so check that too: an email listed in
+// ADMIN_EMAILS opens this page but is NOT an admin to Firestore without that doc.
+function handleErr(collection){
+  return function(err){
+    console.error('Firestore error (' + collection + '):', err);
+    const note = document.getElementById('setupNote');
+    note.classList.add('warn');
+    const u = auth.currentUser;
+    const show = extra => { note.innerHTML = '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i><div><strong>Can\'t read <code>' + escapeHtml(collection) + '</code>.</strong> ' + extra + ' Console error: <code>' + escapeHtml(err.message || err) + '</code></div>'; };
+    if(!u){ show('You are not signed in.'); return; }
+    db.collection('admins').doc(u.uid).get().then(d=>{
+      if(!d.exists) show('Your login (' + escapeHtml(u.email || '') + ') has no <code>admins/' + escapeHtml(u.uid) + '</code> document, so Firestore does not treat it as an admin. In the Firebase console, add a document to the <code>admins</code> collection with this ID: <code>' + escapeHtml(u.uid) + '</code> (one field such as <code>role: "admin"</code>).');
+      else show('Your admin record exists, so the deployed Firestore rules are out of date. Deploy them with <code>firebase deploy --only firestore:rules</code>.');
+    }).catch(()=>show('Deploy the latest Firestore rules with <code>firebase deploy --only firestore:rules</code>, and check that <code>admins/' + escapeHtml(u.uid) + '</code> exists.'));
+  };
+}
+// TECH coach listeners fail on their own: the tutor list keeps working.
+function coachErr(err){
+  console.error('Firestore error (TECH coaches):', err);
+  const body = document.getElementById('coachBody'); if(!body) return;
+  body.innerHTML = '<tr><td colspan="7" style="color:var(--error,#c0392b); padding:1.2rem;"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> Can\'t read TECH coaches yet: the live Firestore rules don\'t include the new TECH rules. Deploy them with <code>firebase deploy --only firestore:rules</code>. (' + escapeHtml(err.message || err) + ')</td></tr>';
 }
 
 function studentsOf(tutorId){
