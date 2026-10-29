@@ -2,332 +2,450 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>TECH Studio | Paisley TECH</title>
-<meta name="robots" content="noindex" />
-<meta name="theme-color" content="#245F5A" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CBC Tuition Portal — Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
 <style>
-:root{--brand:#55BFB3;--brand-deep:#245F5A;--brand-soft:#7BCBC2;--paper:#F1F9F7;--surface:#fff;--sage:#E5F2EF;--ink:#263331;--muted:#5A6E6A;--line:rgba(38,51,49,.12);--dark:#0F1A14;--dark-muted:#8FA8A2;--gold:#F5C842;--font:'Quicksand',sans-serif;--error:#E74C3C;--success:#2EB872}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--font);background:var(--paper);color:var(--ink);-webkit-font-smoothing:antialiased;overflow-x:hidden}
-a{color:var(--brand-deep);font-weight:700}:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
-.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
-.sidebar{background:var(--dark);color:#fff;padding:1.1rem .8rem;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;gap:.2rem}
-.brand{display:flex;gap:.6rem;align-items:center;padding:.3rem .6rem 1rem;font-weight:800;font-size:1.05rem}.brand img{border-radius:9px}.brand b{background:var(--brand);color:#04231f;border-radius:6px;padding:.05rem .45rem;font-size:.75rem;letter-spacing:.08em}
-.nav{display:flex;align-items:center;gap:.7rem;width:100%;padding:.62rem .8rem;border:0;border-radius:12px;background:transparent;color:#b9cdc8;font:inherit;font-weight:700;font-size:.88rem;cursor:pointer;text-align:left;transition:all .2s}
-.nav i{width:18px;text-align:center}.nav:hover{background:rgba(255,255,255,.07);color:#fff}.nav.on{background:var(--brand);color:#04231f}
-.sb-foot{margin-top:auto;padding-top:1rem;border-top:1px solid rgba(255,255,255,.1)}
-.main{min-width:0;padding:1.4rem clamp(1rem,3vw,2.2rem) 3rem}
-.top{display:none;align-items:center;gap:.8rem;margin-bottom:1rem}.menu{border:0;background:var(--brand-deep);color:#fff;width:42px;height:42px;border-radius:12px;font-size:1.1rem;cursor:pointer}
-.scrim{display:none}
-@media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{position:fixed;left:0;top:0;bottom:0;width:270px;z-index:900;transform:translateX(-105%);transition:transform .3s}.sidebar.open{transform:none}.scrim.open{display:block;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:800}.top{display:flex}}
-h1.page{font-size:clamp(1.6rem,3.6vw,2.4rem);font-weight:800;letter-spacing:-.02em;color:var(--brand-deep);margin-bottom:.3rem}.page-sub{color:var(--muted);font-weight:600;margin-bottom:1.3rem}
-.hero{background:var(--dark);color:#fff;border-radius:26px;padding:clamp(1.3rem,3vw,2.2rem);position:relative;overflow:hidden;margin-bottom:1.2rem}
-.hero::before{content:"";position:absolute;right:-10%;top:-40%;width:420px;height:420px;background:radial-gradient(circle,rgba(85,191,179,.3),transparent 65%)}
-.hero>*{position:relative}.hero small{font-size:.7rem;letter-spacing:.14em;font-weight:800;color:var(--brand-soft)}
-.hero h1{font-size:clamp(1.9rem,5vw,3.2rem);line-height:1.05;font-weight:800;letter-spacing:-.02em;margin:.4rem 0 1.2rem}
-.cur{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:1.1rem;max-width:560px}
-.cur h2{font-size:1.25rem;margin:.2rem 0 .6rem}.cur .meta{color:var(--dark-muted);font-size:.84rem;font-weight:600;margin:.6rem 0 1rem}
-.cur .tk-bar{background:rgba(255,255,255,.12)}
-.go{display:inline-flex;gap:.6rem;align-items:center;background:var(--brand);color:#fff;border:0;border-radius:50px;padding:.8rem 1.6rem;font:inherit;font-weight:800;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .3s}.go:hover{background:var(--gold);color:var(--brand-deep);transform:translateY(-2px)}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.7rem;margin-bottom:1.2rem}
-.stat{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:.9rem 1rem}.stat b{display:block;font-size:1.7rem;color:var(--brand-deep);line-height:1}.stat span{font-size:.72rem;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
-.sec{font-size:.78rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand-deep);margin:1.5rem 0 .7rem}
-.c{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:1.1rem;cursor:pointer;transition:all .3s cubic-bezier(.16,1,.3,1);text-align:left;font-family:inherit;color:inherit;width:100%;display:block}
-.c:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(36,95,90,.12);border-color:var(--brand)}.c h3{font-size:1rem;margin:.3rem 0;color:var(--brand-deep)}.c p{font-size:.84rem;color:var(--muted);font-weight:500}
-.c .kind{font-size:.62rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
-.lv{display:grid;gap:.5rem}.lvi{display:grid;grid-template-columns:48px 1fr;gap:.8rem;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:.7rem .9rem}.lvi .n{font-size:1.3rem;font-weight:800;color:var(--muted)}
-.lvi.done{background:var(--sage)}.lvi.done .n{color:var(--brand-deep)}.lvi.now{border-color:var(--brand);box-shadow:0 0 0 3px rgba(85,191,179,.25)}.lvi.now .n{color:var(--brand)}
-.idcard{background:linear-gradient(135deg,var(--brand-deep),#173f3b);color:#fff;border-radius:22px;padding:1.4rem;max-width:460px;position:relative;overflow:hidden}
-.idcard::after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;background:rgba(85,191,179,.25)}
-.idcard small{font-size:.62rem;letter-spacing:.2em;font-weight:800;color:var(--brand-soft)}.idcard h2{font-size:1.5rem;margin:.2rem 0}.idcard .pid{font-size:1.9rem;font-weight:800;letter-spacing:.06em;color:var(--gold)}
-.idcard .row{display:flex;gap:1.2rem;margin-top:1rem;position:relative;z-index:1}.idcard .row b{display:block;font-size:1.3rem}.idcard .row span{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-soft);font-weight:800}
-.empty{border:2px dashed var(--brand);border-radius:20px;padding:1.6rem;text-align:center;font-weight:700;color:var(--brand-deep);background:var(--surface)}
-.search{width:100%;max-width:520px;padding:.75rem 1rem;border-radius:50px;border:1.5px solid var(--line);font:inherit;background:var(--surface);margin-bottom:1rem}.search:focus{outline:none;border-color:var(--brand)}
-.back{background:none;border:0;font:inherit;font-weight:800;color:var(--brand-deep);cursor:pointer;margin-bottom:.8rem;padding:.2rem 0}
-.gate{min-height:100vh;display:grid;place-items:center;padding:1.5rem;text-align:center}.gate .box{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:2rem;max-width:460px}.gate h1{color:var(--brand-deep);margin-bottom:.5rem}
-.pillrow{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0}
-.fin{padding:.7rem;border-radius:12px;background:var(--sage);font-size:.86rem;font-weight:600;margin-bottom:.5rem}
-.loading{padding:3rem;text-align:center;color:var(--muted);font-weight:700}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.12);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:var(--font); background:linear-gradient(160deg,var(--paper) 0%, var(--sage) 100%);
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:2rem 1.2rem; color:var(--ink);
+  }
+  .card{
+    width:100%; max-width:420px; background:var(--surface); border-radius:22px;
+    box-shadow:0 30px 70px rgba(36,95,90,.14); border:1px solid var(--line); padding:2.6rem 2.2rem; position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:''; position:absolute; top:-60px; right:-60px; width:170px; height:170px;
+    background:radial-gradient(circle, var(--brand-soft) 0%, transparent 70%); opacity:.35; border-radius:50%;
+  }
+  .brand{display:flex; align-items:center; gap:.7rem; margin-bottom:1.8rem; position:relative;}
+  .brand img{width:42px; height:42px; border-radius:10px; object-fit:cover;}
+  .brand .word{font-weight:800; font-size:1.05rem; color:var(--brand-deep); line-height:1.2;}
+  .brand .word span{display:block; font-size:.66rem; font-weight:600; letter-spacing:.06em; color:var(--muted); text-transform:uppercase;}
+  h1{font-size:1.5rem; font-weight:800; color:var(--brand-deep); margin-bottom:.3rem;}
+  p.sub{color:var(--muted); font-size:.88rem; margin-bottom:1.8rem; line-height:1.5;}
+  .tabs{display:flex; background:var(--sage); border-radius:12px; padding:4px; margin-bottom:1.6rem;}
+  .tab{flex:1; text-align:center; padding:.6rem 0; border-radius:9px; font-weight:700; font-size:.82rem; color:var(--muted); cursor:pointer; transition:all .25s;}
+  .tab.active{background:var(--surface); color:var(--brand-deep); box-shadow:0 4px 14px rgba(36,95,90,.1);}
+  .field{margin-bottom:1.1rem;}
+  .field label{display:block; font-size:.76rem; font-weight:700; color:var(--brand-deep); margin-bottom:.4rem; text-transform:uppercase; letter-spacing:.03em;}
+  .field input, .field select{
+    width:100%; padding:.75rem .9rem; border:1.5px solid var(--line); border-radius:11px;
+    font-family:var(--font); font-size:.92rem; color:var(--ink); background:var(--paper); transition:border-color .2s;
+  }
+  .field input:focus, .field select:focus{outline:none; border-color:var(--brand);}
+  .btn{
+    width:100%; padding:.85rem 0; border:none; border-radius:12px; background:var(--brand-deep); color:#fff;
+    font-family:var(--font); font-weight:800; font-size:.94rem; cursor:pointer; transition:background .2s, transform .15s;
+    display:flex; align-items:center; justify-content:center; gap:.5rem; margin-top:.4rem;
+  }
+  .btn:hover{background:var(--brand);}
+  .btn:disabled{opacity:.6; cursor:not-allowed;}
+  .btn.loading .btn-text{opacity:0;}
+  .btn.loading::after{
+    content:''; position:absolute; width:18px; height:18px; border:2.5px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite;
+  }
+  .btn{position:relative;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .msg{
+    display:none; padding:.7rem .9rem; border-radius:10px; font-size:.82rem; margin-bottom:1.1rem; line-height:1.4;
+  }
+  .msg.show{display:block;}
+  .msg.error{background:rgba(231,76,60,.08); color:#B8362A; border:1px solid rgba(231,76,60,.25);}
+  .msg.success{background:rgba(46,184,114,.08); color:#1D8B57; border:1px solid rgba(46,184,114,.25);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .back-link{display:block; text-align:center; margin-top:1.4rem; font-size:.82rem; color:var(--muted); text-decoration:none;}
+  .back-link:hover{color:var(--brand-deep);}
+  .pending-note{
+    background:var(--sage); border-radius:12px; padding:1rem 1.1rem; font-size:.8rem; color:var(--muted);
+    line-height:1.5; margin-top:1.2rem; display:flex; gap:.6rem;
+  }
+  .pending-note i{color:var(--brand-deep); margin-top:.1rem;}
+  .group-title{font-size:.78rem; font-weight:800; color:var(--brand-deep); margin:1.3rem 0 .7rem; padding-top:1rem; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:.5rem; text-transform:uppercase; letter-spacing:.03em;}
+  .group-title:first-child{border-top:none; padding-top:0; margin-top:0;}
+  .check-grid{display:grid; grid-template-columns:1fr 1fr; gap:.45rem;}
+  .field .check-grid label{display:flex; align-items:center; gap:.5rem; margin:0; padding:.55rem .7rem; border:1.5px solid var(--line); border-radius:11px; background:var(--paper); font-size:.84rem; font-weight:600; color:var(--ink); text-transform:none; letter-spacing:0; cursor:pointer;}
+  .field .check-grid input{width:auto; padding:0; margin:0; accent-color:var(--brand-deep);}
+  .field small.hint{display:block; margin-top:.4rem; color:#6b7280; font-size:12px;}
+  .link-btn{width:100%; padding:.65rem 0; border:1.5px dashed var(--line); border-radius:11px; background:transparent; color:var(--brand-deep); font-family:var(--font); font-weight:700; font-size:.84rem; cursor:pointer; margin-bottom:1.1rem;}
+  .link-btn:hover{border-color:var(--brand); background:var(--sage);}
+  .mini-remove{border:none; background:none; color:var(--error); font-family:var(--font); font-weight:700; font-size:.74rem; cursor:pointer; text-transform:none; letter-spacing:0;}
+  @media (max-width:420px){ .check-grid{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
-<div id="gate" class="gate"><div class="loading"><i class="fas fa-circle-notch fa-spin"></i> Opening your studio…</div></div>
 
-<div class="app" id="app" hidden>
-  <aside class="sidebar" id="sidebar" aria-label="TECH navigation">
-    <div class="brand"><img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" width="30" height="30" alt=""> Paisley <b>TECH</b></div>
-    <button class="nav on" data-v="home"><i class="fas fa-house"></i>Home</button>
-    <button class="nav" data-v="explore"><i class="fas fa-compass"></i>Explore</button>
-    <button class="nav" data-v="paths"><i class="fas fa-route"></i>Learning Paths</button>
-    <button class="nav" data-v="missions"><i class="fas fa-bullseye"></i>Missions</button>
-    <button class="nav" data-v="builds"><i class="fas fa-hammer"></i>My Builds</button>
-    <button class="nav" data-v="challenges"><i class="fas fa-trophy"></i>Challenges</button>
-    <button class="nav" data-v="coach"><i class="fas fa-user-graduate"></i>My Coach</button>
-    <button class="nav" data-v="toolbox"><i class="fas fa-toolbox"></i>AI Toolbox</button>
-    <button class="nav" data-v="showcase"><i class="fas fa-star"></i>Showcase</button>
-    <button class="nav" data-v="progress"><i class="fas fa-chart-line"></i>Progress</button>
-    <button class="nav" data-v="resources"><i class="fas fa-book-open"></i>Resources</button>
-    <button class="nav" data-v="messages"><i class="fas fa-comments"></i>Messages</button>
-    <button class="nav" data-v="profile"><i class="fas fa-id-badge"></i>Profile</button>
-    <div class="sb-foot"><button class="nav" id="signOut"><i class="fas fa-right-from-bracket"></i>Sign out</button></div>
-  </aside>
-  <div class="scrim" id="scrim"></div>
-  <main class="main" id="mainEl">
-    <div class="top"><button class="menu" id="menuBtn" aria-label="Open menu"><i class="fas fa-bars"></i></button><b id="topTitle" style="color:var(--brand-deep)">TECH Studio</b></div>
-    <div id="view" aria-live="polite"></div>
-  </main>
+<div class="card">
+  <div class="brand">
+    <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" />
+    <div class="word">Paisley Studio<span>CBC Tuition Portal</span></div>
+  </div>
+
+  <h1 id="titleText">Welcome back</h1>
+  <p class="sub" id="subText">Sign in to see your subjects, work, timetable and results.</p>
+
+  <a href="/tuition.html" style="display:inline-block;margin:-.4rem 0 .8rem;font-size:.78rem;font-weight:700;color:var(--brand-deep);text-decoration:none"><i class="fas fa-arrow-left"></i> Back to tuition</a>
+  <div class="tabs">
+    <div class="tab active" data-tab="login">Sign In</div>
+    <div class="tab" data-tab="signup">Create Account</div>
+  </div>
+
+  <div class="msg error" id="errMsg"></div>
+  <div class="msg success" id="okMsg"></div>
+
+  <!-- LOGIN -->
+  <div class="panel active" id="panel-login">
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button class="btn" id="loginBtn" type="button"><span class="btn-text"><i class="fas fa-arrow-right-to-bracket"></i> Sign In</span></button>
+  </div>
+
+  <!-- SIGNUP -->
+  <div class="panel" id="panel-signup">
+    <div class="field">
+      <label>Full Name</label>
+      <input type="text" id="suName" placeholder="Jane Wanjiru" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="suEmail" placeholder="you@example.com" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>Learning band</label>
+      <select id="suKeyStage">
+        <option value="CBC Lower Primary (Grades 1-3)">Lower Primary (Grades 1–3)</option>
+        <option value="CBC Upper Primary (Grades 4-6)">Upper Primary (Grades 4–6)</option>
+        <option value="CBC Junior School (Grades 7-9)" selected>Junior School (Grades 7–9)</option>
+        <option value="CBC Senior School (Grades 10-12)">Senior School (Grades 10–12)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Grade</label>
+      <select id="suYear"></select>
+    </div>
+    <div class="field">
+      <label>Subjects you take</label>
+      <div class="check-grid" id="suSubjects"></div>
+      <small class="hint" id="suSubjectsHint"></small>
+    </div>
+
+    <div class="group-title">Parent / Guardian 1</div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="suGuardianName" placeholder="e.g. Mary Wanjiru" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="suGuardianEmail" placeholder="guardian@example.com" />
+      <small class="hint">Used to set up their access to the Parent Portal, where they can follow your progress.</small>
+    </div>
+    <div class="field">
+      <label>Phone</label>
+      <input type="tel" id="suGuardianPhone" placeholder="e.g. 0712345678" />
+    </div>
+
+    <div id="guardian2" style="display:none;">
+      <div class="group-title">Parent / Guardian 2 <button type="button" class="mini-remove" id="removeGuardian2Btn"><i class="fas fa-xmark"></i> Remove</button></div>
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="suGuardian2Name" placeholder="e.g. John Wanjiru" />
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="suGuardian2Email" placeholder="guardian2@example.com" />
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="tel" id="suGuardian2Phone" placeholder="e.g. 0722345678" />
+      </div>
+    </div>
+    <button type="button" class="link-btn" id="addGuardian2Btn"><i class="fas fa-plus"></i> Add another parent</button>
+
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="suPassword" placeholder="At least 8 characters" autocomplete="new-password" />
+    </div>
+    <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><label>Leave this field empty<input type="text" id="suWebsite" tabindex="-1" autocomplete="off" /></label></div>
+    <button class="btn" id="signupBtn" type="button"><span class="btn-text"><i class="fas fa-user-plus"></i> Create Account</span></button>
+    <div class="pending-note"><i class="fas fa-circle-info"></i><div>New accounts start as <strong>Pending</strong> until the Studio Desk confirms your enrolment and activates your dashboard.</div></div>
+  </div>
+
+  <a href="../index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to paisleystudio.online</a>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../js/tech/tech-helpers.js"></script>
+<script src="../lms-helpers.js"></script>
 <script>
-(function(){
-'use strict';
-const auth=firebase.auth(), T=TechUI, esc=T.esc, FV=()=>firebase.firestore.FieldValue;
-const $=id=>document.getElementById(id);
-T.injectStyle();
-const S={uid:null,p:null,content:{},builds:[],wall:[],v:'home',ws:null,chat:null,openId:null,q:'',unsubs:[]};
-const KINDS=['path','topic','mission','challenge','tool','resource','template'];
-const TITLES={home:'TECH Studio',explore:'Explore',paths:'Learning Paths',missions:'Missions',builds:'My Builds',challenges:'Challenges',coach:'My Coach',toolbox:'AI Toolbox',showcase:'The Tech Wall',progress:'Progress',resources:'Resources',messages:'Messages',profile:'Profile'};
+const auth = firebase.auth();
 
-function gate(html){ $('app').hidden=true; $('gate').hidden=false; $('gate').innerHTML=html; }
-function leave(url){ auth.signOut().finally(()=>{ location.href=url||'/tech/index.html'; }); }
-function byKind(k){ return (S.content[k]||[]).slice().sort((a,b)=>(a.order||0)-(b.order||0)||String(a.title).localeCompare(String(b.title))); }
-function item(id){ for(const k of KINDS){ const f=(S.content[k]||[]).find(x=>x.id===id); if(f) return f; } return null; }
-function buildFor(field,id){ return S.builds.find(b=>b[field]===id); }
-
-auth.onAuthStateChanged(async user=>{
-  // 1. If no user, kick to login page immediately
-  if(!user){ location.href='/tech/index.html'; return; }
-  
-  S.uid=user.uid;
-  let snap; 
-  try{ snap=await db.collection('students').doc(user.uid).get(); }
-  catch(e){ return gate('<div class="box"><h1>Could not open TECH</h1><p>'+esc(T.errMsg(e))+'</p></div>'); }
-  
-  // 2. If user exists but has NO profile in the database, force them out
-  if(!snap.exists){
-    return gate('<div class="box"><h1>Account Not Found</h1><p style="margin:.6rem 0 1.2rem">We couldn\'t find your student profile. Please try signing out and signing up again.</p><button class="go" id="forceOut">Sign Out</button></div>');
-  }
-  
-  const p=snap.data(); S.p=Object.assign({id:snap.id},p);
-  
-  // 3. If they are not a TECH student, send them to their correct dashboard
-  if(p.studentType!=='tech'){
-    const to=p.studentType==='tuition'?'/tuition/dashboard.html':p.studentType==='remote'?'/remote/dashboard.html':'/student/dashboard.html';
-    return leave(to);
-  }
-  
-  // 4. If they are pending, block them
-  if(p.status!=='Active'){
-    const msg=p.status==='Pending'?'Your account is waiting for approval from the Studio Desk. This usually takes up to a day — we will have you building soon.':'This account is not active ('+esc(p.status||'unknown')+'). Please contact the Studio Desk.';
-    return gate('<div class="box"><h1>Welcome to TECH, '+esc(T.firstName(p.name))+'.</h1><p style="margin:.7rem 0 1.2rem;font-weight:600">'+msg+'</p><button class="go" id="forceOut">Sign out</button></div>');
-  }
-  
-  // 5. All clear, boot the dashboard
-  boot();
+// Landing page links here with ?tab=signup
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{ if(new URLSearchParams(location.search).get('tab') === 'signup'){ const t=document.querySelector('.tab[data-tab="signup"]'); if(t) t.click(); } }catch(e){}
 });
 
-// Handle the "Force Out" button in the gate screens
-document.addEventListener('click',e=>{ if(e.target.id==='forceOut') { auth.signOut().then(()=>{ location.href='/tech/index.html'; }); } });
+// Tab switching
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+    document.getElementById('titleText').textContent = t.dataset.tab === 'login' ? 'Welcome back' : 'Join CBC tuition';
+    document.getElementById('subText').textContent = t.dataset.tab === 'login'
+      ? 'Sign in to see your subjects, work, timetable and results.'
+      : 'Create your CBC tuition account. The Studio Desk will approve it.';
+    hideMsgs();
+  });
+});
 
-function boot(){
-  $('gate').hidden=true; $('app').hidden=false;
-  db.collection('students').doc(S.uid).update({lastLoginAt:FV().serverTimestamp()}).catch(()=>{});
-  S.unsubs.push(db.collection('techContent').where('status','==','published').onSnapshot(s=>{
-    S.content={}; KINDS.forEach(k=>S.content[k]=[]);
-    s.docs.forEach(d=>{ const x=Object.assign({id:d.id},d.data()); (S.content[x.kind]=S.content[x.kind]||[]).push(x); });
-    softRender();
-  },e=>console.warn('content',e)));
-  S.unsubs.push(db.collection('techBuilds').where('studentId','==',S.uid).onSnapshot(s=>{
-    S.builds=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>(T.toDate(b.updatedAt)||0)-(T.toDate(a.updatedAt)||0));
-    softRender();
-  },e=>console.warn('builds',e)));
-  db.collection('techShowcase').get().then(s=>{ S.wall=s.docs.map(d=>Object.assign({id:d.id},d.data())); softRender(); }).catch(()=>{});
-  const h=(location.hash||'').slice(1); go(TITLES[h]?h:'home');
+function hideMsgs(){
+  document.getElementById('errMsg').classList.remove('show');
+  document.getElementById('okMsg').classList.remove('show');
 }
-function softRender(){ if(!S.p) return; if(['home','explore','paths','missions','builds','challenges','toolbox','showcase','progress','resources','profile','coach'].includes(S.v) && !S.ws && !S.openId) render(); }
+function showErr(msg){ hideMsgs(); const e=document.getElementById('errMsg'); e.textContent=msg; e.classList.add('show'); }
+function showOk(msg){ hideMsgs(); const o=document.getElementById('okMsg'); o.textContent=msg; o.classList.add('show'); }
 
-/* ---------- navigation ---------- */
-function go(v,keep){
-  if(S.ws){ S.ws.destroy(); S.ws=null; } if(S.chat){ S.chat.destroy(); S.chat=null; }
-  S.v=v; if(!keep) S.openId=null; S.q='';
-  document.querySelectorAll('.nav[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  $('topTitle').textContent=TITLES[v]||'TECH'; $('sidebar').classList.remove('open'); $('scrim').classList.remove('open');
-  try{ history.replaceState(null,'','#'+v); }catch(e){}
-  render(); window.scrollTo(0,0);
-}
-document.querySelectorAll('.nav[data-v]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
-$('signOut').addEventListener('click',()=>leave());
-$('menuBtn').addEventListener('click',()=>{ $('sidebar').classList.add('open'); $('scrim').classList.add('open'); });
-$('scrim').addEventListener('click',()=>{ $('sidebar').classList.remove('open'); $('scrim').classList.remove('open'); });
-
-/* ---------- helpers ---------- */
-function level(){ let m=1; S.builds.forEach(b=>{ if(b.status==='READY'&&b.missionId){ const it=item(b.missionId); if(it&&it.level) m=Math.max(m,Math.min(7,Number(it.level)||1)); } }); return m; }
-function pill(b){ return '<span class="tk-pill'+(b.status==='READY'?' ok':'')+'">'+esc(T.STATUS_LABEL[b.status]||b.status)+'</span>'; }
-function buildCard(b){
-  const nf=(b.files||[]).length,nr=(b.resources||[]).length,nv=(b.versions||[]).length;
-  return '<button class="c" data-open="'+b.id+'"><span class="kind">'+esc(b.category||'Project')+'</span><h3>'+esc(b.title)+'</h3><div class="pillrow">'+pill(b)+(b.reviewState==='changes'?'<span class="tk-pill bad">Changes requested</span>':'')+(b.showcase==='approved'?'<span class="tk-pill gold">On the wall</span>':'')+'</div><div class="tk-bar" style="margin:.5rem 0"><i style="width:'+(Number(b.progress)||0)+'%"></i></div><p>'+nf+' file'+(nf===1?'':'s')+' · '+nr+' resource'+(nr===1?'':'s')+' · '+nv+' version'+(nv===1?'':'s')+'</p></button>';
-}
-function itemCard(it){ return '<button class="c" data-item="'+it.id+'"><span class="kind">'+esc(it.kind)+(it.level?' · Level '+it.level:'')+'</span><h3>'+esc(it.title)+'</h3><p>'+esc((it.summary||'').slice(0,140))+'</p></button>'; }
-function grid(list,fn,empty){ return list.length?'<div class="tk-grid">'+list.map(fn).join('')+'</div>':'<div class="empty">'+empty+'</div>'; }
-
-/* ---------- views ---------- */
-function render(){
-  const v=S.v,el=$('view');
-  if(S.ws||S.chat) return;
-  if(v==='builds'&&S.openId){ el.innerHTML='<button class="back" data-back><i class="fas fa-arrow-left"></i> My Builds</button><div id="wsHost"></div>'; S.ws=T.mountWorkspace($('wsHost'),{id:S.openId,me:{uid:S.uid,role:'student',name:S.p.name},onDeleted:()=>{S.openId=null;go('builds');}}); return; }
-  if(v==='messages'){ return renderMessages(); }
-  const f=VIEWS[v]||VIEWS.home; el.innerHTML=f();
-}
-const VIEWS={
-home(){
-  const cur=S.builds.find(b=>b.status!=='READY')||S.builds[0];
-  const m=cur&&cur.missionId?item(cur.missionId):null;
-  const hint={IDEA:'Shape the idea and write your brief.',LEARNING:'Learn what you need, then start building.',BUILDING:'Build your first version and save it as v1.',TESTING:'Test it, fix what breaks, and ask your coach to review.',READY:'Ready — ask for a showcase.'};
-  const ready=S.builds.filter(b=>b.status==='READY').length, onWall=S.builds.filter(b=>b.showcase==='approved').length;
-  const changes=S.builds.filter(b=>b.reviewState==='changes');
-  const started=new Set(S.builds.map(b=>b.missionId).filter(Boolean));
-  const next=byKind('mission').filter(x=>!started.has(x.id)).slice(0,3);
-  const ch=byKind('challenge')[0];
-  return '<div class="hero"><small>TECH STUDIO · HELLO, '+esc(T.firstName(S.p.name).toUpperCase())+'</small><h1>What are we building today?</h1>'+
-    (cur?'<div class="cur"><small style="color:var(--brand-soft)">CURRENT BUILD</small><h2>'+esc(cur.title)+'</h2><div style="display:flex;gap:.7rem;align-items:center"><div class="tk-bar" style="flex:1"><i style="width:'+(Number(cur.progress)||0)+'%"></i></div><b>'+(Number(cur.progress)||0)+'%</b></div><div class="meta"><b style="color:#fff">'+(m?'Mission: '+esc(m.title):'Stage: '+esc(T.STATUS_LABEL[cur.status]))+'</b><br>'+esc(hint[cur.status]||'')+'</div><button class="go" data-open="'+cur.id+'">Continue build <i class="fas fa-arrow-right"></i></button></div>'
-    :'<div class="cur"><h2>Welcome to TECH.</h2><p style="color:var(--dark-muted);font-weight:600;margin-bottom:1rem">Let\'s build something. Start with an idea — even a rough one.</p><button class="go" data-newbuild>Start your first build <i class="fas fa-arrow-right"></i></button></div>')+'</div>'+
-    '<div class="stats"><div class="stat"><b>'+S.builds.length+'</b><span>Builds</span></div><div class="stat"><b>'+ready+'</b><span>Ready</span></div><div class="stat"><b>'+onWall+'</b><span>On the wall</span></div><div class="stat"><b>'+T.LEVELS[level()-1].replace('AI ','')+'</b><span>Level '+level()+'</span></div></div>'+
-    (changes.length?'<div class="sec">Your coach asked for changes</div>'+grid(changes,buildCard,''):'')+
-    (ch?'<div class="sec">This month\'s TECH drop</div><div class="tk-grid">'+itemCard(ch)+'</div>':'')+
-    '<div class="sec">Missions to try</div>'+grid(next,itemCard,'No missions have been published yet. Start your own build from <b>My Builds</b>.');
-},
-explore(){
-  const q=S.q.toLowerCase(); const all=[].concat(byKind('path'),byKind('topic'),byKind('mission'),byKind('challenge'),byKind('tool'),byKind('resource'));
-  const res=q?all.filter(x=>(x.title+' '+(x.summary||'')+' '+(x.body||'')).toLowerCase().includes(q)):all;
-  return '<h1 class="page">Explore</h1><p class="page-sub">Paths, topics, missions, challenges and tools — all in one place.</p><input class="search" id="q" placeholder="Search anything…" value="'+esc(S.q)+'" aria-label="Search">'+grid(res,itemCard,'Nothing here yet.');
-},
-paths(){
-  if(S.openId){ const p=item(S.openId); if(p) return itemDetail(p); }
-  return '<h1 class="page">Learning Paths</h1><p class="page-sub">A path is a direction. Pick one and start with its first mission.</p>'+grid(byKind('path'),itemCard,'No learning paths have been published yet.');
-},
-missions(){
-  if(S.openId){ const p=item(S.openId); if(p) return itemDetail(p); }
-  return '<h1 class="page">Missions</h1><p class="page-sub">Short, practical missions. Each one becomes a build.</p>'+grid(byKind('mission'),itemCard,'No missions yet. Your coach and the Studio Desk are preparing them.');
-},
-builds(){
-  return '<h1 class="page">My Builds</h1><p class="page-sub">Everything you\'re making — from rough idea to ready.</p><button class="go" data-newbuild style="margin-bottom:1.1rem"><i class="fas fa-plus"></i> New build</button>'+grid(S.builds,buildCard,'<i class="fas fa-hammer" style="font-size:1.6rem"></i><br>No builds yet. Start with an idea — you can change everything later.');
-},
-challenges(){
-  if(S.openId){ const p=item(S.openId); if(p) return itemDetail(p); }
-  return '<h1 class="page">Challenges</h1><p class="page-sub">Recurring practical challenges, with a chance to be featured.</p>'+grid(byKind('challenge'),itemCard,'No challenges are open right now.');
-},
-coach(){
-  const p=S.p; if(!p.techCoachId) return '<h1 class="page">My Coach</h1><div class="empty">A coach will be assigned to you soon. Until then, explore missions and start a build.</div>';
-  return '<h1 class="page">My Coach</h1><p class="page-sub">Your coach reviews your builds and helps you improve them.</p><div class="c" style="cursor:default;max-width:460px"><span class="kind">Coach</span><h3 style="font-size:1.3rem">'+esc(p.techCoachName||'Your coach')+'</h3><p>Open a build and post in <b>Coach feedback</b>, or send a message.</p><button class="go" style="margin-top:.8rem" data-go="messages">Message coach</button></div>';
-},
-toolbox(){
-  const tools=byKind('tool'), cats=['BUILD','CREATE','THINK','WORK'];
-  if(S.openId){ const t=item(S.openId); if(t) return itemDetail(t); }
-  return '<h1 class="page">AI Toolbox</h1><p class="page-sub">Organised by what you want to do — not by brand.</p>'+cats.map(c=>{ const l=tools.filter(t=>(t.category||'').toUpperCase()===c); return '<div class="sec">'+c+'</div>'+grid(l,itemCard,'Nothing in '+c+' yet.'); }).join('');
-},
-showcase(){
-  const list=S.wall.slice().sort((a,b)=>(b.featured?1:0)-(a.featured?1:0));
-  return '<h1 class="page">The Tech Wall</h1><p class="page-sub">What Paisley builders have made.</p>'+grid(list,w=>'<div class="c" style="cursor:default"><span class="kind">'+esc(w.category||'')+(w.featured?' · Featured':'')+'</span><h3>'+esc(w.title)+'</h3><p>By '+esc(w.displayName||'a Paisley student')+'</p><p style="margin-top:.4rem">'+esc((w.description||'').slice(0,120))+'</p>'+(w.previewUrl?'<a href="'+esc(w.previewUrl)+'" target="_blank" rel="noopener" style="font-size:.8rem">View build →</a>':'')+'</div>','Nothing on the wall yet. Get a build to READY and ask your coach to show it.');
-},
-progress(){
-  const L=level(); const by={}; T.STATUSES.forEach(s=>by[s]=S.builds.filter(b=>b.status===s).length);
-  return '<h1 class="page">Progress</h1><p class="page-sub">Your level rises as you complete missions with a READY build.</p><div class="stats">'+T.STATUSES.map(s=>'<div class="stat"><b>'+by[s]+'</b><span>'+T.STATUS_LABEL[s]+'</span></div>').join('')+'</div><div class="sec">The AI literacy journey</div><div class="lv">'+T.LEVELS.map((n,i)=>'<div class="lvi '+(i+1<L?'done':i+1===L?'now':'')+'"><div class="n">0'+(i+1)+'</div><div><b>'+esc(n)+'</b>'+(i+1===L?' <span class="tk-pill ok">You are here</span>':'')+'</div></div>').join('')+'</div>';
-},
-resources(){
-  const q=S.q.toLowerCase(), l=byKind('resource').filter(x=>!q||(x.title+' '+(x.summary||'')).toLowerCase().includes(q));
-  return '<h1 class="page">Resources</h1><p class="page-sub">Guides, readings and examples shared by your coaches.</p><input class="search" id="q" placeholder="Search resources…" value="'+esc(S.q)+'" aria-label="Search">'+grid(l,itemCard,'No resources published yet.');
-},
-profile(){
-  const p=S.p,tp=p.techProfile||{},id=T.builderId(S.uid),mine=new Set(S.builds.map(b=>b.id));
-  const feat=S.wall.filter(w=>mine.has(w.buildId||w.id)&&w.featured).length, pub=S.builds.filter(b=>b.showcase==='approved').length;
-  return '<h1 class="page">Profile</h1><div class="idcard"><small>TECH BUILDER</small><h2>'+esc(p.name||'')+'</h2><div class="pid">'+id+'</div><div class="row"><div><b>'+S.builds.length+'</b><span>Builds</span></div><div><b>'+pub+'</b><span>Published</span></div><div><b>'+feat+'</b><span>Featured</span></div><div><b>'+level()+'</b><span>Level</span></div></div></div>'+
-  '<div class="sec">About you</div><div class="tk-box" style="max-width:560px"><div class="tk-f"><label>What describes you?</label><select id="pId"><option value="">—</option>'+['Student','Creator','Future entrepreneur','Researcher','Problem solver','Curious explorer'].map(x=>'<option'+(tp.identity===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div><div class="tk-f"><label>What do you want to explore?</label><div class="pillrow" id="pInts">'+['Create','Research','Study smarter','Start something','Solve problems','Build projects','Work faster','Understand AI','Stay safe online'].map(x=>'<label class="tk-pill" style="cursor:pointer;padding:.4rem .7rem"><input type="checkbox" value="'+x+'"'+((tp.interests||[]).includes(x)?' checked':'')+'> '+x+'</label>').join('')+'</div></div><div class="tk-f"><label>Phone</label><input id="pPh" value="'+esc(p.phone||'')+'" maxlength="30"></div><div class="tk-f"><label>Email</label><input value="'+esc(p.email||'')+'" readonly></div><button class="tk-btn dark" id="pSave">Save profile</button><div class="tk-msgline" id="pMsg"></div></div>';
-}
-};
-
-function itemDetail(it){
-  const kids=it.kind==='path'?byKind('topic').filter(t=>t.parentId===it.id):it.kind==='topic'?byKind('mission').filter(m=>m.parentId===it.id):[];
-  const directMissions=it.kind==='path'?byKind('mission').filter(m=>m.parentId===it.id):[];
-  const own=(it.kind==='mission'||it.kind==='challenge')?buildFor(it.kind==='mission'?'missionId':'challengeId',it.id):null;
-  const res=(it.resources||[]).map(r=>'<div class="tk-item"><a href="'+esc(T.safeUrl(r.url))+'" target="_blank" rel="noopener"><i class="fas fa-link"></i> '+esc(r.title||r.url)+'</a></div>').join('');
-  return '<button class="back" data-back><i class="fas fa-arrow-left"></i> Back</button><div class="tk-box"><span class="kind" style="font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)">'+esc(it.kind)+(it.level?' · Level '+it.level+' · '+esc(T.LEVELS[(it.level||1)-1]||''):'')+'</span><h1 class="page" style="margin-top:.3rem">'+esc(it.title)+'</h1><p class="page-sub">'+esc(it.summary||'')+'</p>'+
-    (it.deadline?'<p class="tk-pill warn" style="margin-bottom:.8rem">Deadline: '+esc(it.deadline)+'</p>':'')+
-    (it.body?'<div style="white-space:pre-wrap;font-weight:500;line-height:1.65;margin-bottom:1rem">'+esc(it.body)+'</div>':'')+
-    (T.safeUrl(it.url)?'<p style="margin-bottom:1rem"><a href="'+esc(T.safeUrl(it.url))+'" target="_blank" rel="noopener">Open link <i class="fas fa-arrow-up-right-from-square"></i></a></p>':'')+
-    (res?'<div class="sec" style="margin-top:0">Resources</div><div class="tk-list" style="margin-bottom:1rem">'+res+'</div>':'')+
-    (it.kind==='mission'||it.kind==='challenge'?(own?'<button class="go" data-open="'+own.id+'">Continue build <i class="fas fa-arrow-right"></i></button>':'<button class="go" data-start="'+it.id+'">Start this '+it.kind+' <i class="fas fa-arrow-right"></i></button>'):'')+'</div>'+
-    ((kids.length||directMissions.length)?'<div class="sec">'+(it.kind==='path'?'Topics':'Missions')+'</div>'+grid(kids.concat(directMissions),itemCard,''):'');
+function setLoading(btn, on){
+  btn.disabled = on;
+  btn.classList.toggle('loading', on);
 }
 
-function renderMessages(){
-  const el=$('view'); const p=S.p;
-  if(!p.techCoachId){ el.innerHTML='<h1 class="page">Messages</h1><div class="empty">You will be able to message your coach once one is assigned.</div>'; return; }
-  el.innerHTML='<h1 class="page">Messages</h1><div id="chatHost"></div>';
-  S.chat=T.mountChat($('chatHost'),{studentId:S.uid,studentName:p.name,coachId:p.techCoachId,coachName:p.techCoachName,me:{uid:S.uid,role:'student',name:p.name}});
-}
-
-/* ---------- actions ---------- */
-async function createBuild(d){
-  const p=S.p;
-  const doc={studentId:S.uid,studentName:p.name||'',displayName:T.firstName(p.name),tutorId:p.techCoachId||'',tutorName:p.techCoachName||'',
-    title:String(d.title||'Untitled build').slice(0,120),brief:String(d.brief||'').slice(0,2000),category:d.category||'Other',status:'IDEA',progress:0,showcase:'none',reviewState:'none',
-    files:[],resources:(d.resources||[]).slice(0,30),versions:[],skills:[],workText:'',workUrl:'',createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
-  if(d.missionId) doc.missionId=d.missionId; if(d.challengeId) doc.challengeId=d.challengeId; if(d.templateId) doc.templateId=d.templateId;
-  const ref=await db.collection('techBuilds').add(doc); return ref.id;
-}
-function openBuild(id){ S.openId=id; S.v='builds'; document.querySelectorAll('.nav[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v==='builds')); $('topTitle').textContent='My Builds'; try{history.replaceState(null,'','#builds');}catch(e){} if(S.ws){S.ws.destroy();S.ws=null;} render(); window.scrollTo(0,0); }
-
-function newBuildModal(){
-  const tpls=byKind('template');
-  const m=document.createElement('div'); m.className='tk-modal';
-  m.innerHTML='<div role="dialog" aria-modal="true" aria-label="New build"><h3>New build</h3>'+
-   (tpls.length?'<div class="tk-f"><label>Start from a template (optional)</label><select id="nbT"><option value="">Blank — my own idea</option>'+tpls.map(t=>'<option value="'+t.id+'">'+esc(t.title)+'</option>').join('')+'</select></div>':'')+
-   '<div class="tk-f"><label>What are you building?</label><input id="nbN" maxlength="120" placeholder="e.g. AI Study Buddy"></div><div class="tk-f"><label>Type</label><select id="nbC">'+T.CATEGORIES.map(c=>'<option>'+c+'</option>').join('')+'</select></div><div class="tk-f"><label>Idea in a sentence or two</label><textarea id="nbB" maxlength="2000"></textarea></div>'+
-   '<div style="display:flex;gap:.5rem"><button class="tk-btn primary" id="nbGo">Create</button><button class="tk-btn" id="nbX">Cancel</button></div><div class="tk-msgline" id="nbM"></div></div>';
-  document.body.appendChild(m);
-  const close=()=>m.remove();
-  m.querySelector('#nbX').onclick=close; m.addEventListener('click',e=>{ if(e.target===m) close(); });
-  const sel=m.querySelector('#nbT'); if(sel) sel.onchange=()=>{ const t=item(sel.value); if(t){ m.querySelector('#nbN').value=t.title; m.querySelector('#nbB').value=t.summary||''; } };
-  m.querySelector('#nbGo').onclick=async()=>{
-    const title=m.querySelector('#nbN').value.trim(); if(!title){ m.querySelector('#nbM').textContent='Give your build a name.'; return; }
-    const t=sel?item(sel.value):null; m.querySelector('#nbGo').disabled=true;
-    try{ const id=await createBuild({title,brief:m.querySelector('#nbB').value,category:m.querySelector('#nbC').value,templateId:t?t.id:'',resources:t?t.resources:[]}); close(); openBuild(id); }
-    catch(e){ m.querySelector('#nbM').textContent='Could not create: '+T.errMsg(e); m.querySelector('#nbGo').disabled=false; }
-  };
-  m.querySelector('#nbN').focus();
-}
-
-document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-open],[data-item],[data-start],[data-back],[data-newbuild],[data-go],#pSave'); if(!t||!S.p) return;
-  if(t.dataset.open){ openBuild(t.dataset.open); }
-  else if(t.dataset.item){ const it=item(t.dataset.item); const map={path:'paths',topic:'paths',mission:'missions',challenge:'challenges',tool:'toolbox',resource:'resources',template:'builds'}; S.openId=it.id; S.v=map[it.kind]||'explore'; document.querySelectorAll('.nav[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===S.v)); $('topTitle').textContent=TITLES[S.v]; render(); window.scrollTo(0,0); }
-  else if(t.dataset.start){ const it=item(t.dataset.start); t.disabled=true;
-    try{ const id=await createBuild({title:it.title,brief:it.summary,category:'Other',resources:it.resources,missionId:it.kind==='mission'?it.id:'',challengeId:it.kind==='challenge'?it.id:''}); openBuild(id); }
-    catch(er){ t.disabled=false; alert('Could not start: '+T.errMsg(er)); } }
-  else if(t.dataset.back!==undefined){ if(S.v==='builds'&&S.openId){ S.openId=null; go('builds'); } else if(S.openId){ S.openId=null; render(); } else go(S.v); }
-  else if(t.dataset.newbuild!==undefined){ newBuildModal(); }
-  else if(t.dataset.go){ go(t.dataset.go); }
-  else if(t.id==='pSave'){
-    const tp={identity:$('pId').value,interests:[...document.querySelectorAll('#pInts input:checked')].map(x=>x.value)};
-    try{ await db.collection('students').doc(S.uid).update({techProfile:tp,phone:$('pPh').value.trim().slice(0,30),updatedAt:FV().serverTimestamp()}); S.p.techProfile=tp; $('pMsg').textContent='Saved ✓'; }
-    catch(er){ $('pMsg').textContent='Could not save: '+T.errMsg(er); }
+// Redirect signed-in users straight to the dashboard
+auth.onAuthStateChanged(user=>{
+  if(user && !window._justSignedUp){
+    window.location.href = '/tuition/dashboard.html';
   }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='q'){ S.q=e.target.value; const pos=e.target.selectionStart; render(); const q=$('q'); if(q){ q.focus(); q.setSelectionRange(pos,pos); } } });
-})();
+
+// ---- LOGIN ----
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  if(!email || !pass){ showErr('Please enter your email and password.'); return; }
+  const btn = document.getElementById('loginBtn');
+  setLoading(btn, true);
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(()=>{ window.location.href = '/tuition/dashboard.html'; })
+    .catch(err=>{
+      setLoading(btn, false);
+      let m = 'Incorrect email or password.';
+      if(err.code === 'auth/too-many-requests') m = 'Too many attempts. Please wait a few minutes.';
+      showErr(m);
+    });
+});
+
+// ---- KEY STAGE → YEAR + SUBJECTS ----
+const suKeyStage = document.getElementById('suKeyStage');
+const suYear = document.getElementById('suYear');
+const suSubjects = document.getElementById('suSubjects');
+
+function refreshYearAndSubjects(){
+  const ks = suKeyStage.value;
+  suYear.innerHTML = '<option value="">Select grade</option>' +
+    lmzYearsForKeyStage(ks).map(y=>'<option value="'+y+'">Grade '+y+'</option>').join('');
+  const core = false;   // CBC: the student chooses the subjects they want
+  suSubjects.innerHTML = lmzSubjectsForKeyStage(ks).map(s=>
+    '<label><input type="checkbox" value="'+s.id+'"'+(core?' checked':'')+' /> '+s.name+'</label>').join('');
+  document.getElementById('suSubjectsHint').textContent = 'Select the subjects you will study. You can change these later from your dashboard.';
+}
+suKeyStage.addEventListener('change', refreshYearAndSubjects);
+refreshYearAndSubjects();
+
+// ---- SECOND PARENT / GUARDIAN ----
+const guardian2Box = document.getElementById('guardian2');
+const addGuardian2Btn = document.getElementById('addGuardian2Btn');
+addGuardian2Btn.addEventListener('click', ()=>{
+  guardian2Box.style.display = 'block';
+  addGuardian2Btn.style.display = 'none';
+});
+document.getElementById('removeGuardian2Btn').addEventListener('click', ()=>{
+  ['suGuardian2Name','suGuardian2Email','suGuardian2Phone'].forEach(id=>{ document.getElementById(id).value = ''; });
+  guardian2Box.style.display = 'none';
+  addGuardian2Btn.style.display = '';
+});
+
+// ---- SIGN-UP ABUSE GUARDS ----
+// Reserved / throw-away mail domains can never be a real student or parent. This is a
+// courtesy filter in the page; the real enforcement is server-side (Firestore rules,
+// App Check and the optional sign-up blocking function).
+const BLOCKED_MAIL_DOMAINS = [
+  'example.com','example.org','example.net','mailinator.com','guerrillamail.com','sharklasers.com',
+  '10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','trashmail.com','dispostable.com',
+  'getnada.com','maildrop.cc','throwawaymail.com','fakeinbox.com','mintemail.com','mohmal.com'
+];
+function isFakeMailbox(addr){
+  const m = String(addr||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/);
+  if(!m) return true;
+  const d = m[1];
+  if(/\.(test|invalid|localhost|local|example)$/.test(d)) return true;
+  return BLOCKED_MAIL_DOMAINS.some(b => d === b || d.endsWith('.' + b));
+}
+const _signupShownAt = Date.now();
+
+// ---- SIGN UP ----
+document.getElementById('signupBtn').addEventListener('click', ()=>{
+  // Bot traps: a filled hidden field, or a form completed faster than a person can type.
+  if(document.getElementById('suWebsite').value || (Date.now() - _signupShownAt) < 4000){
+    showErr('Please take a moment to check your details and try again.'); return;
+  }
+  const name = document.getElementById('suName').value.trim();
+  const email = document.getElementById('suEmail').value.trim();
+  const keyStage = suKeyStage.value;
+  const year = suYear.value;
+  const subjectIds = Array.from(suSubjects.querySelectorAll('input:checked')).map(cb=>cb.value);
+  const pass = document.getElementById('suPassword').value;
+
+  const guardians = [{
+    name: document.getElementById('suGuardianName').value.trim(),
+    email: document.getElementById('suGuardianEmail').value.trim(),
+    phone: document.getElementById('suGuardianPhone').value.trim()
+  }];
+  const hasSecond = guardian2Box.style.display !== 'none';
+  if(hasSecond){
+    guardians.push({
+      name: document.getElementById('suGuardian2Name').value.trim(),
+      email: document.getElementById('suGuardian2Email').value.trim(),
+      phone: document.getElementById('suGuardian2Phone').value.trim()
+    });
+  }
+
+  if(!name || !email || !pass){ showErr('Please fill in your name, email and password.'); return; }
+  if(name.length > 120){ showErr('Please enter a shorter name.'); return; }
+  if(isFakeMailbox(email)){ showErr('Please use your own real email address — we need to be able to reach you.'); return; }
+  if(pass.length < 8){ showErr('Password must be at least 8 characters.'); return; }
+  if(!keyStage){ showErr('Please select your learning band.'); return; }
+  if(!year){ showErr('Please select your Grade.'); return; }
+  if(!subjectIds.length){ showErr('Please select at least one subject you take.'); return; }
+  if(!guardians[0].email || !guardians[0].phone){ showErr('Please provide a parent/guardian email and phone number.'); return; }
+  for(let i=0;i<guardians.length;i++){
+    const g = guardians[i], label = 'Parent / Guardian ' + (i+1);
+    if(!g.name && i>0){ showErr('Please enter the name of ' + label + '.'); return; }
+    if(!/^\S+@\S+\.\S+$/.test(g.email) || isFakeMailbox(g.email)){ showErr('Please enter a real email address for ' + label + '.'); return; }
+    if(i>0 && !g.phone){ showErr('Please enter the phone number of ' + label + '.'); return; }
+    if(g.email.toLowerCase() === email.toLowerCase()){ showErr(label + ' needs their own email address — it cannot be the same as your student sign-in email.'); return; }
+  }
+  if(hasSecond && guardians[0].email.toLowerCase() === guardians[1].email.toLowerCase()){
+    showErr('Parent / Guardian 2 needs a different email address from Parent / Guardian 1.'); return;
+  }
+
+  const btn = document.getElementById('signupBtn');
+  setLoading(btn, true);
+  window._justSignedUp = true;
+
+  auth.createUserWithEmailAndPassword(email, pass)
+    .then(cred=>{
+      // Ask the new user to confirm their address (best effort — never blocks sign-up).
+      try { cred.user.sendEmailVerification().catch(function(){}); } catch(e) {}
+      return createStudentProfile(cred.user.uid, {
+        name, email, keyStage,
+        studentType: 'tuition', curriculum: 'CBC',
+        year: Number(year),
+        ...lmzSubjectWriteFields(subjectIds),
+        // Structured guardians are the source of truth (one entry each; the
+        // Parent Portal links each to its own account). The first guardian is
+        // also mirrored into the original guardianName/Email/Phone fields and
+        // a derived parentContact string, which older admin/tutor/student
+        // screens still read.
+        guardians,
+        guardianName: guardians[0].name,
+        guardianEmail: guardians[0].email,
+        guardianPhone: guardians[0].phone,
+        parentContact: guardians.map(g=>[g.name, g.email, g.phone].filter(Boolean).join(' · ')).join(' | ')
+      });
+    })
+    .then(()=>{
+      setLoading(btn, false);
+      showOk('Account created! Redirecting to your dashboard…');
+      setTimeout(()=>{ window.location.href = '/tuition/dashboard.html'; }, 1200);
+    })
+    .catch(err=>{
+      setLoading(btn, false);
+      window._justSignedUp = false;
+      let m = 'Could not create account.';
+      if(err.code === 'auth/email-already-in-use') m = 'That email already has an account. Try Sign In instead.';
+      else if(err.code === 'auth/too-many-requests') m = 'Too many attempts from this device. Please wait a few minutes and try again.';
+      else if(err.code === 'auth/invalid-email') m = 'That email address is not valid.';
+      else if(err.code === 'auth/weak-password') m = 'Please choose a stronger password.';
+      showErr(m);
+    });
+});
+
+document.querySelectorAll('input').forEach(inp=>{
+  inp.addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){
+      const activeTab = document.querySelector('.tab.active').dataset.tab;
+      document.getElementById(activeTab === 'login' ? 'loginBtn' : 'signupBtn').click();
+    }
+  });
+});
+
+/* ---------------------------------------------------------
+   SEAMLESS PASSWORD RESET HANDLER
+   Catches the link from the new emails, prompts for password,
+   logs them in, and routes to the dashboard.
+--------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const mode = urlParams.get('mode');
+  const oobCode = urlParams.get('oobCode');
+
+  if (mode === 'resetPassword' && oobCode) {
+    let email = "";
+    try {
+      email = await auth.verifyPasswordResetCode(oobCode);
+    } catch (err) {
+      showErr("This password reset link is invalid or has expired. Please request a new one from the admin.");
+      window.history.replaceState({}, document.title, "/tuition/index.html");
+      return;
+    }
+
+    const newPassword = prompt(`Welcome to Paisley Studio!\n\nPlease set a password for ${email}.\n(Must be at least 6 characters)`);
+
+    if (!newPassword || newPassword.length < 6) {
+      showErr("Password must be at least 6 characters. Please click the link in your email again.");
+      return;
+    }
+
+    try {
+      await auth.confirmPasswordReset(oobCode, newPassword);
+      const cred = await auth.signInWithEmailAndPassword(email, newPassword);
+      
+      showOk("Password set successfully! Taking you to your dashboard...");
+      window.history.replaceState({}, document.title, "/tuition/index.html");
+      
+      setTimeout(() => {
+        window.location.href = '/tuition/dashboard.html';
+      }, 1200);
+
+    } catch (err) {
+      showErr("Error setting password: " + err.message);
+    }
+  }
+});
 </script>
 </body>
 </html>

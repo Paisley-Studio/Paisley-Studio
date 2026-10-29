@@ -1114,8 +1114,9 @@ var CBC_BANDS = [
 ];
 function lmzIsCbcBand(ks) { return /^CBC\b/i.test(String(ks || '')); }
 
-// TECH — Digital AI Literacy. Coaches are tutors who tick this discipline; the level plays the role of the Year.
-// Not part of KEY_STAGES or CBC_BANDS, so it never leaks into online or tuition flows.
+// TECH — Digital AI Literacy. TECH is its own programme with its own coaches (techCoaches),
+// so this band is NOT offered to tutors (see lmzTeachingKeyStages). It is kept only so old
+// records that still mention it can be recognised and labelled.
 var TECH_BANDS = ['TECH Digital AI Literacy (Levels 1-7)'];
 function lmzIsTechBand(ks) { return /^TECH\b/i.test(String(ks || '')); }
 
@@ -1268,8 +1269,9 @@ function lmzSubjectWriteFields(list) {
 // meaning (every ticked subject in every ticked Key Stage, all Years) until the
 // Studio Desk next saves them.
 // =========================================================
+// TECH is deliberately absent: TECH coaching lives in the TECH coach portal, not in tutor accounts.
 function lmzTeachingKeyStages() {
-  return KEY_STAGES.concat(typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : [], typeof TECH_BANDS !== 'undefined' ? TECH_BANDS : []);
+  return KEY_STAGES.concat(typeof CBC_BANDS !== 'undefined' ? CBC_BANDS : []);
 }
 
 // Tidy raw entries: one per Key Stage + subject, Years limited to that stage's Years.
@@ -1316,6 +1318,7 @@ function lmzTutorCovers(tutor, subjectId, keyStage, year) {
   if (!sid) return false;
   if (!Array.isArray(tutor.teaching)) {
     if (lmzSubjectKeys(tutor.subjects).indexOf(sid) === -1) return false;
+    if (lmzIsTechBand(keyStage)) return false;
     var ks = tutor.keyStages || [];
     return !ks.length || ks.indexOf(keyStage) !== -1;
   }
@@ -1341,7 +1344,7 @@ function lmzTutorKeyStages(tutor) {
     lmzNormTeaching(tutor.teaching).forEach(function (e) { if (out.indexOf(e.keyStage) === -1) out.push(e.keyStage); });
     return out;
   }
-  return ((tutor && tutor.keyStages) || []).slice();
+  return ((tutor && tutor.keyStages) || []).filter(function (k) { return !lmzIsTechBand(k); });
 }
 
 // Everything to write on a tutor profile for a set of entries.

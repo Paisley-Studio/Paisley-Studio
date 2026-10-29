@@ -1,19 +1,25 @@
 /* =========================================================
    Paisley TECH — shared UI + data helpers  (window.TechUI)
    ---------------------------------------------------------
-   Used by the TECH student studio (/tech/dashboard), the coach
-   panel in the tutor dashboard and the admin TECH module.
+   Used by the TECH builder studio (/tech/dashboard), the TECH coach
+   portal (/tech/coach), the TECH guardian portal (/tech/parent) and
+   the admin TECH module.
 
      TechUI.mountWorkspace(host, opts)  one project: status, brief, files, versions, feedback, share,
                                         Writing Studio, Code Lab, Upload Pad, AI reflection, mastery, visibility
-     TechUI.mountChat(host, opts)       student <-> coach chat  (collection: techChats)
+     TechUI.mountChat(host, opts)       builder <-> coach (techChats) or, with kind:'guardian',
+                                        guardian <-> coach (techGuardianChats)
+     TechUI.mountBell(host, opts)       TECH-only notification bell (techNotifications)
      TechUI.approveShowcase / removeShowcase(build, user)
      TechUI.mintShareToken(buildId)     create a family-share token
 
    Needs the global Firestore `db` (firebase-config.js).
-   Collections: techBuilds (+ /feedback), techContent, techShowcase, techChats (+ /messages), techProgress, shareTokens.
-   A TECH student is a students/{uid} doc with studentType "tech".
-   A TECH coach is a normal tutor; students.techCoachId points at them.
+   TECH is its own architecture (see functions/tech.js):
+     techStudents/{uid}   builder enrolment; coachId / coachName point at the coach
+     techCoaches/{uid}    coaches — NOT tutors
+     techGuardianLinks    guardian (parentAccounts identity) -> builder
+   plus techBuilds (+ /feedback), techContent, techShowcase, techChats, techGuardianChats,
+   techProgress, techNotifications, shareTokens.
 ========================================================= */
 (function (g) {
   'use strict';
@@ -213,13 +219,29 @@
   }
 
   /* =========================================================
-     Chat — unchanged
+     Chat
+       builder <-> coach   techChats/{studentId}_{coachId}
+       guardian <-> coach  techGuardianChats/{parentUid}_{studentId}  (o.kind === 'guardian')
+     o: { kind, studentId, studentName, coachId, coachName, parentUid, parentName,
+          me: { uid, role: 'student'|'coach'|'guardian'|'admin', name }, readOnly }
      ========================================================= */
   function mountChat(host, o) {
     injectStyle();
-    var chatId = o.studentId + '_' + o.coachId, ref = db.collection('techChats').doc(chatId);
-    var other = o.me.role === 'student' ? (o.coachName || 'Your coach') : (o.studentName || 'Builder');
-    host.innerHTML = '<div class="tk-box tk-chat"><div style="padding-bottom:.7rem;border-bottom:1px solid var(--line,rgba(38,51,49,.12))"><b>' + esc(other) + '</b><div class="tk-sub" style="margin:0">' + (o.me.role === 'student' ? 'Your TECH coach' : 'TECH builder') + (o.readOnly ? ' · read-only' : '') + '</div></div>' +
+    var guardian = o.kind === 'guardian', role = o.me.role;
+    var chatId = guardian ? o.parentUid + '_' + o.studentId : o.studentId + '_' + o.coachId;
+    var ref = db.collection(guardian ? 'techGuardianChats' : 'techChats').doc(chatId);
+    var base = guardian
+      ? { parentUid: o.parentUid, parentName: o.parentName || '', studentId: o.studentId, studentName: o.studentName || '', coachId: o.coachId || '', coachName: o.coachName || '' }
+      : { studentId: o.studentId, studentName: o.studentName || '', coachId: o.coachId, coachName: o.coachName || '' };
+    var other, sub;
+    if (guardian) {
+      other = role === 'guardian' ? (o.coachName || 'Paisley TECH') : (o.parentName || 'Guardian');
+      sub = role === 'guardian' ? (o.coachId ? (o.studentName ? o.studentName.split(' ')[0] + '’s TECH coach' : 'TECH coach') : 'The Studio Desk will answer until a coach is assigned') : ('Family of ' + (o.studentName || 'a builder'));
+    } else {
+      other = role === 'student' ? (o.coachName || 'Your coach') : (o.studentName || 'Builder');
+      sub = role === 'student' ? 'Your TECH coach' : 'TECH builder';
+    }
+    host.innerHTML = '<div class="tk-box tk-chat"><div style="padding-bottom:.7rem;border-bottom:1px solid var(--line,rgba(38,51,49,.12))"><b>' + esc(other) + '</b><div class="tk-sub" style="margin:0">' + esc(sub) + (o.readOnly ? ' · read-only' : '') + '</div></div>' +
       '<div class="tk-chat-list" id="tkList"><div class="tk-empty">Loading messages…</div></div>' +
       (o.readOnly ? '' : '<div class="tk-chat-form"><textarea id="tkText" rows="1" maxlength="3000" placeholder="Write a message…"></textarea><button class="tk-btn primary" id="tkSend" type="button" aria-label="Send"><i class="fas fa-paper-plane"></i></button></div>') + '</div>';
     var list = host.querySelector('#tkList'), unsub = null, dead = false;
@@ -231,7 +253,7 @@
     async function ensure() {
       try { var s = await ref.get(); if (s.exists) return true; } catch (e) { }
       if (o.readOnly) return false;
-      try { await ref.set({ studentId: o.studentId, studentName: o.studentName || '', tutorId: o.coachId, tutorName: o.coachName || '', lastMessage: '', lastAt: FV().serverTimestamp(), createdAt: FV().serverTimestamp() }); return true; }
+      try { await ref.set(Object.assign({}, base, { lastMessage: '', lastSenderRole: '', lastAt: FV().serverTimestamp(), createdAt: FV().serverTimestamp() })); return true; }
       catch (e) { list.innerHTML = '<div class="tk-empty">Chat is not available yet: ' + esc(errMsg(e)) + '</div>'; return false; }
     }
     ensure().then(function (ok) {
@@ -244,8 +266,8 @@
       var send = async function () {
         var text = ta.value.trim(); if (!text || busy) return; busy = true; btn.disabled = true;
         try {
-          await ref.collection('messages').add({ senderId: o.me.uid, senderRole: o.me.role === 'coach' ? 'tutor' : o.me.role, senderName: o.me.name || '', text: text.slice(0, 3000), createdAt: FV().serverTimestamp() });
-          ta.value = ''; ref.update({ lastMessage: text.slice(0, 120), lastAt: FV().serverTimestamp() }).catch(function () { });
+          await ref.collection('messages').add({ senderId: o.me.uid, senderRole: role, senderName: o.me.name || '', text: text.slice(0, 3000), createdAt: FV().serverTimestamp() });
+          ta.value = ''; ref.update({ lastMessage: text.slice(0, 120), lastSenderRole: role, lastAt: FV().serverTimestamp() }).catch(function () { });
         } catch (e) { alert('Could not send: ' + errMsg(e)); }
         busy = false; btn.disabled = false; ta.focus();
       };
@@ -668,68 +690,69 @@
   }
 
   /* =========================================================
-     Coach panel — unchanged, except for a small fix:
-     the reference to label() used STATUS_LABEL which is now in scope.
+     TECH notification bell — techNotifications only.
+     TechUI.mountBell(host, { uid, onOpen(n) })
+       onOpen may handle a notification itself (return true);
+       otherwise the bell follows n.link.
      ========================================================= */
-  function mountCoach(host, o) {
-    injectStyle();
-    var S = { tab: 'builders', students: [], builds: [], mine: [], stuId: null, ws: null, chat: null, unsubs: [] };
-    host.innerHTML = '<div id="tcNav" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem"></div><div id="tcBody"></div>';
-    var nav = host.querySelector('#tcNav'), body = host.querySelector('#tcBody');
-    function ms(x) { var d = toDate(x); return d ? d.getTime() : 0; }
-    function clean() { if (S.ws) { S.ws.destroy(); S.ws = null; } if (S.chat) { S.chat.destroy(); S.chat = null; } }
-    S.unsubs.push(db.collection('students').where('techCoachId', '==', o.uid).onSnapshot(function (s) { S.students = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (x) { return x.studentType === 'tech' && x.status === 'Active'; }); render(); }, function (e) { body.innerHTML = '<div class="tk-empty">Could not load builders: ' + esc(errMsg(e)) + '</div>'; }));
-    S.unsubs.push(db.collection('techBuilds').where('tutorId', '==', o.uid).onSnapshot(function (s) { S.builds = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return ms(b.updatedAt) - ms(a.updatedAt); }); render(); }, function () { }));
-    S.unsubs.push(db.collection('techContent').where('createdBy', '==', o.uid).onSnapshot(function (s) { S.mine = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return ms(b.createdAt) - ms(a.createdAt); }); render(); }, function () { }));
-
-    function label(b) {
-      if (b.showcase === 'requested') return ['Showcase requested', 'warn'];
-      if (b.reviewState === 'requested') return ['Review required', 'warn'];
-      if (b.reviewState === 'changes') return ['Waiting for changes', 'bad'];
-      if (b.mastery === 'approved') return ['Mastered', 'ok'];
-      if (b.status === 'READY' && b.showcase !== 'approved') return ['Ready for showcase', 'ok'];
-      if (b.showcase === 'approved') return ['On the Tech Wall', 'gold'];
-      return [STATUS_LABEL[b.status] || b.status, ''];
+  var bellStyled = false;
+  function bellStyle() {
+    if (bellStyled) return; bellStyled = true;
+    var st = document.createElement('style');
+    st.textContent = [
+      '.tk-bell{position:relative;display:inline-block}',
+      '.tk-bell>button{position:relative;width:40px;height:40px;border-radius:12px;border:1px solid var(--line,rgba(38,51,49,.12));background:var(--surface,#fff);color:var(--brand-deep,#245F5A);font-size:1rem;cursor:pointer;display:grid;place-items:center}',
+      '.tk-bell>button:hover{border-color:var(--brand,#55BFB3)}',
+      '.tk-bell .n{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#E74C3C;color:#fff;font-size:.66rem;font-weight:800;line-height:18px;text-align:center}',
+      '.tk-bell-pop{position:absolute;right:0;top:calc(100% + 8px);width:min(360px,calc(100vw - 32px));max-height:min(70vh,480px);overflow:auto;background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.12));border-radius:16px;box-shadow:0 18px 50px rgba(15,26,20,.18);z-index:60;text-align:left}',
+      '.tk-bell-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.8rem 1rem;border-bottom:1px solid var(--line,rgba(38,51,49,.12));font-weight:800;color:var(--brand-deep,#245F5A);font-size:.9rem}',
+      '.tk-bell-head button{background:none;border:0;color:var(--brand-deep,#245F5A);font:inherit;font-size:.74rem;font-weight:800;cursor:pointer;text-decoration:underline}',
+      '.tk-bell-item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line,rgba(38,51,49,.06));background:none;padding:.7rem 1rem;font:inherit;color:var(--ink,#263331);cursor:pointer}',
+      '.tk-bell-item:hover{background:var(--paper,#F1F9F7)}',
+      '.tk-bell-item.unread{background:rgba(85,191,179,.08)}',
+      '.tk-bell-item b{display:block;font-size:.84rem;color:var(--brand-deep,#245F5A)}',
+      '.tk-bell-item span{display:block;font-size:.8rem;color:var(--muted,#5A6E6A);margin-top:2px;line-height:1.35}',
+      '.tk-bell-item small{display:block;font-size:.68rem;color:var(--muted,#5A6E6A);margin-top:3px;opacity:.8}'
+    ].join('');
+    document.head.appendChild(st);
+  }
+  function mountBell(host, o) {
+    bellStyle();
+    var list = [], open = false, unsub = null;
+    host.innerHTML = '<div class="tk-bell"><button type="button" aria-label="Notifications" aria-expanded="false"><i class="fas fa-bell"></i><span class="n" hidden>0</span></button><div class="tk-bell-pop" hidden role="dialog" aria-label="Notifications"></div></div>';
+    var btn = host.querySelector('.tk-bell>button'), pop = host.querySelector('.tk-bell-pop'), badge = host.querySelector('.tk-bell .n');
+    function unread() { return list.filter(function (n) { return !n.read; }); }
+    function paint() {
+      var u = unread().length;
+      badge.hidden = !u; badge.textContent = u > 99 ? '99+' : u;
+      if (!open) return;
+      pop.innerHTML = '<div class="tk-bell-head"><span>Notifications</span>' + (u ? '<button type="button" data-all>Mark all read</button>' : '') + '</div>' +
+        (list.length ? list.map(function (n) {
+          return '<button type="button" class="tk-bell-item' + (n.read ? '' : ' unread') + '" data-n="' + esc(n.id) + '"><b>' + esc(n.title) + '</b><span>' + esc(n.message) + '</span><small>' + esc(fmt(n.createdAt)) + '</small></button>';
+        }).join('') : '<div class="tk-empty">You’re all caught up.</div>');
     }
-    function renderNav() {
-      var need = S.builds.filter(function (b) { return b.reviewState === 'requested' || b.showcase === 'requested'; }).length;
-      nav.innerHTML = [['builders', 'Your builders', 'fa-people-group', need], ['messages', 'Messages', 'fa-comments', 0], ['content', 'Missions & content', 'fa-bullseye', 0]].map(function (t) {
-        return '<button type="button" class="tk-btn sm ' + (S.tab === t[0] ? 'dark' : '') + '" data-t="' + t[0] + '"><i class="fas ' + t[2] + '"></i> ' + t[1] + (t[3] ? ' <span class="tk-pill warn">' + t[3] + '</span>' : '') + '</button>';
-      }).join('');
+    function markRead(ids) {
+      if (!ids.length) return Promise.resolve();
+      var b = db.batch();
+      ids.forEach(function (id) { b.update(db.collection('techNotifications').doc(id), { read: true, readAt: FV().serverTimestamp() }); });
+      return b.commit().catch(function (e) { console.warn('tech bell:', e); });
     }
-    nav.addEventListener('click', function (e) { var b = e.target.closest('[data-t]'); if (b) { clean(); S.tab = b.dataset.t; S.stuId = null; render(); } });
-    function render() {
-      renderNav(); if (S.ws || S.chat) return;
-      if (S.tab === 'builders') {
-        if (!S.students.length) { body.innerHTML = '<div class="tk-box"><div class="tk-empty">No TECH builders are paired with you yet.</div></div>'; return; }
-        body.innerHTML = '<h3 style="font-size:1.2rem;color:var(--brand-deep,#245F5A);margin-bottom:.7rem">Your builders</h3><div class="tk-list">' + S.students.map(function (s) {
-          var bs = S.builds.filter(function (b) { return b.studentId === s.id; });
-          if (!bs.length) return '<div class="tk-item"><div><b>' + esc(s.name) + '</b><div class="meta">No build yet</div></div><span class="tk-pill">Not started</span></div>';
-          return bs.map(function (b) { var l = label(b); return '<div class="tk-item"><div><b>' + esc(s.name) + '</b> · ' + esc(b.title) + '<div class="meta">' + (Number(b.progress) || 0) + '% · ' + esc(b.category || '') + '</div><div class="tk-bar" style="margin-top:.35rem;width:180px"><i style="width:' + (Number(b.progress) || 0) + '%"></i></div></div><div style="display:flex;gap:.5rem;align-items:center"><span class="tk-pill ' + l[1] + '">' + esc(l[0]) + '</span><button class="tk-btn sm" data-b="' + b.id + '">Open</button></div></div>'; }).join('');
-        }).join('') + '</div>';
-      } else if (S.tab === 'messages') {
-        if (!S.students.length) { body.innerHTML = '<div class="tk-box"><div class="tk-empty">No builders to message yet.</div></div>'; return; }
-        body.innerHTML = '<div class="tk-list">' + S.students.map(function (s) { return '<button class="tk-item" style="cursor:pointer;font:inherit;text-align:left" data-m="' + s.id + '"><b>' + esc(s.name) + '</b><span class="tk-pill">Message</span></button>'; }).join('') + '</div>';
-      } else {
-        body.innerHTML = '<div class="tk-box" style="margin-bottom:1rem"><h3>Create a mission, topic, challenge or resource</h3><div class="tk-sub">Save as draft, or publish so builders can see it.</div>' +
-          '<div class="tk-row"><div class="tk-f"><label>Type</label><select id="ccK"><option value="mission">Mission</option><option value="topic">Topic</option><option value="challenge">Challenge</option><option value="resource">Resource</option><option value="aiTool">AI tool</option></select></div><div class="tk-f"><label>Level (optional)</label><select id="ccL"><option value="">—</option>' + LEVELS.map(function (n, i) { return '<option value="' + (i + 1) + '">' + (i + 1) + ' · ' + n + '</option>'; }).join('') + '</select></div></div>' +
-          '<div class="tk-f"><label>Title</label><input id="ccT" maxlength="120"></div><div class="tk-f"><label>One-line summary</label><input id="ccS" maxlength="300"></div><div class="tk-f"><label>Details</label><textarea id="ccB" maxlength="8000"></textarea></div><div class="tk-f"><label>Link (optional)</label><input id="ccU" placeholder="https://"></div>' +
-          '<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="tk-btn" data-cc="draft">Save draft</button><button class="tk-btn primary" data-cc="published">Publish</button></div><div class="tk-msgline" id="ccM"></div></div>' +
-          '<div class="tk-list">' + (S.mine.map(function (c) { return '<div class="tk-item"><div><b>' + esc(c.title) + '</b><div class="meta">' + esc(c.kind) + '</div></div><button class="tk-btn sm" data-pub="' + c.id + '" data-to="' + (c.status === 'published' ? 'draft' : 'published') + '">' + (c.status === 'published' ? 'Unpublish' : 'Publish') + '</button></div>'; }).join('') || '<div class="tk-empty">You haven\'t created anything yet.</div>') + '</div>';
-      }
-    }
-    body.addEventListener('click', async function (e) {
-      var b = e.target.closest('[data-b]'), m = e.target.closest('[data-m]'), cc = e.target.closest('[data-cc]'), pb = e.target.closest('[data-pub]');
-      if (b) { clean(); body.innerHTML = '<button class="tk-btn sm" id="tcBk" style="margin-bottom:.8rem"><i class="fas fa-arrow-left"></i> Your builders</button><div id="tcWs"></div>'; body.querySelector('#tcBk').onclick = function () { clean(); render(); }; S.ws = mountWorkspace(body.querySelector('#tcWs'), { id: b.dataset.b, me: { uid: o.uid, role: 'coach', name: o.name }, onDeleted: function () { clean(); render(); } }); }
-      else if (m) { var s = S.students.filter(function (x) { return x.id === m.dataset.m; })[0]; clean(); body.innerHTML = '<button class="tk-btn sm" id="tcBk" style="margin-bottom:.8rem"><i class="fas fa-arrow-left"></i> Back</button><div id="tcCh"></div>'; body.querySelector('#tcBk').onclick = function () { clean(); render(); }; S.chat = mountChat(body.querySelector('#tcCh'), { studentId: s.id, studentName: s.name, coachId: o.uid, coachName: o.name, me: { uid: o.uid, role: 'coach', name: o.name } }); }
-      else if (cc) {
-        var t = body.querySelector('#ccT').value.trim(), msg = body.querySelector('#ccM'); if (!t) { msg.textContent = 'Add a title.'; return; }
-        var d = { kind: body.querySelector('#ccK').value, title: t.slice(0, 120), summary: body.querySelector('#ccS').value.trim().slice(0, 300), body: body.querySelector('#ccB').value.trim().slice(0, 8000), url: safeUrl(body.querySelector('#ccU').value), level: Number(body.querySelector('#ccL').value) || 0, order: 0, resources: [], status: cc.dataset.cc, createdBy: o.uid, createdAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
-        try { await db.collection('techContent').add(d); msg.textContent = 'Saved ✓'; body.querySelector('#ccT').value = ''; body.querySelector('#ccS').value = ''; body.querySelector('#ccB').value = ''; } catch (er) { msg.textContent = 'Could not save: ' + errMsg(er); }
-      } else if (pb) { try { await db.collection('techContent').doc(pb.dataset.pub).update({ status: pb.dataset.to, updatedAt: FV().serverTimestamp() }); } catch (er) { alert(errMsg(er)); } }
+    function toggle(on) { open = on; pop.hidden = !on; btn.setAttribute('aria-expanded', String(on)); paint(); }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); toggle(!open); });
+    document.addEventListener('click', function (e) { if (open && !host.contains(e.target)) toggle(false); });
+    document.addEventListener('keydown', function (e) { if (open && e.key === 'Escape') toggle(false); });
+    pop.addEventListener('click', function (e) {
+      if (e.target.closest('[data-all]')) { markRead(unread().map(function (n) { return n.id; })); return; }
+      var it = e.target.closest('[data-n]'); if (!it) return;
+      var n = list.filter(function (x) { return x.id === it.dataset.n; })[0]; if (!n) return;
+      markRead(n.read ? [] : [n.id]); toggle(false);
+      if (o.onOpen && o.onOpen(n) === true) return;
+      if (n.link && n.link.charAt(0) === '/' && location.pathname.replace(/\.html$/, '') !== n.link.split('#')[0]) location.href = n.link;
     });
-    render();
-    return { destroy: function () { clean(); S.unsubs.forEach(function (u) { u(); }); } };
+    unsub = db.collection('techNotifications').where('recipientId', '==', o.uid).orderBy('createdAt', 'desc').limit(40)
+      .onSnapshot(function (s) { list = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); },
+        function (e) { console.warn('tech notifications:', e); });
+    return { destroy: function () { if (unsub) unsub(); host.innerHTML = ''; } };
   }
 
   g.TechUI = {
@@ -741,7 +764,7 @@
     EMPTY_REFLECTION: EMPTY_REFLECTION,
     esc: esc, toDate: toDate, fmt: fmt, safeUrl: safeUrl, firstName: firstName, builderId: builderId, errMsg: errMsg,
     disciplinesOf: disciplinesOf, levelName: levelName, levelLabel: levelLabel,
-    injectStyle: injectStyle, mountWorkspace: mountWorkspace, mountChat: mountChat, mountCoach: mountCoach,
+    injectStyle: injectStyle, mountWorkspace: mountWorkspace, mountChat: mountChat, mountBell: mountBell,
     approveShowcase: approveShowcase, removeShowcase: removeShowcase, mintShareToken: mintShareToken
   };
 })(window);

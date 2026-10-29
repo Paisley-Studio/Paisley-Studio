@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Guardian sign in | Paisley TECH</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#245F5A" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech5" />
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-side">
+    <a class="auth-back" href="/tech.html"><i class="fas fa-arrow-left"></i> Back to Paisley TECH</a>
+    <h1>Follow what your child is <em>building.</em></h1>
+    <p>The Paisley TECH guardian portal, for parents and guardians of TECH builders.</p>
+    <ul>
+      <li><i class="fas fa-check"></i>Every project, its stage and the coach's feedback</li>
+      <li><i class="fas fa-check"></i>Progress in each discipline, level by level</li>
+      <li><i class="fas fa-check"></i>Message your child's TECH coach directly</li>
+    </ul>
+  </aside>
+  <main class="auth-main">
+    <div class="auth-card">
+      <h2>Guardian sign in</h2>
+      <p class="sub">Use the email or phone number your child gave when they joined TECH.</p>
+      <div class="auth-msg err" id="errMsg" role="alert"></div><div class="auth-msg ok" id="okMsg" role="status"></div>
+      <div class="field"><label for="ident">Email or phone number</label><input id="ident" autocomplete="username" enterkeyhint="go" /></div>
+      <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" enterkeyhint="go" /></div>
+      <button class="btn" id="go" type="button">Sign in</button>
+      <p class="auth-small">New guardian? Your first password is the phone number your child gave us (digits only, no spaces).</p>
+      <p class="auth-small"><a href="#" id="forgot">Forgot your password?</a></p>
+      <p class="auth-small">Already use the Paisley Parent Portal? The same login works here.</p>
+    </div>
+  </main>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="/firebase-config.js"></script>
+<script>
+(function(){
+'use strict';
+const auth = firebase.auth(), $ = id => document.getElementById(id);
+function show(id, m){ ['errMsg','okMsg'].forEach(x => $(x).classList.remove('show')); $(id).textContent = m; $(id).classList.add('show'); }
+
+/* A TECH guardian has at least one techGuardianLinks doc. Parent Portal parents
+   without a TECH child are pointed back to their own portal. */
+async function check(user){
+  const links = await db.collection('techGuardianLinks').where('parentUid', '==', user.uid).limit(1).get();
+  if (!links.empty) { location.href = '/tech/parent/dashboard.html'; return; }
+  const parent = await db.collection('parentAccounts').doc(user.uid).get().catch(() => null);
+  $('go').disabled = false;
+  if (parent && parent.exists) {
+    show('errMsg', 'No TECH builder is linked to this account yet. Your other children are in the Parent Portal.');
+    $('errMsg').insertAdjacentHTML('beforeend', ' <a href="/parent/dashboard.html">Open the Parent Portal</a>');
+    return;
+  }
+  await auth.signOut();
+  show('errMsg', 'This login is not a TECH guardian account. If your child has just joined, your login arrives by email once they are approved.');
+}
+auth.onAuthStateChanged(u => { if (u) check(u).catch(e => { $('go').disabled = false; show('errMsg', 'Could not sign in: ' + (e.message || e.code)); }); });
+
+function signIn(){
+  const ident = $('ident').value.trim(), password = $('password').value;
+  if (!ident || !password) return show('errMsg', 'Please enter your email or phone number, and your password.');
+  $('go').disabled = true;
+  const emailP = ident.indexOf('@') !== -1 ? Promise.resolve(ident)
+    : firebase.functions().httpsCallable('parentPhoneLogin')({ phone: ident, password }).then(r => r.data.email);
+  emailP.then(email => auth.signInWithEmailAndPassword(email, password)).catch(err => {
+    $('go').disabled = false;
+    show('errMsg', err.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email, phone number or password.');
+  });
+}
+$('go').addEventListener('click', signIn);
+['ident','password'].forEach(i => $(i).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); signIn(); } }));
+$('forgot').addEventListener('click', e => {
+  e.preventDefault(); const email = $('ident').value.trim();
+  if (email.indexOf('@') === -1) return show('errMsg', 'Enter your email address above first.');
+  const done = () => show('okMsg', 'If that email has an account, a reset link is on its way.');
+  auth.sendPasswordResetEmail(email).then(done, done);
+});
+})();
+</script>
+</body>
+</html>

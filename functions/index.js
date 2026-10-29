@@ -125,11 +125,16 @@ exports.onTuitionTimetableCreated     = tuition.onTuitionTimetableCreated;
 exports.onTuitionTicketCreated        = tuition.onTuitionTicketCreated;
 
 const tech = require("./tech");
-exports.onTechStudentCreated          = tech.onTechStudentCreated;
-exports.onTechStudentActivated        = tech.onTechStudentActivated;
+exports.onTechEnrolmentCreated        = tech.onTechEnrolmentCreated;
+exports.onTechEnrolmentUpdated        = tech.onTechEnrolmentUpdated;
+exports.onTechBuildCreated            = tech.onTechBuildCreated;
+exports.onTechBuildUpdated            = tech.onTechBuildUpdated;
 exports.onTechFeedbackCreated         = tech.onTechFeedbackCreated;
 exports.onTechMessageCreated          = tech.onTechMessageCreated;
-exports.onTechShowcaseApproved        = tech.onTechShowcaseApproved;
+exports.onTechGuardianMessageCreated  = tech.onTechGuardianMessageCreated;
+exports.createTechCoach               = tech.createTechCoach;
+exports.techLinkGuardians             = tech.techLinkGuardians;
+exports.migrateTechArchitecture       = tech.migrateTechArchitecture;
 exports.techShare                     = tech.techShare;
 
 const work = require("./work");

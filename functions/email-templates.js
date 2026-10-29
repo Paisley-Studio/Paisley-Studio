@@ -31,6 +31,8 @@ const PORTALS = {
   remote:  APP_URL + '/remote/index.html',
   tuition: APP_URL + '/tuition/index.html',
   tech:    APP_URL + '/tech/index.html',
+  techCoach:  APP_URL + '/tech/coach/index.html',
+  techParent: APP_URL + '/tech/parent/index.html',
   tutor:   APP_URL + '/tutor/login.html',
   parent:  APP_URL + '/parent/index.html',
   admin:   APP_URL + '/admin'

@@ -147,3 +147,23 @@ working once it is ready.
 ## Audience model (Remote Students upgrade)
 
 Lessons, assignments and exams are readable per audience via `audiences.{online,remote,tutors}`; queries must filter on the same flag. `students.studentType` is writable only by admins/Cloud Functions. Tutors cannot create or modify curriculum, assignments, exams or notes. See `REMOTE_UPGRADE.md` for the data model, deployment order and the emulator tests in `tests/rules/`.
+
+## Paisley TECH (its own architecture)
+
+TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH role is recognised by which collection holds the UID:
+
+| Collection | Create | Read | Update/Delete |
+|---|---|---|---|
+| `techStudents/{uid}` | the account itself, `status: 'Pending'`, no coach (any signed-in account, so IGCSE / CBC / remote students can join) | owner, admin, their coach (`coachId`), linked guardians | owner: `phone`, `techProfile`, `lastLoginAt` only; admin everything |
+| `techCoaches/{uid}` | admin (via `createTechCoach`) | owner, admin | owner: `phone`, `bio`; admin everything. `status != 'Active'` removes all coach access |
+| `techGuardianLinks/{parentUid}_{studentUid}` | admin / Cloud Functions | the guardian, admin | admin |
+| `techGuardianChats/{parentUid}_{studentUid}` (+ `messages`) | the linked guardian (coachId must be the builder's current coach), or that coach | guardian, the chat's coach, admin | participants: last-message fields only. Message `senderRole` must match the sender |
+| `techNotifications` | Cloud Functions only | recipient, admin | recipient may only flip `read` |
+| `techBuilds` (+ `feedback`) | active builder; `coachId` must equal their current coach | builder, their coach, linked guardians, admin | builder (cannot change coach / approve themselves), coach (review fields only), admin |
+| `techShowcase/{buildId}` (public Tech Wall) | admin, or the build's coach | anyone | admin or the build's coach; the builder may delete (take it down) |
+| `shareTokens/{buildId}` (family links) | admin, the builder, or the build's coach | same | same |
+| `techChats`, `techProgress`, `techContent` | as before, but "coach" now means an active `techCoaches` doc, never a tutor | | |
+
+Storage `techBuilds/{studentId}/{buildId}/…`: uploads by admins or an **Active** builder into one of their own builds. Reads by the builder, their **Active** coach, linked guardians and admins.
+
+Guardians sign in with their `parentAccounts` identity, so a parent who already uses the Parent Portal keeps one login. Rules tests: `tests/rules/tech.rules.test.js`. Deployment order: `TECH_UPGRADE.md`.

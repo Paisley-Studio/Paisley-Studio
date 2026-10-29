@@ -234,6 +234,7 @@
     <button class="nav-item" data-view="announcements" type="button"><i class="fas fa-bullhorn"></i> Announcements <span class="nav-dot" id="navNoticeCount" style="display:none;">0</span></button>
     <button class="nav-item" data-view="chats" type="button"><i class="fas fa-comments"></i> Chats</button>
     <button class="nav-item" data-view="messages" type="button"><i class="fas fa-envelope"></i> Messages <span class="nav-dot" id="msgUnreadDot">0</span></button>
+    <a class="nav-item" id="techNav" href="/tech/parent/dashboard.html" style="display:none;text-decoration:none;"><i class="fas fa-wand-magic-sparkles"></i> Paisley TECH</a>
     <div class="signout" id="signOutBtn"><i class="fas fa-arrow-right-from-bracket"></i> Sign out</div>
   </div>
 
@@ -254,6 +255,7 @@
 
     <section class="view active" id="view-overview">
       <h2>Overview <span class="ctx" id="ctxOverview"></span></h2>
+      <div class="panel" id="techBanner" style="display:none;"></div>
       <div class="statgrid" id="ovStats"></div>
       <div class="panel">
         <h3 style="margin:0 0 .6rem; font-size:.95rem;">Recent activity</h3>
@@ -413,16 +415,23 @@ auth.onAuthStateChanged(user => {
   // Start the refresh immediately in the background (do not await)
   tryRefreshAccess();
 
+  // Paisley TECH is a separate programme: TECH children are linked through
+  // techGuardianLinks and followed in the TECH guardian portal (/tech/parent).
+  let techLinks = [];
   Promise.all([
     db.collection('parentAccounts').doc(user.uid).get(),
-    ParentHelpers.getMyChildren(user.uid).catch(e => ({ __err: e }))
+    ParentHelpers.getMyChildren(user.uid).catch(e => ({ __err: e })),
+    db.collection('techGuardianLinks').where('parentUid', '==', user.uid).get().catch(() => null)
   ]).then(res => {
     const doc = res[0];
     if (!doc.exists) { auth.signOut().then(()=>window.location.href='index.html'); return undefined; }
-    if (res[1] && res[1].__err) throw res[1].__err;
-    return res[1];
+    techLinks = res[2] ? res[2].docs.map(d => d.data()) : [];
+    if (res[1] && res[1].__err && !techLinks.length) throw res[1].__err;
+    return res[1] && res[1].__err ? [] : res[1];
   }).then(kids => {
     children = kids || [];
+    if (techLinks.length) showTechEntry(techLinks);
+    if (!children.length && techLinks.length) { window.location.replace('/tech/parent/dashboard.html'); return; }
     if (!children.length) {
       document.body.classList.add('ready');
       document.querySelector('.main').innerHTML = '<div class="panel" style="margin-top:2rem;"><h2>No linked children yet</h2><p style="color:var(--muted);">Your account isn\'t linked to a student yet. Please contact the Studio Desk.</p></div>';
@@ -441,6 +450,17 @@ auth.onAuthStateChanged(user => {
 });
 
 document.getElementById('signOutBtn').addEventListener('click', ()=> auth.signOut().then(()=>window.location.href='index.html'));
+
+function showTechEntry(links){
+  document.getElementById('techNav').style.display = 'flex';
+  const names = links.map(l => (l.studentName || '').split(' ')[0]).filter(Boolean);
+  const b = document.getElementById('techBanner');
+  b.style.display = 'block';
+  b.innerHTML = '<div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;justify-content:space-between;">' +
+    '<div><h3 style="margin:0 0 .2rem;font-size:.95rem;"><i class="fas fa-wand-magic-sparkles"></i> Paisley TECH</h3>' +
+    '<div style="color:var(--muted);font-size:.85rem;">' + escapeHtml(names.length ? names.join(', ') + ' ' + (names.length === 1 ? 'is' : 'are') + ' also building with Paisley TECH.' : 'A child on your account is building with Paisley TECH.') + ' See their projects, progress and coach.</div></div>' +
+    '<a href="/tech/parent/dashboard.html" style="padding:.55rem 1rem;border-radius:10px;background:var(--brand-deep);color:#fff;font-weight:800;font-size:.82rem;text-decoration:none;">Open TECH dashboard</a></div>';
+}
 
 function populateChildSelect(){
   const sel = document.getElementById('childSelect');

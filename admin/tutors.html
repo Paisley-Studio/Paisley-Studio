@@ -250,6 +250,9 @@
           To attach students, click <strong>Manage students</strong> on any tutor row.
           The tutor sees only their own students, their own posts, and the work you ask them to help mark.
           You remain in charge.
+          <br><br>
+          <strong>TECH coaches</strong> are created here too: click <strong>Create TECH coach</strong> (or switch the account type in the create window).
+          They do <em>not</em> get the Tutor Portal. They sign in at <span class="copy-link" id="coachUrlHint">/tech/coach</span>, where they see only the TECH builders you pair with them (in Admin → Tech Studio → Builders), those builders' projects and families.
         </div>
       </div>
 
@@ -263,6 +266,7 @@
       <div class="panel">
         <div class="table-toolbar">
           <button class="btn btn-primary btn-sm" id="addTutorBtn" type="button"><i class="fas fa-plus" aria-hidden="true"></i> Create tutor account</button>
+          <button class="btn btn-ghost btn-sm" id="addCoachBtn" type="button"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> Create TECH coach</button>
           <div class="filter-chips" id="tutorStatusFilters">
             <button class="chip-btn active" data-filter="all" type="button">All</button>
             <button class="chip-btn" data-filter="Active" type="button">Active</button>
@@ -274,7 +278,6 @@
             <button class="chip-btn" data-filter="Key Stage 4 (Years 10-11) — IGCSE" type="button">KS4</button>
             <button class="chip-btn" data-filter="Key Stage 5 (Years 12-13) — A-Level" type="button">KS5</button>
             <button class="chip-btn" data-filter="CBC" type="button">CBC</button>
-            <button class="chip-btn" data-filter="TECH" type="button">TECH</button>
             <button class="chip-btn active" data-filter="all" type="button">All</button>
           </div>
         </div>
@@ -285,6 +288,23 @@
           </table>
         </div>
         <div class="pager"><span id="tutorAcctCount">0 records</span><span>Live from Firestore</span></div>
+      </div>
+
+      <div class="panel" id="coachPanel">
+        <div class="table-toolbar">
+          <div>
+            <div class="cell-name" style="font-size:1rem;"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> TECH coaches</div>
+            <div class="cell-sub">Separate from tutors. Their portal is <span class="copy-link">/tech/coach</span>; they never see the Tutor Portal or IGCSE / CBC classrooms.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="addCoachBtn2" type="button" style="margin-left:auto;"><i class="fas fa-plus" aria-hidden="true"></i> Create TECH coach</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Coach</th><th>Sign-in</th><th>Disciplines</th><th>Builders</th><th>Status</th><th>Created</th><th></th></tr></thead>
+            <tbody id="coachBody"></tbody>
+          </table>
+        </div>
+        <div class="pager"><span id="coachCount">0 coaches</span><span>Pair builders with a coach in Admin → Tech Studio → Builders</span></div>
       </div>
     </div>
   </div>
@@ -316,7 +336,7 @@ const ADMIN_EMAILS = [
 ];
 
 let listenersStarted = false;
-let DB = { tutorAccounts: [], students: [] };
+let DB = { tutorAccounts: [], students: [], techCoaches: [], techStudents: [] };
 let tutorStatusFilter = 'all';
 let tutorAcctKSFilter = 'all';
 
@@ -358,6 +378,7 @@ auth.onAuthStateChanged(function(user){
 function grantAdminAccess(){
   document.body.classList.add('authed');
   document.getElementById('baseUrlHint').textContent = location.origin + '/tutor/{slug}';
+  document.getElementById('coachUrlHint').textContent = location.origin + '/tech/coach';
   if(!listenersStarted){ listenersStarted = true; initFirestore(); }
 }
 
@@ -457,6 +478,16 @@ function initFirestore(){
     DB.students = snap.docs.map(d=>({ id:d.id, ...d.data() }));
     renderTutorAccounts();
   }, handleErr);
+
+  // TECH coaches live in their own collection (techCoaches), not tutorAccounts.
+  db.collection('techCoaches').onSnapshot(snap=>{
+    DB.techCoaches = snap.docs.map(d=>({ id:d.id, ...d.data(), date: toDate(d.data().createdAt) }));
+    renderCoaches();
+  }, handleErr);
+  db.collection('techStudents').onSnapshot(snap=>{
+    DB.techStudents = snap.docs.map(d=>({ id:d.id, coachId: d.data().coachId || '', status: d.data().status || '' }));
+    renderCoaches();
+  }, handleErr);
 }
 function handleErr(err){
   console.error('Firestore error:', err);
@@ -475,7 +506,7 @@ function renderTutorAccounts(){
   if(tutorStatusFilter !== 'all') list = list.filter(t=>(t.status||'Active') === tutorStatusFilter);
   if(tutorAcctKSFilter !== 'all') list = list.filter(t=>{
     const ks = lmzTutorKeyStages(t);
-    if(tutorAcctKSFilter === 'CBC' || tutorAcctKSFilter === 'TECH') return ks.some(k=>k.indexOf(tutorAcctKSFilter) === 0);
+    if(tutorAcctKSFilter === 'CBC') return ks.some(k=>k.indexOf(tutorAcctKSFilter) === 0);
     return ks.indexOf(tutorAcctKSFilter) !== -1;
   });
   list.sort((a,b)=>(b.date||0)-(a.date||0));
@@ -796,10 +827,9 @@ function initTeachPicker(t){
 
   function paint(){
     host.innerHTML = `<div class="tp">
-      <div class="tp-intro">Choose a Key Stage (or TECH for AI coaches), tick the subjects this tutor takes, then pick the Years or Levels. The tutor sees <b>only</b> the Key Stage, subject and Years set here.</div>
+      <div class="tp-intro">Choose a Key Stage, tick the subjects this tutor takes, then pick the Years or Levels. The tutor sees <b>only</b> the Key Stage, subject and Years set here.</div>
       <div><div class="tp-grouplabel">British curriculum</div><div class="tp-pills">${KEY_STAGES.map(pill).join('')}</div></div>
       <div><div class="tp-grouplabel">CBC \u00b7 Tuition</div><div class="tp-pills">${(typeof CBC_BANDS!=='undefined'?CBC_BANDS:[]).map(pill).join('')}</div></div>
-      <div><div class="tp-grouplabel">TECH \u00b7 Digital AI Literacy</div><div class="tp-pills">${(typeof TECH_BANDS!=='undefined'?TECH_BANDS:[]).map(pill).join('')}</div></div>
       ${panel()}
       <div><div class="tp-grouplabel">Assigned (${total()})</div>${summary()}</div>
       ${lost.length ? `<div class="tp-lost"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> These older entries do not fit any Key Stage and will be dropped when you save: <b>${lost.map(s=>escapeHtml(lmzSubjectLabel(s))).join(', ')}</b>.</div>` : ''}
@@ -885,10 +915,32 @@ function tutorFormHtml(t, isNew){
   `;
 }
 
-document.getElementById('addTutorBtn').addEventListener('click', ()=>{
-  openWideModal('Create tutor account', tutorFormHtml(null, true), `
+/* One "create account" window for both kinds of staff. The account type decides
+   which portal the person gets: Tutor -> /tutor/{slug}, TECH coach -> /tech/coach. */
+function acctTypeHtml(type){
+  return `<div class="form-field full" style="margin-bottom:1rem;"><label>Account type</label>
+    <div class="filter-chips" role="radiogroup" aria-label="Account type">
+      <button class="chip-btn ${type==='tutor'?'active':''}" type="button" role="radio" aria-checked="${type==='tutor'}" data-acct="tutor"><i class="fas fa-chalkboard-user" aria-hidden="true"></i> Tutor (IGCSE · A-Level · CBC)</button>
+      <button class="chip-btn ${type==='coach'?'active':''}" type="button" role="radio" aria-checked="${type==='coach'}" data-acct="coach"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> TECH coach</button>
+    </div>
+    <div class="field-hint"><i class="fas fa-circle-info" aria-hidden="true"></i><span>${type==='coach'
+      ? 'Signs in at /tech/coach. Sees only the TECH builders you pair with them, their projects and families.'
+      : 'Signs in at /tutor/{slug}. Sees only the Key Stages, subjects and students you assign.'}</span></div></div>`;
+}
+function wireAcctType(){
+  document.querySelectorAll('#modalBody [data-acct]').forEach(b=>b.addEventListener('click', ()=>{
+    if(b.dataset.acct === 'coach') openCreateCoach(); else openCreateTutor();
+  }));
+}
+document.getElementById('addTutorBtn').addEventListener('click', ()=>openCreateTutor());
+document.getElementById('addCoachBtn').addEventListener('click', ()=>openCreateCoach());
+document.getElementById('addCoachBtn2').addEventListener('click', ()=>openCreateCoach());
+
+function openCreateTutor(){
+  openWideModal('Create tutor account', acctTypeHtml('tutor') + tutorFormHtml(null, true), `
     <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
     <button class="btn btn-primary btn-sm" id="createTutorConfirm" type="button"><i class="fas fa-check" aria-hidden="true"></i> Create tutor</button>`);
+  wireAcctType();
   initTeachPicker(null);
   const nameEl = document.getElementById('tName');
   const slugEl = document.getElementById('tSlug');
@@ -896,7 +948,163 @@ document.getElementById('addTutorBtn').addEventListener('click', ()=>{
   slugEl.addEventListener('input', ()=>{ slugTouched = true; });
   nameEl.addEventListener('input', ()=>{ if(!slugTouched) slugEl.value = tutorSlugify(nameEl.value); });
   document.getElementById('createTutorConfirm').addEventListener('click', createTutor);
-});
+}
+
+/* =========================================================
+   TECH COACHES — techCoaches/{uid}
+   ---------------------------------------------------------
+   Created like tutors (the admin sets the first password, shown once),
+   but stored in techCoaches and signing in at /tech/coach. An email that
+   already has a Paisley login (tutor, admin, parent) gets the coach role
+   on that login through the createTechCoach function instead.
+========================================================= */
+const TECH_DISCIPLINES = ['Coding','AI','Writing','Research','Design','Media','Music','Entrepreneurship']; // = TechUI.DISCIPLINES
+
+function coachFormHtml(c, isNew){
+  c = c || {};
+  const ds = c.disciplines || [];
+  return `<div class="form-grid">
+      <div class="form-field full"><label>Full name</label><input type="text" id="cName" value="${escapeHtml(c.name||'')}" placeholder="Brian Otieno" /></div>
+      <div class="form-field"><label>Email (this is their login)</label><input type="email" id="cEmail" value="${escapeHtml(c.email||'')}" ${isNew?'':'disabled'} /></div>
+      <div class="form-field"><label>Phone</label><input type="text" id="cPhone" value="${escapeHtml(c.phone||'')}" placeholder="+254…" /></div>
+      ${isNew?`<div class="form-field full"><label>Password (at least 6 characters)</label>
+        <input type="password" id="cPassword" placeholder="Set an initial password" autocomplete="new-password" />
+        <div class="field-hint"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>Shown once after you click Create. Copy it and send it to the coach.</span></div></div>`:''}
+      <div class="form-field full"><label>Disciplines they coach</label>
+        <div class="filter-chips" id="cDisc">${TECH_DISCIPLINES.map(d=>`<label class="chip-btn ${ds.indexOf(d)!==-1?'active':''}" style="cursor:pointer;"><input type="checkbox" value="${d}" ${ds.indexOf(d)!==-1?'checked':''} style="margin-right:.35rem;" /> ${d}</label>`).join('')}</div></div>
+    </div>`;
+}
+function readCoachDisciplines(){
+  return [...document.querySelectorAll('#cDisc input:checked')].map(x=>x.value);
+}
+function wireDisciplineChips(){
+  document.querySelectorAll('#cDisc input').forEach(i=>i.addEventListener('change', ()=>i.parentElement.classList.toggle('active', i.checked)));
+}
+
+function openCreateCoach(){
+  openWideModal('Create TECH coach', acctTypeHtml('coach') + coachFormHtml(null, true), `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" id="createCoachConfirm" type="button"><i class="fas fa-check" aria-hidden="true"></i> Create TECH coach</button>`);
+  wireAcctType(); wireDisciplineChips();
+  document.getElementById('createCoachConfirm').addEventListener('click', createCoach);
+}
+
+async function createCoach(){
+  const name = document.getElementById('cName').value.trim();
+  const email = document.getElementById('cEmail').value.trim();
+  const phone = document.getElementById('cPhone').value.trim();
+  const password = document.getElementById('cPassword').value;
+  const disciplines = readCoachDisciplines();
+  const btn = document.getElementById('createCoachConfirm');
+  if(!name){ alert('Please enter the coach\'s full name.'); return; }
+  if(!/^\S+@\S+\.\S+$/.test(email)){ alert('Please enter a valid email address.'); return; }
+  if(!password || password.length < 6){ alert('Please set a password of at least 6 characters.'); return; }
+  const reset = ()=>{ btn.disabled = false; btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Create TECH coach'; };
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Creating…';
+  const url = location.origin + '/tech/coach';
+  try{
+    const secAuth = getSecondaryAuth();
+    const cred = await secAuth.createUserWithEmailAndPassword(email, password);
+    const uid = cred.user.uid;
+    await secAuth.signOut();
+    const FV = firebase.firestore.FieldValue;
+    await db.collection('techCoaches').doc(uid).set({ name, email, phone, disciplines, bio:'', status:'Active',
+      createdAt: FV.serverTimestamp(), updatedAt: FV.serverTimestamp(), createdBy: auth.currentUser ? auth.currentUser.uid : '' });
+    closeModal();
+    const message =
+      'TECH COACH ACCOUNT CREATED\n\n' +
+      'Name:     ' + name + '\n' +
+      'Email:    ' + email + '\n' +
+      'Password: ' + password + '\n' +
+      'Sign-in:  ' + url + '\n\n' +
+      'Copy or screenshot this message NOW and send it to the coach. ' +
+      'For their safety, this password will not be shown again.\n\n' +
+      'Next: pair TECH builders with this coach in Admin → Tech Studio → Builders.';
+    PaisleyUI.alert(message, { type:'success', title:'TECH coach created', sticky:true, okLabel:'I have copied it' });
+    try { if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(message).catch(()=>{}); } catch(e) {}
+  }catch(err){
+    if(err && err.code === 'auth/email-already-in-use'){
+      const ok = await PaisleyUI.confirm('That email already has a Paisley sign-in (for example a tutor, admin or parent).\n\nMake that same account a TECH coach? They will sign in at /tech/coach with the password they already use; the password you typed here is not used.');
+      if(!ok){ reset(); return; }
+      try{
+        await firebase.functions().httpsCallable('createTechCoach')({ name, email, phone, disciplines });
+        closeModal();
+        alert('TECH coach role added to ' + email + '.\n\nThey sign in at ' + url + ' with the password they already use.');
+      }catch(e2){ reset(); alert('Could not add the TECH coach role: ' + (e2.message || e2)); }
+      return;
+    }
+    reset();
+    alert('Could not create the TECH coach: ' + (err.message || err));
+  }
+}
+
+function renderCoaches(){
+  const body = document.getElementById('coachBody'); if(!body) return;
+  const list = DB.techCoaches.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  document.getElementById('coachCount').textContent = list.length + ' coach' + (list.length===1?'':'es');
+  if(!list.length){
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:1.4rem;">No TECH coaches yet. Click <strong>Create TECH coach</strong>.</td></tr>';
+    return;
+  }
+  const url = location.origin + '/tech/coach';
+  body.innerHTML = list.map(c=>{
+    const n = DB.techStudents.filter(s=>s.coachId === c.id && s.status === 'Active').length;
+    const active = c.status === 'Active';
+    return `<tr>
+      <td><div class="cell-name">${escapeHtml(c.name||'—')}</div><div class="cell-sub">${escapeHtml(c.email||'')}${c.migratedFromTutor?' · was a tutor coach':''}</div></td>
+      <td><span class="copy-link">/tech/coach</span>
+          <button class="mini-btn" title="Copy coach sign-in URL" type="button" onclick="copyUrl('${escapeHtml(url)}')"><i class="fas fa-copy" aria-hidden="true"></i></button></td>
+      <td>${escapeHtml((c.disciplines||[]).join(', ') || '—')}</td>
+      <td>${n}</td>
+      <td><span class="badge ${active?'b-confirmed':'b-declined'}">${active?'Active':'Paused'}</span></td>
+      <td>${fmtDate(c.date)}</td>
+      <td class="row-actions">
+        <button class="mini-btn" title="Edit" type="button" onclick="editCoach('${c.id}')"><i class="fas fa-pen" aria-hidden="true"></i></button>
+        <button class="mini-btn" title="Send password reset" type="button" onclick="resetCoachPassword('${c.id}')"><i class="fas fa-key" aria-hidden="true"></i></button>
+        ${active
+          ? `<button class="mini-btn" title="Pause" type="button" onclick="setCoachStatus('${c.id}','Inactive')"><i class="fas fa-lock" aria-hidden="true"></i></button>`
+          : `<button class="mini-btn success" title="Reactivate" type="button" onclick="setCoachStatus('${c.id}','Active')"><i class="fas fa-unlock" aria-hidden="true"></i></button>`}
+      </td></tr>`;
+  }).join('');
+}
+
+window.editCoach = (id) => {
+  const c = DB.techCoaches.find(x=>x.id===id); if(!c) return;
+  openWideModal('Edit TECH coach — ' + (c.name||''), coachFormHtml(c, false), `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" id="saveCoachBtn" type="button"><i class="fas fa-floppy-disk" aria-hidden="true"></i> Save</button>`);
+  wireDisciplineChips();
+  document.getElementById('saveCoachBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('cName').value.trim();
+    if(!name){ alert('Please enter the coach\'s name.'); return; }
+    const d = { name, phone: document.getElementById('cPhone').value.trim(), disciplines: readCoachDisciplines(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+    db.collection('techCoaches').doc(id).update(d).then(async ()=>{
+      // Keep the coach's name on their builders in step (shown in the builder studio and guardian portal).
+      if(name !== c.name){
+        const snap = await db.collection('techStudents').where('coachId','==',id).get();
+        const batch = db.batch();
+        snap.docs.forEach(s=>batch.update(s.ref, { coachName: name }));
+        await batch.commit();
+      }
+    }).then(closeModal).catch(err=>alert('Could not save: ' + err.message));
+  });
+};
+
+window.resetCoachPassword = async (id) => {
+  const c = DB.techCoaches.find(x=>x.id===id); if(!c || !c.email) return;
+  if(!await PaisleyUI.confirm('Send a password reset email to ' + c.email + '?')) return;
+  auth.sendPasswordResetEmail(c.email, { url: window.location.origin + '/tech/coach/index.html' })
+    .then(()=>alert('Password reset email sent to ' + c.email + '.'))
+    .catch(err=>alert('Could not send the reset email: ' + err.message));
+};
+
+window.setCoachStatus = async (id, status) => {
+  const c = DB.techCoaches.find(x=>x.id===id); if(!c) return;
+  const pausing = status !== 'Active';
+  if(!await PaisleyUI.confirm((pausing ? 'Pause ' : 'Reactivate ') + (c.name||'this coach') + '?' + (pausing ? '\n\nThey will not be able to open the coach portal until you reactivate them. Their builders keep their projects.' : ''))) return;
+  db.collection('techCoaches').doc(id).update({ status, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(err=>alert('Could not update: ' + err.message));
+};
 
 function readTutorForm(){
   const tHost = document.getElementById('tTeach');

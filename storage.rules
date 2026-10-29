@@ -229,9 +229,18 @@ service firebase.storage {
     // =====================================================
     // PAISLEY TECH — build files (techBuilds/{studentId}/{buildId}/{file})
     // =====================================================
+    // Readable by the builder, admins, the builder's TECH coach and linked guardians.
     match /techBuilds/{studentId}/{buildId}/{fileName} {
-      allow read: if isSignedIn() && (request.auth.uid == studentId || isAdmin() || isTutor());
-      allow create, update: if isSignedIn() && (request.auth.uid == studentId || isAdmin()) &&
+      allow read: if isSignedIn() && (request.auth.uid == studentId || isAdmin() ||
+        (firestore.exists(/databases/(default)/documents/techCoaches/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/techCoaches/$(request.auth.uid)).data.status == 'Active' &&
+          firestore.get(/databases/(default)/documents/techStudents/$(studentId)).data.get('coachId', '') == request.auth.uid) ||
+        firestore.exists(/databases/(default)/documents/techGuardianLinks/$(request.auth.uid + '_' + studentId)));
+      // Uploads: admins, or an Active builder into one of their own builds.
+      allow create, update: if isSignedIn() && (isAdmin() ||
+        (request.auth.uid == studentId &&
+          firestore.get(/databases/(default)/documents/techStudents/$(studentId)).data.status == 'Active' &&
+          firestore.get(/databases/(default)/documents/techBuilds/$(buildId)).data.studentId == studentId)) &&
         underSizeLimit() &&
         !request.resource.contentType.matches('text/html') &&
         !request.resource.contentType.matches('.*javascript.*');

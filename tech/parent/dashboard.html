@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Guardian | Paisley TECH</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#245F5A" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech5" />
+</head>
+<body>
+<div id="gate"><div class="spin" role="status" aria-label="Loading"></div><p>Opening the guardian portal…</p></div>
+
+<div id="shell" hidden>
+  <aside class="sidebar" id="sidebar" aria-label="Guardian navigation">
+    <div class="sidebar-brand">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" width="38" height="38" alt="" />
+      <div class="name">Paisley<span>TECH guardian</span></div>
+    </div>
+    <nav class="sidebar-nav" id="nav">
+      <button class="nav on" data-v="home" type="button"><i class="fas fa-house"></i> Overview</button>
+      <button class="nav" data-v="projects" type="button"><i class="fas fa-hammer"></i> Projects <span class="badge" id="bProj" hidden>0</span></button>
+      <button class="nav" data-v="progress" type="button"><i class="fas fa-chart-line"></i> Progress</button>
+      <button class="nav" data-v="coach" type="button"><i class="fas fa-comments"></i> Coach</button>
+      <button class="nav" data-v="account" type="button"><i class="fas fa-user"></i> Account</button>
+      <div id="otherPortal" hidden>
+        <div class="nav-sep">Other Paisley programmes</div>
+        <a class="nav" href="/parent/dashboard.html"><i class="fas fa-user-group"></i> Parent Portal</a>
+      </div>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="me"><span class="avatar" id="avatar" aria-hidden="true"></span><div class="who"><b id="whoName"></b><span>Parent / guardian</span></div></div>
+      <button class="signout" id="signOut" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-toggle" id="menuBtn" type="button" aria-label="Open menu"><i class="fas fa-bars"></i></button>
+      <div class="titles"><h1 id="pageTitle">Overview</h1><p id="pageSub"></p></div>
+      <div class="childbar" id="childbar" hidden><label for="childSel" class="muted" style="font-size:.8rem;font-weight:700">Viewing</label><select id="childSel"></select></div>
+      <div id="bellHost"></div>
+    </header>
+    <main class="content" id="view" aria-live="polite"></main>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="/firebase-config.js"></script>
+<script src="/js/tech/tech-helpers.js?v=tech5"></script>
+<script>
+/* Paisley TECH guardian portal.
+   A guardian is a parentAccounts identity with techGuardianLinks/{uid}_{studentUid}.
+   Read-only view of each linked builder (techStudents, techBuilds + feedback,
+   techProgress) plus a chat with the builder's current coach (techGuardianChats). */
+(function(){
+'use strict';
+const auth=firebase.auth(), T=TechUI, esc=T.esc;
+const $=id=>document.getElementById(id);
+T.injectStyle();
+
+const S={uid:null,me:{},links:[],kids:{},cid:null,builds:[],progress:null,v:'home',openId:null,live:null,pf:'all',unsubs:[],kidUnsubs:[],buildUnsubs:[]};
+const TITLES={home:'Overview',projects:'Projects',progress:'Progress',coach:'Coach',account:'Account'};
+const ICON={CODE:'fa-code',DESIGN:'fa-palette',WRITING:'fa-pen-nib',RESEARCH:'fa-microscope',MEDIA:'fa-film',MUSIC:'fa-music',AI:'fa-robot',BUILD:'fa-rocket',Other:'fa-star'};
+
+const ms=x=>{ const d=T.toDate(x); return d?d.getTime():0; };
+const cap=s=>{ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase(); };
+const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w.charAt(0).toUpperCase()).join('');
+const dateShort=ts=>{ const d=T.toDate(ts); return d?d.toLocaleDateString([],{day:'numeric',month:'short',year:'numeric'}):''; };
+const kid=()=>S.kids[S.cid]||null;
+const first=()=>T.firstName((kid()||{}).name);
+const needsChanges=b=>b.reviewState==='changes'||b.mastery==='changes';
+const inReview=b=>b.reviewState==='requested'||b.showcase==='requested'||b.mastery==='requested';
+const levels=()=>{ const o={}; T.DISCIPLINES.forEach(d=>o[d]=(S.progress&&S.progress.levels&&S.progress.levels[d])||1); return o; };
+const overall=()=>{ const l=levels(); let m=1; T.DISCIPLINES.forEach(d=>{ m=Math.max(m,l[d]); }); return m; };
+
+function gate(title,body,btn){ $('shell').hidden=true; $('gate').hidden=false; $('gate').innerHTML='<div class="gate-card"><h1>'+title+'</h1><p>'+body+'</p>'+(btn||'')+'</div>'; }
+function leave(){ auth.signOut().finally(()=>{ location.href='/tech/parent/index.html'; }); }
+document.addEventListener('click',e=>{ if(e.target.closest('#gSign')) leave(); });
+
+auth.onAuthStateChanged(async user=>{
+  if(!user){ location.href='/tech/parent/index.html'; return; }
+  S.uid=user.uid;
+  let links;
+  try{ links=await db.collection('techGuardianLinks').where('parentUid','==',user.uid).get(); }
+  catch(e){ return gate('Could not open the guardian portal',esc(T.errMsg(e))); }
+  if(links.empty) return gate('No TECH builder linked','This account is not linked to a Paisley TECH builder yet. If your child has just joined, you will be linked when the Studio Desk approves them.','<a class="btn" href="/parent/dashboard.html">Open the Parent Portal</a><button class="btn light" id="gSign" type="button" style="margin-top:.5rem">Sign out</button>');
+  boot();
+});
+
+function boot(){
+  $('gate').hidden=true; $('shell').hidden=false;
+  db.collection('parentAccounts').doc(S.uid).get().then(d=>{ S.me=d.exists?d.data():{}; $('avatar').textContent=initials(S.me.name||auth.currentUser.email); $('whoName').textContent=S.me.name||auth.currentUser.email; }).catch(()=>{});
+  db.collection('parentStudentLinks').where('parentUid','==',S.uid).limit(1).get().then(s=>{ $('otherPortal').hidden=s.empty; }).catch(()=>{});
+  T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
+    if(n.studentId&&S.kids[n.studentId]&&n.studentId!==S.cid) selectChild(n.studentId);
+    if(n.chatId){ go('coach'); return true; }
+    if(n.buildId){ openBuild(n.buildId); return true; }
+    go('home'); return true;
+  }});
+  S.unsubs.push(db.collection('techGuardianLinks').where('parentUid','==',S.uid).onSnapshot(s=>{
+    S.links=s.docs.map(d=>d.data());
+    S.kidUnsubs.forEach(u=>u()); S.kidUnsubs=[];
+    S.links.forEach(l=>{
+      S.kidUnsubs.push(db.collection('techStudents').doc(l.studentUid).onSnapshot(d=>{
+        if(d.exists) S.kids[d.id]=Object.assign({id:d.id},d.data());
+        paintChildbar();
+        if(!S.cid||!S.kids[S.cid]){ const firstId=S.links.map(x=>x.studentUid).find(id=>S.kids[id]); if(firstId) selectChild(firstId); }
+        else refresh();
+      },e=>console.warn('child',e)));
+    });
+  },e=>console.warn('links',e)));
+}
+function paintChildbar(){
+  const ids=S.links.map(l=>l.studentUid).filter(id=>S.kids[id]);
+  $('childbar').hidden=ids.length<2;
+  $('childSel').innerHTML=ids.map(id=>'<option value="'+esc(id)+'"'+(id===S.cid?' selected':'')+'>'+esc(S.kids[id].name||'Builder')+'</option>').join('');
+}
+$('childSel').addEventListener('change',e=>selectChild(e.target.value));
+
+function selectChild(id){
+  if(!S.kids[id]) return;
+  S.cid=id; S.builds=[]; S.progress=null; S.openId=null;
+  S.buildUnsubs.forEach(u=>u()); S.buildUnsubs=[];
+  paintChildbar();
+  S.buildUnsubs.push(db.collection('techBuilds').where('studentId','==',id).onSnapshot(s=>{
+    S.builds=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>ms(b.updatedAt)-ms(a.updatedAt)); refresh();
+  },e=>console.warn('builds',e)));
+  S.buildUnsubs.push(db.collection('techProgress').doc(id).onSnapshot(s=>{ S.progress=s.exists?s.data():null; refresh(); },()=>{}));
+  const h=(location.hash||'').slice(1);
+  go(S.v&&S.v!=='home'?S.v:(TITLES[h]?h:'home'));
+}
+function refresh(){
+  const n=S.builds.filter(needsChanges).length, b=$('bProj'); b.hidden=!n; b.textContent=n;
+  if(!S.live) render(true);
+}
+
+/* ---------- navigation ---------- */
+function setNav(v){ document.querySelectorAll('.nav[data-v]').forEach(b=>{ const on=b.dataset.v===v; b.classList.toggle('on',on); if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); }); }
+function kill(){ if(S.live){ S.live.destroy(); S.live=null; } }
+function go(v){
+  kill(); S.v=v; S.openId=null;
+  setNav(v); $('sidebar').classList.remove('open'); $('scrim').classList.remove('open');
+  try{ history.replaceState(null,'','#'+v); }catch(e){}
+  render(); window.scrollTo(0,0);
+}
+document.querySelectorAll('.nav[data-v]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
+$('signOut').addEventListener('click',leave);
+$('menuBtn').addEventListener('click',()=>{ $('sidebar').classList.add('open'); $('scrim').classList.add('open'); });
+$('scrim').addEventListener('click',()=>{ $('sidebar').classList.remove('open'); $('scrim').classList.remove('open'); });
+
+/* ---------- pieces ---------- */
+function emptyBox(t,p,a){ return '<div class="empty"><h3>'+t+'</h3><p>'+p+'</p>'+(a||'')+'</div>'; }
+function panelList(title,rows,extra){ return '<section class="panel flush"><div class="panel-head"><h2>'+esc(title)+'</h2>'+(extra||'')+'</div>'+rows+'</section>'; }
+function kpi(i,cls,lab,val){ return '<div class="kpi-card"><div class="kpi-icon '+cls+'"><i class="fas '+i+'"></i></div><div><span class="kpi-label">'+lab+'</span><span class="kpi-value">'+val+'</span></div></div>'; }
+function flags(b){
+  const f=[];
+  if(needsChanges(b)) f.push('<span class="pill bad">Coach asked for changes</span>');
+  else if(inReview(b)) f.push('<span class="pill warn">With the coach</span>');
+  if(b.mastery==='approved') f.push('<span class="pill ok">Mastered</span>');
+  if(b.showcase==='approved') f.push('<span class="pill gold">On the Tech Wall</span>');
+  return f.join('');
+}
+function track(status){
+  const all=T.STATUSES, i=all.indexOf(status), last=i===all.length-1;
+  return '<ol class="track" aria-label="Project stage">'+all.map((s,k)=>'<li class="'+((k<i||last)?'done':(k===i?'now':''))+'"><span></span><b>'+esc(T.STATUS_LABEL[s])+'</b></li>').join('')+'</ol>';
+}
+function segs(L){ return '<ol class="segs" aria-label="Level '+L+' of 7">'+T.LEVELS.map((n,k)=>'<li class="'+((k+1)<L?'done':((k+1)===L?'now':''))+'"><span></span><b>'+esc(cap(n))+'</b></li>').join('')+'</ol>'; }
+function projectRow(b){
+  const icon=ICON[b.category]||ICON.Other, d=dateShort(b.updatedAt);
+  return '<button class="row" type="button" data-open="'+esc(b.id)+'"><span class="ico"><i class="fas '+icon+'"></i></span><span class="t"><b>'+esc(b.title)+'</b><span>'+esc(T.STATUS_LABEL[b.status]||b.status||'')+(d?' · updated '+esc(d):'')+'</span></span><span class="tags">'+flags(b)+'</span><i class="fas fa-chevron-right chev"></i></button>';
+}
+
+/* ---------- views ---------- */
+const VIEWS={
+home(){
+  const k=kid(); if(!k) return '';
+  const L=overall(), mastered=S.builds.filter(b=>b.mastery==='approved').length, wall=S.builds.filter(b=>b.showcase==='approved').length;
+  const changes=S.builds.filter(needsChanges);
+  const status=k.status==='Active'?'':'<section class="panel"><p><b>'+esc(first())+'\'s TECH account is '+esc((k.status||'pending').toLowerCase())+'.</b> <span class="muted">'+(k.status==='Pending'?'The Studio Desk will approve it soon.':'Please contact the Studio Desk if this is unexpected.')+'</span></p></section>';
+  return '<div class="stack">'+status+
+    '<div class="kpi-grid">'+kpi('fa-layer-group','ki-1','Level',L+' · '+esc(cap(T.levelName(L))))+kpi('fa-hammer','ki-2','Projects',S.builds.length)+kpi('fa-award','ki-4','Mastered',mastered)+kpi('fa-star','ki-2','On the Tech Wall',wall)+'</div>'+
+    '<div class="cols">'+
+      '<section class="panel"><div class="panel-head"><h2>'+esc(first())+'\'s coach</h2></div>'+
+        (k.coachId?'<p class="lvl-name" style="font-size:1.25rem">'+esc(k.coachName||'Coach')+'</p><p class="muted" style="margin:.3rem 0 1rem">Reviews every project and approves mastery.</p><button class="btn" type="button" data-go="coach"><i class="fas fa-comments"></i> Message the coach</button>'
+          :'<p class="muted" style="margin-bottom:1rem">A coach has not been assigned yet. Until then the Studio Desk answers your messages.</p><button class="btn light" type="button" data-go="coach">Message Paisley TECH</button>')+'</section>'+
+      '<section class="panel"><div class="panel-head"><h2>Overall level</h2></div><p class="lvl-name">'+esc(cap(T.levelName(L)))+'<small>Level '+L+' of 7</small></p><p class="muted" style="font-size:.88rem">'+esc(T.LEVEL_BLURB[T.levelName(L)]||'')+'</p>'+segs(L)+'</section>'+
+    '</div>'+
+    (changes.length?panelList('The coach asked for changes',changes.map(projectRow).join('')):'')+
+    (S.builds.length?panelList('Recent projects',S.builds.slice(0,5).map(projectRow).join(''),'<button class="link" type="button" data-go="projects">All projects</button>')
+      :emptyBox('No projects yet',esc(first())+' has not started a project. New projects appear here as soon as they begin.'))+
+  '</div>';
+},
+projects(){
+  if(S.openId) return '';
+  const F={all:()=>true,active:b=>b.status!=='READY',review:inReview,changes:needsChanges,mastered:b=>b.mastery==='approved'};
+  const LAB={all:'All',active:'In progress',review:'With the coach',changes:'Changes asked',mastered:'Mastered'};
+  if(!S.builds.length) return emptyBox('No projects yet',esc(first())+' has not started a project.');
+  const list=S.builds.filter(F[S.pf]||F.all);
+  return '<div class="chips" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="chip'+(S.pf===k?' on':'')+'" type="button" aria-pressed="'+(S.pf===k)+'" data-pf="'+k+'">'+LAB[k]+'<em>'+S.builds.filter(F[k]).length+'</em></button>').join('')+'</div>'+
+    (list.length?'<section class="panel flush">'+list.map(projectRow).join('')+'</section>':emptyBox('Nothing here','No projects match this filter.'));
+},
+progress(){
+  const L=overall(), lv=levels(), mc=(S.progress&&S.progress.masteryCount)||{};
+  return '<div class="stack"><section class="panel"><div class="panel-head"><h2>Overall</h2></div><p class="lvl-name">'+esc(cap(T.levelName(L)))+'<small>Level '+L+' of 7</small></p><p class="muted" style="font-size:.9rem">'+esc(T.LEVEL_BLURB[T.levelName(L)]||'')+'</p>'+segs(L)+'</section>'+
+    '<section class="panel flush"><div class="panel-head"><h2>By discipline</h2></div><div class="drow head"><span>Discipline</span><span>Progress</span><span>Level</span><span style="text-align:right">Mastered</span></div>'+
+    T.DISCIPLINES.map(d=>'<div class="drow"><span class="dn">'+esc(d)+'</span><div class="bar" aria-hidden="true"><i style="width:'+Math.round(lv[d]/7*100)+'%"></i></div><span class="dl">'+esc(cap(T.levelName(lv[d])))+'</span><span class="dm">'+(mc[d]||0)+' mastered</span></div>').join('')+'</section>'+
+    '<p class="muted" style="font-size:.85rem">A level goes up each time the coach approves mastery on a project in that discipline. Uneven progress is normal: builders lean into what they love.</p></div>';
+},
+account(){
+  const kids=S.links.map(l=>S.kids[l.studentUid]).filter(Boolean);
+  return '<div class="stack" style="max-width:640px"><section class="panel"><div class="panel-head"><h2>'+esc(S.me.name||'Your account')+'</h2></div>'+
+    '<div class="field"><label for="aEm">Sign-in email</label><input id="aEm" value="'+esc(S.me.email||auth.currentUser.email||'')+'" readonly></div>'+
+    '<button class="btn light" type="button" id="aPw">Email me a link to change my password</button><div class="msg" id="aMsg" role="status"></div></section>'+
+    panelList('TECH builders on this account',kids.map(k=>'<div class="row"><span class="ico av">'+esc(initials(k.name))+'</span><span class="t"><b>'+esc(k.name)+'</b><span>'+esc(k.status||'Pending')+(k.coachName?' · coach '+esc(k.coachName):'')+'</span></span></div>').join(''))+
+    '<p class="muted" style="font-size:.85rem">To add or remove a builder, or a second guardian, contact the Studio Desk.</p></div>';
+}
+};
+
+function render(silent){
+  if(S.live) return;
+  const k=kid();
+  $('pageTitle').textContent=TITLES[S.v]||'Overview';
+  $('pageSub').textContent=k?(S.v==='account'?'':k.name+(k.coachName?' · coach '+k.coachName:'')):'';
+  if(S.v==='coach') return openCoach();
+  if(S.v==='projects'&&S.openId) return openBuild(S.openId);
+  $('view').innerHTML=k?(VIEWS[S.v]||VIEWS.home)():'';
+  if(!silent) window.scrollTo(0,0);
+}
+
+/* ---------- live pieces ---------- */
+function openCoach(){
+  const k=kid(); if(!k) return;
+  kill();
+  $('view').innerHTML='<p class="muted" style="margin:-.4rem 0 1rem">Messages go to '+esc(first())+'\'s TECH coach'+(k.coachId?'':' (the Studio Desk until a coach is assigned)')+'. You\'ll also get an email when they reply.</p><div id="liveHost"></div>';
+  S.live=T.mountChat($('liveHost'),{kind:'guardian',parentUid:S.uid,parentName:S.me.name||'',studentId:k.id,studentName:k.name||'',coachId:k.coachId||'',coachName:k.coachName||'',me:{uid:S.uid,role:'guardian',name:S.me.name||'Guardian'}});
+}
+/* Read-only project view: guardians see everything the coach sees, but change nothing. */
+function openBuild(id){
+  kill();
+  S.v='projects'; S.openId=id; setNav('projects');
+  $('view').innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Projects</button><div id="liveHost"><div class="empty">Opening project…</div></div>';
+  const host=$('liveHost'), ref=db.collection('techBuilds').doc(id);
+  let b=null, fb=[];
+  function paint(){
+    if(!b){ host.innerHTML=emptyBox('Project not found','It may have been deleted.'); return; }
+    $('pageTitle').textContent=b.title||'Project';
+    const files=(b.files||[]).filter(f=>T.safeUrl(f.url)), res=(b.resources||[]).filter(r=>T.safeUrl(r.url));
+    const vers=(b.versions||[]).slice().reverse();
+    const r=b.aiReflection||{};
+    host.innerHTML='<div class="stack"><section class="panel"><div class="panel-head"><h2>'+esc(b.title)+'</h2><div class="pills"><span class="pill">'+esc(T.CREATION_LABEL[b.category]||b.category||'Project')+'</span>'+flags(b)+'</div></div>'+
+      track(b.status)+'<div class="bar" aria-hidden="true"><i style="width:'+Math.max(0,Math.min(100,Number(b.progress)||0))+'%"></i></div>'+
+      (b.brief?'<h3 style="margin:1.1rem 0 .4rem;font-size:.9rem;color:var(--brand-deep)">The idea</h3><div class="note">'+esc(b.brief)+'</div>':'')+
+      (T.disciplinesOf(b).length?'<div class="pills" style="margin-top:.9rem">'+T.disciplinesOf(b).map(d=>'<span class="pill">'+esc(d)+'</span>').join('')+'</div>':'')+'</section>'+
+      '<section class="panel"><div class="panel-head"><h2>Coach feedback</h2></div>'+(fb.length?fb.map(f=>'<div class="fb'+(f.role==='student'?'':' coach')+'"><span class="who">'+esc(f.role==='student'?T.firstName(b.studentName):(f.authorName||'Coach'))+(f.kind==='approved'?' · approved':f.kind==='changes'?' · asked for changes':'')+' · '+esc(T.fmt(f.createdAt))+'</span>'+esc(f.text)+'</div>').join(''):'<p class="muted">No feedback yet.</p>')+'</section>'+
+      (vers.length?panelList('Versions',vers.map((v,i)=>'<div class="row"><span class="ico"><b>v'+(vers.length-i)+'</b></span><span class="t"><b>'+esc(v.note||'')+'</b><span>'+esc(v.at?new Date(v.at).toLocaleDateString():'')+'</span></span>'+(T.safeUrl(v.url)?'<a class="btn light sm" href="'+esc(T.safeUrl(v.url))+'" target="_blank" rel="noopener">Open</a>':'')+'</div>').join('')):'')+
+      ((files.length||res.length)?panelList('Files and links',files.concat(res).map(f=>'<div class="row"><span class="ico"><i class="fas fa-'+(f.name?'file':'link')+'"></i></span><span class="t"><b>'+esc(f.name||f.title||f.url)+'</b></span><a class="btn light sm" href="'+esc(T.safeUrl(f.url))+'" target="_blank" rel="noopener">Open</a></div>').join('')):'')+
+      ((r.purpose||r.learned)?'<section class="panel"><div class="panel-head"><h2>How '+esc(T.firstName(b.studentName))+' used AI</h2></div>'+
+        ((r.tools||[]).length?'<div class="pills" style="margin-bottom:.7rem">'+r.tools.map(t=>'<span class="pill">'+esc(t)+'</span>').join('')+'</div>':'')+
+        (r.purpose?'<p><b>What the AI did:</b> '+esc(r.purpose)+'</p>':'')+(r.changes?'<p style="margin-top:.4rem"><b>What they changed:</b> '+esc(r.changes)+'</p>':'')+(r.learned?'<p style="margin-top:.4rem"><b>What they learned:</b> '+esc(r.learned)+'</p>':'')+'</section>':'')+
+    '</div>';
+  }
+  const u1=ref.onSnapshot(s=>{ b=s.exists?Object.assign({id:s.id},s.data()):null; paint(); },e=>{ host.innerHTML=emptyBox('Could not open this project',esc(T.errMsg(e))); });
+  const u2=ref.collection('feedback').orderBy('createdAt').onSnapshot(s=>{ fb=s.docs.map(d=>d.data()); if(b) paint(); },()=>{});
+  S.live={destroy(){ u1(); u2(); }};
+  window.scrollTo(0,0);
+}
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-open],[data-back],[data-go],[data-pf],#aPw'); if(!t||!S.cid) return;
+  if(t.dataset.open) openBuild(t.dataset.open);
+  else if(t.dataset.back!==undefined){ kill(); S.openId=null; render(); }
+  else if(t.dataset.go) go(t.dataset.go);
+  else if(t.dataset.pf){ S.pf=t.dataset.pf; render(true); }
+  else if(t.id==='aPw'){ const m=$('aMsg'), em=S.me.email||auth.currentUser.email; auth.sendPasswordResetEmail(em).then(()=>{ m.style.color='#1d8b57'; m.textContent='A link is on its way to '+em+'.'; },er=>{ m.style.color='#b8362a'; m.textContent=T.errMsg(er); }); }
+});
+})();
+</script>
+</body>
+</html>

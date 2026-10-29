@@ -379,6 +379,7 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
     <header class="topbar">
       <button class="menu-toggle" id="menuBtn" type="button" aria-label="Open menu"><i class="fas fa-bars"></i></button>
       <div class="titles"><h1 id="pageTitle">Home</h1><p id="pageSub"></p></div>
+      <div id="bellHost"></div>
       <button class="btn" type="button" data-newbuild aria-label="New project"><i class="fas fa-plus"></i> <span>New project</span></button>
     </header>
     <main class="content" id="view" aria-live="polite"></main>
@@ -390,7 +391,7 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../js/tech/tech-helpers.js"></script>
+<script src="../js/tech/tech-helpers.js?v=tech5"></script>
 <script src="../js/tech/writing-studio.js"></script>
 <script src="../js/tech/code-lab.js"></script>
 <script src="../js/tech/upload-pad.js"></script>
@@ -435,15 +436,17 @@ function emptyBox(title,text,action){ return '<div class="empty"><h3>'+title+'</
 auth.onAuthStateChanged(async user=>{
   if(!user){ location.href='/tech/index.html'; return; }
   S.uid=user.uid;
-  let snap; try{ snap=await db.collection('students').doc(user.uid).get(); }catch(e){ return showGate(gateCard('Could not open TECH',esc(T.errMsg(e)))); }
+  /* TECH enrolment lives in techStudents/{uid}, separate from any IGCSE / CBC / remote record. */
+  let snap; try{ snap=await db.collection('techStudents').doc(user.uid).get(); }catch(e){ return showGate(gateCard('Could not open TECH',esc(T.errMsg(e)))); }
   if(!snap.exists){
-    return showGate(gateCard('This is the builder sign-in','Coaches use the tutor dashboard.','<a class="btn" href="/tutor/login.html">Go to tutor sign-in</a>'));
+    const [coach,links]=await Promise.all([
+      db.collection('techCoaches').doc(user.uid).get().catch(()=>null),
+      db.collection('techGuardianLinks').where('parentUid','==',user.uid).limit(1).get().catch(()=>null)]);
+    if(coach&&coach.exists){ location.href='/tech/coach/dashboard.html'; return; }
+    if(links&&!links.empty){ location.href='/tech/parent/dashboard.html'; return; }
+    location.href='/tech/index.html?tab=signup'; return;   // signed in but not in TECH yet: apply with this account
   }
   const p=snap.data(); S.p=Object.assign({id:snap.id},p);
-  if(p.studentType!=='tech'){
-    const to=p.studentType==='tuition'?'/tuition/dashboard.html':p.studentType==='remote'?'/remote/dashboard.html':'/student/dashboard.html';
-    return leave(to);
-  }
   if(p.status!=='Active'){
     const msg=p.status==='Pending'?'Your account is waiting for approval from the Studio Desk. This usually takes up to a day.':'This account is not active ('+esc(p.status||'unknown')+'). Please contact the Studio Desk.';
     return showGate(gateCard('Welcome to TECH, '+esc(T.firstName(p.name))+'.',msg,'<button class="btn" id="gSign" type="button">Sign out</button>'));
@@ -455,7 +458,17 @@ document.addEventListener('click',e=>{ if(e.target.closest('#gSign')) leave(); }
 function boot(){
   $('gate').hidden=true; $('shell').hidden=false;
   $('avatar').textContent=initials(S.p.name); $('whoName').textContent=S.p.name||'Builder'; $('whoId').textContent=T.builderId(S.uid);
-  db.collection('students').doc(S.uid).update({lastLoginAt:FV().serverTimestamp()}).catch(()=>{});
+  db.collection('techStudents').doc(S.uid).update({lastLoginAt:FV().serverTimestamp()}).catch(()=>{});
+  S.bell=T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
+    if(n.buildId&&S.builds.some(b=>b.id===n.buildId)){ openBuild(n.buildId); return true; }
+    if(n.chatId){ go('coach'); return true; }
+    return true;
+  }});
+  /* Coach changes and guardian links arrive live. */
+  S.unsubs.push(db.collection('techStudents').doc(S.uid).onSnapshot(s=>{
+    if(!s.exists) return; const was=S.p.coachId; S.p=Object.assign({id:s.id},s.data());
+    if(was!==S.p.coachId&&S.v==='coach'&&!S.openId) go('coach'); else setHead();
+  },()=>{}));
   S.unsubs.push(db.collection('techContent').where('status','==','published').onSnapshot(s=>{
     S.content={}; KINDS.forEach(k=>S.content[k]=[]);
     s.docs.forEach(d=>{ const x=Object.assign({id:d.id},d.data()); (S.content[x.kind]=S.content[x.kind]||[]).push(x); });
@@ -493,7 +506,7 @@ function subFor(v){
     missions:'Short, practical builds. Each one becomes a project.',
     toolbox:'AI tools your coaches have approved.',
     progress:'Your level in each discipline.',
-    coach:S.p.techCoachName||'Your coach will appear here.',
+    coach:S.p.coachName||'Your coach will appear here.',
     profile:'Builder ID '+T.builderId(S.uid)
   })[v]||'';
 }
@@ -577,9 +590,9 @@ function render(silent){
 }
 function renderCoach(){
   const el=$('view'), p=S.p;
-  if(!p.techCoachId){ el.innerHTML=emptyBox('No coach yet','A coach will be assigned to you soon. Until then, try a mission or start a project.','<button class="btn" type="button" data-go="missions">Browse missions</button>'); return; }
+  if(!p.coachId){ el.innerHTML=emptyBox('No coach yet','A coach will be assigned to you soon. Until then, try a mission or start a project.','<button class="btn" type="button" data-go="missions">Browse missions</button>'); return; }
   el.innerHTML='<div id="chatHost"></div>';
-  S.chat=T.mountChat($('chatHost'),{studentId:S.uid,studentName:p.name,coachId:p.techCoachId,coachName:p.techCoachName,me:{uid:S.uid,role:'student',name:p.name}});
+  S.chat=T.mountChat($('chatHost'),{studentId:S.uid,studentName:p.name,coachId:p.coachId,coachName:p.coachName,me:{uid:S.uid,role:'student',name:p.name}});
 }
 
 const VIEWS={
@@ -716,6 +729,11 @@ profile(){
       '<div class="field"><label for="pPh">Phone</label><input id="pPh" type="tel" value="'+esc(p.phone||'')+'" maxlength="30"></div>'+
       '<div class="field"><label for="pEm">Email</label><input id="pEm" value="'+esc(p.email||'')+'" readonly></div>'+
       '<button class="btn" type="button" id="pSave">Save profile</button><div class="msg" id="pMsg" role="status"></div></section>'+
+    '<section class="panel"><div class="panel-head"><h2>Family</h2></div>'+
+      ((p.guardianAccounts||[]).length
+        ? '<p class="muted" style="margin-bottom:.6rem">They can follow your projects and progress, and message your coach.</p>'+(p.guardianAccounts||[]).map(g=>'<div class="reslink"><i class="fas fa-user-shield"></i> '+esc(g.name||'Guardian')+'</div>').join('')
+        : '<p class="muted">'+((p.guardians||[]).length?'Your parent or guardian gets their own login once your account is approved.':'No parent or guardian is linked. Ask the Studio Desk if you want someone to follow your projects.')+'</p>')+
+    '</section>'+
   '</div>';
 }
 };
@@ -760,7 +778,7 @@ function itemDetail(it){
 /* ---------- actions ---------- */
 async function createBuild(d){
   const p=S.p;
-  const doc={studentId:S.uid,studentName:p.name||'',displayName:T.firstName(p.name),tutorId:p.techCoachId||'',tutorName:p.techCoachName||'',
+  const doc={studentId:S.uid,studentName:p.name||'',displayName:T.firstName(p.name),coachId:p.coachId||'',coachName:p.coachName||'',
     title:String(d.title||'Untitled build').slice(0,120),brief:String(d.brief||'').slice(0,2000),category:d.category||'Other',status:'IDEA',progress:0,showcase:'none',reviewState:'none',mastery:'none',
     files:[],resources:(d.resources||[]).slice(0,30),versions:[],skills:[],workText:'',workUrl:'',
     writingHtml:'',codeFiles:[],codeActive:'',visibility:'private',
@@ -847,7 +865,7 @@ document.addEventListener('click',async e=>{
   else if(t.id==='pSave'){
     const tp={identity:$('pId').value,interests:[...document.querySelectorAll('#pInts input:checked')].map(x=>x.value)};
     const msg=$('pMsg'); msg.style.color='';
-    try{ await db.collection('students').doc(S.uid).update({techProfile:tp,phone:$('pPh').value.trim().slice(0,30),updatedAt:FV().serverTimestamp()}); S.p.techProfile=tp; msg.style.color='#1d8b57'; msg.textContent='Profile saved.'; }
+    try{ await db.collection('techStudents').doc(S.uid).update({techProfile:tp,phone:$('pPh').value.trim().slice(0,30),updatedAt:FV().serverTimestamp()}); S.p.techProfile=tp; msg.style.color='#1d8b57'; msg.textContent='Profile saved.'; }
     catch(er){ msg.style.color='#b8362a'; msg.textContent='Could not save: '+T.errMsg(er); }
   }
 });

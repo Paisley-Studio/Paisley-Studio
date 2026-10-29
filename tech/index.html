@@ -15,6 +15,7 @@
 <style>
 :root{--brand:#55BFB3;--brand-deep:#245F5A;--brand-soft:#7BCBC2;--paper:#F1F9F7;--surface:#fff;--sage:#E5F2EF;--ink:#263331;--muted:#5A6E6A;--line:rgba(38,51,49,.12);--dark:#0F1A14;--gold:#F5C842;--font:'Quicksand',sans-serif;--error:#E74C3C;--success:#2EB872}
 *{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
 body{font-family:var(--font);background:var(--paper);color:var(--ink);min-height:100vh;display:grid;grid-template-columns:1fr 1fr;-webkit-font-smoothing:antialiased}
 @media(max-width:900px){body{grid-template-columns:1fr}}
 a{color:var(--brand-deep);font-weight:700}
@@ -45,7 +46,19 @@ a{color:var(--brand-deep);font-weight:700}
 .msg{display:none;padding:.7rem .9rem;border-radius:12px;font-size:.85rem;font-weight:700;margin-bottom:.9rem}.msg.show{display:block}
 .msg.err{background:rgba(231,76,60,.1);color:#b8362a}.msg.ok{background:rgba(46,184,114,.12);color:#1d8b57}
 .small{font-size:.78rem;color:var(--muted);font-weight:600;margin-top:.9rem;text-align:center}
-#guard{display:none;background:var(--sage);border-radius:14px;padding:.9rem;margin-bottom:.9rem}
+#guard{border:0;background:var(--sage);border-radius:14px;padding:.9rem;margin:.5rem 0 .9rem;min-width:0}
+#guard legend{float:left;width:100%;font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--brand-deep);margin-bottom:.4rem}
+#guard legend em{font-style:normal;font-weight:700;text-transform:none;letter-spacing:0;color:var(--muted)}
+#guard .f input,#guard .f select{background:var(--surface)}
+.gcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.8rem .8rem .2rem;margin-bottom:.7rem}
+.gcard-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;font-size:.78rem;font-weight:800;color:var(--brand-deep)}
+.gcard-head button{border:0;background:none;color:#b8362a;font:inherit;font-size:.76rem;font-weight:800;cursor:pointer;padding:.2rem .3rem}
+.gcard .f input,.gcard .f select{background:var(--paper)}
+.addg{display:flex;align-items:center;justify-content:center;gap:.45rem;width:100%;min-height:44px;border:1.5px dashed var(--brand);border-radius:12px;background:transparent;color:var(--brand-deep);font-family:var(--font);font-weight:800;font-size:.82rem;cursor:pointer}
+.addg:hover{background:var(--surface)}
+.note{background:var(--sage);border-radius:12px;padding:.7rem .85rem;font-size:.82rem;font-weight:600;color:var(--brand-deep);margin-bottom:1rem;line-height:1.45}
+.note i{margin-right:.35rem}
+.portals{margin-top:1.1rem;padding-top:1rem;border-top:1px solid var(--line)}
 .hp{position:absolute;left:-9999px}
 
 /* ---------- Responsive upgrade ---------- */
@@ -118,17 +131,22 @@ body{min-height:100vh;min-height:100dvh}
   </div>
 
   <div class="panel" id="panel-signup">
+    
+    <div class="note" id="joinAs" hidden></div>
     <div class="f"><label for="suName">Your name</label><input id="suName" autocomplete="name" maxlength="80" /></div>
-    <div class="f"><label for="suEmail">Email</label><input id="suEmail" type="email" autocomplete="email" /></div>
-    <div class="f"><label for="suPass">Password</label><input id="suPass" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" /></div>
-    <div class="f"><label for="suAge">Age group</label><select id="suAge"><option value="">Select…</option><option value="under18">Under 18</option><option value="18plus">18 or over</option></select></div>
-    <div id="guard">
-      <div class="small" style="margin:0 0 .6rem;text-align:left">Because you're under 18, we need a parent or guardian's contact details.</div>
-      <div class="f"><label for="gName">Parent / guardian name</label><input id="gName" maxlength="80" /></div>
-      <div class="f"><label for="gEmail">Parent / guardian email</label><input id="gEmail" type="email" /></div>
-      <div class="f" style="margin:0"><label for="gPhone">Parent / guardian phone</label><input id="gPhone" type="tel" /></div>
+    <div id="newAcct">
+      <div class="f"><label for="suEmail">Email</label><input id="suEmail" type="email" autocomplete="email" /></div>
+      <div class="f"><label for="suPass">Password</label><input id="suPass" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" /></div>
     </div>
+    <div class="f"><label for="suAge">Age group</label><select id="suAge"><option value="">Select…</option><option value="under18">Under 18</option><option value="18plus">18 or over</option></select></div>
     <div class="f" style="margin-bottom:.4rem"><label for="suPhone">Your phone (optional)</label><input id="suPhone" type="tel" autocomplete="tel" /></div>
+
+    <fieldset id="guard">
+      <legend id="gLegend">Parents and guardians</legend>
+      <div class="small" id="gHelp" style="margin:0 0 .7rem;text-align:left">Once you're approved, each person you add gets their own TECH guardian login by email. They sign in with their email (or phone number), and their phone number is their first password. They can follow your projects and message your coach. Anyone who already uses the Paisley Parent Portal keeps the same login. You can add up to 4.</div>
+      <div id="gList"></div>
+      <button class="addg" id="gAdd" type="button"><i class="fas fa-user-plus"></i> Add another parent or guardian</button>
+    </fieldset>
 
     <span class="q-label" style="margin-top:.9rem">What describes you?</span>
     <div class="chips" id="idChips" role="radiogroup" aria-label="What describes you?"></div>
@@ -139,6 +157,7 @@ body{min-height:100vh;min-height:100dvh}
     <button class="btn" id="signupBtn" type="button">Create my TECH account</button>
     <p class="small">The Studio Desk approves new accounts, usually within a day. You'll get a coach once you're in.</p>
   </div>
+  <p class="small portals">Coach? <a href="/tech/coach/index.html">Coach sign in</a> · Parent or guardian? <a href="/tech/parent/index.html">Guardian sign in</a></p>
 </div>
 </main>
 
@@ -146,73 +165,122 @@ body{min-height:100vh;min-height:100dvh}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js"></script>
 <script>
+/* Paisley TECH sign in / apply.
+   TECH is its own programme: an application is a techStudents/{uid} doc.
+   - New people create a login and apply in one step.
+   - Anyone who already has a Paisley login (IGCSE, CBC, online, remote) signs in
+     and applies with that same account.
+   - Coaches and guardians who sign in here are sent to their own portals. */
 document.addEventListener('DOMContentLoaded', () => {
   const auth = firebase.auth();
-  // Use the db variable already provided by lms-helpers.js or define it safely here if not
-  const db = window.db || firebase.firestore(); 
-  
   const $ = id => document.getElementById(id);
+  const FV = () => firebase.firestore.FieldValue;
   const IDENT = ['Student','Creator','Future entrepreneur','Researcher','Problem solver','Curious explorer'];
   const INTS = ['Create','Research','Study smarter','Start something','Solve problems','Build projects','Work faster','Understand AI','Stay safe online'];
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let joinUser = null;   // signed in, but not yet in TECH
 
   $('idChips').innerHTML = IDENT.map(x=>'<label class="chip"><input type="radio" name="ident" value="'+x+'"><span>'+x+'</span></label>').join('');
   $('intChips').innerHTML = INTS.map(x=>'<label class="chip"><input type="checkbox" name="int" value="'+x+'"><span>'+x+'</span></label>').join('');
 
   function hideMsgs(){ $('errMsg').classList.remove('show'); $('okMsg').classList.remove('show'); }
-  function showErr(m){ hideMsgs(); $('errMsg').textContent = m; $('errMsg').classList.add('show'); }
+  function showErr(m){ hideMsgs(); $('errMsg').textContent = m; $('errMsg').classList.add('show'); $('errMsg').scrollIntoView({block:'nearest'}); }
   function showOk(m){ hideMsgs(); $('okMsg').textContent = m; $('okMsg').classList.add('show'); }
-  function setLoading(b,on){ b.disabled = on; }
 
   function setTab(t){
     document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
     document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active', x.id==='panel-'+t));
     const s = t==='signup';
-    $('titleText').textContent = s ? 'Welcome to TECH.' : 'Welcome back';
-    $('subText').textContent = s ? "Let's build something." : 'Sign in to continue your build.';
+    $('titleText').textContent = joinUser ? 'Join Paisley TECH' : (s ? 'Welcome to TECH.' : 'Welcome back');
+    $('subText').textContent = joinUser ? 'One more step and you can start building.' : (s ? "Let's build something." : 'Sign in to continue your build.');
     $('sideTitle').innerHTML = s ? 'What are we <em>building?</em>' : 'Welcome to <em>PAISLEY TECH STUDIO.</em>';
     hideMsgs();
   }
-
   document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.tab)));
+  document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); setTab(g.dataset.goto); } });
+  if (new URLSearchParams(location.search).get('tab') === 'signup') setTimeout(() => setTab('signup'), 10);
 
-  // Check URL parameter for signup tab
-  const urlParams = new URLSearchParams(location.search);
-  if(urlParams.get('tab') === 'signup') {
-    // Small delay to ensure DOM is fully ready and overriding any default active states
-    setTimeout(() => setTab('signup'), 10);
-  }
-
-  [['loginEmail','loginBtn'],['loginPassword','loginBtn'],['suName','signupBtn'],['suEmail','signupBtn'],['suPass','signupBtn'],['suPhone','signupBtn'],['gName','signupBtn'],['gEmail','signupBtn'],['gPhone','signupBtn']].forEach(([i,b])=>{
+  [['loginEmail','loginBtn'],['loginPassword','loginBtn'],['suName','signupBtn'],['suEmail','signupBtn'],['suPass','signupBtn'],['suPhone','signupBtn'],].forEach(([i,b])=>{
     const el=$(i); if(!el) return; el.setAttribute('enterkeyhint','go');
     el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $(b).click(); } });
   });
 
-  $('suAge').addEventListener('change',()=>{ $('guard').style.display = $('suAge').value==='under18' ? 'block' : 'none'; });
+  /* Parents and guardians: one card each, up to 4 (the rules cap techStudents.guardians at 4).
+     At least one is required under 18; optional for adults. */
+  const MAX_G = 4, RELS = ['Mother','Father','Guardian','Grandparent','Other relative','Sponsor'];
+  let gSeq = 0;
+  function cards(){ return [...$('gList').querySelectorAll('.gcard')]; }
+  function addGuardian(g){
+    if (cards().length >= MAX_G) return null;
+    g = g || {}; const n = ++gSeq, card = document.createElement('div');
+    card.className = 'gcard';
+    card.innerHTML = '<div class="gcard-head"><span class="gtitle"></span><button type="button" class="grm" aria-label="Remove this parent or guardian"><i class="fas fa-xmark"></i> Remove</button></div>' +
+      '<div class="f"><label for="gN'+n+'">Full name</label><input id="gN'+n+'" class="g-name" maxlength="80" autocomplete="off" value="'+esc(g.name||'')+'" /></div>' +
+      '<div class="f"><label for="gR'+n+'">Relationship</label><select id="gR'+n+'" class="g-rel"><option value="">Select…</option>'+RELS.map(r=>'<option'+(r===g.relationship?' selected':'')+'>'+r+'</option>').join('')+'</select></div>' +
+      '<div class="f"><label for="gE'+n+'">Email (their sign-in)</label><input id="gE'+n+'" class="g-email" type="email" autocomplete="off" value="'+esc(g.email||'')+'" /></div>' +
+      '<div class="f"><label for="gP'+n+'">Phone (their first password)</label><input id="gP'+n+'" class="g-phone" type="tel" autocomplete="off" placeholder="At least 6 digits" value="'+esc(g.phone||'')+'" /></div>';
+    card.querySelector('.grm').addEventListener('click', () => { card.remove(); if (!cards().length) addGuardian(); paintGuard(); });
+    $('gList').appendChild(card);
+    paintGuard();
+    return card;
+  }
+  function paintGuard(){
+    const minor = $('suAge').value === 'under18', list = cards();
+    $('gLegend').innerHTML = minor ? 'Parents and guardians <em>(at least one)</em>' : 'Parents and guardians <em>(optional for 18+)</em>';
+    list.forEach((c, i) => { c.querySelector('.gtitle').textContent = 'Parent or guardian ' + (i + 1); c.querySelector('.grm').hidden = list.length === 1; });
+    $('gAdd').hidden = list.length >= MAX_G;
+  }
+  $('gAdd').addEventListener('click', () => { const c = addGuardian(); if (c) c.querySelector('.g-name').focus(); });
+  $('suAge').addEventListener('change', paintGuard);
+  addGuardian();
 
-  auth.onAuthStateChanged(async user => { 
-    if(user && !window._justSignedUp){ 
-      try {
-        const snap = await db.collection('students').doc(user.uid).get();
-        if (snap.exists) {
-          location.href = '/tech/dashboard.html'; 
-        } else {
-          await auth.signOut();
-          showErr('We couldn\'t find your student profile. Please sign up again.');
-        }
-      } catch (e) {
-        console.warn('Profile check failed', e);
-      }
-    } 
+  /* ---------- where does this account belong? ---------- */
+  async function route(user){
+    const [ts, coach, links, stu] = await Promise.all([
+      db.collection('techStudents').doc(user.uid).get(),
+      db.collection('techCoaches').doc(user.uid).get().catch(() => null),
+      db.collection('techGuardianLinks').where('parentUid', '==', user.uid).limit(1).get().catch(() => null),
+      db.collection('students').doc(user.uid).get().catch(() => null)
+    ]);
+    if (ts.exists) { location.href = '/tech/dashboard.html'; return; }
+    if (coach && coach.exists) { location.href = '/tech/coach/dashboard.html'; return; }
+    if (links && !links.empty) { location.href = '/tech/parent/dashboard.html'; return; }
+    const sp = stu && stu.exists ? stu.data() : null;
+    if (sp && sp.studentType === 'tech') {
+      showErr('Your TECH account is being moved to the new TECH studio. Please try again shortly, or contact the Studio Desk.');
+      return;
+    }
+    startJoin(user, sp);
+  }
+  function startJoin(user, sp){
+    joinUser = user;
+    $('newAcct').hidden = true; $('existingNote').hidden = true;
+    $('joinAs').hidden = false;
+    $('joinAs').innerHTML = '<i class="fas fa-user-check"></i> Joining TECH as <b>' + esc(user.email) + '</b>' + (sp ? ' with your Paisley student account' : '') + '. <a href="#" id="notMe">Not you?</a>';
+    if (sp) {
+      $('suName').value = sp.name || ''; $('suPhone').value = sp.phone || '';
+      const gs = (Array.isArray(sp.guardians) && sp.guardians.length) ? sp.guardians : (sp.guardianEmail ? [{ name: sp.guardianName, email: sp.guardianEmail, phone: sp.guardianPhone }] : []);
+      if (gs.length) { $('gList').innerHTML = ''; gs.slice(0, MAX_G).forEach(g => addGuardian(g)); }
+    } else if (user.displayName) $('suName').value = user.displayName;
+    document.querySelector('.tab[data-tab="login"]').hidden = true;
+    document.querySelector('.tab[data-tab="signup"]').textContent = 'Join TECH';
+    $('signupBtn').textContent = 'Join Paisley TECH';
+    setTab('signup');
+  }
+  document.addEventListener('click', e => { if (e.target.id === 'notMe') { e.preventDefault(); auth.signOut().then(() => location.reload()); } });
+
+  auth.onAuthStateChanged(user => {
+    if (!user || window._busy) return;
+    route(user).catch(e => { console.warn('TECH routing failed', e); showErr('Could not open TECH: ' + (e.message || e.code)); });
   });
 
   $('loginBtn').addEventListener('click',()=>{
     const email=$('loginEmail').value.trim(), pass=$('loginPassword').value;
     if(!email||!pass) return showErr('Please enter your email and password.');
-    setLoading($('loginBtn'),true);
-    auth.signInWithEmailAndPassword(email,pass).then(()=>{ location.href='/tech/dashboard.html'; })
-      .catch(err=>{ setLoading($('loginBtn'),false); showErr(err.code==='auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email or password.'); });
+    $('loginBtn').disabled = true;
+    auth.signInWithEmailAndPassword(email,pass)   // onAuthStateChanged routes the account
+      .catch(err=>{ $('loginBtn').disabled = false; showErr(err.code==='auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email or password.'); });
   });
 
   $('forgot').addEventListener('click',e=>{
@@ -225,38 +293,68 @@ document.addEventListener('DOMContentLoaded', () => {
   function isFake(a){ const m=String(a||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/); if(!m) return true; const d=m[1]; return /\.(test|invalid|localhost|local|example)$/.test(d) || BLOCKED.some(b=>d===b||d.endsWith('.'+b)); }
   const shownAt = Date.now();
 
-  $('signupBtn').addEventListener('click',()=>{
+  /* Validates the form; returns the techStudents doc or null (after showing the error). */
+  function collect(email){
+    const name=$('suName').value.trim(), age=$('suAge').value, phone=$('suPhone').value.trim();
+    if(name.length<2) { showErr('Please enter your name.'); return null; }
+    if(!age) { showErr('Please tell us your age group.'); return null; }
+    const guardians = [], seen = {}, list = cards();
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      const g = { name: c.querySelector('.g-name').value.trim(), relationship: c.querySelector('.g-rel').value, email: c.querySelector('.g-email').value.trim(), phone: c.querySelector('.g-phone').value.trim() };
+      if (!g.name && !g.email && !g.phone) continue;      // an empty card is ignored
+      const who = list.length > 1 ? 'parent or guardian ' + (i + 1) : 'your parent or guardian';
+      if(!g.name||!/^\S+@\S+\.\S+$/.test(g.email)||isFake(g.email)) { showErr('Please give the name and real email address of ' + who + '.'); return null; }
+      if(g.phone.replace(/\D/g,'').length<6) { showErr('Please give the phone number of ' + who + ' (at least 6 digits). It becomes their first password.'); return null; }
+      if(g.email.toLowerCase()===String(email).toLowerCase()) { showErr('Each parent or guardian needs their own email address, not yours.'); return null; }
+      if(seen[g.email.toLowerCase()]) { showErr('Two parents or guardians have the same email address. Each needs their own.'); return null; }
+      seen[g.email.toLowerCase()] = true;
+      guardians.push({ name: g.name.slice(0,80), relationship: g.relationship, email: g.email.slice(0,120), phone: g.phone.slice(0,40) });
+    }
+    if (age==='under18' && !guardians.length) { showErr('Because you\'re under 18, please add at least one parent or guardian.'); return null; }
+    const data = { name: name.slice(0,80), email, phone: phone.slice(0,30), ageGroup: age, status: 'Pending',
+      techProfile: { identity:(document.querySelector('input[name=ident]:checked')||{}).value||'', interests:[...document.querySelectorAll('input[name=int]:checked')].map(x=>x.value) },
+      guardians: guardians.slice(0, 4),
+      createdAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
+    return data;
+  }
+
+  $('signupBtn').addEventListener('click', async ()=>{
     hideMsgs();
     if($('suWebsite').value || Date.now()-shownAt < 2500) return showErr('Please take a moment to complete the form.');
-    const name=$('suName').value.trim(), email=$('suEmail').value.trim(), pass=$('suPass').value, age=$('suAge').value, phone=$('suPhone').value.trim();
-    if(name.length<2) return showErr('Please enter your name.');
-    if(isFake(email)) return showErr('Please use your own real email address — we need to be able to reach you.');
-    if(pass.length<8) return showErr('Please choose a password of at least 8 characters.');
-    if(!age) return showErr('Please tell us your age group.');
-    
-    const data = { name, email, studentType:'tech', phone, ageGroup:age, status:'Pending', 
-      techProfile:{ identity:(document.querySelector('input[name=ident]:checked')||{}).value||'', interests:[...document.querySelectorAll('input[name=int]:checked')].map(x=>x.value) } };
-    
-    if(age==='under18'){
-      const g={ name:$('gName').value.trim(), email:$('gEmail').value.trim(), phone:$('gPhone').value.trim() };
-      if(!g.name||!g.phone||!/^\S+@\S+\.\S+$/.test(g.email)||isFake(g.email)) return showErr('Please give a parent or guardian name, real email and phone number.');
-      if(g.email.toLowerCase()===email.toLowerCase()) return showErr("Your parent or guardian needs their own email address.");
-      data.guardians=[g]; data.guardianName=g.name; data.guardianEmail=g.email; data.guardianPhone=g.phone; data.parentContact=[g.name,g.email,g.phone].join(' · ');
+    const btn=$('signupBtn');
+
+    if (joinUser) {
+      const data = collect(joinUser.email || ''); if (!data) return;
+      btn.disabled = true;
+      try {
+        await db.collection('techStudents').doc(joinUser.uid).set(data);
+        showOk('You\'re in the queue for TECH. Taking you to your studio…');
+        setTimeout(()=>{ location.href='/tech/dashboard.html'; }, 1100);
+      } catch (e) { btn.disabled = false; showErr('Could not join TECH: ' + (e.message || e.code)); }
+      return;
     }
-    
-    const btn=$('signupBtn'); setLoading(btn,true); window._justSignedUp=true;
-    auth.createUserWithEmailAndPassword(email,pass)
-      .then(c=>{ try{ c.user.sendEmailVerification().catch(()=>{}); }catch(e){} return db.collection('students').doc(c.user.uid).set(data); })
-      .then(()=>{ showOk('Welcome to TECH. Taking you to your studio…'); setTimeout(()=>{ location.href='/tech/dashboard.html'; },1100); })
-      .catch(err=>{
-        setLoading(btn,false); window._justSignedUp=false;
-        let m='Could not create your account.';
-        if(err.code==='auth/email-already-in-use') m='That email already has an account. Try signing in instead.';
-        else if(err.code==='auth/too-many-requests') m='Too many attempts from this device. Please wait a few minutes.';
-        else if(err.code==='auth/invalid-email') m='That email address is not valid.';
-        else if(err.code==='auth/weak-password') m='Please choose a stronger password.';
-        showErr(m);
-      });
+
+    const email=$('suEmail').value.trim(), pass=$('suPass').value;
+    if(isFake(email)) return showErr('Please use your own real email address. We need to be able to reach you.');
+    if(pass.length<8) return showErr('Please choose a password of at least 8 characters.');
+    const data = collect(email); if (!data) return;
+    btn.disabled = true; window._busy = true;
+    try {
+      const c = await auth.createUserWithEmailAndPassword(email, pass);
+      try { c.user.sendEmailVerification().catch(()=>{}); } catch(e){}
+      await db.collection('techStudents').doc(c.user.uid).set(data);
+      showOk('Welcome to TECH. Taking you to your studio…');
+      setTimeout(()=>{ location.href='/tech/dashboard.html'; },1100);
+    } catch (err) {
+      btn.disabled = false; window._busy = false;
+      let m='Could not create your account.';
+      if(err.code==='auth/email-already-in-use') m='That email already has a Paisley account (for example for IGCSE or CBC). Use the Sign in tab with that password, then you can join TECH.';
+      else if(err.code==='auth/too-many-requests') m='Too many attempts from this device. Please wait a few minutes.';
+      else if(err.code==='auth/invalid-email') m='That email address is not valid.';
+      else if(err.code==='auth/weak-password') m='Please choose a stronger password.';
+      showErr(m);
+    }
   });
 });
 </script>

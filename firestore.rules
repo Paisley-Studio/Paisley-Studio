@@ -401,16 +401,8 @@ service cloud.firestore {
         !('tutorIds' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
 
-      // TECH sign-up: always lands as Pending; only an admin can activate or pair a coach.
-      allow create: if isOwner(uid) &&
-        request.resource.data.status == 'Pending' &&
-        request.resource.data.studentType == 'tech' &&
-        !('admittedBy' in request.resource.data) &&
-        !('tutorId' in request.resource.data) &&
-        !('tutorIds' in request.resource.data) &&
-        !('subjectTutors' in request.resource.data) &&
-        !('techCoachId' in request.resource.data) &&
-        !('techCoachName' in request.resource.data);
+      // TECH no longer creates students docs: TECH applications live in techStudents.
+      // Legacy studentType 'tech' records are moved there by migrateTechArchitecture.
 
       // Allow tutors to read student documents so the release modal can find them
       allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || isTutor();
@@ -913,26 +905,88 @@ service cloud.firestore {
     }
 
     // =====================================================
-    // PAISLEY TECH — builds, content, wall, coach chats
+    // PAISLEY TECH — its own architecture (functions/tech.js)
+    //   techStudents/{uid}       enrolment (any account may apply)
+    //   techCoaches/{uid}        coaches (not tutors)
+    //   techGuardianLinks/{parentUid}_{studentUid}   guardian -> builder
+    //   techGuardianChats/{parentUid}_{studentUid}   guardian <-> coach
+    //   techNotifications        TECH-only bell feed
+    // A builder, coach or guardian is recognised by which collection
+    // holds their uid — never by a field they can write themselves.
     // =====================================================
     function techStudentActive() {
-      return isSignedIn() && exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/students/$(request.auth.uid)).data.studentType == 'tech' &&
-        get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'Active';
+      return isSignedIn() && exists(/databases/$(database)/documents/techStudents/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/techStudents/$(request.auth.uid)).data.status == 'Active';
+    }
+    function isTechCoach() {
+      return isSignedIn() && exists(/databases/$(database)/documents/techCoaches/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/techCoaches/$(request.auth.uid)).data.status == 'Active';
+    }
+    function techCoachIdOf(studentId) {
+      return get(/databases/$(database)/documents/techStudents/$(studentId)).data.get('coachId', '');
+    }
+    function isTechCoachOf(studentId) {
+      return isTechCoach() && exists(/databases/$(database)/documents/techStudents/$(studentId)) &&
+        techCoachIdOf(studentId) == request.auth.uid;
+    }
+    function isTechGuardianOf(studentId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/techGuardianLinks/$(request.auth.uid + '_' + studentId));
+    }
+
+    match /techStudents/{uid} {
+      allow read: if isOwner(uid) || isAdmin() ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid) ||
+        isTechGuardianOf(uid);
+      // A brand-new account, or an existing IGCSE / CBC / remote student, applies for
+      // themselves. Applications always land Pending, with no coach and no links.
+      allow create: if isOwner(uid) &&
+        request.resource.data.status == 'Pending' &&
+        request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'ageGroup', 'status', 'techProfile', 'guardians', 'createdAt', 'updatedAt']) &&
+        (!('guardians' in request.resource.data) ||
+          (request.resource.data.guardians is list && request.resource.data.guardians.size() <= 4));
+      allow update: if isAdmin() ||
+        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'techProfile', 'updatedAt', 'lastLoginAt']));
+      allow delete: if isAdmin();
+    }
+
+    match /techCoaches/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow update: if isAdmin() ||
+        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'bio', 'updatedAt', 'lastLoginAt']));
+      allow create, delete: if isAdmin();
+    }
+
+    // Written by Cloud Functions / admins only.
+    match /techGuardianLinks/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.parentUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /techNotifications/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.recipientId == request.auth.uid);
+      allow update: if isSignedIn() && resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow create, delete: if false;
     }
 
     match /techContent/{id} {
-      allow read: if isAdmin() || isTutor() || (techStudentActive() && resource.data.status == 'published');
-      allow create: if isAdmin() || (isTutor() && request.resource.data.createdBy == request.auth.uid);
-      allow update, delete: if isAdmin() || (isTutor() && resource.data.createdBy == request.auth.uid &&
+      allow read: if isAdmin() || isTechCoach() || (techStudentActive() && resource.data.status == 'published');
+      allow create: if isAdmin() || (isTechCoach() && request.resource.data.createdBy == request.auth.uid);
+      allow update: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdBy == request.auth.uid);
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
     }
 
     match /techBuilds/{id} {
       allow read: if isAdmin() ||
-        (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.tutorId == request.auth.uid));
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid) ||
+        isTechGuardianOf(resource.data.studentId);
+      // A build is always routed to the builder's current coach.
       allow create: if techStudentActive() &&
         request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.get('coachId', '') == techCoachIdOf(request.auth.uid) &&
         request.resource.data.showcase == 'none' &&
         request.resource.data.reviewState == 'none';
       allow update: if isAdmin() ||
@@ -940,84 +994,131 @@ service cloud.firestore {
         // cannot grant themselves mastery, and cannot request review without an AI reflection.
         (techStudentActive() && resource.data.studentId == request.auth.uid &&
           request.resource.data.studentId == resource.data.studentId &&
-          request.resource.data.tutorId == resource.data.tutorId &&
-          request.resource.data.showcase in ['none', 'requested'] &&
-          request.resource.data.reviewState in ['none', 'requested', 'changes'] &&
-          (resource.data.showcase != 'approved' || request.resource.data.showcase == 'approved') &&
-          // mastery can only be cleared by the builder, never set to 'approved'
+          request.resource.data.get('coachId', '') == resource.data.get('coachId', '') &&
+          // showcase / review: keep what the coach set, or move to none / requested (withdrawing
+          // from the Wall is allowed; approving is not)
+          (request.resource.data.showcase == resource.data.get('showcase', 'none') ||
+            request.resource.data.showcase in ['none', 'requested']) &&
+          (request.resource.data.reviewState == resource.data.get('reviewState', 'none') ||
+            request.resource.data.reviewState in ['none', 'requested']) &&
           (!(('mastery' in request.resource.data) && request.resource.data.mastery != resource.data.get('mastery', 'none')) ||
             request.resource.data.mastery == 'none') &&
-          // requesting review requires an aiReflection field to be present
           (!(('reviewState' in request.resource.data.diff(resource.data).affectedKeys()) &&
              request.resource.data.reviewState == 'requested') ||
             (('aiReflection' in request.resource.data) && request.resource.data.aiReflection != null))) ||
-        // coach: review only
-        (isTutor() && resource.data.tutorId == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewState', 'showcase', 'mastery', 'masteryNote', 'masteryAt', 'masteryBy', 'updatedAt']) &&
-          request.resource.data.showcase == resource.data.showcase);
+        // coach: review, stage, Tech Wall and family-link fields only — never the builder's work
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewState', 'showcase', 'mastery', 'masteryNote', 'masteryAt', 'masteryBy', 'status', 'progress', 'visibility', 'shareToken', 'updatedAt']) &&
+          request.resource.data.studentId == resource.data.studentId);
       allow delete: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid && resource.data.showcase != 'approved');
 
       match /feedback/{fid} {
         allow read: if isAdmin() || (isSignedIn() && (
           get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid ||
-          get(/databases/$(database)/documents/techBuilds/$(id)).data.tutorId == request.auth.uid));
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid) ||
+          isTechGuardianOf(get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId)));
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid && (isAdmin() ||
-          get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid ||
-          get(/databases/$(database)/documents/techBuilds/$(id)).data.tutorId == request.auth.uid);
+          (get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid &&
+            request.resource.data.role == 'student') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.role == 'coach'));
         allow update, delete: if isAdmin();
       }
     }
 
-    // Public TECH Wall: only admins publish (after a coach/admin review).
+    // Public TECH Wall (doc id = build id): admins, or the build's own coach, publish;
+    // the builder may take their own build down.
+    function techBuildOf(id) { return get(/databases/$(database)/documents/techBuilds/$(id)).data; }
     match /techShowcase/{id} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() ||
+        (isTechCoach() && exists(/databases/$(database)/documents/techBuilds/$(id)) &&
+          techBuildOf(id).get('coachId', '') == request.auth.uid);
+      allow delete: if isAdmin() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/techBuilds/$(id)) &&
+          (techBuildOf(id).studentId == request.auth.uid ||
+            (isTechCoach() && techBuildOf(id).get('coachId', '') == request.auth.uid)));
     }
 
-    // =====================================================
-    // PAISLEY TECH — per-discipline progression (Cloud Function writes only)
-    // =====================================================
-    // Shape: techProgress/{uid} = {
-    //   levels: { Coding: 3, Writing: 2, Music: 1, ... },
-    //   masteryCount: { Coding: 2, Writing: 1, ... },
-    //   updatedAt, updatedBy
-    // }
-    // Readable by the student, their assigned coach, and admins.
+    // techProgress/{uid} = { levels: {Coding: 3, ...}, masteryCount: {...}, updatedAt, updatedBy }
+    // Cloud Function writes only.
     match /techProgress/{uid} {
-      allow read: if isAdmin() ||
-        (isSignedIn() && request.auth.uid == uid) ||
-        (isSignedIn() && isTutor() &&
-          exists(/databases/$(database)/documents/students/$(uid)) &&
-          get(/databases/$(database)/documents/students/$(uid)).data.techCoachId == request.auth.uid);
+      allow read: if isAdmin() || isOwner(uid) || isTechCoachOf(uid) || isTechGuardianOf(uid);
       allow write: if false;
     }
 
-    // =====================================================
-    // PAISLEY TECH — family-share tokens (admin/coach only)
-    // =====================================================
-    // Shape: shareTokens/{buildId} = { token, createdBy, createdAt, revoked }
-    // The public share page is served by the techShare Cloud Function,
-    // which reads this collection via Admin SDK. No public read here.
+    // shareTokens/{buildId} = { token, createdBy, createdAt, revoked }
+    // Served by the techShare Cloud Function via the Admin SDK; no public read.
+    // The builder (family link from their own studio), their coach and admins manage it.
     match /shareTokens/{buildId} {
       allow read, create, update, delete: if isAdmin() ||
-        (isTutor() && exists(/databases/$(database)/documents/techBuilds/$(buildId)) &&
-          get(/databases/$(database)/documents/techBuilds/$(buildId)).data.tutorId == request.auth.uid);
+        (isSignedIn() && exists(/databases/$(database)/documents/techBuilds/$(buildId)) &&
+          (techBuildOf(buildId).studentId == request.auth.uid ||
+            (isTechCoach() && techBuildOf(buildId).get('coachId', '') == request.auth.uid)));
     }
 
+    // Builder <-> coach. chatId = studentId + '_' + coachId.
     match /techChats/{chatId} {
-      allow read: if isAdmin() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.tutorId == request.auth.uid));
-      allow create: if isAdmin() || (isSignedIn() && (request.resource.data.studentId == request.auth.uid || request.resource.data.tutorId == request.auth.uid));
-      allow update: if isAdmin() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.tutorId == request.auth.uid));
+      allow read: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isSignedIn() && request.resource.data.studentId == request.auth.uid &&
+          request.resource.data.coachId == techCoachIdOf(request.auth.uid) &&
+          chatId == request.auth.uid + '_' + request.resource.data.coachId) ||
+        (isTechCoach() && request.resource.data.coachId == request.auth.uid &&
+          isTechCoachOf(request.resource.data.studentId) &&
+          chatId == request.resource.data.studentId + '_' + request.auth.uid);
+      allow update: if isAdmin() ||
+        ((resource.data.studentId == request.auth.uid ||
+          (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid)) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'lastSenderRole']));
       allow delete: if isAdmin();
 
       match /messages/{mid} {
         allow read: if isAdmin() || (isSignedIn() && (
           get(/databases/$(database)/documents/techChats/$(chatId)).data.studentId == request.auth.uid ||
-          get(/databases/$(database)/documents/techChats/$(chatId)).data.tutorId == request.auth.uid));
-        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid && (isAdmin() ||
-          get(/databases/$(database)/documents/techChats/$(chatId)).data.studentId == request.auth.uid ||
-          get(/databases/$(database)/documents/techChats/$(chatId)).data.tutorId == request.auth.uid);
+          (isTechCoach() && get(/databases/$(database)/documents/techChats/$(chatId)).data.get('coachId', '') == request.auth.uid)));
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid && (
+          (isAdmin() && request.resource.data.senderRole == 'admin') ||
+          (get(/databases/$(database)/documents/techChats/$(chatId)).data.studentId == request.auth.uid &&
+            request.resource.data.senderRole == 'student') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techChats/$(chatId)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.senderRole == 'coach'));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Guardian <-> the builder's current coach. chatId = parentUid + '_' + studentId.
+    // coachId is kept in step with techStudents.coachId by onTechEnrolmentUpdated.
+    match /techGuardianChats/{chatId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.parentUid == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isSignedIn() && request.resource.data.parentUid == request.auth.uid &&
+          isTechGuardianOf(request.resource.data.studentId) &&
+          chatId == request.auth.uid + '_' + request.resource.data.studentId &&
+          request.resource.data.coachId == techCoachIdOf(request.resource.data.studentId)) ||
+        (isTechCoachOf(request.resource.data.studentId) && request.resource.data.coachId == request.auth.uid &&
+          chatId == request.resource.data.parentUid + '_' + request.resource.data.studentId &&
+          exists(/databases/$(database)/documents/techGuardianLinks/$(chatId)));
+      allow update: if isAdmin() ||
+        ((resource.data.parentUid == request.auth.uid ||
+          (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid)) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'lastSenderRole']));
+      allow delete: if isAdmin();
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.parentUid == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == request.auth.uid)));
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid && (
+          (isAdmin() && request.resource.data.senderRole == 'admin') ||
+          (get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.parentUid == request.auth.uid &&
+            request.resource.data.senderRole == 'guardian') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.senderRole == 'coach'));
         allow update, delete: if isAdmin();
       }
     }

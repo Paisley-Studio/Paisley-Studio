@@ -585,5 +585,7 @@ module.exports = {
   sendEmail,
   linkGuardians,
   guardiansOf,
-  actionSettings
+  actionSettings,
+  normalizePhonePassword,
+  phoneKey
 };

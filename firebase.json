@@ -93,6 +93,22 @@
       {
         "source": "/tech/dashboard",
         "destination": "/tech/dashboard.html"
+      },
+      {
+        "source": "/tech/coach",
+        "destination": "/tech/coach/index.html"
+      },
+      {
+        "source": "/tech/coach/dashboard",
+        "destination": "/tech/coach/dashboard.html"
+      },
+      {
+        "source": "/tech/parent",
+        "destination": "/tech/parent/index.html"
+      },
+      {
+        "source": "/tech/parent/dashboard",
+        "destination": "/tech/parent/dashboard.html"
       }
     ]
   },

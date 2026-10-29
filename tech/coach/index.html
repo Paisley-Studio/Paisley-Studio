@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Coach sign in | Paisley TECH</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#245F5A" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech5" />
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-side">
+    <a class="auth-back" href="/tech.html"><i class="fas fa-arrow-left"></i> Back to Paisley TECH</a>
+    <h1>Paisley TECH <em>coach portal.</em></h1>
+    <p>Review builds, approve mastery, and keep builders and their families moving.</p>
+    <ul>
+      <li><i class="fas fa-check"></i>Your builders and every project they're making</li>
+      <li><i class="fas fa-check"></i>Reviews, mastery and Tech Wall requests in one queue</li>
+      <li><i class="fas fa-check"></i>Messages with builders and their parents or guardians</li>
+    </ul>
+  </aside>
+  <main class="auth-main">
+    <div class="auth-card">
+      <h2>Coach sign in</h2>
+      <p class="sub">TECH coach accounts are created by the Studio Desk.</p>
+      <div class="auth-msg err" id="errMsg" role="alert"></div><div class="auth-msg ok" id="okMsg" role="status"></div>
+      <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" enterkeyhint="go" /></div>
+      <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" enterkeyhint="go" /></div>
+      <button class="btn" id="go" type="button">Sign in</button>
+      <p class="auth-small"><a href="#" id="forgot">Forgot your password?</a></p>
+      <p class="auth-small">Builder? <a href="/tech/index.html">Builder sign in</a> · Parent? <a href="/tech/parent/index.html">Guardian sign in</a></p>
+    </div>
+  </main>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="/firebase-config.js"></script>
+<script>
+(function(){
+'use strict';
+const auth = firebase.auth(), $ = id => document.getElementById(id);
+function show(id, m){ ['errMsg','okMsg'].forEach(x => $(x).classList.remove('show')); $(id).textContent = m; $(id).classList.add('show'); }
+
+/* Only techCoaches/{uid} with status Active may use the coach portal. */
+async function check(user){
+  const d = await db.collection('techCoaches').doc(user.uid).get();
+  if (d.exists && d.data().status === 'Active') { location.href = '/tech/coach/dashboard.html'; return; }
+  await auth.signOut();
+  $('go').disabled = false;
+  show('errMsg', d.exists ? 'This coach account is paused. Please contact the Studio Desk.' : 'This login is not a TECH coach account. Builders and guardians have their own sign-in pages below.');
+}
+auth.onAuthStateChanged(u => { if (u) check(u).catch(e => show('errMsg', 'Could not sign in: ' + (e.message || e.code))); });
+
+function signIn(){
+  const email = $('email').value.trim(), pass = $('password').value;
+  if (!email || !pass) return show('errMsg', 'Please enter your email and password.');
+  $('go').disabled = true;
+  auth.signInWithEmailAndPassword(email, pass).catch(err => {
+    $('go').disabled = false;
+    show('errMsg', err.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email or password.');
+  });
+}
+$('go').addEventListener('click', signIn);
+['email','password'].forEach(i => $(i).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); signIn(); } }));
+$('forgot').addEventListener('click', e => {
+  e.preventDefault(); const email = $('email').value.trim();
+  if (!email) return show('errMsg', 'Enter your email above first.');
+  const done = () => show('okMsg', 'If that email has an account, a reset link is on its way.');
+  auth.sendPasswordResetEmail(email).then(done, done);
+});
+})();
+</script>
+</body>
+</html>
