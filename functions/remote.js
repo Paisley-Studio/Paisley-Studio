@@ -127,6 +127,7 @@ exports.admitRemoteStudent = onRequest(
         parentContact: v.guardians.map((g) => [g.name, g.email, g.phone].filter(Boolean).join(" · ")).join(" | "),
         role: "student", studentType: "remote", status: "Active",
         admittedBy: callerUid, admittedAt: admin.firestore.FieldValue.serverTimestamp(),
+        activatedAt: admin.firestore.FieldValue.serverTimestamp(),
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       };
       

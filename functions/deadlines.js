@@ -39,6 +39,8 @@ const W = require("./work-shared");
 const HOUR = 3600 * 1000;
 const GRACE_HOURS = 48;
 const LOOKBACK_DAYS = 30;
+const OVERDUE_AFTER_HOURS = 24;       // the pending-work report starts once work is this late
+const OVERDUE_REPEAT_HOURS = 47;      // then repeats every 2 days (the job runs daily, so 47 not 48)
 
 /* ---------------------------------------------------------
    Small shared pieces
@@ -102,7 +104,7 @@ async function runHomeworkDeadlineReminder() {
     const dueAt = W.toDate(a.dueAt);
 
     for (const student of students) {
-      if (await hasSubmitted(doc.ref, student.id)) continue;
+      if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
       const parents = await W.parentsOfStudent(student.id);
       const msg = `${a.title} (${a.subjectName || ""}${a.topicTitle ? ", " + a.topicTitle : ""}) is due ${fmtShort(dueAt)}.`;
       await tellFamily({
@@ -150,7 +152,7 @@ async function runHomeworkOverdueGraceNotice() {
     const graceUntil = new Date(dueAt.getTime() + GRACE_HOURS * HOUR);
 
     for (const student of students) {
-      if (await hasSubmitted(doc.ref, student.id)) continue;
+      if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
       const parents = await W.parentsOfStudent(student.id);
       const msg = `Homework ${a.title} for ${a.subjectName || "your subject"} is overdue. You have a 48-hour extension until ${fmtShort(graceUntil)}.`;
       await tellFamily({
@@ -197,7 +199,7 @@ const C = {
   error: [0xE7 / 255, 0x4C / 255, 0x3C / 255]
 };
 
-async function buildReportPdf({ student, items, generatedAt }) {
+async function buildReportPdf({ student, items, generatedAt, heading, introText, noteText }) {
   const { PDFDocument, rgb } = require("pdf-lib");
   const fontkit = require("@pdf-lib/fontkit");
   const doc = await PDFDocument.create();
@@ -233,7 +235,7 @@ async function buildReportPdf({ student, items, generatedAt }) {
     page.drawRectangle({ x: 0, y: PH - 92, width: PW, height: 92, color: col(C.deep) });
     page.drawRectangle({ x: 0, y: PH - 98, width: PW, height: 6, color: col(C.teal) });
     page.drawText("PAISLEY STUDIO", { x: M, y: PH - 38, size: 12, font: bold, color: col(C.sage) });
-    page.drawText("UNATTENDED WORK REPORT", { x: M, y: PH - 68, size: 22, font: bold, color: rgb(1, 1, 1) });
+    page.drawText(heading || "UNATTENDED WORK REPORT", { x: M, y: PH - 68, size: 22, font: bold, color: rgb(1, 1, 1) });
     y = PH - 128;
   }
   function footer(p, n, total) {
@@ -250,7 +252,7 @@ async function buildReportPdf({ student, items, generatedAt }) {
   if (meta) { page.drawText(clean(regular, meta), { x: M, y, size: 10, font: regular, color: col(C.muted) }); y -= 14; }
   page.drawText("Generated " + generatedAt.toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: W.TIME_ZONE }), { x: M, y, size: 10, font: regular, color: col(C.muted) });
   y -= 24;
-  const intro = wrap(regular, `The work listed below was not handed in by the original deadline or by the end of the 48-hour extension. It is still outstanding.`, 10.5, PW - 2 * M);
+  const intro = wrap(regular, introText || `The work listed below was not handed in by the original deadline or by the end of the 48-hour extension. It is still outstanding.`, 10.5, PW - 2 * M);
   intro.forEach((ln) => { page.drawText(ln, { x: M, y, size: 10.5, font: regular, color: col(C.ink) }); y -= 14; });
   y -= 8;
 
@@ -285,7 +287,7 @@ async function buildReportPdf({ student, items, generatedAt }) {
 
   y -= 14;
   if (y < 90) header();
-  const note = wrap(regular, "Please speak to the tutor if there was a reason the work could not be completed. Submitted work is always welcome and will still be marked.", 10, PW - 2 * M);
+  const note = wrap(regular, noteText || "Please speak to the tutor if there was a reason the work could not be completed. Submitted work is always welcome and will still be marked.", 10, PW - 2 * M);
   note.forEach((ln) => { page.drawText(ln, { x: M, y, size: 10, font: regular, color: col(C.muted) }); y -= 13; });
 
   const pages = doc.getPages();
@@ -314,7 +316,7 @@ async function runGenerateUnattendedWorkReport() {
     const students = await W.resolveStudents(classroom, a.recipients, a);
     const dueAt = W.toDate(a.dueAt);
     for (const student of students) {
-      if (await hasSubmitted(doc.ref, student.id)) continue;
+      if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
       if (!perStudent.has(student.id)) perStudent.set(student.id, { student, items: [] });
       perStudent.get(student.id).items.push({
         subjectName: a.subjectName || (classroom && classroom.subjectName) || "",
@@ -337,6 +339,7 @@ async function runGenerateUnattendedWorkReport() {
     const attachments = [{ filename: "Unattended-Work-Report.pdf", content: Buffer.from(bytes), contentType: "application/pdf" }];
     const parents = await W.parentsOfStudent(student.id);
     const summary = `${items.length} piece${items.length === 1 ? "" : "s"} of work remain unattended after the 48-hour extension.`;
+    await overdueClaim(student.id, now, true);   // the next pending-work report counts from this one
 
     await tellFamily({
       student, parents, attachments,
@@ -355,6 +358,119 @@ async function runGenerateUnattendedWorkReport() {
   }
   console.log("generateUnattendedWorkReport: claimed", claimed, "assignment(s),", reports, "report(s)");
   return { assignments: claimed, reports };
+}
+
+/* =========================================================
+   3b. overdueWorkDigest — each student's own pending-work report.
+   -----------------------------------------------------------
+   Once work is more than 24 hours overdue, the student and every
+   linked parent get a PDF + email listing ALL of that student's
+   outstanding homework, classwork and exam hand-ins. It repeats every
+   2 days while anything is outstanding, for work up to 30 days late.
+   Paper-hand-in students are never included. overdueWorkState/{uid}
+   holds the last send, claimed in a transaction, so an overlapping run
+   or a manual "Run now" cannot email anyone twice.
+========================================================= */
+async function overdueClaim(studentId, now, force) {
+  const ref = W.db().collection("overdueWorkState").doc(studentId);
+  return W.db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const last = snap.exists ? W.toDate(snap.data().lastSentAt) : null;
+    if (!force && last && now.getTime() - last.getTime() < OVERDUE_REPEAT_HOURS * HOUR) return false;
+    tx.set(ref, { lastSentAt: admin.firestore.Timestamp.fromDate(now), count: (snap.exists ? snap.data().count || 0 : 0) + 1 });
+    return true;
+  });
+}
+
+const OVERDUE_SOURCES = [
+  { group: "assignments", field: "dueAt", label: "Homework", live: () => true, entity: "assignment" },
+  { group: "lessons", field: "dueAt", label: "Classwork", live: (d) => d.status === "published", entity: "lesson" },
+  // Only flat exams (classrooms/{cid}/exams/{eid}) take uploads in this collection.
+  { group: "exams", field: "submissionDeadline", label: "Exam", live: (d, ref) => d.status === "Published" && ref.path.split("/").length === 4, entity: "exam" }
+];
+
+function daysLate(dueAt, now) {
+  const d = Math.floor((now.getTime() - dueAt.getTime()) / (24 * HOUR));
+  return d === 1 ? "1 day late" : d + " days late";
+}
+
+async function collectOverdueWork(now) {
+  const to = new Date(now.getTime() - OVERDUE_AFTER_HOURS * HOUR);
+  const from = new Date(now.getTime() - LOOKBACK_DAYS * 24 * HOUR);
+  const perStudent = new Map();
+  for (const src of OVERDUE_SOURCES) {
+    let snap;
+    try {
+      snap = await W.db().collectionGroup(src.group)
+        .where(src.field, ">=", admin.firestore.Timestamp.fromDate(from))
+        .where(src.field, "<", admin.firestore.Timestamp.fromDate(to))
+        .get();
+    } catch (e) {
+      // A missing index on one source must not stop the other reports going out.
+      console.error("overdueWorkDigest: query failed for", src.group, e.message || e);
+      continue;
+    }
+    for (const doc of snap.docs) {
+      const a = doc.data();
+      if (a.migrated === true || !doc.ref.path.startsWith("classrooms/") || !src.live(a, doc.ref)) continue;
+      const cid = doc.ref.path.split("/")[1];
+      const classroom = await W.classroomOf(cid);
+      const students = await W.resolveStudents(classroom, a.recipients, a);
+      const dueAt = W.toDate(a[src.field]);
+      for (const student of students) {
+        if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
+        if (!perStudent.has(student.id)) perStudent.set(student.id, { student, items: [] });
+        perStudent.get(student.id).items.push({
+          subjectName: a.subjectName || a.subject || (classroom && classroom.subjectName) || "",
+          topicTitle: a.topicTitle || src.label,
+          title: a.title || src.label,
+          kindLabel: src.label,
+          dueAt,
+          dueText: fmtShort(dueAt) + " (" + daysLate(dueAt, now) + ")"
+        });
+      }
+    }
+  }
+  return perStudent;
+}
+
+async function runOverdueWorkDigest() {
+  const now = new Date();
+  const perStudent = await collectOverdueWork(now);
+  let reports = 0, throttled = 0;
+  for (const { student, items } of perStudent.values()) {
+    if (!(await overdueClaim(student.id, now, false))) { throttled++; continue; }
+    items.sort((x, y) => x.dueAt - y.dueAt);
+    const count = `${items.length} piece${items.length === 1 ? "" : "s"} of work`;
+    const bytes = await buildReportPdf({
+      student, items, generatedAt: now,
+      heading: "PENDING WORK REPORT",
+      introText: "The work listed below is more than 24 hours past its deadline and has not been handed in. It is still outstanding.",
+      noteText: "Late work is still welcome and will be marked. Please speak to the tutor if there is a reason it could not be done."
+    });
+    const stamp = now.toISOString().replace(/[:.]/g, "-");
+    const storagePath = `unattended-reports/${student.id}/pending-work-report_${stamp}.pdf`;
+    const url = await W.saveStoredPdf(storagePath, bytes);
+    const attachments = [{ filename: "Pending-Work-Report.pdf", content: Buffer.from(bytes), contentType: "application/pdf" }];
+    const parents = await W.parentsOfStudent(student.id);
+    const summary = `${count} still pending, more than 24 hours overdue.`;
+    await tellFamily({
+      student, parents, attachments,
+      studentMail: templates.pendingWorkReport({ audience: "student", student, items, reportUrl: url }),
+      parentMail: (p) => templates.pendingWorkReport({ audience: "parent", student, parentName: p.name, items, reportUrl: url }),
+      bell: {
+        student: { type: "overdue_work_report", title: "Pending Work Report", message: summary, relatedEntity: "unattendedReport", relatedEntityId: storagePath },
+        parent: { type: "overdue_work_report", title: `Pending Work Report: ${student.name || "your child"}`, message: summary, relatedEntity: "unattendedReport", relatedEntityId: storagePath }
+      },
+      notice: {
+        student: { type: "overdue_work_report", title: "Pending Work Report", message: summary, fileUrl: url, fileName: "Pending-Work-Report.pdf" },
+        parent: { type: "overdue_work_report", title: `Pending Work Report: ${student.name || "your child"}`, message: summary, fileUrl: url, fileName: "Pending-Work-Report.pdf" }
+      }
+    });
+    reports++;
+  }
+  console.log("overdueWorkDigest: reports", reports, "throttled", throttled);
+  return { students: perStudent.size, reports, throttled };
 }
 
 /* =========================================================
@@ -489,6 +605,7 @@ exports.homeworkDeadlineReminder   = onSchedule(SCHEDULE, async () => { await ru
 exports.homeworkOverdueGraceNotice = onSchedule(SCHEDULE, async () => { await runHomeworkOverdueGraceNotice(); });
 exports.generateUnattendedWorkReport = onSchedule(SCHEDULE, async () => { await runGenerateUnattendedWorkReport(); });
 exports.examReminderToParents      = onSchedule(SCHEDULE, async () => { await runExamReminderToParents(); });
+exports.overdueWorkDigest          = onSchedule(Object.assign({}, SCHEDULE, { schedule: "every day 07:00" }), async () => { await runOverdueWorkDigest(); });
 
 /* Admin-only manual trigger, used by the "Run now" buttons for testing. */
 exports.runDeadlineJob = onCall(
@@ -502,9 +619,10 @@ exports.runDeadlineJob = onCall(
       reminder: runHomeworkDeadlineReminder,
       grace:    runHomeworkOverdueGraceNotice,
       report:   runGenerateUnattendedWorkReport,
-      exam:     runExamReminderToParents
+      exam:     runExamReminderToParents,
+      overdue:  runOverdueWorkDigest
     };
-    if (!jobs[job]) throw new HttpsError("invalid-argument", "Unknown job. Use reminder, grace, report or exam.");
+    if (!jobs[job]) throw new HttpsError("invalid-argument", "Unknown job. Use reminder, grace, report, exam or overdue.");
     try {
       return await jobs[job]();
     } catch (e) {
@@ -519,5 +637,8 @@ exports._internals = {
   runHomeworkDeadlineReminder,
   runHomeworkOverdueGraceNotice,
   runGenerateUnattendedWorkReport,
-  runExamReminderToParents
+  runExamReminderToParents,
+  runOverdueWorkDigest,
+  collectOverdueWork,
+  OVERDUE_SOURCES
 };

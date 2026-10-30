@@ -331,7 +331,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js?v=scope2"></script>
+<script src="../lms-helpers.js?v=boards3"></script>
 <script>
 const auth = firebase.auth();
 
@@ -796,10 +796,12 @@ function initTeachPicker(t){
   const host = document.getElementById('tTeach');
   if(!host) return;
   const stages = lmzTeachingKeyStages();
-  const map = {};
+  const map = {}, boards = {};
   lmzTutorTeaching(t || { teaching: [] }).forEach(e=>{
     (map[e.keyStage] = map[e.keyStage] || {})[e.subjectId] = (e.years.length ? e.years : lmzYearsForKeyStage(e.keyStage)).slice();
+    (boards[e.keyStage] = boards[e.keyStage] || {})[e.subjectId] = e.boards.slice();
   });
+  const boardsFor = (k, sid) => { const b = boards[k] = boards[k] || {}; return b[sid] = b[sid] || [LMZ_DEFAULT_BOARD]; };
 
   // Older tutors: anything that did not fit a Key Stage is dropped on save, so say so.
   let lost = [];
@@ -829,11 +831,12 @@ function initTeachPicker(t){
       return `<div class="tp-row${on?' on':''}">
         <label class="tp-sub"><input type="checkbox" data-tp-sub="${escapeHtml(s.id)}" ${on?'checked':''} /><span>${escapeHtml(s.name)}</span></label>
         <div class="tp-yrs">${yrs.map(y=>`<button type="button" class="tp-yr${on && cur[s.id].indexOf(y)!==-1 ? ' on' : ''}" data-tp-yr="${y}" data-tp-for="${escapeHtml(s.id)}" ${on?'':'disabled'}>${word} ${y}</button>`).join('')}</div>
+        ${lmzIsCbcBand(active) ? '' : `<div class="tp-yrs" style="flex-basis:100%;align-items:center"><small style="color:var(--muted);font-weight:700;margin-right:.2rem">Exam board</small>${LMZ_BOARDS.map(b=>`<button type="button" class="tp-yr${on && boardsFor(active, s.id).indexOf(b.id)!==-1 ? ' on' : ''}" data-tp-board="${b.id}" data-tp-for="${escapeHtml(s.id)}" ${on?'':'disabled'}>${escapeHtml(b.label)}</button>`).join('')}</div>`}
       </div>`;
     }).join('');
     return `<div class="tp-panel">
       <div class="tp-panel-head">
-        <div><h4>${escapeHtml(active.replace(/^(CBC|TECH)\s+/, '$1 \u00b7 '))}</h4><small>Subjects offered at this stage. Tick the ones this tutor takes, then choose the ${word}s.</small></div>
+        <div><h4>${escapeHtml(active.replace(/^(CBC|TECH)\s+/, '$1 \u00b7 '))}</h4><small>Subjects offered at this stage. Tick the ones this tutor takes, then choose the ${word}s${lmzIsCbcBand(active) ? '' : ' and exam board'}.</small></div>
         <div><button type="button" class="tp-link" data-tp-all>Select all</button><button type="button" class="tp-link" data-tp-none>Clear</button></div>
       </div>
       ${rows || '<div class="tp-empty">No subjects are set up for this stage yet.</div>'}
@@ -846,12 +849,12 @@ function initTeachPicker(t){
       Object.keys(map[k] || {}).sort((a,b)=>lmzSubjectLabel(a).localeCompare(lmzSubjectLabel(b))).forEach(sid=>items.push({ k, sid, y: map[k][sid] }));
     });
     if(!items.length) return '<div class="tp-empty">Nothing assigned yet. This tutor will not see any classrooms, resources or timetable sessions until you tick at least one subject.</div>';
-    return `<div class="tp-chips">${items.map(i=>`<span class="tp-chip"><b>${escapeHtml(lmzKeyStageShort(i.k).replace('Key Stage ','KS'))}</b> ${escapeHtml(lmzSubjectLabel(i.sid))} \u00b7 ${escapeHtml(lmzYearsLabel(i.k, i.y))}<button type="button" data-tp-rm="${escapeHtml(i.k)}|${escapeHtml(i.sid)}" aria-label="Remove">\u00d7</button></span>`).join('')}</div>`;
+    return `<div class="tp-chips">${items.map(i=>`<span class="tp-chip"><b>${escapeHtml(lmzKeyStageShort(i.k).replace('Key Stage ','KS'))}</b> ${escapeHtml(lmzSubjectLabel(i.sid))} \u00b7 ${escapeHtml(lmzYearsLabel(i.k, i.y))}${lmzIsCbcBand(i.k) ? '' : ' \u00b7 ' + escapeHtml(boardsFor(i.k, i.sid).map(lmzBoardLabel).join(', '))}<button type="button" data-tp-rm="${escapeHtml(i.k)}|${escapeHtml(i.sid)}" aria-label="Remove">\u00d7</button></span>`).join('')}</div>`;
   }
 
   function paint(){
     host.innerHTML = `<div class="tp">
-      <div class="tp-intro">Choose a Key Stage, tick the subjects this tutor takes, then pick the Years or Levels. The tutor sees <b>only</b> the Key Stage, subject and Years set here.</div>
+      <div class="tp-intro">Choose a Key Stage, tick the subjects this tutor takes, then pick the Years or Levels and the exam board (Cambridge unless you choose otherwise). The tutor sees <b>only</b> the Key Stage, subject, Years and board set here.</div>
       <div><div class="tp-grouplabel">British curriculum</div><div class="tp-pills">${KEY_STAGES.map(pill).join('')}</div></div>
       <div><div class="tp-grouplabel">CBC \u00b7 Tuition</div><div class="tp-pills">${(typeof CBC_BANDS!=='undefined'?CBC_BANDS:[]).map(pill).join('')}</div></div>
       ${panel()}
@@ -861,9 +864,14 @@ function initTeachPicker(t){
   }
 
   host.addEventListener('click', e=>{
-    const b = e.target.closest('[data-tp-ks],[data-tp-yr],[data-tp-all],[data-tp-none],[data-tp-rm]');
+    const b = e.target.closest('[data-tp-ks],[data-tp-yr],[data-tp-board],[data-tp-all],[data-tp-none],[data-tp-rm]');
     if(!b || !host.contains(b)) return;
     if(b.dataset.tpKs){ active = b.dataset.tpKs; }
+    else if(b.dataset.tpBoard){
+      const arr = boardsFor(active, b.dataset.tpFor), i = arr.indexOf(b.dataset.tpBoard);
+      if(i === -1) arr.push(b.dataset.tpBoard);
+      else if(arr.length > 1) arr.splice(i, 1);   // a taught subject always has a board
+    }
     else if(b.dataset.tpYr){
       const sid = b.dataset.tpFor, y = Number(b.dataset.tpYr);
       const arr = (map[active] || {})[sid]; if(!arr) return;
@@ -893,7 +901,7 @@ function initTeachPicker(t){
 
   host._tpGet = () => {
     const out = [];
-    stages.forEach(k=>Object.keys(map[k] || {}).forEach(sid=>out.push({ keyStage: k, subjectId: sid, years: map[k][sid].slice() })));
+    stages.forEach(k=>Object.keys(map[k] || {}).forEach(sid=>out.push({ keyStage: k, subjectId: sid, years: map[k][sid].slice(), boards: boardsFor(k, sid).slice() })));
     return lmzNormTeaching(out);
   };
   paint();
@@ -905,7 +913,7 @@ function teachesHtml(t){
   if(!rows.length) return '<span class="cell-sub">None assigned</span>';
   const by = {}, order = [];
   rows.forEach(e=>{ if(!by[e.keyStage]){ by[e.keyStage] = []; order.push(e.keyStage); } by[e.keyStage].push(e); });
-  return order.map(k=>`<div class="tt-line"><b>${escapeHtml(lmzKeyStageShort(k).replace('Key Stage ','KS'))}</b>${by[k].map(e=>`${escapeHtml(lmzSubjectLabel(e.subjectId))} <span>${escapeHtml(lmzYearsLabel(k, e.years))}</span>`).join(' \u00b7 ')}</div>`).join('');
+  return order.map(k=>`<div class="tt-line"><b>${escapeHtml(lmzKeyStageShort(k).replace('Key Stage ','KS'))}</b>${by[k].map(e=>`${escapeHtml(lmzSubjectLabel(e.subjectId))} <span>${escapeHtml(lmzYearsLabel(k, e.years))}${lmzIsCbcBand(k) ? '' : ' \u00b7 ' + escapeHtml(e.boards.map(lmzBoardLabel).join(', '))}</span>`).join(' \u00b7 ')}</div>`).join('');
 }
 
 // Does this tutor's assignment cover this student (same Key Stage, Year and a subject the student takes)?
@@ -916,7 +924,7 @@ function tutorCoversStudent(t, s){
   return lmzTutorTeaching(t).some(e=>
     e.keyStage === s.keyStage &&
     (!e.years.length || s.year == null || s.year === '' || e.years.indexOf(Number(s.year)) !== -1) &&
-    (!subs.length || subs.indexOf(e.subjectId) !== -1));
+    (!subs.length || (subs.indexOf(e.subjectId) !== -1 && (lmzIsCbcBand(e.keyStage) || e.boards.indexOf(lmzStudentBoard(s, e.subjectId)) !== -1))));
 }
 
 function tutorFormHtml(t, isNew){
@@ -1269,7 +1277,7 @@ async function createTutor(){
       }).then(async ()=>{
         try{
           const q = await db.collection('tutorAccounts').where('slug','==',d.slug).limit(1).get();
-          if(!q.empty) await q.docs[0].ref.update({ teaching: d.teaching });
+          if(!q.empty) await q.docs[0].ref.update({ teaching: d.teaching, boardScope: d.boardScope });
         }catch(te){ console.warn('Could not store exact teaching assignments:', te); }
         closeModal();
         alert('Tutor role added to the existing account for ' + d.email + '.\n\nThey can sign in at ' + location.origin + '/tutor/' + d.slug + ' with the password they already use.');

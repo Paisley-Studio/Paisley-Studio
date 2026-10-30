@@ -145,7 +145,8 @@
     var subs = o.subjects || [], ks = o.keyStages || [];
     return cacheCls.filter(function (c) {
       if (o.role === 'admin') return true;
-      if (Array.isArray(o.teaching)) return lmzTutorCovers(scopeOf(o), c.subjectId, c.keyStage, c.year);
+      if (Array.isArray(o.teaching)) return lmzTutorCovers(scopeOf(o), c.subjectId, c.keyStage, c.year, lmzBoardOf(c));
+      if (lmzBoardOf(c) !== LMZ_DEFAULT_BOARD && !/^CBC/i.test(c.keyStage || '')) return false;
       if (subs.indexOf(c.subjectId) === -1) return false;
       return !ks.length || /^CBC/i.test(c.keyStage || '') || ks.indexOf(c.keyStage) !== -1;
     });
@@ -168,8 +169,11 @@
       var ks = o.keyStages || [];
       if (Array.isArray(o.teaching)) {
         // Files tied to a Key Stage show only where the tutor teaches that exact Key Stage + subject + Year.
-        out = out.filter(function (r) { return !r.keyStage || lmzTutorCovers(scopeOf(o), r.subjectId, r.keyStage, r.year); });
-      } else if (ks.length) out = out.filter(function (r) { return /^CBC/i.test(r.keyStage || '') || ks.indexOf(r.keyStage) !== -1; });
+        out = out.filter(function (r) { return !r.keyStage || lmzTutorCovers(scopeOf(o), r.subjectId, r.keyStage, r.year, lmzBoardOf(r)); });
+      } else {
+        out = out.filter(function (r) { return lmzBoardOf(r) === LMZ_DEFAULT_BOARD || /^CBC/i.test(r.keyStage || ''); });
+        if (ks.length) out = out.filter(function (r) { return /^CBC/i.test(r.keyStage || '') || ks.indexOf(r.keyStage) !== -1; });
+      }
     }
     // Work the Studio Desk has withdrawn is hidden from tutors (the admin still sees it, marked Withdrawn).
     if (o.role !== 'admin') out = out.filter(function (r) { return r.withdrawn !== true; });

@@ -379,6 +379,7 @@ function createTutorAccount(uid, data) {
     subjects: data.subjects || [],
     keyStages: data.keyStages || [],
     teaching: Array.isArray(data.teaching) ? data.teaching : [],
+    boardScope: Array.isArray(data.boardScope) ? data.boardScope : [],
     role: 'tutor',
     status: data.status || 'Active',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -804,6 +805,7 @@ function addTimetableEntry(data) {
     endTime: data.endTime || '',
     subjectId: data.subjectId || '',
     subjectName: data.subjectName || '',
+    board: lmzBoardId(data.board),
     classId: data.classId || '',
     keyStage: data.keyStage || '',
     tutorId: data.tutorId || null,
@@ -1120,6 +1122,71 @@ function lmzIsCbcBand(ks) { return /^CBC\b/i.test(String(ks || '')); }
 var TECH_BANDS = ['TECH Digital AI Literacy (Levels 1-7)'];
 function lmzIsTechBand(ks) { return /^TECH\b/i.test(String(ks || '')); }
 
+// =========================================================
+// EXAM BOARDS
+// A classroom, timetable session or tutor assignment belongs to a board; anything
+// without one is Cambridge. A student follows subjectBoards[subject], else board.
+// Same logic as functions/work-shared.js and firestore.rules.
+// =========================================================
+var LMZ_BOARDS = [
+  { id: 'cambridge', label: 'Cambridge' },
+  { id: 'edexcel', label: 'Pearson Edexcel' },
+  { id: 'oxford_aqa', label: 'Oxford AQA' }
+];
+var LMZ_DEFAULT_BOARD = 'cambridge';
+function lmzBoardId(v) { return LMZ_BOARDS.some(function (b) { return b.id === v; }) ? v : LMZ_DEFAULT_BOARD; }
+function lmzBoardOf(x) { return lmzBoardId(x && x.board); }
+function lmzBoardLabel(id) {
+  var want = lmzBoardId(id);
+  return LMZ_BOARDS.filter(function (b) { return b.id === want; })[0].label;
+}
+function lmzBoardOptionsHtml(cur) {
+  var want = lmzBoardId(cur);
+  return LMZ_BOARDS.map(function (b) { return '<option value="' + b.id + '"' + (b.id === want ? ' selected' : '') + '>' + b.label + '</option>'; }).join('');
+}
+function lmzStudentBoard(student, subjectId) {
+  var sb = student && student.subjectBoards && student.subjectBoards[subjectId];
+  return lmzBoardId(sb || (student && student.board));
+}
+// Every board this student follows across their subjects.
+function lmzStudentBoards(student) {
+  var keys = lmzSubjectKeys(student && student.subjects), out = [];
+  if (!keys.length) return [lmzBoardOf(student)];
+  keys.forEach(function (k) {
+    var b = lmzStudentBoard(student, k);
+    if (out.indexOf(b) === -1) out.push(b);
+  });
+  return out;
+}
+// An upload-style timetable document with no subject: shown when the student follows its board at all.
+function lmzTimetableForStudent(student, t) { return lmzStudentBoards(student).indexOf(lmzBoardOf(t)) !== -1; }
+function lmzEntryForStudent(student, entry) { return lmzBoardOf(entry) === lmzStudentBoard(student, lmzEntrySubjectKey(entry)); }
+
+// =========================================================
+// NEW STUDENTS START FRESH
+// Work posted to the class before the account became active (students.activatedAt)
+// is not theirs. Accounts with no activatedAt predate this and keep what they see;
+// work a tutor releases to the student by name always counts.
+// Same logic as workPredatesStudent in functions/work-shared.js.
+// =========================================================
+function _lmzMs(ts) {
+  if (!ts) return 0;
+  if (ts.toMillis) return ts.toMillis();
+  if (ts.toDate) return ts.toDate().getTime();
+  var d = new Date(ts);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+function lmzWorkPredatesStudent(student, item, uid) {
+  var joined = _lmzMs(student && student.activatedAt);
+  if (!joined || !item) return false;
+  var who = uid || (student && student.id);
+  if (Array.isArray(item.releasedTo) && item.releasedTo.indexOf(who) !== -1) return false;
+  var t = student.studentType, aud = t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online');
+  var pub = item.publication && item.publication[aud];
+  var posted = _lmzMs((pub && pub.publishedAt) || item.createdAt);
+  return !!posted && posted < joined;
+}
+
 var LMZ_SUBJECTS = [
   { id: 'english',            name: 'English',            keyStages: [2, 3, 4, 5] },
   { id: 'mathematics',        name: 'Mathematics',        keyStages: [2, 3, 4, 5], aliases: ['maths', 'math'] },
@@ -1256,7 +1323,8 @@ function lmzSubjectWriteFields(list) {
 // =========================================================
 // TUTOR TEACHING SCOPE  (exact Key Stage + subject + Years)
 //
-//   tutorAccounts.teaching = [ { keyStage, subjectId, years:[7,8,9] }, ... ]
+//   tutorAccounts.teaching = [ { keyStage, subjectId, years:[7,8,9], boards:['cambridge','edexcel'] }, ... ]
+//   tutorAccounts.boardScope = [ "keyStage|subjectId|board", ... ]  derived, read by the rules and functions
 //
 // One entry per Key Stage + subject, listing the exact Years the tutor takes.
 // A tutor sees ONLY those classrooms, resources and timetable sessions: KS3
@@ -1284,10 +1352,12 @@ function lmzNormTeaching(list) {
     var valid = lmzYearsForKeyStage(ks);
     var yrs = (Array.isArray(e.years) ? e.years : []).map(Number).filter(function (y) { return valid.indexOf(y) !== -1; });
     var k = ks + '|' + sid;
-    if (!byKey[k]) { byKey[k] = { keyStage: ks, subjectId: sid, years: [] }; out.push(byKey[k]); }
+    if (!byKey[k]) { byKey[k] = { keyStage: ks, subjectId: sid, years: [], boards: [] }; out.push(byKey[k]); }
     yrs.forEach(function (y) { if (byKey[k].years.indexOf(y) === -1) byKey[k].years.push(y); });
+    (Array.isArray(e.boards) ? e.boards : []).forEach(function (b) { if (LMZ_BOARDS.some(function (x) { return x.id === b; }) && byKey[k].boards.indexOf(b) === -1) byKey[k].boards.push(b); });
   });
-  out.forEach(function (e) { e.years.sort(function (a, b) { return a - b; }); });
+  // Entries saved before boards existed are Cambridge.
+  out.forEach(function (e) { e.years.sort(function (a, b) { return a - b; }); if (!e.boards.length) e.boards = [LMZ_DEFAULT_BOARD]; });
   out.sort(function (a, b) {
     return (order.indexOf(a.keyStage) - order.indexOf(b.keyStage)) || lmzSubjectLabel(a.subjectId).localeCompare(lmzSubjectLabel(b.subjectId));
   });
@@ -1311,20 +1381,22 @@ function lmzTutorTeaching(tutor) {
   return lmzLegacyTeaching(tutor);
 }
 
-// Does this tutor teach this subject in this Key Stage (and Year, when given)?
-function lmzTutorCovers(tutor, subjectId, keyStage, year) {
+// Does this tutor teach this subject in this Key Stage (and Year and board, when given)?
+function lmzTutorCovers(tutor, subjectId, keyStage, year, board) {
   if (!tutor) return false;
   var sid = lmzSubjectKey(subjectId);
   if (!sid) return false;
   if (!Array.isArray(tutor.teaching)) {
     if (lmzSubjectKeys(tutor.subjects).indexOf(sid) === -1) return false;
     if (lmzIsTechBand(keyStage)) return false;
+    if (board && !lmzIsCbcBand(keyStage) && lmzBoardId(board) !== LMZ_DEFAULT_BOARD) return false;
     var ks = tutor.keyStages || [];
     return !ks.length || ks.indexOf(keyStage) !== -1;
   }
   var noYear = year == null || year === '';
   return lmzNormTeaching(tutor.teaching).some(function (e) {
     if (e.subjectId !== sid || e.keyStage !== keyStage) return false;
+    if (board && !lmzIsCbcBand(keyStage) && e.boards.indexOf(lmzBoardId(board)) === -1) return false;
     return noYear || !e.years.length || e.years.indexOf(Number(year)) !== -1;
   });
 }
@@ -1338,6 +1410,16 @@ function lmzTutorSubjectKeys(tutor) {
   return lmzSubjectKeys(tutor && tutor.subjects);
 }
 
+// Every board this tutor teaches (a tutor saved before boards existed is Cambridge).
+function lmzTutorBoards(tutor) {
+  var out = [];
+  lmzTutorTeaching(tutor).forEach(function (e) {
+    if (lmzIsCbcBand(e.keyStage)) return;
+    e.boards.forEach(function (b) { if (out.indexOf(b) === -1) out.push(b); });
+  });
+  return out.length ? out : [LMZ_DEFAULT_BOARD];
+}
+
 function lmzTutorKeyStages(tutor) {
   if (tutor && Array.isArray(tutor.teaching)) {
     var out = [];
@@ -1349,12 +1431,13 @@ function lmzTutorKeyStages(tutor) {
 
 // Everything to write on a tutor profile for a set of entries.
 function lmzTeachingWriteFields(list) {
-  var teaching = lmzNormTeaching(list), ks = [], subs = [];
+  var teaching = lmzNormTeaching(list), ks = [], subs = [], scope = [];
   teaching.forEach(function (e) {
     if (ks.indexOf(e.keyStage) === -1) ks.push(e.keyStage);
     if (subs.indexOf(e.subjectId) === -1) subs.push(e.subjectId);
+    if (!lmzIsCbcBand(e.keyStage)) e.boards.forEach(function (b) { scope.push(e.keyStage + '|' + e.subjectId + '|' + b); });
   });
-  return { teaching: teaching, keyStages: ks, subjects: subs, subjectNames: subs.map(lmzSubjectLabel) };
+  return { teaching: teaching, keyStages: ks, subjects: subs, subjectNames: subs.map(lmzSubjectLabel), boardScope: scope };
 }
 
 // "Year 7", "Years 7-9", "Years 7, 9", "Grades 4-6"
@@ -1383,7 +1466,8 @@ function lmzKeyStageShort(ks) {
 // Plain-text lines for the tutor's own sidebar / lists: "English \u00b7 Key Stage 3 \u00b7 Years 7\u20139"
 function lmzTeachingLines(tutor) {
   return lmzTutorTeaching(tutor).map(function (e) {
-    return lmzSubjectLabel(e.subjectId) + ' \u00b7 ' + lmzKeyStageShort(e.keyStage) + ' \u00b7 ' + lmzYearsLabel(e.keyStage, e.years);
+    return lmzSubjectLabel(e.subjectId) + ' \u00b7 ' + lmzKeyStageShort(e.keyStage) + ' \u00b7 ' + lmzYearsLabel(e.keyStage, e.years) +
+      (lmzIsCbcBand(e.keyStage) ? '' : ' \u00b7 ' + e.boards.map(lmzBoardLabel).join(', '));
   });
 }
 
@@ -1447,7 +1531,9 @@ function getTimetableEntriesForStudent(student) {
   if (!scope.keyStage) return Promise.resolve([]);
   return Promise.all(_lmzEntryQueries(scope.keyStage, scope.subjectKeys).map(function (q) {
     return q.get().then(_lmzSnapToEntries);
-  })).then(_lmzFlatten);
+  })).then(_lmzFlatten).then(function (list) {
+    return list.filter(function (e) { return lmzEntryForStudent(student, e); });
+  });
 }
 
 function watchTimetableEntriesForStudent(student, cb, errCb) {
@@ -1458,7 +1544,7 @@ function watchTimetableEntriesForStudent(student, cb, errCb) {
   var unsubs = queries.map(function (q, i) {
     return q.onSnapshot(function (snap) {
       buckets[i] = _lmzSnapToEntries(snap);
-      cb(_lmzFlatten(buckets));
+      cb(_lmzFlatten(buckets).filter(function (e) { return lmzEntryForStudent(student, e); }));
     }, errCb || function (e) { console.error('timetableEntries listener:', e); });
   });
   return function () { unsubs.forEach(function (u) { u(); }); };
@@ -1474,8 +1560,8 @@ function watchTimetableEntriesForTutor(tutor, cb, errCb) {
   var unsubs = queries.map(function (q, i) {
     return q.onSnapshot(function (snap) {
       buckets[i] = _lmzSnapToEntries(snap);
-      // Only the exact Key Stage + subject pairs this tutor was given (KS3 English never shows KS4 English).
-      cb(_lmzFlatten(buckets).filter(function (e) { return lmzTutorCovers(tutor, lmzEntrySubjectKey(e), e.keyStage); }));
+      // Only the exact Key Stage + subject + board this tutor was given (KS3 English never shows KS4 English).
+      cb(_lmzFlatten(buckets).filter(function (e) { return lmzTutorCovers(tutor, lmzEntrySubjectKey(e), e.keyStage, null, lmzBoardOf(e)); }));
     }, errCb || function (e) { console.error('timetableEntries listener:', e); });
   });
   return function () { unsubs.forEach(function (u) { u(); }); };

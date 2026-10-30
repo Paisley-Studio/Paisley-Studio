@@ -636,9 +636,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js?v=live2"></script>
-<script src="../js/classroom/classroom-helpers.js?v=live2"></script>
-<script src="../js/classroom/work-helpers.js?v=live7"></script>
+<script src="../lms-helpers.js?v=boards3"></script>
+<script src="../js/classroom/classroom-helpers.js?v=boards3"></script>
+<script src="../js/classroom/work-helpers.js?v=boards3"></script>
 <script src="../js/classroom/work-learner.js?v=boards2"></script>
 <script>
 const auth = firebase.auth();
@@ -822,7 +822,7 @@ function applyWorkCounts(per){
     (w.assignments||[]).concat(w.lessons||[]).forEach(function(it){
       if(!H.studentSees(profile, it)) return;
       if(WorkUI.isStudentTodo(it, false)) hw++;
-      if(it.isClasswork && (!it.sub || (it.sub && it.sub.status === 'Corrections'))) cls++;
+      if(it.isClasswork && (it.sub ? it.sub.status === 'Corrections' : !it._hardCopy)) cls++;
       if(it.sub) handedIn.push(it.id);
     });
     (w.exams||[]).forEach(function(it){
@@ -956,7 +956,7 @@ document.addEventListener('click', function(e){
 function renderWorkNotices(){
   const list = document.getElementById('workNoticesList'); if(!list) return;
   list.innerHTML = workNotices.map(n=>{
-    const bad = n.type === 'unattended_report' || n.type === 'homework_overdue';
+    const bad = n.type === 'unattended_report' || n.type === 'overdue_work_report' || n.type === 'homework_overdue';
     const when = n.createdAt && n.createdAt.toDate ? lmsFmtDate(n.createdAt.toDate()) : '';
     return `<div class="item-card"><div class="ic"><i class="fas ${bad?'fa-clipboard-list':(n.type==='graded'?'fa-circle-check':'fa-bell')}"></i></div><div class="body">
       <div class="title">${escapeHtml(n.title||'Notice')}</div>
@@ -1400,7 +1400,7 @@ function loadNotesAndNotices(){
     getTimetableEntriesForStudent(profile).catch(e=>{ console.error('timetableEntries:', e); return null; })
   ]).then(([tSnap, ttSnap, teList])=>{
     allNotices    = tSnap  ? tSnap.docs.map(d=>({id:d.id, ...d.data()}))  : [];
-    allTimetables = ttSnap ? ttSnap.docs.map(d=>({id:d.id, ...d.data()})) : [];
+    allTimetables = ttSnap ? ttSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(t=>lmzTimetableForStudent(profile, t)) : [];
     allTimetableEntries = teList || [];
 
     const byPosted = (a,b)=> ((b.postedAt&&b.postedAt.seconds)||0) - ((a.postedAt&&a.postedAt.seconds)||0);

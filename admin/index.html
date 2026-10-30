@@ -57,12 +57,13 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../firestore-helpers.js"></script>
-<script src="../lms-helpers.js?v=scope2"></script>
+<script src="../lms-helpers.js?v=boards3"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=scope1"></script>
-<script src="../js/classroom/resources-folder.js?v=res3"></script>
-<script src="../js/classroom/work-helpers.js?v=live9"></script>
-<script src="../js/classroom/publish-helpers.js?v=live5"></script>
+<script src="../js/classroom/classroom-helpers.js?v=boards3"></script>
+<script src="../js/classroom/paper-handins.js?v=boards3"></script>
+<script src="../js/classroom/resources-folder.js?v=boards3"></script>
+<script src="../js/classroom/work-helpers.js?v=boards3"></script>
+<script src="../js/classroom/publish-helpers.js?v=boards3"></script>
 <script src="../js/classroom/publish-ui.js?v=restore2"></script>
 <script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/admin/remote-students.js"></script>
@@ -976,10 +977,16 @@
                 <button class="chip-btn" data-filter="Key Stage 5 (Years 12-13) — A-Level" type="button">KS5</button>
                 <button class="chip-btn active" data-filter="all" type="button">All</button>
               </div>
+              <div class="filter-chips" id="teBoardChips">
+                <button class="chip-btn active" data-filter="all" type="button">All boards</button>
+                <button class="chip-btn" data-filter="cambridge" type="button">Cambridge</button>
+                <button class="chip-btn" data-filter="edexcel" type="button">Edexcel</button>
+                <button class="chip-btn" data-filter="oxford_aqa" type="button">Oxford AQA</button>
+              </div>
             </div>
             <div class="footer-note" style="margin-top:.8rem;">
               <i class="fas fa-circle-info" aria-hidden="true"></i>
-              <div>Add as many sessions as you like to any day — there's no limit, and a tutor is optional (leave it blank for a self-study slot, a trial class, or one not yet staffed).</div>
+              <div>Each session belongs to one exam board (Cambridge unless you choose otherwise), and only students on that board see it. Add as many sessions as you like to any day — there's no limit, and a tutor is optional (leave it blank for a self-study slot, a trial class, or one not yet staffed).</div>
             </div>
             <div id="teDayGrid"></div>
           </div>
@@ -1892,6 +1899,15 @@ function viewStudent(id){
         <div id="editBoards" class="cr-boardbox"></div>
       </div>
     </div>
+    <div class="detail-block">
+      <div class="k">Hands in on paper</div>
+      <div class="v">
+        <label style="display:flex; gap:.5rem; align-items:flex-start; font-size:.84rem; cursor:pointer;">
+          <input type="checkbox" id="editPhysical" ${s.physicalStudent===true?'checked':''} style="margin-top:.2rem;" />
+          <span>This student attends at school and hands in paper copies. They get no upload reminders or overdue notices. You or their tutor record each hand-in and grade from the work's student list.</span>
+        </label>
+      </div>
+    </div>
         <div class="detail-block">
       <div class="k">Tutors — one per subject</div>
       <div class="v">
@@ -1972,6 +1988,8 @@ function initStudentSubjectEditor(s){
   fillYears(s.year);
     ksSel.addEventListener('change', ()=>{ fillYears(yearSel.value); renderEditSubjects(); renderSubjectTutors(s); });
   yearSel.addEventListener('change', ()=>renderSubjectTutors(s));
+  // The tutors offered depend on the board, so changing it refreshes the list.
+  document.getElementById('editBoards').addEventListener('change', ()=>renderSubjectTutors(s));
   document.getElementById('editSubjectAddBtn').addEventListener('click', ()=>{
     const sel = document.getElementById('editSubjectAdd');
     if(sel.value && editSubjectKeys.indexOf(sel.value) === -1) editSubjectKeys.push(sel.value);
@@ -2154,6 +2172,7 @@ async function saveStudentEdit(id){
     tutorId: legacyTutorId,
     tutorName: legacyTutorName,
     tutorSlug: legacyTutorSlug,
+    physicalStudent: !!(document.getElementById('editPhysical')||{}).checked,
     ...(()=>{
       const bh = document.getElementById('editBoards');
       if(!bh || !window.ClassroomUI) return {};
@@ -2174,11 +2193,11 @@ async function saveStudentEdit(id){
    On save, we derive `tutorIds[]` (for the tutor portal query)
    and the legacy `tutorId`/`tutorName`/`tutorSlug` fields.
 --------------------------------------------------------- */
-function eligibleTutorsForSubject(subjectId, keyStage, year){
+function eligibleTutorsForSubject(subjectId, keyStage, year, board){
   return (DB.tutorAccounts || []).filter(t=>{
     if((t.status||'') === 'Suspended') return false;
-    // Exact Key Stage + subject + Year the tutor was given (older tutors keep their subjects + Key Stages).
-    return lmzTutorCovers(t, subjectId, keyStage, year);
+    // Exact Key Stage + subject + Year + board the tutor was given (older tutors keep their subjects + Key Stages).
+    return lmzTutorCovers(t, subjectId, keyStage, year, board);
   }).sort((a,b)=> String(a.name||'').localeCompare(String(b.name||'')));
 }
 
@@ -2201,11 +2220,12 @@ function renderSubjectTutors(s){
     host.innerHTML = '<div style="color:var(--muted); font-size:.82rem;">Add subjects above to assign a tutor to each one.</div>';
     return;
   }
+  const picked = ClassroomUI.util.readBoardAssign(document.getElementById('editBoards'), 'eb');
   host.innerHTML = editSubjectKeys.map(k=>{
     const allowed = lmzSubjectsForKeyStage(ks).map(x=>x.id);
     const bad = allowed.indexOf(k) === -1;
     const cur = existing[k] || null;
-    const eligible = eligibleTutorsForSubject(k, ks, (document.getElementById('editYear')||{}).value || s.year);
+    const eligible = eligibleTutorsForSubject(k, ks, (document.getElementById('editYear')||{}).value || s.year, lmzStudentBoard(picked, k));
     let options = '<option value="">— No tutor assigned —</option>';
     options += eligible.map(t=>`<option value="${escapeHtml(t.id)}" ${cur && cur.tutorId===t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
     // If the current tutor is no longer eligible, still show them but mark it.
@@ -3980,12 +4000,13 @@ function closeModal(){ overlay.classList.remove('open'); }
 /* =========================================================
    CONTENT — NOTES, NOTICES, TIMETABLES, LIVE CLASSES
 ========================================================= */
-let noteKSFilter = 'all', noticeKSFilter = 'all', ttKSFilter = 'all', teKSFilter = 'all', liveKSFilter = 'all';
+let noteKSFilter = 'all', noticeKSFilter = 'all', ttKSFilter = 'all', teKSFilter = 'all', teBoardFilter = 'all', liveKSFilter = 'all';
 
 wireChips('noteKS',   v=>noteKSFilter=v,   renderNoteTable);
 wireChips('noticeKS', v=>noticeKSFilter=v, renderNoticeTable);
 wireChips('ttKS',     v=>ttKSFilter=v,     renderTtTable);
 wireChips('teKS',     v=>teKSFilter=v,     renderTeGrid);
+wireChips('teBoardChips', v=>teBoardFilter=v, renderTeGrid);
 wireChips('liveKS',   v=>liveKSFilter=v,   renderLiveTable);
 
 document.querySelectorAll('#contentSubtabs .subtab-btn').forEach(btn=>{
@@ -4140,6 +4161,7 @@ function renderTeGrid(){
   if(!grid) return;
   let list = DB.timetableEntries || [];
   if(teKSFilter !== 'all') list = list.filter(e=>e.keyStage===teKSFilter);
+  if(teBoardFilter !== 'all') list = list.filter(e=>lmzBoardOf(e)===teBoardFilter);
   const byDay = groupTimetableEntriesByDay(list);
   grid.innerHTML = DAYS_OF_WEEK.map(day=>`
     <div class="panel" style="margin-bottom:.9rem; padding:1rem 1.1rem;">
@@ -4148,10 +4170,11 @@ function renderTeGrid(){
         <button class="btn btn-ghost btn-sm" type="button" onclick="openTeForm(null, '${day}')"><i class="fas fa-plus"></i> Add session</button>
       </div>
       ${byDay[day].length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Time</th><th>Subject</th><th>Key Stage</th><th>Tutor</th><th>Room</th><th></th></tr></thead>
+        <thead><tr><th>Time</th><th>Subject</th><th>Board</th><th>Key Stage</th><th>Tutor</th><th>Room</th><th></th></tr></thead>
         <tbody>${byDay[day].map(e=>`<tr>
           <td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td>
           <td>${escapeHtml(e.subjectName||'')}</td>
+          <td>${escapeHtml(lmzBoardLabel(e.board))}</td>
           <td>${escapeHtml((e.keyStage||'').replace(/\s*\(.*/, ''))}</td>
           <td>${e.tutorName ? escapeHtml(e.tutorName) : '<span class="cell-sub">Optional — not set</span>'}</td>
           <td>${escapeHtml(e.room||'—')}</td>
@@ -4180,6 +4203,9 @@ function openTeForm(id, presetDay){
       </div>
       <div class="form-field"><label>Key Stage</label>
         <select id="teKeyStage">${keyStages.map(k=>`<option value="${escapeHtml(k)}" ${e&&e.keyStage===k?'selected':''}>${escapeHtml(k)}</option>`).join('')}</select>
+      </div>
+      <div class="form-field full"><label>Exam board</label>
+        <select id="teBoard">${lmzBoardOptionsHtml(e ? e.board : '')}</select>
       </div>
       <div class="form-field"><label>Start time</label><input type="time" id="teStart" value="${e?escapeHtml(e.startTime||''):''}" /></div>
       <div class="form-field"><label>End time</label><input type="time" id="teEnd" value="${e?escapeHtml(e.endTime||''):''}" /></div>
@@ -4211,6 +4237,7 @@ function saveTeForm(id){
     endTime: document.getElementById('teEnd').value,
     subjectId: document.getElementById('teSubject').value,
     subjectName: lmzSubjectLabel(document.getElementById('teSubject').value),
+    board: lmzBoardId(document.getElementById('teBoard').value),
     tutorId: tutorId || null,
     tutorName: tutor ? tutor.name : null,
     room: document.getElementById('teRoom').value.trim()
@@ -4252,7 +4279,8 @@ function timetableFormHtml(t){
       <div class="form-field"><label>Key Stage</label>
         <select id="tKeyStage">${keyStages.map(k=>`<option value="${escapeHtml(k)}" ${t.keyStage===k?'selected':''}>${escapeHtml(k)}</option>`).join('')}</select>
       </div>
-      <div class="form-field"><label>File URL (optional)</label><input type="text" id="tFile" value="${escapeHtml(t.fileURL||'')}" placeholder="https://…" /></div>
+      <div class="form-field"><label>Exam board</label><select id="tBoard">${lmzBoardOptionsHtml(t.board)}</select></div>
+      <div class="form-field full"><label>File URL (optional)</label><input type="text" id="tFile" value="${escapeHtml(t.fileURL||'')}" placeholder="https://…" /></div>
     </div>
     <div id="ttSlotList" style="margin-top:1rem;"></div>
     <button class="btn btn-ghost btn-sm" type="button" onclick="addTtSlot()"><i class="fas fa-plus" aria-hidden="true"></i> Add slot</button>`;
@@ -4292,6 +4320,7 @@ function timetableFromForm(){
   return {
     title: document.getElementById('tTitle').value.trim(),
     keyStage: document.getElementById('tKeyStage').value,
+    board: lmzBoardId(document.getElementById('tBoard').value),
     fileURL: document.getElementById('tFile').value.trim(),
     slots: ttSlots
   };

@@ -1,7 +1,7 @@
 // Paisley Studio Service Worker
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v8-fresh-js'; // bumped: audience-aware client + Cloud Function calls must not be intercepted
+const CACHE_NAME = 'paisley-studio-v9-boards'; // bumped: audience-aware client + Cloud Function calls must not be intercepted
 const CACHE_URLS = ['./', './index.html'];
 
 // Hosts that must NEVER be intercepted by the service worker.

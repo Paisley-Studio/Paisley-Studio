@@ -449,6 +449,11 @@ exports.onStudentActivated = onDocumentUpdated(
     if (afterStatus !== "active") return;
     if (beforeStatus !== "pending") return;
     const student = after;
+    // New students start fresh: work posted to the class before this moment is not theirs.
+    if (!after.activatedAt) {
+      try { await event.data.after.ref.update({ activatedAt: admin.firestore.FieldValue.serverTimestamp() }); }
+      catch (e) { console.error("onStudentActivated: activatedAt write failed:", e); }
+    }
     // TECH students get their own welcome (functions/tech.js → onTechStudentActivated) with the TECH sign-in link.
     if (student.studentType === "tech") return;
     if (!student.email) return;
@@ -710,6 +715,7 @@ exports.onFlatExamPosted = onDocumentWritten(
     }
 
     const wantYear = exam.year != null ? Number(exam.year) : null;
+    const examClassroom = await WS.classroomOf(cid);
     const studentsSnap = await db.collection("students")
       .where("keyStage", "==", exam.keyStage)
       .get();
@@ -721,6 +727,7 @@ exports.onFlatExamPosted = onDocumentWritten(
       if (wantYear != null && student.year != null && Number(student.year) !== wantYear) continue;
       if (String(student.status || "").toLowerCase() === "suspended") continue;
       if (claimedAuds.indexOf(WS.studentAudience(student)) === -1) continue;
+      if (examClassroom && WS.studentBoard(student, exam.subjectId) !== WS.boardOf(examClassroom)) continue;
 
       const studentId = stuDoc.id;
 
@@ -790,6 +797,7 @@ exports.onFlatExamPosted = onDocumentWritten(
         if (tutorSubjects.indexOf(exam.subjectId) === -1) continue;
         const tutorKs = Array.isArray(tutor.keyStages) ? tutor.keyStages : [];
         if (tutorKs.length && tutorKs.indexOf(exam.keyStage) === -1) continue;
+        if (examClassroom && !WS.tutorTeachesBoard(tutor, examClassroom)) continue;
 
         const tutorId = tutDoc.id;
 

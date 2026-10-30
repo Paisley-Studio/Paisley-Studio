@@ -156,9 +156,11 @@ body{min-height:100vh;min-height:100dvh}
     
     <div class="note" id="joinAs" hidden></div>
     <div class="f"><label for="suName">Your name</label><input id="suName" autocomplete="name" maxlength="80" /></div>
+    <div class="f"><label for="suEmail">Student email</label><input id="suEmail" type="email" autocomplete="email" />
+      <div class="small" style="margin:.3rem 0 0;text-align:left">We email your acceptance, new missions and reminders here.</div></div>
     <div id="newAcct">
-      <div class="f"><label for="suEmail">Email</label><input id="suEmail" type="email" autocomplete="email" /></div>
-      <div class="f"><label for="suPass">Password</label><input id="suPass" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" /></div>
+      <div class="f"><label for="suPass">Password</label><input id="suPass" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+        <div class="small" style="margin:.3rem 0 0;text-align:left">Already have a Paisley login (student, tutor, parent or coach)? Use that email and its password and we'll add TECH to it. <a href="#" id="suForgot">Forgot it?</a></div></div>
     </div>
     <div class="f"><label for="suAge">Age group</label><select id="suAge"><option value="">Select…</option><option value="under18">Under 18</option><option value="18plus">18 or over</option></select></div>
     <div class="f" style="margin-bottom:.4rem"><label for="suPhone">Your phone (optional)</label><input id="suPhone" type="tel" autocomplete="tel" /></div>
@@ -191,9 +193,11 @@ body{min-height:100vh;min-height:100dvh}
 /* Paisley TECH sign in / apply.
    TECH is its own programme: an application is a techStudents/{uid} doc.
    - New people create a login and apply in one step.
-   - Anyone who already has a Paisley login (IGCSE, CBC, online, remote) signs in
-     and applies with that same account.
-   - Coaches and guardians who sign in here are sent to their own portals. */
+   - Anyone who already has a Paisley login (student, tutor, parent, coach) joins with that
+     same account: on the join form their email + password adds TECH to it, because
+     Firebase allows only one login per email.
+   - Coaches and guardians who sign in here are sent to their own portals, unless they
+     came to join (?tab=signup). */
 document.addEventListener('DOMContentLoaded', () => {
   const auth = firebase.auth();
   const $ = id => document.getElementById(id);
@@ -202,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const INTS = ['Create','Research','Study smarter','Start something','Solve problems','Build projects','Work faster','Understand AI','Stay safe online'];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let joinUser = null;   // signed in, but not yet in TECH
+  const cameToJoin = new URLSearchParams(location.search).get('tab') === 'signup';
 
   $('idChips').innerHTML = IDENT.map(x=>'<label class="chip"><input type="radio" name="ident" value="'+x+'"><span>'+x+'</span></label>').join('');
   $('intChips').innerHTML = INTS.map(x=>'<label class="chip"><input type="checkbox" name="int" value="'+x+'"><span>'+x+'</span></label>').join('');
@@ -221,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.tab)));
   document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); setTab(g.dataset.goto); } });
-  if (new URLSearchParams(location.search).get('tab') === 'signup') setTimeout(() => setTab('signup'), 10);
+  if (cameToJoin) setTimeout(() => setTab('signup'), 10);
 
   [['loginEmail','loginBtn'],['loginPassword','loginBtn'],['suName','signupBtn'],['suEmail','signupBtn'],['suPass','signupBtn'],['suPhone','signupBtn'],].forEach(([i,b])=>{
     const el=$(i); if(!el) return; el.setAttribute('enterkeyhint','go');
@@ -266,8 +271,8 @@ document.addEventListener('DOMContentLoaded', () => {
       db.collection('students').doc(user.uid).get().catch(() => null)
     ]);
     if (ts.exists) { location.href = '/tech/dashboard.html'; return; }
-    if (coach && coach.exists) { location.href = '/tech/coach/dashboard.html'; return; }
-    if (links && !links.empty) { location.href = '/tech/parent/dashboard.html'; return; }
+    if (!cameToJoin && coach && coach.exists) { location.href = '/tech/coach/dashboard.html'; return; }
+    if (!cameToJoin && links && !links.empty) { location.href = '/tech/parent/dashboard.html'; return; }
     const sp = stu && stu.exists ? stu.data() : null;
     if (sp && sp.studentType === 'tech') {
       showErr('Your TECH account is being moved to the new TECH studio. Please try again shortly, or contact the Studio Desk.');
@@ -277,7 +282,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function startJoin(user, sp){
     joinUser = user;
-    $('newAcct').hidden = true; $('existingNote').hidden = true;
+    $('newAcct').hidden = true;
+    $('suEmail').value = (sp && sp.email) || user.email || '';
     $('joinAs').hidden = false;
     $('joinAs').innerHTML = '<i class="fas fa-user-check"></i> Joining TECH as <b>' + esc(user.email) + '</b>' + (sp ? ' with your Paisley student account' : '') + '. <a href="#" id="notMe">Not you?</a>';
     if (sp) {
@@ -311,14 +317,21 @@ document.addEventListener('DOMContentLoaded', () => {
     auth.sendPasswordResetEmail(email).then(()=>showOk('If that email has an account, a reset link is on its way.')).catch(()=>showOk('If that email has an account, a reset link is on its way.'));
   });
 
+  $('suForgot').addEventListener('click',e=>{
+    e.preventDefault(); const email=$('suEmail').value.trim();
+    if(!email) return showErr('Enter your email above first, then click "Forgot it?".');
+    auth.sendPasswordResetEmail(email).then(()=>showOk('If that email has an account, a reset link is on its way.')).catch(()=>showOk('If that email has an account, a reset link is on its way.'));
+  });
+
   const BLOCKED = ['example.com','example.org','example.net','mailinator.com','guerrillamail.com','sharklasers.com','10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','trashmail.com','dispostable.com','getnada.com','maildrop.cc','throwawaymail.com','fakeinbox.com','mintemail.com','mohmal.com'];
   function isFake(a){ const m=String(a||'').trim().toLowerCase().match(/^[^@\s]+@([^@\s]+)$/); if(!m) return true; const d=m[1]; return /\.(test|invalid|localhost|local|example)$/.test(d) || BLOCKED.some(b=>d===b||d.endsWith('.'+b)); }
   const shownAt = Date.now();
 
   /* Validates the form; returns the techStudents doc or null (after showing the error). */
-  function collect(email){
-    const name=$('suName').value.trim(), age=$('suAge').value, phone=$('suPhone').value.trim();
+  function collect(){
+    const name=$('suName').value.trim(), age=$('suAge').value, phone=$('suPhone').value.trim(), email=$('suEmail').value.trim();
     if(name.length<2) { showErr('Please enter your name.'); return null; }
+    if(!/^\S+@\S+\.\S+$/.test(email)||isFake(email)) { showErr('Please enter your own real email address. We send your acceptance and new work there.'); return null; }
     if(!age) { showErr('Please tell us your age group.'); return null; }
     const guardians = [], seen = {}, list = cards();
     for (let i = 0; i < list.length; i++) {
@@ -328,13 +341,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const who = list.length > 1 ? 'parent or guardian ' + (i + 1) : 'your parent or guardian';
       if(!g.name||!/^\S+@\S+\.\S+$/.test(g.email)||isFake(g.email)) { showErr('Please give the name and real email address of ' + who + '.'); return null; }
       if(g.phone.replace(/\D/g,'').length<6) { showErr('Please give the phone number of ' + who + ' (at least 6 digits). It becomes their first password.'); return null; }
-      if(g.email.toLowerCase()===String(email).toLowerCase()) { showErr('Each parent or guardian needs their own email address, not yours.'); return null; }
+      if(g.email.toLowerCase()===email.toLowerCase()) { showErr('Each parent or guardian needs their own email address, not yours.'); return null; }
       if(seen[g.email.toLowerCase()]) { showErr('Two parents or guardians have the same email address. Each needs their own.'); return null; }
       seen[g.email.toLowerCase()] = true;
       guardians.push({ name: g.name.slice(0,80), relationship: g.relationship, email: g.email.slice(0,120), phone: g.phone.slice(0,40) });
     }
     if (age==='under18' && !guardians.length) { showErr('Because you\'re under 18, please add at least one parent or guardian.'); return null; }
-    const data = { name: name.slice(0,80), email, phone: phone.slice(0,30), ageGroup: age, status: 'Pending',
+    const data = { name: name.slice(0,80), email: email.slice(0,120), phone: phone.slice(0,30), ageGroup: age, status: 'Pending',
       techProfile: { identity:(document.querySelector('input[name=ident]:checked')||{}).value||'', interests:[...document.querySelectorAll('input[name=int]:checked')].map(x=>x.value) },
       guardians: guardians.slice(0, 4),
       createdAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
@@ -347,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn=$('signupBtn');
 
     if (joinUser) {
-      const data = collect(joinUser.email || ''); if (!data) return;
+      const data = collect(); if (!data) return;
       btn.disabled = true;
       try {
         await db.collection('techStudents').doc(joinUser.uid).set(data);
@@ -358,21 +371,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const email=$('suEmail').value.trim(), pass=$('suPass').value;
-    if(isFake(email)) return showErr('Please use your own real email address. We need to be able to reach you.');
-    if(pass.length<8) return showErr('Please choose a password of at least 8 characters.');
-    const data = collect(email); if (!data) return;
+    const data = collect(); if (!data) return;
+    if(pass.length<6) return showErr('Please enter a password of at least 8 characters.');
     btn.disabled = true; window._busy = true;
+
+    /* One login per email: a person who already has a Paisley account joins TECH with it. */
+    async function joinExisting(){
+      const c = await auth.signInWithEmailAndPassword(email, pass);
+      const already = await db.collection('techStudents').doc(c.user.uid).get();
+      if(!already.exists) await db.collection('techStudents').doc(c.user.uid).set(data);
+      showOk('We added TECH to your Paisley account. Taking you to your studio…');
+      setTimeout(()=>{ location.href='/tech/dashboard.html'; },1100);
+    }
+    const wrongPassword = e => ['auth/wrong-password','auth/invalid-credential','auth/invalid-login-credentials','auth/user-not-found'].indexOf(e.code) !== -1;
+
     try {
+      if(pass.length<8){
+        // Too short for a new password, but older logins (a tutor's, or a parent's phone number) can be.
+        try { await joinExisting(); return; }
+        catch(e){ if(!wrongPassword(e)) throw e; btn.disabled = false; window._busy = false; return showErr('Please choose a password of at least 8 characters.'); }
+      }
       const c = await auth.createUserWithEmailAndPassword(email, pass);
       try { c.user.sendEmailVerification().catch(()=>{}); } catch(e){}
       await db.collection('techStudents').doc(c.user.uid).set(data);
       showOk('Welcome to TECH. Taking you to your studio…');
       setTimeout(()=>{ location.href='/tech/dashboard.html'; },1100);
     } catch (err) {
+      if(err.code==='auth/email-already-in-use'){
+        try { await joinExisting(); return; }
+        catch(e2){
+          btn.disabled = false; window._busy = false;
+          if(wrongPassword(e2)) return showErr('That email already has a Paisley account. Enter that account\'s password to add TECH to it, or use "Forgot it?" under the password box.');
+          return showErr(e2.code==='auth/too-many-requests' ? 'Too many attempts from this device. Please wait a few minutes.' : 'Could not join TECH: ' + (e2.message || e2.code));
+        }
+      }
       btn.disabled = false; window._busy = false;
       let m='Could not create your account.';
-      if(err.code==='auth/email-already-in-use') m='That email already has a Paisley account (for example for IGCSE or CBC). Use the Sign in tab with that password, then you can join TECH.';
-      else if(err.code==='auth/too-many-requests') m='Too many attempts from this device. Please wait a few minutes.';
+      if(err.code==='auth/too-many-requests') m='Too many attempts from this device. Please wait a few minutes.';
       else if(err.code==='auth/invalid-email') m='That email address is not valid.';
       else if(err.code==='auth/weak-password') m='Please choose a stronger password.';
       showErr(m);

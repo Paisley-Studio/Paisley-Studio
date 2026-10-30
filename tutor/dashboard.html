@@ -326,11 +326,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js?v=scope2"></script>
+<script src="../lms-helpers.js?v=boards3"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=scope1"></script>
-<script src="../js/classroom/resources-folder.js?v=res3"></script>
-<script src="../js/classroom/work-helpers.js?v=live9"></script>
+<script src="../js/classroom/classroom-helpers.js?v=boards3"></script>
+<script src="../js/classroom/paper-handins.js?v=boards3"></script>
+<script src="../js/classroom/resources-folder.js?v=boards3"></script>
+<script src="../js/classroom/work-helpers.js?v=boards3"></script>
 <script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script>
@@ -512,13 +513,7 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
   });
 });
-// Homework Management and Exam Management mount from work-helpers.js?v=live7.
-// Both are tutor-restricted there: no topic create, no exam create.
-// Tutors cannot create or edit assignments. What they keep: releasing
-// admin-posted homework to their own students, grading and feedback.
-function mountWorkManagement(kind, hostId){
-  const host = document.getElementById(hostId);
-  host.innerHTML = '';
+// Homework Management and Exam Management mount from work-helpers.js?v=boards3'';
   const box = document.createElement('div'); host.appendChild(box);
   const focus = window.__wkFocus || null; window.__wkFocus = null;   // set by the Overview "Mark" buttons
   WorkUI.mountManagement(box, {
@@ -780,7 +775,7 @@ async function tutorClassroomsInScopeFetch(){
     return [];
   }
   // Exact scope: this Key Stage + subject + Year only (KS3 English is not KS4 English).
-  return classrooms.filter(c => lmzTutorCovers(tutor, c.subjectId, c.keyStage, c.year));
+  return classrooms.filter(c => lmzTutorCovers(tutor, c.subjectId, c.keyStage, c.year, lmzBoardOf(c)));
 }
 
 // CHANGED:
@@ -1169,7 +1164,7 @@ window.openGrantedTask = (taskType, taskId) => {
 };
 
 function visibleNotices(){ return DB.notifications.filter(n=>iCanSee(n) || (n.postedById && isMyKeyStage(n.keyStage) && n.postedById === tutor.id)); }
-function visibleTts(){ return DB.timetables.filter(t=>iCanSee(t) || (t.postedById && isMyKeyStage(t.keyStage) && t.postedById === tutor.id)); }
+function visibleTts(){ return DB.timetables.filter(t=>(iCanSee(t) && lmzTutorBoards(tutor).indexOf(lmzBoardOf(t)) !== -1) || (t.postedById && isMyKeyStage(t.keyStage) && t.postedById === tutor.id)); }
 
 function renderTutorTeGrid(){
   const grid = document.getElementById('tutorTeGrid');
@@ -1185,7 +1180,7 @@ function renderTutorTeGrid(){
         <thead><tr><th>Time</th><th>Subject</th><th>Key Stage</th><th>Tutor</th><th>Room</th></tr></thead>
         <tbody>${byDay[day].map(e=>`<tr style="${e.tutorId===tutor.id?'background:var(--sage);':''}">
           <td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td>
-          <td>${escapeHtml(e.subjectName||'')}</td>
+          <td>${escapeHtml(e.subjectName||'')}<div class="cell-sub">${escapeHtml(lmzBoardLabel(e.board))}</div></td>
           <td>${escapeHtml((e.keyStage||'').replace(/\s*\(.*/, ''))}</td>
           <td>${e.tutorName ? escapeHtml(e.tutorName) + (e.tutorId===tutor.id?' (you)':'') : '<span class="cell-sub">Not assigned</span>'}</td>
           <td>${lmzRoomHtml(e.room)}</td>
@@ -1291,7 +1286,8 @@ function ttFormHtml(t){
     <div class="form-field"><label>Key Stage</label>
       <select id="tKeyStage">${myKeyStages.map(k=>`<option value="${escapeHtml(k)}" ${t.keyStage===k?'selected':''}>${escapeHtml(k)}</option>`).join('')}</select>
     </div>
-    <div class="form-field"><label>File URL (optional)</label><input type="text" id="tFile" value="${escapeHtml(t.fileURL||'')}" placeholder="https://…" /></div>
+    <div class="form-field"><label>Exam board</label><select id="tBoard">${lmzBoardOptionsHtml(t.board || lmzTutorBoards(tutor)[0])}</select></div>
+    <div class="form-field full"><label>File URL (optional)</label><input type="text" id="tFile" value="${escapeHtml(t.fileURL||'')}" placeholder="https://…" /></div>
   </div>
   <div id="ttSlotList" style="margin-top:1rem;"></div>
   <button class="btn btn-ghost btn-sm" type="button" onclick="addTtSlot()"><i class="fas fa-plus"></i> Add slot</button>`;
@@ -1324,6 +1320,7 @@ function ttFromForm(){
   return {
     title: document.getElementById('tTitle').value.trim(),
     keyStage: document.getElementById('tKeyStage').value,
+    board: lmzBoardId(document.getElementById('tBoard').value),
     fileURL: document.getElementById('tFile').value.trim(),
     slots: ttSlots
   };

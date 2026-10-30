@@ -133,6 +133,7 @@ async function tutorRecipientsFor(cid, item, primaryIds) {
       if (!ts.some((x) => subjects.indexOf(x) !== -1)) return;
       const tk = Array.isArray(t.keyStages) ? t.keyStages : [];
       if (tk.length && ks && tk.indexOf(ks) === -1) return;
+      if (classroom && !W.tutorTeachesBoard(t, classroom)) return;
       if (ids.indexOf(d.id) === -1) ids.push(d.id);
     });
   } catch (e) { console.warn("tutorRecipientsFor:", e && e.message); }
@@ -174,8 +175,12 @@ async function handleWorkWrite(event, kind) {
     ""
   );
 
+  // A paper hand-in is recorded by the tutor or the Studio Desk, so nobody needs telling it arrived.
+  const paper = after.handIn === "physical";
+  if (!before && paper && after.status !== "Graded") return;
+
   // 1. Student handed work in (first creation only)
-  if (!before) {
+  if (!before && !paper) {
     for (const rid of await tutorRecipientsFor(cid, item, [tutorRecipient])) {
       await W.notify(rid, "tutor", {
         type: kind === "exam" ? "exam_submitted" : "homework_submitted",
@@ -193,7 +198,7 @@ async function handleWorkWrite(event, kind) {
   // the work"): the notification was created with `item.tutorId` which, for a
   // legacy Studio Desk lesson, was empty — so nothing was written. Now the
   // resubmission reaches whoever the fallback identifies.
-  if (before.status === "Corrections" && after.status === "Submitted") {
+  if (before && before.status === "Corrections" && after.status === "Submitted") {
     // The tutor who sent it back for corrections is the one who should mark the corrected work.
     const attempt = (Array.isArray(after.history) ? after.history.length : 1) + 1;
     for (const rid of await tutorRecipientsFor(cid, item, [before.gradedBy, tutorRecipient])) {
@@ -210,8 +215,8 @@ async function handleWorkWrite(event, kind) {
   // 2. Marks released (Graded) or work sent back (Corrections)
   const status = after.status;
   if (after.released !== true || (status !== "Graded" && status !== "Corrections")) return;
-  const gAfter = W.toDate(after.gradedAt), gBefore = W.toDate(before.gradedAt);
-  const changed = !before.released || before.status !== status || String(gAfter || "") !== String(gBefore || "");
+  const gAfter = W.toDate(after.gradedAt), gBefore = before ? W.toDate(before.gradedAt) : null;
+  const changed = !before || !before.released || before.status !== status || String(gAfter || "") !== String(gBefore || "");
   if (!changed) return;
 
   // Claim this exact grading event so a retried trigger can never notify twice.

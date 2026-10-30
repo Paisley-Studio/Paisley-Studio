@@ -116,8 +116,51 @@ function itemPostedTo(item, audience) {
 
 // Can this student see this item at all (before recipient scoping)?
 function studentMaySee(student, item) {
-  if (itemPostedTo(item, studentAudience(student))) return true;
-  return Array.isArray(item && item.releasedTo) && item.releasedTo.indexOf(student.id) !== -1;
+  if (Array.isArray(item && item.releasedTo) && item.releasedTo.indexOf(student.id) !== -1) return true;
+  return itemPostedTo(item, studentAudience(student)) && !workPredatesStudent(student, item);
+}
+
+/* New students start fresh: work posted to the class before the account became
+   active is not theirs. students.activatedAt is stamped by onStudentActivated;
+   accounts activated before that field existed have none and keep what they see.
+   Work a tutor releases to the student by name always counts (studentMaySee). */
+function msOf(ts) {
+  const d = toDate(ts);
+  return d ? d.getTime() : 0;
+}
+function workPredatesStudent(student, item) {
+  const joined = msOf(student && student.activatedAt);
+  if (!joined) return false;
+  const pub = item && item.publication && item.publication[studentAudience(student)];
+  const posted = msOf((pub && pub.publishedAt) || (item && item.createdAt));
+  return !!posted && posted < joined;
+}
+
+/* Students who hand in on paper at school. The Studio Desk or their tutor records
+   hand-ins for them, so upload reminders and overdue notices never go to them. */
+function isPaperStudent(student) { return !!(student && student.physicalStudent === true); }
+
+/* ---------------------------------------------------------
+   EXAM BOARDS
+   A classroom belongs to one board (missing = Cambridge). A student follows
+   students.subjectBoards[subjectId], else students.board, else Cambridge.
+   A tutor teaches the boards in tutorAccounts.boardScope ("keyStage|subjectId|board",
+   derived from teaching[].boards); with no boardScope they are Cambridge only.
+   CBC classrooms have no board. Same logic as firestore.rules and lms-helpers.js.
+--------------------------------------------------------- */
+const BOARD_IDS = ["cambridge", "edexcel", "oxford_aqa"];
+const DEFAULT_BOARD = "cambridge";
+function boardId(v) { return BOARD_IDS.indexOf(v) !== -1 ? v : DEFAULT_BOARD; }
+function boardOf(c) { return boardId(c && c.board); }
+function studentBoard(student, subjectId) {
+  const sb = student && student.subjectBoards && student.subjectBoards[subjectId];
+  return boardId(sb || (student && student.board));
+}
+function tutorTeachesBoard(tutor, classroom) {
+  if (!classroom || /^CBC/i.test(String(classroom.keyStage || ""))) return true;
+  const b = boardOf(classroom);
+  if (Array.isArray(tutor && tutor.boardScope)) return tutor.boardScope.indexOf(classroom.keyStage + "|" + classroom.subjectId + "|" + b) !== -1;
+  return b === DEFAULT_BOARD;
 }
 
 
@@ -207,6 +250,7 @@ async function resolveStudents(classroom, recipients, item) {
     const subs = Array.isArray(s.subjects) ? s.subjects.map(subjectKey) : [];
     if (!subs.includes(subjectKey(classroom.subjectId))) return;
     if (s.year != null && classroom.year != null && Number(s.year) !== Number(classroom.year)) return;
+    if (studentBoard(s, classroom.subjectId) !== boardOf(classroom)) return;
     out.push({ id: d.id, ...s });
   });
   return out;
@@ -274,5 +318,6 @@ module.exports = {
   db, FV, toDate, subjectKey, notify, addStudentNotice, claimOnce,
   classroomOf, resolveStudents, parentsOfStudent,
   AUDIENCES, studentAudience, itemPostedTo, isVisibleTo, studentMaySee, notifyOnce, stableId,
+  workPredatesStudent, isPaperStudent, boardId, boardOf, studentBoard, tutorTeachesBoard, DEFAULT_BOARD,
   pathFromDownloadUrl, downloadStoredFile, saveStoredPdf, cidTidFromRef
 };

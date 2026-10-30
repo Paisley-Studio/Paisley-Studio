@@ -144,6 +144,19 @@
     return hit.id;
   }
 
+  // Has THIS tutor released it? releasedTo is shared between tutors, so it cannot answer that.
+  // Older releases with no log count as released.
+  function releasedByMe(it, uid) {
+    var log = it && it.releaseLog;
+    if (Array.isArray(log) && log.length) return log.some(function (x) { return x && x.by === uid; });
+    return !!(it && Array.isArray(it.releasedTo) && it.releasedTo.length);
+  }
+  // Green "Released" once released, and it stays clickable so the tutor can release again at will.
+  function releaseBtnHtml(it, uid, attrs, baseCls) {
+    if (releasedByMe(it, uid)) return '<button type="button" class="cr-btn ' + (baseCls || 'sm') + ' cr-released" ' + attrs + ' title="Released. Click to release again."><i class="fas fa-circle-check"></i> Released</button>';
+    return '<button type="button" class="cr-btn ' + (baseCls || 'sm') + '" ' + attrs + '><i class="fas fa-share-from-square"></i> Release to my students</button>';
+  }
+
   function ksShort(ks) { return String(ks || '').replace(/\s*\(.*/, ''); }
   function byOrder(a, b) {
     return ((a.order == null ? 1e9 : a.order) - (b.order == null ? 1e9 : b.order)) ||
@@ -286,6 +299,7 @@
       '.cr-lesson .tt small{display:block;font-weight:500;color:var(--muted,#5A6E6A);font-size:.72rem}',
       '.cr-lesson.student{cursor:pointer}',
       '.cr-lesson.student:hover{background:var(--paper,#F1F9F7)}',
+      '.cr-btn.cr-released,.cr-btn.cr-released:hover{background:#2EB872;border-color:#2EB872;color:#fff}',
       '.cr-board{display:inline-flex;align-items:center;gap:.3rem;padding:.16rem .55rem;border-radius:99px;font-size:.68rem;font-weight:800;background:#E6F1EF;color:#245F5A;border:1px solid #BFD9D5}',
       '.cr-board.b-edexcel{background:#FDECEC;color:#9B2C2C;border-color:#F2C4C4}',
       '.cr-board.b-oxford_aqa{background:#EAF0FD;color:#2A4BA0;border-color:#C5D3F5}',
@@ -741,7 +755,7 @@
             return db.collection('classrooms').where('subjectId', '==', k).get().then(snapDocs);
           }));
           S.classrooms = [].concat.apply([], parts).filter(function (c) {
-            return lmzTutorCovers(tutorScope, c.subjectId, c.keyStage, c.year);
+            return lmzTutorCovers(tutorScope, c.subjectId, c.keyStage, c.year, boardOf(c));
           });
         }
       } catch (e) {
@@ -960,7 +974,7 @@
                 '<button type="button" class="cr-btn sm" data-a="edit-lesson" data-id="' + esc(l.id) + '"><i class="fas fa-pen"></i> Edit</button>' +
                 '<button type="button" class="cr-btn sm" data-a="archive" data-id="' + esc(l.id) + '">' + (l.status === 'archived' ? '<i class="fas fa-box-open"></i> Restore' : '<i class="fas fa-box-archive"></i> Archive') + '</button>' +
                 '<button type="button" class="cr-btn sm danger" data-a="del-lesson" data-id="' + esc(l.id) + '"><i class="fas fa-trash"></i></button></div>'
-              : '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="release" data-id="' + esc(l.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button></div>';
+              : '<div class="cr-actions">' + releaseBtnHtml(l, user.uid, 'data-a="release" data-id="' + esc(l.id) + '"', releasedByMe(l, user.uid) ? 'sm' : 'sm primary') + '</div>';
             h += '<div class="cr-lesson" ' + (!isAdmin ? 'data-a="open-lesson" data-id="' + esc(l.id) + '" style="cursor:pointer"' : '') + '>' +
               '<span class="n">' + pad2(numOf[l.id]) + '</span>' +
               '<span class="tt">' + esc(l.title) + '<small>' + esc(l.authorName || '') + (l.attachments && l.attachments.length ? ' · ' + l.attachments.length + ' resource' + (l.attachments.length === 1 ? '' : 's') : '') + '</small></span>' +
@@ -1461,7 +1475,7 @@
             var lessonRel = S.lessons.filter(function (x) { return x.id === id; })[0];
             if (lessonRel && window.WorkUI && window.WorkUI.openRelease) {
               var item = Object.assign({}, lessonRel, { cid: S.cls.id, tid: lessonRel.topicId });
-              window.WorkUI.openRelease(item, user);
+              window.WorkUI.openRelease(item, user, refreshClassroom);
             }
           }
         }
@@ -1541,8 +1555,9 @@
             if (!cls || !window.WorkUI || !window.WorkUI.loadStudentWork) return;
             var topics = await loadTopicsCached(cls.id);
             var work = await window.WorkUI.loadStudentWork(cls, topics, opts.uid, profile);
-            var pLessons = work.lessons ? work.lessons.filter(function (l) { return !l.sub || l.sub.status === 'Corrections'; }).length : 0;
-            var pHomework = work.assignments ? work.assignments.filter(function (a) { return !a.sub || a.sub.status === 'Corrections'; }).length : 0;
+            var isOwed = function (x) { return x.sub ? x.sub.status === 'Corrections' : !x._hardCopy; };
+            var pLessons = work.lessons ? work.lessons.filter(isOwed).length : 0;
+            var pHomework = work.assignments ? work.assignments.filter(isOwed).length : 0;
             var pExams = work.exams ? work.exams.filter(function (e) {
               if (e.sub && e.sub.status === 'Submitted') return false;
               if (e.sub && e.sub.status === 'Graded') return false;
@@ -1573,7 +1588,8 @@
           loadLessonsCached(cls.id, topics, AUD),
           global.WorkUI ? global.WorkUI.loadStudentWork(cls, topics, opts.uid, profile).catch(function () { return emptyWork; }) : emptyWork
         ]);
-        S.cls = cls; S.topics = topics; S.lessons = res[0]; S.work = res[1];
+        S.cls = cls; S.topics = topics; S.work = res[1];
+        S.lessons = res[0].filter(function (l) { return !lmzWorkPredatesStudent(profile, l, opts.uid); });
       } catch (e) {
         console.error('student classroom:', e);
         root.innerHTML = '<div class="cr-crumb"><a data-a="home">My Classes</a></div><div class="cr-panel"><div class="cr-empty">Could not load this class right now.</div></div>';
@@ -1756,7 +1772,7 @@
         else { 
           S.cls = cls; 
           S.topics = await loadTopicsCached(cls.id); 
-          S.lessons = await loadLessonsCached(cls.id, S.topics, AUD); 
+          S.lessons = (await loadLessonsCached(cls.id, S.topics, AUD)).filter(function (l) { return !lmzWorkPredatesStudent(child, l, child.id); }); 
         }
       } catch (e) {
         console.error('parent classroom:', e); 
@@ -1814,6 +1830,7 @@
       loadTopics: loadTopics, loadLessons: loadLessons, loadLessonsForTopics: loadLessonsForTopics,
       findClassroomCached: findClassroomCached, loadTopicsCached: loadTopicsCached, loadLessonsCached: loadLessonsCached, memo: memo, clearMemo: clearMemo, loaderHtml: loaderHtml, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
       KEY_STAGES: KEY_STAGES, audFor: audFor, isCbcStage: isCbcStage,
+      releasedByMe: releasedByMe, releaseBtnHtml: releaseBtnHtml,
       BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, groupClassrooms: groupClassrooms, boardSwitcherHtml: boardSwitcherHtml, switchBoardTarget: switchBoardTarget, studentBoardFor: studentBoardFor, boardAssigned: boardAssigned, boardAssignHtml: boardAssignHtml, readBoardAssign: readBoardAssign
     }
   };

@@ -200,14 +200,16 @@ async function releaseWork(db, tutorUid, tutor, parsed0, studentIds, dueAtIso) {
   const subjects = Array.isArray(tutor.subjects) ? tutor.subjects : [];
   const stages = Array.isArray(tutor.keyStages) ? tutor.keyStages : [];
   if (subjects.indexOf(cls.subjectId) === -1 || (stages.length && stages.indexOf(cls.keyStage) === -1)) throw new HttpsError("permission-denied", "This subject is not assigned to you.");
-  if (parsed.type === "exam" && item.status !== "Published") throw new HttpsError("failed-precondition", "Exam is not published.");
+  if (!W.tutorTeachesBoard(tutor, cls)) throw new HttpsError("permission-denied", "This exam board is not assigned to you.");
+  if ((parsed.type === "exam" || parsed.type === "flatExam") && item.status !== "Published") throw new HttpsError("failed-precondition", "Exam is not published.");
 
   const ok = [], rejected = [];
   for (const sid of studentIds) {
     const s = await db.collection("students").doc(sid).get();
     const row = s.exists ? s.data() : null;
     const enrolled = row && Array.isArray(row.subjects) && row.subjects.indexOf(cls.subjectId) !== -1 &&
-      (row.year == null || cls.year == null || Number(row.year) === Number(cls.year));
+      (row.year == null || cls.year == null || Number(row.year) === Number(cls.year)) &&
+      W.studentBoard(row, cls.subjectId) === W.boardOf(cls);
     const active = row && ["pending", "suspended"].indexOf(String(row.status || "").toLowerCase()) === -1;
     if (row && enrolled && active && tutorTeaches(row, cls.subjectId, tutorUid)) ok.push(sid); else rejected.push(sid);
   }
@@ -220,7 +222,9 @@ async function releaseWork(db, tutorUid, tutor, parsed0, studentIds, dueAtIso) {
     const when = dueAtIso ? new Date(dueAtIso) : null;
     const valid = when && !isNaN(when.getTime());
     if (!valid && !item.dueAt) throw new HttpsError("invalid-argument", "Please set a deadline before releasing this work.");
-    if (valid) {
+    const prevDue = W.toDate(item.dueAt);
+    // Releasing again with the same deadline leaves the deadline and its reminder flags alone.
+    if (valid && !(prevDue && prevDue.getTime() === when.getTime())) {
       if (when.getTime() <= Date.now()) throw new HttpsError("invalid-argument", "The deadline must be in the future.");
       dueUpdate = {
         dueAt: admin.firestore.Timestamp.fromDate(when),
@@ -255,7 +259,7 @@ exports.tutorReleaseWork = onCall(
     const t = await db.collection("tutorAccounts").doc(request.auth.uid).get();
     if (!t.exists) throw new HttpsError("permission-denied", "Tutors only.");
     const parsed = parsePath((request.data || {}).path);
-    if (!parsed || ["assignment", "exam", "lesson"].indexOf(parsed.type) === -1) throw new HttpsError("invalid-argument", "Only lessons, homework and exams can be released to students.");
+    if (!parsed || ["assignment", "exam", "flatExam", "lesson"].indexOf(parsed.type) === -1) throw new HttpsError("invalid-argument", "Only lessons, homework and exams can be released to students.");
     const ids = Array.from(new Set(((request.data || {}).studentIds || []).map(String))).slice(0, 200);
     if (!ids.length) throw new HttpsError("invalid-argument", "Choose at least one student.");
     return releaseWork(db, request.auth.uid, t.data() || {}, parsed, ids, (request.data || {}).dueAt);
@@ -358,6 +362,7 @@ async function notifyTutorsOfPost({ item, cid, entity, what }) {
     if (String(t.status || "Active").toLowerCase() === "suspended") continue;
     if ((t.subjects || []).indexOf(classroom.subjectId) === -1) continue;
     if ((t.keyStages || []).length && t.keyStages.indexOf(classroom.keyStage) === -1) continue;
+    if (!W.tutorTeachesBoard(t, classroom)) continue;
     await W.notifyOnce(`work_${key}_${d.id}`, d.id, "tutor", {
       type: "material_posted", title: "New material from the Studio Desk",
       message: `${item.title || what} (${item.subjectName || classroom.subjectName || ""}) is ready for you in the Classroom.`,
@@ -405,13 +410,14 @@ exports.onLessonAudienceChanged = onDocumentUpdated(
    New resource  -> every active tutor of that subject
    Admin message -> tutors of that subject
 ========================================================= */
-async function tutorsOfSubject(subjectId, keyStage) {
+async function tutorsOfSubject(subjectId, keyStage, board) {
   const snap = await W.db().collection("tutorAccounts").get();
   return snap.docs.filter((d) => {
     const t = d.data() || {};
     if (String(t.status || "Active").toLowerCase() === "suspended") return false;
     if ((t.subjects || []).indexOf(subjectId) === -1) return false;
     if ((t.keyStages || []).length && !/^CBC/i.test(keyStage || "") && t.keyStages.indexOf(keyStage) === -1) return false;
+    if (keyStage && !W.tutorTeachesBoard(t, { keyStage, subjectId, board })) return false;
     return true;
   });
 }
@@ -419,7 +425,7 @@ exports.onResourcePosted = onDocumentCreated(
   { document: "classroomResources/{rid}", region: W.LOCATION },
   async (event) => {
     const r = (event.data && event.data.data()) || {};
-    for (const d of await tutorsOfSubject(r.subjectId, r.keyStage)) {
+    for (const d of await tutorsOfSubject(r.subjectId, r.keyStage, r.board)) {
       await W.notifyOnce(`res_${event.params.rid}_${d.id}`, d.id, "tutor", {
         type: "material_posted", title: "New resource from the Studio Desk",
         message: `${r.category || "Resource"}: ${r.title || ""} (${r.subjectName || ""}${r.topicTitle ? ", " + r.topicTitle : ""}) is in your Resources folder.`,
@@ -435,7 +441,7 @@ exports.onResourceMessage = onDocumentCreated(
     if (m.authorRole !== "admin") return;
     const res = await W.db().doc(`classroomResources/${event.params.rid}`).get();
     const r = res.data() || {};
-    for (const d of await tutorsOfSubject(r.subjectId, r.keyStage)) {
+    for (const d of await tutorsOfSubject(r.subjectId, r.keyStage, r.board)) {
       await W.notifyOnce(`resmsg_${event.params.mid}_${d.id}`, d.id, "tutor", {
         type: "material_posted", title: "Studio Desk replied about a resource",
         message: `${r.title || "Resource"} (${r.subjectName || ""}${r.topicTitle ? ", " + r.topicTitle : ""}): ${String(m.text || "").slice(0, 100)}`,

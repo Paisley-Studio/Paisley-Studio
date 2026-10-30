@@ -644,6 +644,38 @@ function unattendedWorkReport({ audience, student, parentName, items, reportUrl 
   };
 }
 
+/* 16b. Student + parents — every piece of work still pending, once it is 24h+ overdue. Repeats until handed in. */
+function pendingWorkReport({ audience, student, parentName, items, reportUrl }) {
+  const rows = items.map(i =>
+    `<tr>
+       <td style="padding:8px 10px;border-top:1px solid ${BRAND.line};font-size:13px;">${esc(i.subjectName || '—')}</td>
+       <td style="padding:8px 10px;border-top:1px solid ${BRAND.line};font-size:13px;font-weight:700;">${esc(i.title || '—')}<div style="font-weight:400;color:${BRAND.muted};font-size:12px;">${esc(i.kindLabel || '')}</div></td>
+       <td style="padding:8px 10px;border-top:1px solid ${BRAND.line};font-size:13px;">${esc(i.dueText || fmtWhen(i.dueAt))}</td>
+     </tr>`).join('');
+  const who = audience === 'parent' ? `<strong>${esc((student && student.name) || 'your child')}</strong> has` : 'you have';
+  return {
+    subject: `Pending work report: ${items.length} overdue${audience === 'parent' && student && student.name ? ' - ' + student.name : ''}`,
+    html: render({
+      preheader: `${items.length} piece${items.length === 1 ? '' : 's'} of work overdue by more than 24 hours.`,
+      heading: 'Pending work report',
+      intro: audienceIntro(audience, student, parentName),
+      body: `
+        <p style="margin:0 0 14px;">${fa('fa-clipboard-list', '#E74C3C')}Here is the work ${who} not handed in yet. Each piece is more than 24 hours past its deadline.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 16px;border:1px solid ${BRAND.line};border-radius:12px;border-collapse:separate;">
+          <tr style="background:${BRAND.sage};">
+            <th align="left" style="padding:8px 10px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:${BRAND.deep};">Subject</th>
+            <th align="left" style="padding:8px 10px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:${BRAND.deep};">Work</th>
+            <th align="left" style="padding:8px 10px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:${BRAND.deep};">Deadline</th>
+          </tr>
+          ${rows}
+        </table>
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">A PDF copy is attached and is also in the portal. Late work is still welcome and will be marked. We will send this again every 2 days while work is outstanding.</p>
+      `,
+      cta: { label: audience === 'parent' ? 'Open the Parent Portal' : 'Open the Student Portal', url: audience === 'parent' ? PORTALS.parent : studentPortal(student) }
+    })
+  };
+}
+
 /* 17. Parent — exam paper two days ahead (legacy nested model) */
 function examParentReminder({ parentName, student, exam, examDate }) {
   return {
@@ -811,6 +843,7 @@ module.exports = {
     homeworkDeadlineReminder,
     homeworkOverdueGraceNotice,
     unattendedWorkReport,
+    pendingWorkReport,
     examParentReminder,
     workPosted,
     examPostedParent,

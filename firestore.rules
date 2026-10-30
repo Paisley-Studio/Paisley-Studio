@@ -170,17 +170,30 @@ service cloud.firestore {
         subjectId in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.subjects;
     }
     function classTutorMay(c) {
-      return classTutorSubject(c.subjectId) &&
+      return classTutorSubject(c.subjectId) && tutorBoardOk(c) &&
         (c.keyStage.matches('CBC.*') ||
          !('keyStages' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) ||
           get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages.size() == 0 ||
           c.keyStage in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages);
+    }
+    // A classroom belongs to one exam board (missing = Cambridge). A tutor teaches the boards in
+    // boardScope ("keyStage|subjectId|board"); a tutor with no boardScope is Cambridge only.
+    function tutorBoardOk(c) {
+      let t = get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data;
+      let b = c.get('board', 'cambridge');
+      return c.keyStage.matches('CBC.*') ||
+        (('boardScope' in t) ? (c.keyStage + '|' + c.subjectId + '|' + b) in t.boardScope : b == 'cambridge');
+    }
+    // subjectBoards[subject], else board, else Cambridge.
+    function studentBoardOk(s, c) {
+      return c.get('board', 'cambridge') == s.get('subjectBoards', {}).get(c.subjectId, s.get('board', 'cambridge'));
     }
     function classStudentMay(c) {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
         ('subjects' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
         c.subjectId in get(/databases/$(database)/documents/students/$(request.auth.uid)).data.subjects &&
+        studentBoardOk(get(/databases/$(database)/documents/students/$(request.auth.uid)).data, c) &&
         (
           (('year' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
            ('year' in c) &&
@@ -236,6 +249,15 @@ service cloud.firestore {
         request.resource.data.keys().hasOnly(
           ['studentId', 'studentName', 'studentEmail', 'fileUrl', 'fileName', 'fileType', 'storagePath',
            'note', 'textAnswer', 'status', 'released', 'createdAt', 'updatedAt', 'submittedAt']);
+    }
+    // A paper hand-in: staff record it for a student who does not upload (see js/classroom/paper-handins.js).
+    function staffPaperHandIn(cid, sid) {
+      return (isAdmin() || classTutorMay(classroomData(cid))) &&
+        request.resource.data.get('handIn', '') == 'physical' &&
+        request.resource.data.studentId == sid;
+    }
+    function staffUndoPaperHandIn(cid) {
+      return (isAdmin() || classTutorMay(classroomData(cid))) && resource.data.get('handIn', '') == 'physical';
     }
     function isLinkedParent(conversationId) {
       return isSignedIn() &&
@@ -416,6 +438,9 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || isTutor();
 
       allow update: if isAdmin() ||
+        // A tutor may mark their own student as handing in on paper at school, nothing else.
+        (tutorTeachesStudent(uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['physicalStudent', 'physicalSetBy', 'physicalSetAt'])) ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt'])) ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'tuition' &&
@@ -436,6 +461,10 @@ service cloud.firestore {
         !('tutorName' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('tutorSlug' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('tutorIds' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('board' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjectBoards' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('activatedAt' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('physicalStudent' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('subjectTutors' in request.resource.data.diff(resource.data).affectedKeys()));
       allow delete: if false;
     }
@@ -794,10 +823,11 @@ service cloud.firestore {
               studentAccountOk() &&
               classStudentMay(classroomData(cid)) &&
               postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
+            allow create: if staffPaperHandIn(cid, sid);
             allow update: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
-            allow delete: if isAdmin();
+            allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
           }
         }
 
@@ -816,11 +846,12 @@ service cloud.firestore {
               studentAccountOk() &&
               classStudentMay(classroomData(cid)) &&
               forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/assignments/$(aid)).data);
+            allow create: if staffPaperHandIn(cid, sid);
             allow update: if isAdmin() ||
               classTutorSubject(classroomData(cid).subjectId) ||
               activeGrant('homework', aid) ||
               (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
-            allow delete: if isAdmin();
+            allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
           }
         }
 
@@ -882,6 +913,8 @@ service cloud.firestore {
               get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
             );
 
+          allow create: if staffPaperHandIn(cid, studentId);
+
           allow update: if
             isAdmin() ||
             classTutorSubject(classroomData(cid).subjectId) ||
@@ -893,7 +926,7 @@ service cloud.firestore {
                 get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
               ));
 
-          allow delete: if isAdmin();
+          allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
         }
       }
     }
@@ -955,11 +988,12 @@ service cloud.firestore {
       // themselves. Applications always land Pending, with no coach and no links.
       allow create: if isOwner(uid) &&
         request.resource.data.status == 'Pending' &&
+        request.resource.data.email is string && request.resource.data.email.size() > 0 &&
         request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'ageGroup', 'status', 'techProfile', 'guardians', 'createdAt', 'updatedAt']) &&
         (!('guardians' in request.resource.data) ||
           (request.resource.data.guardians is list && request.resource.data.guardians.size() <= 4));
       allow update: if isAdmin() ||
-        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'techProfile', 'updatedAt', 'lastLoginAt', 'lastActiveAt']));
+        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'phone', 'techProfile', 'updatedAt', 'lastLoginAt', 'lastActiveAt']));
       allow delete: if isAdmin();
     }
 

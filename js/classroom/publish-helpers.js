@@ -77,13 +77,15 @@
     return w.mode === 'manual-open' || w.mode === 'auto-open';
   }
 
-  function workState(item, sub, kind) {
+  function workState(item, sub, kind, hardCopy) {
     var now = Date.now();
     if (sub && sub.status === 'Graded') return { k: 'graded', cls: 'b-confirmed', icon: 'fa-circle-check', text: 'Graded: ' + (fmtScore(sub) || 'done') };
     if (sub && sub.status === 'Corrections') return { k: 'corrections', cls: 'b-declined', icon: 'fa-rotate-left', text: 'Corrections requested' };
     if (sub && sub.status === 'Suspended') return { k: 'suspended', cls: 'b-declined', icon: 'fa-ban', text: 'Suspended' };
     if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
+    if (sub && sub.handIn === 'physical' && sub.status === 'Submitted') return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-school', text: 'Paper copy received \u2013 awaiting grading' };
     if (sub) return { k: 'submitted', cls: 'b-pending', icon: 'fa-inbox', text: 'Submitted \u2013 awaiting grading' };
+    if (hardCopy) return { k: 'paper', cls: 'b-plain', icon: 'fa-school', text: 'Paper hand-in at school' };
     var due = dueOf(item, kind);
     if (due && due.getTime() < now) return { k: 'overdue', cls: 'b-declined', icon: 'fa-triangle-exclamation', text: 'Overdue' };
     return { k: 'pending', cls: 'b-plain', icon: 'fa-circle', text: 'Not submitted' };
@@ -96,6 +98,7 @@
       if (String(s.status || '').toLowerCase() === 'pending') return false;
       var subs = lmzSubjectKeys(s.subjects);
       if (subs.indexOf(want) === -1) return false;
+      if (U.studentBoardFor(s, cls.subjectId) !== U.boardOf(cls)) return false;
       return !(s.year != null && cls.year != null && Number(s.year) !== Number(cls.year));
     }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
   }
@@ -160,7 +163,8 @@
   function studentAud(s) { var t = s && s.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
   function effAudiences(it) { return it && it.audiences && typeof it.audiences === 'object' ? it.audiences : { online: true, remote: false, tuition: false, tutors: true }; }
   function studentSees(s, it) {
-    return effAudiences(it)[studentAud(s)] === true || (Array.isArray(it.releasedTo) && it.releasedTo.indexOf(s.id) !== -1);
+    if (Array.isArray(it.releasedTo) && it.releasedTo.indexOf(s.id) !== -1) return true;
+    return effAudiences(it)[studentAud(s)] === true && !lmzWorkPredatesStudent(s, it, s.id);
   }
   function audChips(it) {
     var a = effAudiences(it);
@@ -842,14 +846,14 @@
 
     function counts(it) {
       var aud = audienceOf(it, S.enrolled), subs = S.subs[it.id] || {};
-      var submitted = 0, graded = 0;
+      var submitted = 0, graded = 0, paper = 0;
       aud.forEach(function (s) {
         var x = subs[s.id];
-        if (!x) return;
+        if (!x) { if (global.PaperHandIns.isFlagged(s)) paper++; return; }
         if (x.status !== 'In progress' && x.status !== 'Suspended') submitted++;
         if (x.status === 'Graded') graded++;
       });
-      return { total: aud.length, submitted: submitted, graded: graded };
+      return { total: aud.length, submitted: submitted, graded: graded, paper: paper };
     }
 
     // Past Work = every recipient has handed in AND every piece is graded.
@@ -875,7 +879,8 @@
       
       var due = dueOf(it, 'assignment');
       if (c.total && c.graded === c.total) return pill('b-confirmed', 'All graded', 'fa-circle-check');
-      if (due && due.getTime() < Date.now() && c.submitted < c.total) return pill('b-declined', 'Overdue', 'fa-triangle-exclamation');
+      if (due && due.getTime() < Date.now() && c.submitted + c.paper < c.total) return pill('b-declined', 'Overdue', 'fa-triangle-exclamation');
+      if (due && due.getTime() < Date.now() && c.paper > 0) return pill('b-pending', c.paper + ' paper to collect', 'fa-school');
       if (c.submitted > c.graded) return pill('b-pending', (c.submitted - c.graded) + ' to grade', 'fa-inbox');
       return pill('b-plain', 'Open');
     }
@@ -1033,15 +1038,16 @@
 
         var rows = aud.map(function (s) {
           var sub = subs[s.id] || null;
-          var st = workState(it, sub, kind);
-          var canGrade = sub && sub.status !== 'In progress';
-          return '<tr>' +
-            '<td><b>' + esc(s.name || s.email || s.id) + '</b></td>' +
+          var st = workState(it, sub, kind, global.PaperHandIns.isFlagged(s));
+          var canGrade = sub && sub.status !== 'In progress' && !global.PaperHandIns.isPaperSub(sub);
+          return '<tr>' + global.PaperHandIns.checkCell(s) +
+            '<td><b>' + esc(s.name || s.email || s.id) + '</b>' + global.PaperHandIns.chip(s) + '</td>' +
             '<td>' + pill(st.cls, st.text, st.icon) + '</td>' +
             '<td>' + (sub && (sub.submittedAt || sub.updatedAt) ? esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '—') + '</td>' +
             '<td>' +
               (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> File</a>' : '') +
               (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Graded</a>' : '') +
+              global.PaperHandIns.rowButtons(s, sub) +
               (canGrade
                 ? (kind === 'exam'
                     ? '<button type="button" class="cr-btn sm primary" data-a="grade-flat" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Review' : 'Grade') + '</button>'
@@ -1054,8 +1060,14 @@
         }).join('');
 
         m.body.innerHTML = head + (aud.length
-          ? '<div class="cr-table-wrap"><table class="cr-table wk-tbl" style="min-width:560px"><thead><tr><th>Student</th><th>State</th><th>Handed in</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+          ? global.PaperHandIns.panelHtml() + '<div class="cr-table-wrap"><table class="cr-table wk-tbl" style="min-width:560px"><thead><tr><th></th><th>Student</th><th>State</th><th>Handed in</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
           : '<div class="cr-empty">No students are assigned to this item.</div>');
+
+        global.PaperHandIns.wire(m.body, {
+          col: kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.isClasswork ? 'lesson' : 'assignment').doc(it.id).collection('submissions'),
+          students: aud, subs: subs, user: user,
+          onDone: async function () { await refresh(); paint(); }
+        });
 
         var gb = m.body.querySelector('[data-a="grant"]'); if (gb) gb.onclick = function () { openGrant(it); };
 
@@ -1417,7 +1429,7 @@
 
     function renderJobs() {
       if (!isAdmin) return;
-      var jobs = [['reminder', 'Deadline reminder (24h)', 'fa-bell'], ['grace', 'Overdue + 48h extension notice', 'fa-hourglass-half'], ['report', 'Unattended Work Report', 'fa-clipboard-list'], ['exam', 'Exam paper to parents (48h)', 'fa-file-pen']];
+      var jobs = [['reminder', 'Deadline reminder (24h)', 'fa-bell'], ['grace', 'Overdue + 48h extension notice', 'fa-hourglass-half'], ['report', 'Unattended Work Report', 'fa-clipboard-list'], ['overdue', 'Pending work report (24h+ overdue)', 'fa-file-circle-exclamation'], ['exam', 'Exam paper to parents (48h)', 'fa-file-pen']];
       root.querySelector('#wkJobs').innerHTML = '<div class="cr-panel"><h4 style="margin:0 0 .4rem;color:var(--brand-deep,#245F5A)">Run an automation now</h4>' +
         '<div class="cr-note" style="margin-bottom:.7rem">These jobs run every hour on their own. Use these buttons to test. Each item is only ever processed once, so pressing a button twice is harmless.</div>' +
         '<div class="cr-actions">' + jobs.map(function (j) { return '<button type="button" class="cr-btn" data-a="job" data-j="' + j[0] + '"><i class="fas ' + j[2] + '"></i> ' + j[1] + '</button>'; }).join('') + '</div>' +

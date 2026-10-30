@@ -176,3 +176,12 @@ Storage `techBuilds/{studentId}/{buildId}/…`: uploads by admins or an **Active
 Storage `techContent/{contentId}/…` (mission study materials): uploads by admins or the **Active** coach who created that mission (the mission doc must exist first); videos up to 500 MB, documents, images and audio up to 50 MB, never HTML or JavaScript. Reads by admins and Active builders and coaches.
 
 Guardians sign in with their `parentAccounts` identity, so a parent who already uses the Parent Portal keeps one login. Rules tests: `tests/rules/tech.rules.test.js`. Deployment order: `TECH_UPGRADE.md`.
+
+## Exam boards and paper hand-ins
+
+- `classTutorMay` requires the classroom's board in `tutorAccounts.boardScope` (no `boardScope` = Cambridge only). `classStudentMay` requires it to match the student's board for that subject. CBC classrooms skip the tutor check.
+- Assignment and lesson **reads** are not separated by board or audience here: the collection-group rules at the top of the file allow any signed-in user. Exams, hand-ins and all writes are enforced.
+- `submissions/{sid}`: admins and the classroom's tutors may create or delete a record with `handIn == 'physical'`. Students cannot.
+- `students/{uid}`: a tutor who teaches the student may change only `physicalStudent`, `physicalSetBy` and `physicalSetAt`. Students cannot change `board`, `subjectBoards`, `activatedAt` or `physicalStudent`.
+- `techStudents/{uid}` create requires a non-empty `email`; the owner may update it.
+- `overdueWorkState/{uid}` is written by Cloud Functions only (no client access).
