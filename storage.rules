@@ -174,11 +174,8 @@ service firebase.storage {
     }
 
     // =====================================================
-    // GRADED OUTPUT (ink burned in)   <<< CHANGED
+    // GRADED OUTPUT (ink burned in)
     // Path: graded-submissions/{subjectId}/{classroomId}/{itemId}/{studentId}/{file}
-    //
-    // subjectId is now in the path so a tutor check needs only ONE
-    // Firestore lookup (Storage rules allow max 2 per request).
     // =====================================================
     match /graded-submissions/{subjectId}/{classroomId}/{itemId}/{studentId}/{fileName} {
       allow get: if isSignedIn();
@@ -229,18 +226,18 @@ service firebase.storage {
     // =====================================================
     // PAISLEY TECH — build files (techBuilds/{studentId}/{buildId}/{file})
     // =====================================================
-    // Readable by the builder, admins, the builder's TECH coach and linked guardians.
     match /techBuilds/{studentId}/{buildId}/{fileName} {
       allow read: if isSignedIn() && (request.auth.uid == studentId || isAdmin() ||
         (firestore.exists(/databases/(default)/documents/techCoaches/$(request.auth.uid)) &&
           firestore.get(/databases/(default)/documents/techCoaches/$(request.auth.uid)).data.status == 'Active' &&
           firestore.get(/databases/(default)/documents/techStudents/$(studentId)).data.get('coachId', '') == request.auth.uid) ||
         firestore.exists(/databases/(default)/documents/techGuardianLinks/$(request.auth.uid + '_' + studentId)));
-      // Uploads: admins, or an Active builder into one of their own builds.
-      allow create, update: if isSignedIn() && (isAdmin() ||
+      // Builder branch first: it uses techStudents + techBuilds, its 2-doc budget.
+      allow create, update: if isSignedIn() && (
         (request.auth.uid == studentId &&
           firestore.get(/databases/(default)/documents/techStudents/$(studentId)).data.status == 'Active' &&
-          firestore.get(/databases/(default)/documents/techBuilds/$(buildId)).data.studentId == studentId)) &&
+          firestore.get(/databases/(default)/documents/techBuilds/$(buildId)).data.studentId == studentId) ||
+        (request.auth.uid != studentId && isAdmin())) &&
         underSizeLimit() &&
         !request.resource.contentType.matches('text/html') &&
         !request.resource.contentType.matches('.*javascript.*');
@@ -248,31 +245,30 @@ service firebase.storage {
     }
 
     // =====================================================
-    // PAISLEY TECH — mission study materials (techContent/{contentId}/{file})
-    // Videos, documents, images and examples a coach or the Studio Desk attaches
-    // to a mission. The mission doc must exist first; a coach may only upload to
-    // their own missions. Read by any TECH builder, coach or admin.
+    // PAISLEY TECH � mission study materials (techContent/{contentId}/{file})
+    // A rule may touch at most 2 distinct Firestore docs per request (admins/,
+    // techCoaches/, techContent/ ... each counts once), so every branch below
+    // stays within 2. createdBy on the mission proves the uploader is its coach:
+    // firestore.rules only lets an Active TECH coach create one with their uid.
+    // Builders open materials through the token download URL saved on the mission.
     // =====================================================
     function techActiveIn(coll) {
       return firestore.exists(/databases/(default)/documents/$(coll)/$(request.auth.uid)) &&
         firestore.get(/databases/(default)/documents/$(coll)/$(request.auth.uid)).data.status == 'Active';
     }
+    function techMissionOwner(contentId) {
+      return firestore.get(/databases/(default)/documents/techContent/$(contentId)).data.get('createdBy', '') == request.auth.uid;
+    }
     match /techContent/{contentId}/{fileName} {
-      allow read: if isSignedIn() && (isAdmin() || techActiveIn('techStudents') || techActiveIn('techCoaches'));
-      allow create, update: if isSignedIn() &&
-        (isAdmin() ||
-          (techActiveIn('techCoaches') &&
-            firestore.get(/databases/(default)/documents/techContent/$(contentId)).data.createdBy == request.auth.uid)) &&
+      allow read: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches') || techActiveIn('techStudents'));
+      allow create, update: if isSignedIn() && (isAdmin() || techMissionOwner(contentId)) &&
         ((request.resource.contentType.matches('video/.*') && request.resource.size < 500 * 1024 * 1024) ||
           ((isEducationalFile() || request.resource.contentType.matches('text/(plain|csv)') ||
             request.resource.contentType.matches('application/(msword|vnd[.]openxmlformats-officedocument[.].*|vnd[.]ms-.*|zip)')) &&
             request.resource.size < 50 * 1024 * 1024)) &&
         !request.resource.contentType.matches('text/html') &&
         !request.resource.contentType.matches('.*javascript.*');
-      allow delete: if isSignedIn() &&
-        (isAdmin() ||
-          (techActiveIn('techCoaches') &&
-            firestore.get(/databases/(default)/documents/techContent/$(contentId)).data.createdBy == request.auth.uid));
+      allow delete: if isSignedIn() && (isAdmin() || techMissionOwner(contentId));
     }
 
     // Default deny
