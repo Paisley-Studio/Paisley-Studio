@@ -12,6 +12,9 @@
                                         (snapshots in techBuilds/{id}/submissions), coach Review with
                                         grade and criteria, Submissions history, Comments, Publish.
                                         Roles: student, coach, admin, guardian (read-only).
+     TechUI.mountMission(host, opts)    the step-by-step mission player (brief → learn → practise →
+                                        build) with the lesson video stage; used in the Mission tab
+                                        and on the builder's mission page before they start
      TechUI.projectState / journeyHtml / missionLock / liveCardHtml / logActivity / activityRows
                                         shared states, the LEARN → … → PUBLISH journey, mission
                                         unlocking, live-class cards and the activity timeline
@@ -151,11 +154,25 @@
       '.tk-table td{padding:.6rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08));vertical-align:middle}',
       '.tk-scroll{overflow-x:auto}',
       /* New: workspace tabs (Brief / Writing / Code / Upload / AI reflection) */
-      '.tk-tabbar{display:flex;gap:.35rem;flex-wrap:wrap;border-bottom:1.5px solid var(--line,rgba(38,51,49,.12));margin:.8rem 0 .9rem}',
-      '.tk-tab{padding:.5rem .9rem;border-radius:10px 10px 0 0;border:1.5px solid transparent;border-bottom:none;background:transparent;color:var(--muted,#5A6E6A);font:inherit;font-weight:800;font-size:.8rem;letter-spacing:.02em;cursor:pointer;display:inline-flex;align-items:center;gap:.4rem}',
+      '.tk-tabbar{display:flex;gap:.3rem;overflow-x:auto;scrollbar-width:none;padding:.35rem;margin:0 0 1rem;background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.12));border-radius:16px}',
+      '.tk-tabbar::-webkit-scrollbar{display:none}',
+      '.tk-tab{flex:none;padding:.55rem .95rem;border-radius:12px;border:0;background:transparent;color:var(--muted,#5A6E6A);font:inherit;font-weight:800;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;gap:.45rem;white-space:nowrap}',
       '.tk-tab:hover{color:var(--brand-deep,#245F5A);background:var(--sage,#E5F2EF)}',
-      '.tk-tab.on{background:var(--surface,#fff);color:var(--brand-deep,#245F5A);border-color:var(--line,rgba(38,51,49,.12));border-bottom-color:var(--surface,#fff);margin-bottom:-1.5px}',
-      '.tk-tab .tk-pill{margin-left:.3rem}',
+      '.tk-tab.on{background:var(--brand-deep,#245F5A);color:#fff}',
+      '.tk-tab .tk-pill{margin-left:.2rem}.tk-tab.on .tk-pill{background:rgba(255,255,255,.2);color:#fff}',
+      '.tk-lbl{display:block;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-deep,#245F5A);margin-bottom:.35rem}',
+      '.tk-btn.gold{background:#F5C842;border-color:#F5C842;color:#3b2f00}',
+      /* Project header */
+      '.ws-hero{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.12));border-radius:22px;padding:1.3rem 1.5rem 1rem;margin-bottom:1rem;box-shadow:0 4px 18px rgba(36,95,90,.05)}',
+      '.ws-top{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}',
+      '.ws-title{display:block;width:calc(100% + .9rem);border:2px solid transparent;border-radius:12px;background:none;font:inherit;font-size:clamp(1.25rem,2.4vw,1.7rem);font-weight:800;letter-spacing:-.01em;color:var(--brand-deep,#245F5A);padding:.15rem .4rem;margin:.5rem 0 0 -.45rem}',
+      '.ws-title:hover{border-color:var(--line,rgba(38,51,49,.12))}.ws-title:focus{outline:none;border-color:var(--brand,#55BFB3);background:var(--paper,#F1F9F7)}.ws-title[readonly]{border-color:transparent;background:none}',
+      '.ws-meta{display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;align-items:center;font-size:.82rem;color:var(--muted,#5A6E6A);font-weight:600;margin-top:.3rem}.ws-meta i{color:var(--brand-deep,#245F5A);margin-right:.3rem}',
+      '.ws-prog{display:flex;align-items:center;gap:.6rem;flex:1;min-width:150px;max-width:260px}.ws-prog .tk-bar{flex:1}.ws-prog b{font-size:.8rem;color:var(--brand-deep,#245F5A)}',
+      '.ws-settings{margin-top:.6rem;border-top:1px solid var(--line,rgba(38,51,49,.08));padding-top:.7rem}',
+      '.ws-settings>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:.45rem;font-size:.78rem;font-weight:800;color:var(--brand-deep,#245F5A);padding:.4rem .75rem;border-radius:10px;background:var(--sage,#E5F2EF)}',
+      '.ws-settings>summary::-webkit-details-marker{display:none}.ws-settings[open]>summary{margin-bottom:.9rem}',
+      '.ws-set-grid{display:grid;gap:1rem}.ws-set-grid .tk-steps{margin:0}',
       '.tk-pane{display:none}.tk-pane.on{display:block}',
       /* New: AI reflection */
       '.tk-ai-box{border:1.5px dashed var(--brand,#55BFB3);border-radius:14px;padding:.9rem 1rem;background:rgba(85,191,179,.04);margin:.8rem 0}',
@@ -184,9 +201,13 @@
       /* Journey, origin labels, banners */
       '.tk-origin{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .6rem;border-radius:6px;font-size:.64rem;font-weight:800;letter-spacing:.08em;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
       '.tk-origin.self{background:#FFF4D6;color:#7a5c00;border:1px solid rgba(245,200,66,.6)}.tk-origin.sm{font-size:.56rem;padding:.1rem .4rem}',
-      '.tk-journey{list-style:none;display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin:.9rem 0 .6rem;padding:0}',
-      '.tk-journey li span{display:block;height:6px;border-radius:99px;background:var(--sage,#E5F2EF)}.tk-journey li.done span{background:var(--brand-soft,#7BCBC2)}.tk-journey li.now span{background:var(--brand-deep,#245F5A)}',
-      '.tk-journey li b{display:block;margin-top:.35rem;font-size:.62rem;font-weight:800;letter-spacing:.03em;color:var(--muted,#5A6E6A);text-transform:uppercase}.tk-journey li.now b{color:var(--brand-deep,#245F5A)}',
+      '.tk-journey{list-style:none;display:grid;grid-template-columns:repeat(8,1fr);margin:1.1rem 0 .5rem;padding:0}',
+      '.tk-journey li{position:relative;text-align:center;min-width:0}',
+      '.tk-journey li::before{content:"";position:absolute;top:13px;left:-50%;width:100%;height:3px;background:var(--sage,#E5F2EF)}.tk-journey li:first-child::before{display:none}',
+      '.tk-journey li.done::before,.tk-journey li.now::before{background:var(--brand-soft,#7BCBC2)}',
+      '.tk-journey li span{position:relative;z-index:1;width:29px;height:29px;margin:0 auto;border-radius:50%;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--muted,#5A6E6A);font-size:.72rem;font-weight:800;border:3px solid var(--surface,#fff)}',
+      '.tk-journey li.done span{background:var(--brand-soft,#7BCBC2);color:#04231f}.tk-journey li.now span{background:var(--brand-deep,#245F5A);color:#fff;box-shadow:0 0 0 4px rgba(36,95,90,.15)}',
+      '.tk-journey li b{display:block;margin-top:.4rem;font-size:.62rem;font-weight:800;letter-spacing:.03em;color:var(--muted,#5A6E6A);text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tk-journey li.now b{color:var(--brand-deep,#245F5A)}',
       '.tk-banner{display:flex;gap:.8rem;align-items:center;padding:.85rem 1rem;border-radius:14px;margin-bottom:.9rem;font-size:.88rem}.tk-banner>i{font-size:1.1rem}.tk-banner>div{flex:1;min-width:0}',
       '.tk-banner.bad{background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.25);color:#7d241b}.tk-banner.warn{background:rgba(245,200,66,.16);border:1px solid rgba(245,200,66,.45);color:#5c4500}',
       '.tk-h4{margin:.8rem 0 .35rem;font-size:.74rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--brand-deep,#245F5A)}',
@@ -211,7 +232,91 @@
       '.tk-article{border:1px solid var(--line,rgba(38,51,49,.08));border-radius:10px;padding:.8rem 1rem;line-height:1.65;max-height:520px;overflow:auto}.tk-article img{max-width:100%}',
       '.tk-code{background:#0f1f1d;color:#d9f2ee;border-radius:10px;padding:.7rem;font-size:.78rem;overflow:auto;max-height:360px}',
       '.tk-run{width:100%;height:380px;border:1px solid var(--line,rgba(38,51,49,.12));border-radius:10px;margin:.5rem 0;background:#fff}',
-      '@media(max-width:560px){.tk-msg{max-width:92%}.tk-step{min-width:60px;font-size:.62rem}.tk-tab{font-size:.72rem;padding:.45rem .7rem}.tk-journey li b{display:none}.tk-journey li.now b{display:block;white-space:nowrap}.tk-live{flex-wrap:wrap}.tk-live-act{align-items:flex-start}}',
+      /* Mission player */
+      '.mp{display:flex;flex-direction:column;gap:1.1rem}',
+      '.mp-hero{position:relative;overflow:hidden;border-radius:24px;padding:1.7rem 1.9rem;background:linear-gradient(135deg,#1c4f4a 0%,#245F5A 50%,#2f7d74 100%);color:#fff;display:flex;gap:1.5rem;align-items:center;box-shadow:0 16px 36px rgba(36,95,90,.2)}',
+      '.mp-hero::before{content:"";position:absolute;width:280px;height:280px;border-radius:50%;background:rgba(85,191,179,.22);top:-130px;right:-70px}',
+      '.mp-hero::after{content:"";position:absolute;width:150px;height:150px;border-radius:50%;background:rgba(245,200,66,.16);bottom:-70px;right:150px}',
+      '.mp-hero-in{position:relative;z-index:1;flex:1;min-width:0}',
+      '.mp-hero-art{position:relative;z-index:1;flex:none;width:92px;height:92px;border-radius:26px;background:rgba(255,255,255,.12);display:grid;place-items:center;font-size:2.3rem;color:#F5C842;transform:rotate(-6deg)}',
+      '.mp-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.75rem}',
+      '.mp-chip{display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .7rem;border-radius:99px;background:rgba(255,255,255,.14);color:#fff;font-size:.7rem;font-weight:800;letter-spacing:.04em}.mp-chip.gold{background:#F5C842;color:#3b2f00}',
+      '.mp-title{font-size:clamp(1.4rem,2.6vw,2rem);line-height:1.15;font-weight:800;letter-spacing:-.02em;margin:0;color:#fff}',
+      '.mp-lede{margin:.55rem 0 0;color:#cdeee9;font-weight:600;font-size:1rem;max-width:62ch;line-height:1.5}',
+      '.mp-hero-act{margin-top:1.1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}.mp-hero-act .tk-btn{padding:.7rem 1.2rem;font-size:.9rem;border-radius:14px}',
+      '.mp-lock{display:inline-flex;align-items:center;gap:.5rem;margin:0;padding:.55rem .9rem;border-radius:12px;background:rgba(255,255,255,.12);font-weight:700;font-size:.88rem}',
+      '.mp-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6rem}',
+      '.mp-step{display:flex;align-items:center;gap:.7rem;padding:.7rem .85rem;border-radius:16px;border:2px solid var(--line,rgba(38,51,49,.1));background:var(--surface,#fff);font:inherit;text-align:left;cursor:pointer;color:var(--ink,#263331);transition:border-color .15s,background .15s}',
+      '.mp-step:hover{border-color:var(--brand,#55BFB3)}',
+      '.mp-step .n{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.92rem;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
+      '.mp-step .l{min-width:0}.mp-step .l small{display:block;font-size:.62rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#5A6E6A)}.mp-step .l b{display:block;font-size:.92rem;font-weight:800;color:var(--brand-deep,#245F5A);line-height:1.2}',
+      '.mp-step.done .n{background:#2EB872;color:#fff}',
+      '.mp-step.on{border-color:var(--brand-deep,#245F5A);background:var(--brand-deep,#245F5A)}.mp-step.on .n{background:#F5C842;color:#3b2f00}.mp-step.on .l small{color:#9fd9d1}.mp-step.on .l b{color:#fff}',
+      '.mp-body{min-width:0}',
+      '.mp-cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:1rem;align-items:start}',
+      '.mp-main,.mp-side{display:flex;flex-direction:column;gap:1rem;min-width:0}',
+      '.mp-card{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:20px;padding:1.25rem 1.4rem;box-shadow:0 4px 18px rgba(36,95,90,.05)}',
+      '.mp-card h3{display:flex;align-items:center;gap:.65rem;margin:0 0 .8rem;font-size:1.02rem;font-weight:800;color:var(--brand-deep,#245F5A)}',
+      '.mp-card h3 i{width:36px;height:36px;flex:none;border-radius:12px;display:grid;place-items:center;background:var(--sage,#E5F2EF);font-size:.95rem}',
+      '.mp-card.accent{background:linear-gradient(180deg,#F0FAF8,#fff);border-color:rgba(85,191,179,.5)}.mp-card.accent h3 i{background:var(--brand,#55BFB3);color:#04231f}',
+      '.mp-card.sun{background:#FFFBEA;border-color:rgba(245,200,66,.55)}.mp-card.sun h3 i{background:#F5C842;color:#3b2f00}',
+      '.mp-prose{white-space:pre-wrap;line-height:1.7;font-size:.95rem;color:var(--ink,#263331);max-width:68ch;font-weight:500;margin:0}',
+      '.mp-big{white-space:pre-wrap;font-size:1.05rem;line-height:1.6;font-weight:700;color:var(--ink,#263331);margin:0}',
+      '.mp-route{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.6rem}',
+      '.mp-route li{display:flex;gap:.65rem;align-items:center;font-size:.9rem;font-weight:800;color:var(--ink,#263331)}.mp-route li span{color:var(--muted,#5A6E6A);font-weight:600}',
+      '.mp-route li>i{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);font-size:.8rem;flex:none}',
+      '.mp-learn{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:1rem;align-items:start}',
+      '.mp-stage-col{display:flex;flex-direction:column;gap:.9rem;min-width:0}',
+      '.mp-stage{background:#0d1a18;border-radius:20px;overflow:hidden;box-shadow:0 14px 40px rgba(13,26,24,.22)}',
+      '.mp-stage-bar{display:flex;align-items:center;gap:.5rem;padding:.6rem .7rem .6rem 1rem;color:#e6f5f2}',
+      '.mp-stage-bar>b{flex:1;min-width:0;font-size:.86rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mp-stage-bar>b i{color:#F5C842;margin-right:.4rem}',
+      '.mp-sbtn{display:inline-flex;align-items:center;gap:.4rem;border:0;border-radius:10px;padding:.45rem .75rem;background:rgba(255,255,255,.1);color:#fff;font:inherit;font-size:.76rem;font-weight:800;cursor:pointer;white-space:nowrap}',
+      '.mp-sbtn:hover{background:rgba(255,255,255,.2)}.mp-sbtn.mp-close{background:#F5C842;color:#3b2f00}',
+      '.mp-stage:not(.theatre) .mp-close{display:none}.mp-stage.theatre .mp-sbtn[data-mp-theatre]{display:none}',
+      '.mp-frame{position:relative;aspect-ratio:16/9;background:#000;display:grid;place-items:center;overflow:hidden}',
+      '.mp-frame video,.mp-frame iframe,.mp-frame img{position:absolute;inset:0;width:100%;height:100%;border:0}.mp-frame video,.mp-frame img{object-fit:contain}',
+      '.mp-frame.img{background:#0d1a18;cursor:zoom-in}.mp-stage.theatre .mp-frame.img{cursor:default}',
+      '.mp-frame.doc{aspect-ratio:auto;height:min(70vh,640px);background:#fff}.mp-frame.doc iframe{background:#fff}',
+      '.mp-frame.card{aspect-ratio:auto;min-height:240px;background:linear-gradient(135deg,#245F5A,#2f7d74);padding:2rem 1.2rem;text-align:center;color:#fff}',
+      '.mp-doc{display:flex;flex-direction:column;align-items:center;gap:.7rem;max-width:420px}.mp-doc>i{font-size:2.8rem;color:#F5C842}.mp-doc b{font-size:1.1rem}.mp-doc p{margin:0;color:#cdeee9;font-size:.9rem;font-weight:600}',
+      '.mp-stage.theatre{position:fixed;inset:0;z-index:10000;border-radius:0;background:rgba(6,14,13,.95);display:flex;flex-direction:column;justify-content:center;align-items:center;padding:1rem 1.5rem 1.5rem;box-shadow:none}',
+      '.mp-stage.theatre .mp-stage-bar{width:min(1200px,100%);padding-left:.2rem;padding-right:0}',
+      '.mp-stage.theatre .mp-frame{width:min(1200px,100%,calc((100vh - 120px) * 16 / 9));border-radius:14px}',
+      '.mp-stage.theatre .mp-frame.doc,.mp-stage.theatre .mp-frame.card{width:min(1200px,100%);height:calc(100vh - 110px)}',
+      '.mp-stage:fullscreen{background:#000;display:flex;flex-direction:column;border-radius:0}.mp-stage:fullscreen .mp-frame{flex:1;width:100%;aspect-ratio:auto;height:auto}',
+      '.mp-stage:-webkit-full-screen{background:#000;display:flex;flex-direction:column;border-radius:0;width:100%;height:100%}.mp-stage:-webkit-full-screen .mp-frame{flex:1;width:100%;aspect-ratio:auto;height:auto}',
+      '.mp-info{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:20px;padding:1.15rem 1.35rem}',
+      '.mp-info-top{display:flex;gap:1rem;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}',
+      '.mp-info h3{margin:.4rem 0 0;font-size:1.18rem;font-weight:800;color:var(--brand-deep,#245F5A);line-height:1.25}',
+      '.mp-info-desc{margin:.6rem 0 0;color:var(--muted,#5A6E6A);font-size:.93rem;line-height:1.6;white-space:pre-wrap;font-weight:500}',
+      '.mp-tip{display:flex;gap:.6rem;margin-top:.85rem;padding:.75rem .9rem;border-radius:14px;background:#FFFBEA;border:1px solid rgba(245,200,66,.5);font-size:.88rem;line-height:1.5;white-space:pre-wrap;color:#5c4500;font-weight:600}.mp-tip i{margin-top:.2rem}',
+      '.mp-done-tag{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .85rem;border-radius:99px;background:rgba(46,184,114,.14);color:#1d8b57;font-weight:800;font-size:.82rem}',
+      '.mp-matnav{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--line,rgba(38,51,49,.08))}.mp-matnav span{font-size:.78rem;font-weight:800;color:var(--muted,#5A6E6A)}',
+      '.mp-playlist{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:20px;padding:1rem;position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto}',
+      '.mp-pl-head{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;margin-bottom:.55rem}.mp-pl-head b{color:var(--brand-deep,#245F5A);font-size:.95rem}.mp-pl-head span{font-size:.74rem;font-weight:800;color:var(--muted,#5A6E6A)}',
+      '.mp-pl{list-style:none;margin:.8rem 0 0;padding:0;display:flex;flex-direction:column;gap:.3rem}',
+      '.mp-pl-item{display:flex;gap:.65rem;align-items:center;width:100%;text-align:left;padding:.5rem .55rem;border-radius:14px;border:2px solid transparent;background:none;font:inherit;cursor:pointer;color:var(--ink,#263331)}',
+      '.mp-pl-item:hover{background:var(--paper,#F1F9F7)}.mp-pl-item.on{border-color:var(--brand,#55BFB3);background:rgba(85,191,179,.08)}',
+      '.mp-pl-ico{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);font-size:.95rem}',
+      '.mp-pl-item.done .mp-pl-ico{background:rgba(46,184,114,.15);color:#1d8b57}.mp-pl-item.on .mp-pl-ico{background:var(--brand-deep,#245F5A);color:#fff}',
+      '.mp-pl-t{min-width:0}.mp-pl-t b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:.86rem;font-weight:800;line-height:1.25}.mp-pl-t small{display:block;font-size:.7rem;color:var(--muted,#5A6E6A);font-weight:700;margin-top:2px}',
+      '.mp-res{margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--line,rgba(38,51,49,.08))}.mp-res a{display:flex;gap:.55rem;align-items:center;padding:.45rem .3rem;font-size:.85rem;font-weight:700;color:var(--brand-deep,#245F5A);word-break:break-word;text-decoration:none;border-radius:10px}.mp-res a:hover{background:var(--paper,#F1F9F7)}',
+      '.mp-prac{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem}',
+      '.mp-pcard{display:flex;flex-direction:column;gap:.7rem;background:var(--surface,#fff);border:2px solid var(--line,rgba(38,51,49,.1));border-radius:20px;padding:1.25rem}.mp-pcard.done{border-color:rgba(46,184,114,.45)}',
+      '.mp-pnum{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#F5C842;color:#3b2f00;font-weight:800;font-size:1.05rem}.mp-pcard.done .mp-pnum{background:#2EB872;color:#fff}',
+      '.mp-ptype{font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#5A6E6A)}',
+      '.mp-pcard h3{margin:.15rem 0 0;font-size:1.05rem;font-weight:800;color:var(--brand-deep,#245F5A)}.mp-pcard p{margin:.35rem 0 0;font-size:.9rem;line-height:1.55;color:var(--ink,#263331);white-space:pre-wrap;font-weight:500}',
+      '.mp-pact{margin-top:auto}',
+      '.mp-hint{display:flex;gap:.5rem;align-items:center;margin:.9rem 0 0;font-size:.88rem;font-weight:700;color:var(--muted,#5A6E6A)}',
+      '.mp-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.55rem}',
+      '.mp-checks li{display:flex;gap:.7rem;align-items:flex-start;padding:.75rem .9rem;border-radius:14px;background:var(--paper,#F1F9F7);font-size:.92rem;line-height:1.45}.mp-checks li>i{color:#E8A33D;margin-top:.2rem}.mp-checks li b{color:var(--brand-deep,#245F5A)}',
+      '.mp-foot{position:sticky;bottom:.6rem;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.7rem .8rem;border-radius:18px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line,rgba(38,51,49,.1));box-shadow:0 8px 28px rgba(36,95,90,.12)}',
+      '.mp-foot-n{font-size:.8rem;font-weight:800;color:var(--muted,#5A6E6A)}',
+      '.mp-foot .tk-btn{padding:.72rem 1.2rem;font-size:.9rem;border-radius:14px}.mp-foot .mp-lock{background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
+      '@media(max-width:1000px){.mp-learn{grid-template-columns:1fr}.mp-playlist{position:static;max-height:none}}',
+      '@media(max-width:760px){.mp-cols{grid-template-columns:1fr}.mp-hero{padding:1.3rem}.mp-hero-art{display:none}.mp-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.mp-sbtn span{display:none}.mp-foot-n{display:none}.mp-foot .tk-btn{padding:.65rem .9rem;font-size:.84rem}.mp-card,.mp-info{padding:1rem 1.05rem}.ws-hero{padding:1.1rem 1.1rem .9rem}}',
+      '@media(max-width:420px){.mp-step .l small{display:none}.mp-step{padding:.6rem}.mp-step .n{width:30px;height:30px}}',
+      '@media(max-width:560px){.tk-msg{max-width:92%}.tk-step{min-width:60px;font-size:.62rem}.tk-tab{font-size:.72rem;padding:.45rem .7rem}.tk-journey li b{display:none}.tk-journey li.now b{display:block;white-space:nowrap;overflow:visible}.tk-live{flex-wrap:wrap}.tk-live-act{align-items:flex-start}}',
       '@media(prefers-reduced-motion:reduce){.tk-bar>i,.tk-btn,.tk-step{transition:none}}'
     ].join('\n');
     document.head.appendChild(st);
@@ -290,7 +395,7 @@
     var j = journeyOf(b, mission);
     return '<ol class="tk-journey" aria-label="Learning journey">' + JOURNEY.map(function (k, i) {
       var cls = i === j.step ? 'now' : (j.done[k] || i < j.step ? 'done' : '');
-      return '<li class="' + cls + '"' + (i === j.step ? ' aria-current="step"' : '') + '><span></span><b>' + (k === 'REVIEW' ? 'Coach review' : k.charAt(0) + k.slice(1).toLowerCase()) + '</b></li>';
+      return '<li class="' + cls + '"' + (i === j.step ? ' aria-current="step"' : '') + '><span>' + (cls === 'done' ? '<i class="fas fa-check"></i>' : (i + 1)) + '</span><b>' + (k === 'REVIEW' ? 'Coach review' : k.charAt(0) + k.slice(1).toLowerCase()) + '</b></li>';
     }).join('') + '</ol>';
   }
   /* Missions unlock by level in their discipline, and optionally after another mission is mastered. */
@@ -342,6 +447,257 @@
     if (!list.length) return '';
     return '<div class="tk-mats">' + list.map(function (x) { return materialHtml(x, { seen: (seen || []).indexOf(x.id) !== -1 }); }).join('') + '</div>';
   }
+
+  /* =========================================================
+     Mission player — one mission, one step at a time:
+       Mission brief → Learn → Practise → Build & submit
+     Learn is a lesson player: the current material sits in a 16:9
+     stage (Enlarge, Full screen, Close) with the playlist beside it,
+     in the order the coach set. Uploaded videos play without a
+     download option (that only hides the button; the file URL is
+     still reachable by a determined user).
+
+     TechUI.mountMission(host, {
+       mission, track (count materials towards LEARN),
+       isSeen(id), isPracticed(i), onSeen(id, video), onPlay(id),
+       onPractice(i) (omit to show practice read-only), practiceNote,
+       heroAction: html, cta: { html } | { label, icon, onClick },
+       compact (inside a project: no hero), state: {} kept across mounts })
+     → { update(), destroy() }
+     ========================================================= */
+  var MAT_ICON = { video: 'fa-circle-play', document: 'fa-file-lines', image: 'fa-image', link: 'fa-link', example: 'fa-lightbulb' };
+  var PRACTICE_LABEL = { code: 'Coding experiment', writing: 'Writing practice', research: 'Research activity', ai: 'AI exploration' };
+  function isPdf(x) { return x.contentType === 'application/pdf' || /\.pdf(\?|$)/i.test(x.path || x.url || ''); }
+  function mountMission(host, o) {
+    injectStyle();
+    var m = o.mission || {}, state = o.state || {}, dead = false;
+    var mats = (m.materials || []).filter(function (x) { return x && (safeUrl(x.url) || x.title || x.notes); });
+    var res = (m.resources || []).filter(function (r) { return safeUrl(r.url); });
+    var prac = m.practice || [];
+    var isSeen = function (id) { return !!(o.isSeen && id && o.isSeen(id)); };
+    var isPracticed = function (i) { return !!(o.isPracticed && o.isPracticed(i)); };
+    var steps = [{ k: 'brief', icon: 'fa-flag', label: 'Mission brief' }];
+    if (mats.length || res.length) steps.push({ k: 'learn', icon: 'fa-play', label: 'Learn' });
+    if (prac.length) steps.push({ k: 'practice', icon: 'fa-flask', label: 'Practise' });
+    steps.push({ k: 'build', icon: 'fa-hammer', label: 'Build & submit' });
+    var keys = steps.map(function (s) { return s.k; });
+    if (keys.indexOf(state.step) === -1) state.step = 'brief';
+    if (!(state.mat >= 0 && state.mat < mats.length)) state.mat = 0;
+    var discs = Array.isArray(m.disciplines) ? m.disciplines : (m.discipline ? [m.discipline] : []);
+    var ws = WORKSPACE_NAME[workspaceFor(m.creationType)];
+
+    function card(icon, title, html, tone) { return '<section class="mp-card ' + (tone || '') + '"><h3><i class="fas ' + icon + '"></i> ' + esc(title) + '</h3>' + html + '</section>'; }
+    function seenCount() { return mats.filter(function (x) { return isSeen(x.id); }).length; }
+    function stepDone(k) {
+      if (!o.track) return false;
+      if (k === 'learn') { var req = mats.filter(function (x) { return x.required; }); return mats.length > 0 && (req.length ? req : mats).every(function (x) { return isSeen(x.id); }); }
+      if (k === 'practice') return prac.some(function (p, i) { return isPracticed(i); });
+      return false;
+    }
+    function stepsHtml() {
+      return steps.map(function (s, i) {
+        var on = s.k === state.step, done = !on && stepDone(s.k);
+        return '<button type="button" class="mp-step' + (on ? ' on' : '') + (done ? ' done' : '') + '" data-mp-step="' + s.k + '"' + (on ? ' aria-current="step"' : '') + '>' +
+          '<span class="n">' + (done ? '<i class="fas fa-check"></i>' : (i + 1)) + '</span><span class="l"><small>Step ' + (i + 1) + '</small><b>' + esc(s.label) + '</b></span></button>';
+      }).join('');
+    }
+    function hero() {
+      if (o.compact) return '';
+      var chips = [m.kind === 'challenge' ? 'Challenge' : 'Mission'];
+      if (m.level) chips.push(cap1(LEVELS[Math.max(1, Math.min(7, m.level)) - 1]));
+      chips = chips.concat(discs);
+      return '<header class="mp-hero"><div class="mp-hero-in"><div class="mp-chips">' + chips.map(function (c) { return '<span class="mp-chip">' + esc(c) + '</span>'; }).join('') +
+          (m.deadline ? '<span class="mp-chip gold"><i class="fas fa-calendar"></i> Due ' + esc(m.deadline) + '</span>' : '') + '</div>' +
+          '<h2 class="mp-title">' + esc(m.title || 'Mission') + '</h2>' + (m.summary ? '<p class="mp-lede">' + esc(m.summary) + '</p>' : '') +
+          (o.heroAction ? '<div class="mp-hero-act">' + o.heroAction + '</div>' : '') +
+        '</div><div class="mp-hero-art" aria-hidden="true"><i class="fas ' + (m.kind === 'challenge' ? 'fa-trophy' : 'fa-rocket') + '"></i></div></header>';
+    }
+
+    /* ---- steps ---- */
+    function briefStep() {
+      var route = steps.slice(1).map(function (s) {
+        var extra = s.k === 'learn' ? (mats.length + ' lesson material' + (mats.length === 1 ? '' : 's')) : s.k === 'practice' ? (prac.length + ' activit' + (prac.length === 1 ? 'y' : 'ies') + ', never graded') : ('in the ' + ws);
+        return '<li><i class="fas ' + s.icon + '"></i><div>' + esc(s.label) + ' <span>· ' + esc(extra) + '</span></div></li>';
+      }).join('');
+      var task = m.brief || (o.compact ? m.summary : '');
+      return '<div class="mp-cols"><div class="mp-main">' +
+          (task ? card('fa-bullseye', 'Your task', '<p class="mp-big">' + esc(task) + '</p>', 'accent') : '') +
+          (m.body ? card('fa-list-check', 'Instructions', '<p class="mp-prose">' + esc(m.body) + '</p>') : '') +
+          (!task && !m.body ? card('fa-bullseye', 'Your task', '<p class="mp-prose">Your coach will add the details soon. Start with the lesson materials.</p>', 'accent') : '') +
+        '</div><div class="mp-side">' +
+          (m.objectives ? card('fa-lightbulb', 'What you will learn', '<p class="mp-prose">' + esc(m.objectives) + '</p>', 'sun') : '') +
+          card('fa-route', 'Your route', '<ol class="mp-route">' + route + '</ol>') +
+        '</div></div>';
+    }
+    function frameHtml(x) {
+      var url = safeUrl(x.url), type = x.type || 'link', id = esc(x.id || ''), title = esc(x.title || 'Material');
+      if (type === 'video' && url) {
+        var emb = videoEmbed(url);
+        if (emb) return '<div class="mp-frame"><iframe src="' + esc(emb) + '" title="' + title + '" allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>';
+        return '<div class="mp-frame"><video src="' + esc(url) + '" controls controlsList="nodownload noremoteplayback" disablePictureInPicture playsinline preload="metadata" data-mp-video="' + id + '"></video></div>';
+      }
+      if (type === 'image' && url) return '<div class="mp-frame img" data-mp-theatre><img src="' + esc(url) + '" alt="' + title + '"></div>';
+      if (url && isPdf(x)) return '<div class="mp-frame doc"><iframe src="' + esc(url) + '#toolbar=0" title="' + title + '"></iframe></div>';
+      var icon = type === 'document' ? 'fa-file-lines' : type === 'example' ? 'fa-lightbulb' : 'fa-link';
+      return '<div class="mp-frame card"><div class="mp-doc"><i class="fas ' + icon + '"></i><b>' + title + '</b>' +
+        (url ? '<p>Opens in a new tab.</p><a class="tk-btn gold" href="' + esc(url) + '" target="_blank" rel="noopener" data-mp-open="' + id + '"><i class="fas fa-arrow-up-right-from-square"></i> Open ' + esc((MATERIAL_TYPES[type] || 'resource').toLowerCase()) + '</a>' : '<p>Read your coach’s notes below.</p>') +
+        '</div></div>';
+    }
+    function stageHtml() {
+      var x = mats[state.mat], type = x.type || 'link', media = safeUrl(x.url) && (type === 'video' || type === 'image' || isPdf(x));
+      return '<div class="mp-stage" data-mp-stage><div class="mp-stage-bar"><b><i class="fas ' + (MAT_ICON[type] || 'fa-book') + '"></i>' + esc(x.title || 'Material') + '</b>' +
+          (media ? '<button type="button" class="mp-sbtn" data-mp-theatre title="Enlarge"><i class="fas fa-expand"></i><span>Enlarge</span></button>' +
+            '<button type="button" class="mp-sbtn" data-mp-full title="Full screen"><i class="fas fa-maximize"></i><span>Full screen</span></button>' : '') +
+          '<button type="button" class="mp-sbtn mp-close" data-mp-close title="Close"><i class="fas fa-xmark"></i><span>Close</span></button></div>' +
+        frameHtml(x) + '</div>';
+    }
+    function infoHtml() {
+      var x = mats[state.mat], seen = isSeen(x.id);
+      return '<div class="mp-info"><div class="mp-info-top"><div><span class="tk-pill ' + (x.required ? 'warn' : '') + '">' + (x.required ? 'Required' : 'Optional') + '</span> <span class="tk-pill">' + esc(MATERIAL_TYPES[x.type] || 'Resource') + '</span>' +
+          '<h3>' + esc(x.title || 'Material') + '</h3></div>' +
+          (o.track ? (seen ? '<span class="mp-done-tag"><i class="fas fa-circle-check"></i> Done</span>' : '<button type="button" class="tk-btn primary" data-mp-done><i class="fas fa-check"></i> Mark as done</button>') : '') + '</div>' +
+        (x.description ? '<p class="mp-info-desc">' + esc(x.description) + '</p>' : '') +
+        (x.notes ? '<div class="mp-tip"><i class="fas fa-comment-dots"></i><div>' + esc(x.notes) + '</div></div>' : '') +
+        '<div class="mp-matnav"><button type="button" class="tk-btn" data-mp-mat="-1"' + (state.mat === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-left"></i> Previous</button>' +
+          '<span>' + (state.mat + 1) + ' of ' + mats.length + '</span>' +
+          '<button type="button" class="tk-btn dark" data-mp-mat="1"' + (state.mat === mats.length - 1 ? ' disabled' : '') + '>Next <i class="fas fa-arrow-right"></i></button></div></div>';
+    }
+    function listHtml() {
+      var n = seenCount();
+      return '<div class="mp-pl-head"><b>Lesson materials</b><span>' + (o.track ? n + ' / ' + mats.length + ' done' : mats.length + ' item' + (mats.length === 1 ? '' : 's')) + '</span></div>' +
+        (o.track ? '<div class="tk-bar"><i style="width:' + Math.round(n / Math.max(1, mats.length) * 100) + '%"></i></div>' : '') +
+        '<ol class="mp-pl">' + mats.map(function (x, i) {
+          var done = o.track && isSeen(x.id);
+          return '<li><button type="button" class="mp-pl-item' + (i === state.mat ? ' on' : '') + (done ? ' done' : '') + '" data-mp-goto="' + i + '"' + (i === state.mat ? ' aria-current="true"' : '') + '>' +
+            '<span class="mp-pl-ico"><i class="fas ' + (done ? 'fa-circle-check' : (MAT_ICON[x.type] || 'fa-book')) + '"></i></span>' +
+            '<span class="mp-pl-t"><b>' + (i + 1) + '. ' + esc(x.title || 'Material') + '</b><small>' + esc(MATERIAL_TYPES[x.type] || 'Resource') + (x.required ? ' · Required' : '') + '</small></span></button></li>';
+        }).join('') + '</ol>';
+    }
+    function learnStep() {
+      var more = res.length ? '<div class="mp-res"><div class="mp-pl-head"><b>More resources</b></div>' + res.map(function (r) { return '<a href="' + esc(safeUrl(r.url)) + '" target="_blank" rel="noopener"><i class="fas fa-link"></i> ' + esc(r.title || r.url) + '</a>'; }).join('') + '</div>' : '';
+      if (!mats.length) return '<div class="mp-card">' + more + '</div>';
+      return '<div class="mp-learn"><div class="mp-stage-col"><div data-mp-stagehost>' + stageHtml() + '</div><div data-mp-info>' + infoHtml() + '</div></div>' +
+        '<aside class="mp-playlist"><div data-mp-list>' + listHtml() + '</div>' + more + '</aside></div>';
+    }
+    function practiceStep() {
+      return '<div class="mp-prac">' + prac.map(function (p, i) {
+        var done = o.track && isPracticed(i);
+        return '<article class="mp-pcard' + (done ? ' done' : '') + '"><div class="mp-pnum">' + (done ? '<i class="fas fa-check"></i>' : (i + 1)) + '</div>' +
+          '<div><span class="mp-ptype">' + esc(PRACTICE_LABEL[p.type] || 'Practice') + '</span><h3>' + esc(p.title || ('Practice ' + (i + 1))) + '</h3>' + (p.instructions ? '<p>' + esc(p.instructions) + '</p>' : '') + '</div>' +
+          (o.onPractice ? '<div class="mp-pact"><button type="button" class="tk-btn ' + (done ? '' : 'primary') + '" data-mp-prac="' + i + '"><i class="fas fa-flask"></i> ' + (done ? 'Practise again' : 'Start practice') + '</button></div>' : '') + '</article>';
+      }).join('') + '</div>' + (o.practiceNote ? '<p class="mp-hint"><i class="fas fa-circle-info"></i> ' + esc(o.practiceNote) + '</p>' : '<p class="mp-hint"><i class="fas fa-circle-info"></i> Practice is never graded. Try things out and have fun.</p>');
+    }
+    function buildStep() {
+      var crit = (m.criteria || []).filter(function (c) { return c && c.name; }).map(function (c) { return '<li><i class="fas fa-star"></i><div><b>' + esc(c.name) + '</b>' + (c.description ? ' — ' + esc(c.description) : '') + '</div></li>'; }).join('');
+      var tools = (m.aiTools || []).map(function (t) { var u = safeUrl(t.url); return u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> ' + esc(t.name || 'Tool') + '</a>' : '<span>' + esc(t.name || 'Tool') + '</span>'; }).join('');
+      return '<div class="mp-cols"><div class="mp-main">' +
+          card('fa-box-open', 'What to submit', '<p class="mp-big">' + esc(m.submissionReq || ('Build it in the ' + ws + ', then submit it with your AI reflection.')) + '</p>', 'accent') +
+          (crit ? card('fa-star', 'How it will be assessed', '<ul class="mp-checks">' + crit + '</ul>') : '') +
+        '</div><div class="mp-side">' +
+          card('fa-robot', 'AI tools', (tools ? '<div class="tk-ai-tools">' + tools + '</div>' : '<p class="mp-prose">Ask your coach before using AI on this mission.</p>') + (m.aiRules ? '<div class="mp-tip"><i class="fas fa-shield-halved"></i><div>' + esc(m.aiRules) + '</div></div>' : ''), 'sun') +
+        '</div></div>';
+    }
+    function bodyHtml() { return ({ brief: briefStep, learn: learnStep, practice: practiceStep, build: buildStep })[state.step](); }
+    function footHtml() {
+      var i = keys.indexOf(state.step), prev = steps[i - 1], next = steps[i + 1], cta = '';
+      if (!next && o.cta) cta = o.cta.html || '<button type="button" class="tk-btn primary" data-mp-cta><i class="fas ' + (o.cta.icon || 'fa-arrow-right') + '"></i> ' + esc(o.cta.label) + '</button>';
+      return '<footer class="mp-foot">' + (prev ? '<button type="button" class="tk-btn" data-mp-nav="-1"><i class="fas fa-arrow-left"></i> ' + esc(prev.label) + '</button>' : '<span></span>') +
+        '<span class="mp-foot-n">Step ' + (i + 1) + ' of ' + steps.length + '</span>' +
+        (next ? '<button type="button" class="tk-btn primary" data-mp-nav="1">Next: ' + esc(next.label) + ' <i class="fas fa-arrow-right"></i></button>' : (cta || '<span></span>')) + '</footer>';
+    }
+
+    /* ---- painting ---- */
+    function render() {
+      leaveTheatre();
+      host.innerHTML = '<div class="mp' + (o.compact ? ' compact' : '') + '">' + hero() + '<nav class="mp-steps" data-mp-steps aria-label="Mission steps">' + stepsHtml() + '</nav>' +
+        '<div class="mp-body">' + bodyHtml() + '</div>' + footHtml() + '</div>';
+      wireMedia();
+    }
+    function part(sel, html) { var el = host.querySelector(sel); if (el) el.innerHTML = html; }
+    function refresh() {
+      if (dead) return;
+      part('[data-mp-steps]', stepsHtml());
+      if (state.step === 'learn' && mats.length) { part('[data-mp-list]', listHtml()); part('[data-mp-info]', infoHtml()); }
+      if (state.step === 'practice') { var b = host.querySelector('.mp-body'); if (b) b.innerHTML = practiceStep(); }
+    }
+    function showMat(i) {
+      if (i < 0 || i >= mats.length || i === state.mat) return;
+      leaveTheatre(); state.mat = i;
+      part('[data-mp-stagehost]', stageHtml()); part('[data-mp-info]', infoHtml()); part('[data-mp-list]', listHtml());
+      wireMedia();
+      var stg = host.querySelector('[data-mp-stage]');
+      if (stg && stg.getBoundingClientRect().top < 70) window.scrollTo({ top: stg.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' });
+    }
+    function go(k) {
+      if (keys.indexOf(k) === -1) return;
+      state.step = k; render();
+      var top = host.getBoundingClientRect().top + window.scrollY - 90;
+      if (window.scrollY > top) window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+    function markSeen(id, video) {
+      if (!o.track || !id || isSeen(id)) return;
+      if (o.onSeen) o.onSeen(id, video);
+      refresh();
+    }
+    function wireMedia() {
+      var v = host.querySelector('video[data-mp-video]'); if (!v) return;
+      var id = v.dataset.mpVideo;
+      v.addEventListener('play', function () { if (o.onPlay) o.onPlay(id); }, { once: true });
+      v.addEventListener('timeupdate', function () { if (v.duration && v.currentTime / v.duration > 0.8 && !v._done) { v._done = true; markSeen(id, true); } });
+    }
+
+    /* ---- enlarge / full screen ---- */
+    function stage() { return host.querySelector('[data-mp-stage]'); }
+    function enterTheatre() { var s = stage(); if (!s) return; s.classList.add('theatre'); document.documentElement.style.overflow = 'hidden'; var c = s.querySelector('[data-mp-close]'); if (c) c.focus(); }
+    function leaveTheatre() {
+      var s = stage(); if (s) s.classList.remove('theatre');
+      document.documentElement.style.overflow = '';
+      var fs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (fs && host.contains(fs)) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+    function fullScreen() {
+      var s = stage(); if (!s) return;
+      var fs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (fs) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+      var v = s.querySelector('video');
+      if (s.requestFullscreen) s.requestFullscreen().catch(function () { enterTheatre(); });
+      else if (s.webkitRequestFullscreen) s.webkitRequestFullscreen();
+      else if (v && v.webkitEnterFullscreen) v.webkitEnterFullscreen();   // iPhone
+      else enterTheatre();
+    }
+    function onKey(e) { if (e.key === 'Escape') { var s = stage(); if (s && s.classList.contains('theatre')) leaveTheatre(); } }
+    function onClick(e) {
+      var t = e.target.closest('[data-mp-step],[data-mp-nav],[data-mp-goto],[data-mp-mat],[data-mp-done],[data-mp-open],[data-mp-theatre],[data-mp-full],[data-mp-close],[data-mp-prac],[data-mp-cta]');
+      if (!t || !host.contains(t)) return;
+      var d = t.dataset;
+      if (d.mpStep) go(d.mpStep);
+      else if (d.mpNav) go(keys[keys.indexOf(state.step) + Number(d.mpNav)]);
+      else if (d.mpGoto) showMat(Number(d.mpGoto));
+      else if (d.mpMat) showMat(state.mat + Number(d.mpMat));
+      else if (d.mpDone !== undefined) { var x = mats[state.mat]; markSeen(x && x.id, x && x.type === 'video'); }
+      else if (d.mpOpen !== undefined) markSeen(d.mpOpen, false);
+      else if (d.mpTheatre !== undefined) { if (!stage().classList.contains('theatre')) enterTheatre(); }
+      else if (d.mpFull !== undefined) fullScreen();
+      else if (d.mpClose !== undefined) leaveTheatre();
+      else if (d.mpPrac) { if (o.onPractice) o.onPractice(Number(d.mpPrac)); }
+      else if (d.mpCta !== undefined) { if (o.cta && o.cta.onClick) o.cta.onClick(); }
+    }
+    /* No "Save video as…" on the lesson stage. */
+    function onMenu(e) { if (e.target.closest('[data-mp-stage]')) e.preventDefault(); }
+    host.addEventListener('click', onClick);
+    host.addEventListener('contextmenu', onMenu);
+    document.addEventListener('keydown', onKey);
+    render();
+    return {
+      update: refresh,
+      destroy: function () {
+        if (dead) return; dead = true; leaveTheatre();
+        host.removeEventListener('click', onClick); host.removeEventListener('contextmenu', onMenu); document.removeEventListener('keydown', onKey);
+        var v = host.querySelector('video'); if (v) { try { v.pause(); } catch (e) { } }
+      }
+    };
+  }
+  function cap1(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
 
   /* Live classes */
   function liveState(c) {
@@ -577,9 +933,10 @@
     var activeTab = null, stale = false;
     var MODULE_TABS = ['writing', 'code', 'upload'];
     /* While a builder is typing in a tool, live updates wait until they leave it. */
-    function canRepaint() { return !editing() && MODULE_TABS.indexOf(activeTab) === -1; }
-    function repaint() { if (!rendered || canRepaint()) { stale = false; render(); } else { stale = true; renderFb(); } }
-    var mounted = { writing: null, code: null, upload: null };
+    function canRepaint() { return !editing() && MODULE_TABS.indexOf(activeTab) === -1 && !(activeTab === 'mission' && mounted.mission); }
+    function repaint() { if (!rendered || canRepaint()) { stale = false; render(); } else { stale = true; renderFb(); if (mounted.mission) mounted.mission.update(); } }
+    var mounted = { writing: null, code: null, upload: null, mission: null };
+    var missionState = {}, settingsOpen = false;
 
     function editing() { var a = document.activeElement; return a && host.contains(a) && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); }
     function say(t, bad) { var m = host.querySelector('#wsMsg'); if (m) { m.textContent = t; m.style.color = bad ? '#b8362a' : 'var(--brand-deep,#245F5A)'; } }
@@ -612,43 +969,38 @@
         mounted[kind] = lib.mount(hostEl, { build: b, me: me, canEdit: canEdit, files: b.files || [], onSave: moduleSave(kind === 'code' ? 'Code saved ✓' : 'Saved ✓') });
       } catch (e) { hostEl.innerHTML = '<div class="tk-empty">' + label + ' could not start: ' + esc(errMsg(e)) + '</div>'; }
     }
+    function practiced(i) { return (b.practiceIds || []).some(function (x) { return String(x).indexOf('m' + i + '_') === 0 || x === ('m' + i); }); }
+    /* Study materials: opening or finishing one counts towards LEARN. */
+    function seenMat(id, video) {
+      if (!isStu || !id) return;
+      var mat = ((mission && mission.materials) || []).filter(function (x) { return x.id === id; })[0];
+      act(video ? 'video_watched' : 'material_opened', (video ? 'Watched ' : 'Opened ') + ((mat && mat.title) || 'study material'), { materialId: id, missionId: mission && mission.id });
+      if ((b.materialsSeen || []).indexOf(id) === -1) {
+        b.materialsSeen = (b.materialsSeen || []).concat([id]);
+        ref.update({ materialsSeen: FV().arrayUnion(id), updatedAt: FV().serverTimestamp() }).catch(function () { });
+      }
+    }
+    function mountMissionTab() {
+      var el = host.querySelector('#wsMissionHost'); if (!el || !mission) return;
+      var pt = primaryTab();
+      mounted.mission = mountMission(el, {
+        mission: mission, compact: true, track: isStu, state: missionState,
+        isSeen: function (id) { return (b.materialsSeen || []).indexOf(id) !== -1; },
+        isPracticed: practiced,
+        onSeen: seenMat,
+        onPlay: function (id) { act('material_opened', 'Started a video', { materialId: id }); },
+        onPractice: isStu && o.onPractice ? function (i) { o.onPractice((mission.practice || [])[i], mission, b, i); } : null,
+        practiceNote: isStu ? '' : 'Builders open these from their own project. Practice is never graded.',
+        cta: isStu ? { label: 'Start building in the ' + WORKSPACE_NAME[pt], icon: 'fa-hammer', onClick: function () { switchTab(pt); window.scrollTo(0, host.getBoundingClientRect().top + window.scrollY - 80); } } : null
+      });
+    }
     function unmountTabModules() {
+      if (mounted.mission) { mounted.mission.destroy(); mounted.mission = null; }
       ['writing', 'code', 'upload'].forEach(function (k) { if (mounted[k]) { try { mounted[k].destroy(); } catch (e) { } mounted[k] = null; } });
     }
 
     /* ---------- panes ---------- */
-    function missionPane() {
-      var m = mission; if (!m) return '';
-      var seen = b.materialsSeen || [];
-      var prac = (m.practice || []).map(function (p, i) {
-        var done = (b.practiceIds || []).some(function (x) { return String(x).indexOf('m' + i + '_') === 0 || x === ('m' + i); });
-        return '<div class="tk-item"><div><b>' + esc(p.title || ('Practice ' + (i + 1))) + '</b>' + (done ? ' <span class="tk-pill ok">Practised</span>' : '') + '<div class="meta">' + esc(p.instructions || '') + '</div></div>' +
-          (isStu && o.onPractice ? '<button type="button" class="tk-btn sm" data-practice="' + i + '"><i class="fas fa-flask"></i> Practise</button>' : '') + '</div>';
-      }).join('');
-      var crit = (m.criteria || []).map(function (c) { return '<li><b>' + esc(c.name || '') + '</b>' + (c.description ? ' — ' + esc(c.description) : '') + '</li>'; }).join('');
-      var tools = (m.aiTools || []).map(function (t) { var u = safeUrl(t.url); return u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> ' + esc(t.name || 'Tool') + '</a>' : '<span>' + esc(t.name || 'Tool') + '</span>'; }).join('');
-      var discs = Array.isArray(m.disciplines) ? m.disciplines : [];
-      return '<div class="tk-grid2">' +
-        '<div class="tk-box"><h3>' + esc(m.title || 'Mission') + '</h3><div class="tk-sub">' +
-          [m.level ? LEVELS[Math.max(1, Math.min(7, m.level)) - 1] : '', discs.join(', '), m.deadline ? 'Due ' + m.deadline : ''].filter(Boolean).map(esc).join(' · ') + '</div>' +
-          (m.summary ? '<p style="margin:.2rem 0 .6rem">' + esc(m.summary) + '</p>' : '') +
-          (m.objectives ? '<h4 class="tk-h4">What you will learn</h4><div class="tk-fb">' + esc(m.objectives) + '</div>' : '') +
-          (m.body ? '<h4 class="tk-h4">Instructions</h4><div class="tk-prose">' + esc(m.body) + '</div>' : '') +
-          (m.brief ? '<h4 class="tk-h4">The task</h4><div class="tk-fb">' + esc(m.brief) + '</div>' : '') +
-        '</div>' +
-        '<div class="tk-box"><h3>1 · Learn</h3><div class="tk-sub">Study these before you start the main task.' + (requiredMaterials(m).length ? ' Required ones count towards your journey.' : '') + '</div>' +
-          (materialsHtml(m, seen) || '<div class="tk-empty">No study materials for this mission.</div>') +
-          ((m.resources || []).filter(function (r) { return safeUrl(r.url); }).length ? '<h4 class="tk-h4">More resources</h4><div class="tk-list">' + m.resources.filter(function (r) { return safeUrl(r.url); }).map(function (r) { return '<div class="tk-item"><a href="' + esc(safeUrl(r.url)) + '" target="_blank" rel="noopener"><i class="fas fa-link"></i> ' + esc(r.title || r.url) + '</a></div>'; }).join('') + '</div>' : '') +
-        '</div>' +
-        '<div class="tk-box"><h3>2 · Practise</h3><div class="tk-sub">Try the skills first. Practice is never graded.</div>' + (prac ? '<div class="tk-list">' + prac + '</div>' : '<div class="tk-empty">No practice activities. Go straight to building.</div>') + '</div>' +
-        '<div class="tk-box"><h3>3 · Build and submit</h3>' +
-          (m.submissionReq ? '<h4 class="tk-h4">What to submit</h4><div class="tk-fb">' + esc(m.submissionReq) + '</div>' : '<div class="tk-sub">Build it in the ' + esc(WORKSPACE_NAME[primaryTab()]) + ', then submit it with your AI reflection.</div>') +
-          (crit ? '<h4 class="tk-h4">How it will be assessed</h4><ul class="tk-crit">' + crit + '</ul>' : '') +
-          (tools ? '<h4 class="tk-h4">Approved AI tools</h4><div class="tk-ai-tools">' + tools + '</div>' : '') +
-          (m.aiRules ? '<div class="tk-sub">' + esc(m.aiRules) + '</div>' : '') +
-          (isStu ? '<button type="button" class="tk-btn primary" data-tabgo="' + primaryTab() + '" style="margin-top:.6rem"><i class="fas fa-hammer"></i> Start building in the ' + esc(WORKSPACE_NAME[primaryTab()]) + '</button>' : '') +
-        '</div></div>';
-    }
+    function missionPane() { return mission ? '<div id="wsMissionHost"></div>' : ''; }
 
     function overviewPane() {
       var ro = canEdit ? '' : ' readonly';
@@ -825,23 +1177,27 @@
       }
       var pane = function (k, html) { return '<div class="tk-pane' + (activeTab === k ? ' on' : '') + '" data-pane="' + k + '">' + html + '</div>'; };
 
+      var prog = Math.max(0, Math.min(100, Number(b.progress) || 0));
       host.innerHTML = banner +
-        '<div class="tk-box" style="margin-bottom:.9rem">' +
-          '<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem">' + originTag(b) + statePill(b) + gradeLine(b) +
+        '<div class="ws-hero">' +
+          '<div class="ws-top">' + originTag(b) + statePill(b) + gradeLine(b) +
             (b.showcase === 'approved' ? '<span class="tk-pill gold"><i class="fas fa-globe"></i> Published</span>' : '') + '</div>' +
-          '<div class="tk-row" style="align-items:end">' +
-            '<div class="tk-f" style="margin:0;grid-column:span 2"><label>Project</label><input id="wsTitle" maxlength="120" value="' + esc(b.title) + '"' + (canEdit ? '' : ' readonly') + '></div>' +
-            '<div class="tk-f" style="margin:0"><label>Type</label><select id="wsCat"' + (canEdit ? '' : ' disabled') + '>' +
+          '<input id="wsTitle" class="ws-title" maxlength="120" aria-label="Project title" value="' + esc(b.title) + '"' + (canEdit ? '' : ' readonly') + '>' +
+          '<div class="ws-meta"><span><i class="fas fa-user"></i>' + esc(b.displayName || b.studentName || '') + '</span>' +
+            (b.coachName ? '<span><i class="fas fa-chalkboard-user"></i>Coach ' + esc(b.coachName) + '</span>' : '') +
+            '<span><i class="fas fa-toolbox"></i>' + esc(WORKSPACE_NAME[pt]) + '</span>' +
+            '<span class="ws-prog"><span class="tk-bar"><i style="width:' + prog + '%"></i></span><b>' + prog + '%</b></span></div>' +
+          journeyHtml(b, mission) +
+          '<details class="ws-settings"' + (settingsOpen ? ' open' : '') + '><summary><i class="fas fa-sliders"></i> Project settings</summary><div class="ws-set-grid">' +
+            '<div class="tk-f" style="margin:0;max-width:280px"><label for="wsCat">Type</label><select id="wsCat"' + (canEdit ? '' : ' disabled') + '>' +
               CATEGORIES.map(function (c) { return '<option value="' + c + '"' + (c === b.category ? ' selected' : '') + '>' + esc(CREATION_LABEL[c] || c) + '</option>'; }).join('') +
               (LEGACY_CATEGORIES.indexOf(b.category) !== -1 && CATEGORIES.indexOf(b.category) === -1 ? '<option selected>' + esc(b.category) + '</option>' : '') +
-            '</select></div></div>' +
-          '<div class="tk-sub" style="margin:.6rem 0 0">By ' + esc(b.displayName || b.studentName || '') + (b.coachName ? ' · coach ' + esc(b.coachName) : '') + ' · opens in the ' + esc(WORKSPACE_NAME[pt]) + '</div>' +
-          journeyHtml(b, mission) +
-          '<div class="tk-steps">' + steps + '</div>' +
-          '<div style="display:flex;gap:.7rem;align-items:center"><div class="tk-bar" style="flex:1"><i style="width:' + (Number(b.progress) || 0) + '%"></i></div><b style="font-size:.85rem">' + (Number(b.progress) || 0) + '%</b></div>' +
-          (canEdit ? '<input type="range" id="wsProg" min="0" max="100" step="5" value="' + (Number(b.progress) || 0) + '" style="width:100%;margin-top:.4rem" aria-label="Progress">' : '') +
-          '<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;margin-top:.6rem"><span class="tk-sub" style="margin:0">Disciplines:</span>' +
-            DISCIPLINES.map(function (d) { var on = disciplinesOf(b).indexOf(d) !== -1; return '<button type="button" class="tk-pill' + (on ? ' ok' : '') + '" data-disc="' + esc(d) + '" style="border:0;cursor:' + (canEdit ? 'pointer' : 'default') + ';opacity:' + (on ? '1' : '.55') + '"' + (canEdit ? '' : ' disabled') + '>' + esc(d) + '</button>'; }).join('') + '</div>' +
+            '</select></div>' +
+            '<div><span class="tk-lbl">Stage</span><div class="tk-steps">' + steps + '</div></div>' +
+            (canEdit ? '<div><label class="tk-lbl" for="wsProg">Progress</label><input type="range" id="wsProg" min="0" max="100" step="5" value="' + prog + '" style="width:100%;max-width:420px"></div>' : '') +
+            '<div><span class="tk-lbl">Disciplines</span><div style="display:flex;gap:.35rem;flex-wrap:wrap">' +
+              DISCIPLINES.map(function (d) { var on = disciplinesOf(b).indexOf(d) !== -1; return '<button type="button" class="tk-pill' + (on ? ' ok' : '') + '" data-disc="' + esc(d) + '" style="border:0;cursor:' + (canEdit ? 'pointer' : 'default') + ';opacity:' + (on ? '1' : '.55') + '"' + (canEdit ? '' : ' disabled') + '>' + esc(d) + '</button>'; }).join('') + '</div></div>' +
+          '</div></details>' +
         '</div>' +
         tabbar +
         (mission ? pane('mission', missionPane()) : '') +
@@ -859,6 +1215,7 @@
       wire();
     }
     function openModuleFor(tab) {
+      if (tab === 'mission' && !mounted.mission) mountMissionTab();
       if (tab === 'writing' && !mounted.writing) mountModule('writing', host.querySelector('#wsWritingHost'));
       if (tab === 'code' && !mounted.code) mountModule('code', host.querySelector('#wsCodeHost'));
       if (tab === 'upload' && !mounted.upload) mountModule('upload', host.querySelector('#wsUploadHost'));
@@ -867,6 +1224,7 @@
     function switchTab(tab) {
       if (!host.querySelector('[data-pane="' + tab + '"]')) return;
       activeTab = tab;
+      if (tab !== 'mission' && mounted.mission) { mounted.mission.destroy(); mounted.mission = null; }   // stops a playing lesson video
       if (stale && MODULE_TABS.indexOf(tab) === -1) { stale = false; render(); return; }
       host.querySelectorAll('[data-tab]').forEach(function (x) { x.classList.toggle('on', x.dataset.tab === tab); x.setAttribute('aria-selected', x.dataset.tab === tab); });
       host.querySelectorAll('[data-pane]').forEach(function (p) { p.classList.toggle('on', p.dataset.pane === tab); });
@@ -980,22 +1338,7 @@
         fr.srcdoc = g.CodeLab.buildPreview(s.codeFiles || []); h.innerHTML = ''; h.appendChild(fr);
       }); });
 
-      /* study materials: opening one counts towards LEARN */
-      function seenMat(id, video) {
-        if (!isStu || !id) return;
-        var mat = ((mission && mission.materials) || []).filter(function (x) { return x.id === id; })[0];
-        act(video ? 'video_watched' : 'material_opened', (video ? 'Watched ' : 'Opened ') + ((mat && mat.title) || 'study material'), { materialId: id, missionId: mission && mission.id });
-        if ((b.materialsSeen || []).indexOf(id) === -1) {
-          b.materialsSeen = (b.materialsSeen || []).concat([id]);
-          ref.update({ materialsSeen: FV().arrayUnion(id), updatedAt: FV().serverTimestamp() }).catch(function () { });
-        }
-      }
-      host.querySelectorAll('a[data-mat]').forEach(function (x) { x.addEventListener('click', function () { seenMat(x.dataset.mat); }); });
-      host.querySelectorAll('video[data-mat]').forEach(function (v) {
-        v.addEventListener('play', function () { act('material_opened', 'Started a video', { materialId: v.dataset.mat }); }, { once: true });
-        v.addEventListener('timeupdate', function () { if (v.duration && v.currentTime / v.duration > 0.8 && !v._done) { v._done = true; seenMat(v.dataset.mat, true); } });
-      });
-      host.querySelectorAll('[data-matdone]').forEach(function (x) { x.addEventListener('click', function () { seenMat(x.dataset.matdone, true); render(); }); });
+      var set = host.querySelector('.ws-settings'); if (set) set.addEventListener('toggle', function () { settingsOpen = set.open; });
 
       if (q('#wsSave')) q('#wsSave').addEventListener('click', function () { patch(collect(), 'Saved ✓').catch(function () { }); });
       if (q('#rsAdd')) q('#rsAdd').addEventListener('click', function () { var u = safeUrl(q('#rsU').value); if (!u) return say('Enter a link starting with https://', true); var a = (b.resources || []).concat([{ title: q('#rsT').value.trim().slice(0, 80) || u, url: u }]); patch(Object.assign(collect(), { resources: a.slice(0, 30) })).catch(function () { }); });
@@ -1150,7 +1493,7 @@
     MATERIAL_TYPES: MATERIAL_TYPES, WORKSPACE_NAME: WORKSPACE_NAME,
     projectState: projectState, statePill: statePill, isSelfLed: isSelfLed, originLabel: originLabel, originTag: originTag,
     workspaceFor: workspaceFor, hasArtifact: hasArtifact, journeyOf: journeyOf, journeyHtml: journeyHtml,
-    missionLock: missionLock, missionFor: missionFor, materialsHtml: materialsHtml, videoEmbed: videoEmbed,
+    missionLock: missionLock, missionFor: missionFor, materialsHtml: materialsHtml, videoEmbed: videoEmbed, mountMission: mountMission,
     liveState: liveState, liveCardHtml: liveCardHtml, sortLive: sortLive, LIVE_LABEL: LIVE_LABEL,
     logActivity: logActivity, touchActive: touchActive, activityRows: activityRows, ago: ago, lastSeen: lastSeen
   };

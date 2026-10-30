@@ -52,19 +52,21 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
 
 /* ---------- shell ---------- */
 #shell{display:flex;min-height:100vh}
-.sidebar{width:var(--sidebar-w);background:var(--brand-deep);position:fixed;inset:0 auto 0 0;z-index:20;display:flex;flex-direction:column;transition:transform .25s}
+.sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,#1c4f4a 0%,#245F5A 55%,#2a6a63 100%);position:fixed;inset:0 auto 0 0;z-index:20;display:flex;flex-direction:column;transition:transform .25s}
 .sidebar-brand{display:flex;align-items:center;gap:.75rem;padding:1.5rem 1.4rem;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0}
 .sidebar-brand img{width:38px;height:38px;border-radius:10px}
 .sidebar-brand .name{color:#fff;font-weight:800;font-size:1.05rem;line-height:1.2;letter-spacing:-.02em}
 .sidebar-brand .name span{display:block;font-size:.72rem;font-weight:700;color:var(--brand-soft);letter-spacing:.05em;text-transform:uppercase;margin-top:2px}
-.sidebar-nav{flex:1;min-height:0;overflow-y:auto;padding:1.2rem 1rem;display:flex;flex-direction:column;gap:.25rem}
-.nav{display:flex;align-items:center;gap:.8rem;width:100%;padding:.75rem .9rem;border:0;border-radius:12px;background:none;color:rgba(255,255,255,.7);font-weight:700;font-size:.9rem;text-align:left;transition:all .2s}
-.nav i{width:18px;text-align:center;font-size:1rem}
-.nav:hover{background:rgba(255,255,255,.06);color:#fff}
-.nav.on{background:var(--brand);color:#04231f;box-shadow:0 4px 12px rgba(85,191,179,.3)}
+.sidebar-nav{flex:1;min-height:0;overflow-y:auto;padding:.9rem .85rem;display:flex;flex-direction:column;gap:.2rem;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.nav{display:flex;align-items:center;gap:.75rem;width:100%;padding:.5rem .6rem;border:0;border-radius:14px;background:none;color:rgba(255,255,255,.78);font-weight:700;font-size:.9rem;text-align:left;transition:background .15s,color .15s}
+.nav i{width:34px;height:34px;flex:none;border-radius:11px;display:grid;place-items:center;background:rgba(255,255,255,.07);font-size:.9rem;transition:background .15s}
+.nav:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav:hover i{background:rgba(255,255,255,.14)}
+.nav.on{background:#fff;color:var(--brand-deep);box-shadow:0 8px 20px rgba(0,0,0,.16)}
+.nav.on i{background:var(--brand);color:#04231f}
 .nav .badge{margin-left:auto;background:var(--gold);color:#3b2f00;font-size:.7rem;font-weight:800;padding:.1rem .5rem;border-radius:99px}
-.sidebar-foot{padding:1.2rem 1.2rem;border-top:1px solid rgba(255,255,255,.06);flex-shrink:0}
-.me{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;min-width:0}
+.sidebar-foot{padding:1rem .85rem 1.1rem;border-top:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.me{display:flex;align-items:center;gap:.75rem;margin-bottom:.8rem;min-width:0;padding:.6rem .7rem;border-radius:16px;background:rgba(255,255,255,.07)}
 /* Avatar: initials always sit in the exact middle of the circle, for every account */
 .me .avatar{
   width:40px;
@@ -314,7 +316,7 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
 .actions{display:flex;gap:.8rem;margin-top:1rem}
 
 /* ---------- journey home ---------- */
-.nav-sep{margin:.9rem .9rem .3rem;font-size:.66rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.nav-sep{margin:1rem .7rem .35rem;font-size:.62rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.42)}
 .nav .badge.live{background:#E74C3C;color:#fff}
 .live-strip{display:grid;gap:.8rem}
 .continue .cm-title{font-size:1.3rem;line-height:1.25;color:var(--brand-deep);font-weight:800}
@@ -430,7 +432,7 @@ ul.crit{margin:.2rem 0 0 1.2rem;line-height:1.7}
 <script src="../js/tech/writing-studio.js?v=tech7"></script>
 <script src="../js/tech/code-lab.js?v=tech7"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
-<script src="../js/tech/tech-helpers.js?v=tech7"></script>
+<script src="../js/tech/tech-helpers.js?v=tech8"></script>
 <script>
 (function(){
 'use strict';
@@ -651,10 +653,12 @@ function render(silent){
   if(v==='coach') return renderCoach();
   if(v==='practice'&&S.openId) return openPractice(S.openId);
   el.innerHTML=(VIEWS[v]||VIEWS.home)();
+  /* A mission page is a mounted player, so live updates never restart its video. */
+  if(S.mpArgs){ const a=S.mpArgs; S.mpArgs=null; if($('mpHost')) S.ws=T.mountMission($('mpHost'),a); }
   if(!silent){ el.classList.remove('view-in'); void el.offsetWidth; el.classList.add('view-in'); }
 }
 function mountProject(){
-  const b=S.builds.find(x=>x.id===S.openId), m=b&&b.missionId?item(b.missionId):null;
+  const b=S.builds.find(x=>x.id===S.openId), m=b&&(b.missionId||b.challengeId)?item(b.missionId||b.challengeId):null;
   $('view').innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> My projects</button><div id="wsHost"></div>';
   S.ws=T.mountWorkspace($('wsHost'),{id:S.openId,me:me(),mission:m,tab:S.openTab,findMission:item,
     onPractice:(act,mission,build,i)=>startPractice({type:act&&act.type,title:act&&act.title,instructions:act&&act.instructions,starter:act&&act.starter,missionId:mission.id,missionTitle:mission.title,buildId:build.id,activity:i}),
@@ -876,6 +880,13 @@ function itemDetail(it){
   const lock=isM&&!own?lockOf(it):'';
   const discs=Array.isArray(it.disciplines)&&it.disciplines.length?it.disciplines:(it.discipline?[it.discipline]:[]);
   const kindLabel=it.kind==='aiTool'?'AI tool':cap(it.kind);
+  if(isM){
+    const cta=cls=>own?'<button class="tk-btn '+cls+'" type="button" data-open="'+esc(own.id)+'" data-tab="mission"><i class="fas fa-play"></i> Continue</button>'
+      :(lock?'<p class="mp-lock"><i class="fas fa-lock"></i> '+esc(lock)+'</p>':'<button class="tk-btn '+cls+'" type="button" data-start="'+esc(it.id)+'"><i class="fas fa-rocket"></i> Start this '+esc(it.kind)+'</button>');
+    S.mpArgs={mission:it,track:false,state:{},heroAction:cta('gold'),cta:{html:cta('primary')},
+      practiceNote:own?'':'Start the '+it.kind+' to try these. Practice is never graded.'};
+    return '<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Back</button><div id="mpHost"></div>';
+  }
   const block=(title,html)=>'<div class="block"><h3>'+title+'</h3>'+html+'</div>';
   const note=t=>'<div class="note">'+esc(t)+'</div>';
   const res=(it.resources||[]).filter(r=>T.safeUrl(r.url)).map(r=>'<a class="reslink" href="'+esc(T.safeUrl(r.url))+'" target="_blank" rel="noopener"><i class="fas fa-link"></i> '+esc(r.title||r.url)+'</a>').join('');
@@ -946,6 +957,8 @@ function openBuild(id,tab){
 }
 function openItem(id){
   const it=item(id); if(!it) return;
+  /* A mission already started opens as its project, on the Mission tab. */
+  if(it.kind==='mission'||it.kind==='challenge'){ const own=buildFor(it.kind==='mission'?'missionId':'challengeId',it.id); if(own) return openBuild(own.id,'mission'); }
   const map={path:'learn',topic:'learn',mission:'missions',challenge:'missions',tool:'toolbox',resource:'learn',template:'learn',aiTool:'toolbox'};
   kill();
   S.openId=it.id; S.v=map[it.kind]||'learn';
