@@ -326,7 +326,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js?v=boards3"></script>
+<script src="../lms-helpers.js?v=pw1"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards3"></script>
 <script src="../js/classroom/paper-handins.js?v=boards3"></script>
@@ -493,6 +493,7 @@ const titles = {
   overview:['Overview','Your students at a glance'],
   students:['My Students','Students assigned to you'],
   classroom:['Classroom','Material the Studio Desk has posted to you for the subjects you teach'],
+  resources:['Resources','Marking schemes and teaching materials for your subjects'],
   hwmgmt:['Homework Management','Homework the Studio Desk has posted to you: release it to your students and mark their work.'],
   exmgmt:['Exam Management','Exams in your subjects: see every hand-in and grade it'],
   granted:['Granted to Me','Tasks the Studio Desk has asked you to help mark'],
@@ -513,7 +514,13 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
   });
 });
-// Homework Management and Exam Management mount from work-helpers.js?v=boards3'';
+// Homework Management and Exam Management mount from work-helpers.js.
+// Both are tutor-restricted there: no topic create, no exam create.
+// Tutors cannot create or edit assignments. What they keep: releasing
+// admin-posted homework to their own students, grading and feedback.
+function mountWorkManagement(kind, hostId){
+  const host = document.getElementById(hostId);
+  host.innerHTML = '';
   const box = document.createElement('div'); host.appendChild(box);
   const focus = window.__wkFocus || null; window.__wkFocus = null;   // set by the Overview "Mark" buttons
   WorkUI.mountManagement(box, {

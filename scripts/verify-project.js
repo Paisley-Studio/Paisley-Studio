@@ -55,6 +55,24 @@ ok("index.html: no duplicate IDs", ids.length === new Set(ids).size);
 // 24: domain + secrets
 const tpl = read("functions/email-templates.js");
 ok("Emails: production domain default", tpl.includes("'https://paisleystudio.online'"));
+// A syntax error in a page's inline script stops the whole page, e.g. a dashboard stuck on its loader.
+(function inlineScriptsParse() {
+  const vm = require("vm");
+  const skip = ["node_modules", "paisley-ad", ".git", ".firebase", "functions"];
+  const walk = (d, out) => { fs.readdirSync(d, { withFileTypes: true }).forEach((e) => {
+    if (skip.indexOf(e.name) !== -1) return;
+    const p = path.join(d, e.name);
+    if (e.isDirectory()) walk(p, out); else if (/\.html$/.test(e.name)) out.push(p);
+  }); return out; };
+  const bad = [];
+  walk(path.join(__dirname, ".."), []).forEach((f) => {
+    for (const m of fs.readFileSync(f, "utf8").matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g)) {
+      if (/module|json/.test(m[1])) continue;
+      try { new vm.Script(m[2]); } catch (e) { bad.push(path.relative(path.join(__dirname, ".."), f) + ": " + e.message); }
+    }
+  });
+  ok("Pages: every inline script parses" + (bad.length ? " (" + bad.join("; ") + ")" : ""), !bad.length);
+})();
 ok("Emails: no localhost in functions", !/localhost|127\.0\.0\.1/.test(["index.js", "notifications.js", "work.js", "work-shared.js", "deadlines.js", "publishing.js", "remote.js", "email-templates.js"].map((f) => read("functions/" + f)).join("\n")));
 ok("Auth links: password reset uses continue URL", /generatePasswordResetLink\([^)]*actionSettings/.test(read("functions/notifications.js")) && /generatePasswordResetLink\([^)]*actionSettings/.test(read("functions/remote.js")));
 ok("No service-account key in project tree", !fs.existsSync(path.join(__dirname, "..", "vertex-key.json")));
