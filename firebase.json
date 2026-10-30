@@ -23,7 +23,10 @@
       "**/node_modules/**",
       "functions/**",
       "vertex-key.json",
-      "FIRESTORE_RULES.md"
+      "FIRESTORE_RULES.md",
+      "paisley-ad/**",
+      "**/*.zip",
+      "**/*.mp4"
     ],
     "redirects": [
       {
@@ -113,6 +116,14 @@
       {
         "source": "/tech/parent/dashboard",
         "destination": "/tech/parent/dashboard.html"
+      },
+      {
+        "source": "/tech/p/:id",
+        "destination": "/tech/project.html"
+      },
+      {
+        "source": "/tech/b/**",
+        "function": { "functionId": "techShare", "region": "us-central1" }
       }
     ]
   },

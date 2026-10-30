@@ -356,5 +356,5 @@
     document.head.appendChild(st);
   }
 
-  g.CodeLab = { mount: mount };
+  g.CodeLab = { mount: mount, buildPreview: buildPreview };
 })(window);

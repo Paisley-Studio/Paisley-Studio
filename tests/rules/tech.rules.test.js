@@ -179,3 +179,79 @@ test("coach accounts are created by admins only", async () => {
   await assertFails(as("tutor1").doc("techCoaches/tutor1").set({ name: "Me", status: "Active" }));
   await assertSucceeds(as("admin1").doc("techCoaches/coach3").set({ name: "C3", status: "Active" }));
 });
+
+/* ---------- TECH experience: submissions, grading, practice, activity, live classes, family desk ---------- */
+const { serverTimestamp } = require("firebase/firestore");
+const seed = (fn) => env.withSecurityRulesDisabled(async (ctx) => fn(ctx.firestore()));
+
+test("builders submit snapshots but can never grade themselves", async () => {
+  await assertSucceeds(as("kid1").doc("techBuilds/b1/submissions/s1").set({ studentId: "kid1", version: 1, status: "submitted", writingHtml: "<p>hi</p>" }));
+  await assertFails(as("kid1").doc("techBuilds/b1/submissions/s2").set({ studentId: "kid1", version: 2, status: "submitted", gradeLabel: "Exceeding" }));
+  await assertFails(as("kid1").doc("techBuilds/b1/submissions/s3").set({ studentId: "kid1", version: 3, status: "approved" }));
+  await assertFails(as("kid2").doc("techBuilds/b1/submissions/s4").set({ studentId: "kid2", version: 1, status: "submitted" }));
+  await assertFails(as("kid1").doc("techBuilds/b1").update({ gradeLabel: "Exceeding" }));
+  await assertFails(as("kid1").doc("techBuilds/b1").update({ reviewNote: "great" }));
+  await assertSucceeds(as("kid1").doc("techBuilds/b1").update({ reviewState: "requested", aiReflection: { tools: ["None"], purpose: "x", contribution: "y" }, submissionCount: 1 }));
+});
+
+test("the coach grades and reviews; the guardian only reads", async () => {
+  await seed((db) => db.doc("techBuilds/b1/submissions/g1").set({ studentId: "kid1", version: 1, status: "submitted" }));
+  await assertSucceeds(as("coach1").doc("techBuilds/b1").update({ reviewState: "changes", gradeLabel: "Approaching", gradeScore: 55, reviewNote: "Add sources", criteriaScores: [] }));
+  await assertSucceeds(as("coach1").doc("techBuilds/b1/submissions/g1").update({ status: "changes", gradeLabel: "Approaching", reviewNote: "Add sources" }));
+  await assertFails(as("coach1").doc("techBuilds/b1/submissions/g1").update({ writingHtml: "tampered" }));
+  await assertFails(as("coach2").doc("techBuilds/b1/submissions/g1").update({ status: "approved" }));
+  await assertSucceeds(as("mum").doc("techBuilds/b1/submissions/g1").get());
+  await assertFails(as("mum").doc("techBuilds/b1/submissions/g9").set({ studentId: "kid1", version: 9, status: "submitted" }));
+  await assertFails(as("mum").doc("techBuilds/b1").update({ title: "changed by parent" }));
+});
+
+test("practice: the builder owns it, their coach reads it and leaves notes", async () => {
+  await assertSucceeds(as("kid1").doc("techPractice/p1").set({ studentId: "kid1", title: "Loops", type: "code" }));
+  await assertFails(as("kid1").doc("techPractice/p2").set({ studentId: "kid1", title: "x", coachNote: "self note" }));
+  await assertFails(as("kid2").doc("techPractice/p3").set({ studentId: "kid1", title: "x" }));
+  await assertSucceeds(as("coach1").doc("techPractice/p1").get());
+  await assertSucceeds(as("coach1").doc("techPractice/p1").update({ coachNote: "Try a for loop", coachNoteBy: "Coach One", helpRequested: false }));
+  await assertFails(as("coach1").doc("techPractice/p1").update({ title: "renamed" }));
+  await assertFails(as("coach2").doc("techPractice/p1").get());
+  await assertFails(as("kid1").doc("techPractice/p1").update({ coachNote: "edited" }));
+});
+
+test("activity: builders append real, server-stamped events; history is read-only", async () => {
+  const ev = { studentId: "kid1", studentName: "Kid One", type: "project_opened", label: "Opened Bot", buildId: "b1", at: serverTimestamp() };
+  await assertSucceeds(as("kid1").collection("techActivity").add(ev));
+  await assertFails(as("kid1").collection("techActivity").add({ ...ev, at: new Date("2020-01-01") }));
+  await assertFails(as("kid1").collection("techActivity").add({ ...ev, type: "mastered" }));
+  await assertFails(as("kid1").collection("techActivity").add({ ...ev, studentId: "kid2" }));
+  await seed((db) => db.doc("techActivity/a1").set({ studentId: "kid1", type: "session", label: "x", at: new Date() }));
+  await assertSucceeds(as("coach1").collection("techActivity").where("studentId", "==", "kid1").get());
+  await assertSucceeds(as("mum").collection("techActivity").where("studentId", "==", "kid1").get());
+  await assertFails(as("coach2").collection("techActivity").where("studentId", "==", "kid1").get());
+  await assertFails(as("kid1").doc("techActivity/a1").update({ label: "y" }));
+  await assertSucceeds(as("kid1").doc("techStudents/kid1").update({ lastActiveAt: serverTimestamp() }));
+});
+
+test("live classes: invited builders and their guardians see them; coaches only target their own", async () => {
+  await seed(async (db) => {
+    await db.doc("techLiveClasses/all1").set({ topic: "AI art", audience: "all", studentIds: [], coachId: "coach1", status: "scheduled", parentUids: ["mum"] });
+    await db.doc("techLiveClasses/sel1").set({ topic: "Games", audience: "selected", studentIds: ["kid2"], coachId: "coach2", status: "scheduled", parentUids: [] });
+  });
+  await assertSucceeds(as("kid1").collection("techLiveClasses").where("audience", "==", "all").get());
+  await assertSucceeds(as("kid2").collection("techLiveClasses").where("studentIds", "array-contains", "kid2").get());
+  await assertFails(as("kid1").doc("techLiveClasses/sel1").get());
+  await assertSucceeds(as("mum").collection("techLiveClasses").where("parentUids", "array-contains", "mum").get());
+  await assertFails(as("mum").doc("techLiveClasses/sel1").get());
+  await assertSucceeds(as("coach1").collection("techLiveClasses").add({ topic: "Mine", audience: "selected", studentIds: ["kid1"], coachId: "coach1", status: "scheduled" }));
+  await assertFails(as("coach1").collection("techLiveClasses").add({ topic: "Everyone", audience: "all", studentIds: [], coachId: "coach1", status: "scheduled" }));
+  await assertFails(as("coach1").collection("techLiveClasses").add({ topic: "Peek", audience: "selected", studentIds: ["kid1"], coachId: "coach1", parentUids: ["stranger"] }));
+  await assertFails(as("coach1").doc("techLiveClasses/sel1").update({ topic: "not mine" }));
+  await assertFails(as("kid1").collection("techLiveClasses").add({ topic: "x", audience: "all", coachId: "kid1" }));
+  await assertSucceeds(as("admin1").collection("techLiveClasses").add({ topic: "Desk", audience: "all", studentIds: [], coachId: "", status: "scheduled" }));
+});
+
+test("TECH guardians can message the Studio Desk through parentConversations", async () => {
+  await assertSucceeds(as("mum").doc("parentConversations/mum_kid1").set({ parentUid: "mum", studentUid: "kid1", programme: "tech", lastMessage: "Hi", unreadForAdmin: true }));
+  await assertSucceeds(as("mum").doc("parentConversations/mum_kid1/messages/m1").set({ senderUid: "mum", senderRole: "parent", text: "Hi" }));
+  await assertFails(as("mum").doc("parentConversations/mum_kid2").set({ parentUid: "mum", studentUid: "kid2", programme: "tech" }));
+  await assertFails(as("mum").doc("parentConversations/mum_kid1/messages/m2").set({ senderUid: "mum", senderRole: "admin", text: "spoof" }));
+  await assertFails(as("kid1").doc("parentConversations/mum_kid1/messages/m3").get());
+});

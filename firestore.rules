@@ -242,6 +242,14 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/parentStudentLinks/$(conversationId)) &&
         get(/databases/$(database)/documents/parentStudentLinks/$(conversationId)).data.parentUid == request.auth.uid;
     }
+    // A parent may talk to the Studio Desk about a child they are linked to, through the
+    // Parent Portal (parentStudentLinks) or Paisley TECH (techGuardianLinks, same id format).
+    function isDeskParent(conversationId) {
+      return isLinkedParent(conversationId) ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/techGuardianLinks/$(conversationId)) &&
+          get(/databases/$(database)/documents/techGuardianLinks/$(conversationId)).data.parentUid == request.auth.uid);
+    }
 
     // =====================================================
     // AUDIENCE-AWARE CONTENT ACCESS
@@ -692,7 +700,7 @@ service cloud.firestore {
         (isSignedIn() &&
           request.resource.data.parentUid == request.auth.uid &&
           cid == request.auth.uid + '_' + request.resource.data.studentUid &&
-          isLinkedParent(cid));
+          isDeskParent(cid));
       allow update: if isAdmin() ||
         (isSignedIn() &&
           resource.data.parentUid == request.auth.uid &&
@@ -700,21 +708,21 @@ service cloud.firestore {
           request.resource.data.studentUid == resource.data.studentUid &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(
             ['lastMessage', 'lastMessageAt', 'lastSenderRole', 'unreadForAdmin', 'unreadForParent',
-             'parentName', 'studentName', 'keyStage', 'year']));
+             'parentName', 'studentName', 'keyStage', 'year', 'programme']));
       allow delete: if false;
 
       match /messages/{mid} {
-        allow read: if isAdmin() || isLinkedParent(cid);
+        allow read: if isAdmin() || isDeskParent(cid);
         allow create: if
           (isAdmin() &&
             request.resource.data.senderRole == 'admin' &&
             request.resource.data.senderUid == request.auth.uid) ||
-          (isLinkedParent(cid) &&
+          (isDeskParent(cid) &&
             request.resource.data.senderRole == 'parent' &&
             request.resource.data.senderUid == request.auth.uid);
         allow update: if
           ((isAdmin() && resource.data.senderRole == 'parent') ||
-           (isLinkedParent(cid) && resource.data.senderRole == 'admin')) &&
+           (isDeskParent(cid) && resource.data.senderRole == 'admin')) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
         allow delete: if false;
       }
@@ -933,6 +941,11 @@ service cloud.firestore {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/techGuardianLinks/$(request.auth.uid + '_' + studentId));
     }
+    // Fields only a coach or the Studio Desk may write on a build or a submission.
+    function techReviewKeys() {
+      return ['grade', 'gradeLabel', 'gradeScore', 'criteriaScores', 'reviewNote', 'reviewedAt', 'reviewedBy',
+        'reviewerName', 'publishedAt', 'publishedBy', 'publishConsent'];
+    }
 
     match /techStudents/{uid} {
       allow read: if isOwner(uid) || isAdmin() ||
@@ -946,7 +959,7 @@ service cloud.firestore {
         (!('guardians' in request.resource.data) ||
           (request.resource.data.guardians is list && request.resource.data.guardians.size() <= 4));
       allow update: if isAdmin() ||
-        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'techProfile', 'updatedAt', 'lastLoginAt']));
+        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'techProfile', 'updatedAt', 'lastLoginAt', 'lastActiveAt']));
       allow delete: if isAdmin();
     }
 
@@ -1046,13 +1059,36 @@ service cloud.firestore {
             request.resource.data.mastery == 'none') &&
           (!(('reviewState' in request.resource.data.diff(resource.data).affectedKeys()) &&
              request.resource.data.reviewState == 'requested') ||
-            (('aiReflection' in request.resource.data) && request.resource.data.aiReflection != null))) ||
-        // coach: review, stage, Tech Wall and family-link fields only — never the builder's work
+            (('aiReflection' in request.resource.data) && request.resource.data.aiReflection != null)) &&
+          // grades, review notes and publication belong to the coach / Studio Desk
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(techReviewKeys())) ||
+        // coach: review, grading, stage, Tech Wall and family-link fields only — never the builder's work
         (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewState', 'showcase', 'mastery', 'masteryNote', 'masteryAt', 'masteryBy', 'status', 'progress', 'visibility', 'shareToken', 'updatedAt']) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['grade', 'gradeLabel', 'gradeScore', 'criteriaScores', 'reviewNote', 'reviewedAt', 'reviewedBy',
+            'reviewerName', 'publishedAt', 'publishedBy', 'publishConsent', 'reviewState', 'showcase', 'mastery', 'masteryNote',
+            'masteryAt', 'masteryBy', 'status', 'progress', 'visibility', 'shareToken', 'updatedAt']) &&
           request.resource.data.studentId == resource.data.studentId);
       allow delete: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid && resource.data.showcase != 'approved');
+
+      // One immutable snapshot per submission (the work, the AI reflection and the version),
+      // so earlier submissions survive revisions. The coach records the outcome on it.
+      match /submissions/{sid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid) ||
+          isTechGuardianOf(get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId)));
+        allow create: if techStudentActive() &&
+          get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid &&
+          request.resource.data.studentId == request.auth.uid &&
+          request.resource.data.status == 'submitted' &&
+          !request.resource.data.keys().hasAny(techReviewKeys());
+        allow update: if isAdmin() ||
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['grade', 'gradeLabel', 'gradeScore', 'criteriaScores', 'reviewNote', 'reviewedAt',
+              'reviewedBy', 'reviewerName', 'status']));
+        allow delete: if isAdmin();
+      }
 
       match /feedback/{fid} {
         allow read: if isAdmin() || (isSignedIn() && (
@@ -1087,6 +1123,61 @@ service cloud.firestore {
     match /techProgress/{uid} {
       allow read: if isAdmin() || isOwner(uid) || isTechCoachOf(uid) || isTechGuardianOf(uid);
       allow write: if false;
+    }
+
+    // Practice: low-stakes experiments, kept apart from assessed builds.
+    // The builder owns the work; their coach can read it and leave a note; admins see all.
+    match /techPractice/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        !request.resource.data.keys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt']);
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid &&
+          request.resource.data.studentId == resource.data.studentId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt'])) ||
+        (isTechCoachOf(resource.data.studentId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coachNote', 'coachNoteBy', 'coachNoteAt', 'helpRequested', 'updatedAt']));
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+    }
+
+    // Activity timeline. Builders append their own events (stamped with the server time);
+    // Cloud Functions add review / mastery / publication events. Nobody edits history.
+    match /techActivity/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.at == request.time &&
+        request.resource.data.keys().hasOnly(['studentId', 'studentName', 'type', 'label', 'buildId', 'missionId', 'practiceId', 'materialId', 'origin', 'at']) &&
+        request.resource.data.type in ['session', 'project_created', 'project_opened', 'project_saved', 'mission_started',
+          'material_opened', 'video_watched', 'practice_saved', 'practice_done', 'help_requested', 'submitted', 'resubmitted',
+          'feedback_viewed', 'live_joined'] &&
+        request.resource.data.label is string && request.resource.data.label.size() <= 200;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Live classes (Google Meet). audience 'all' = every active builder; 'selected' = studentIds.
+    // parentUids is filled by onTechLiveClassWritten so guardians of those builders see the class.
+    match /techLiveClasses/{id} {
+      allow read: if isAdmin() || isTechCoach() ||
+        (techStudentActive() && (resource.data.audience == 'all' || request.auth.uid in resource.data.studentIds)) ||
+        (isSignedIn() && request.auth.uid in resource.data.get('parentUids', []));
+      allow create: if isAdmin() ||
+        (isTechCoach() && request.resource.data.coachId == request.auth.uid &&
+          request.resource.data.audience == 'selected' && request.resource.data.studentIds is list &&
+          !('parentUids' in request.resource.data));
+      allow update: if isAdmin() ||
+        (isTechCoach() && resource.data.coachId == request.auth.uid &&
+          request.resource.data.coachId == request.auth.uid &&
+          request.resource.data.audience == 'selected' &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['parentUids', 'notifyKey']));
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.coachId == request.auth.uid);
     }
 
     // shareTokens/{buildId} = { token, createdBy, createdAt, revoked }

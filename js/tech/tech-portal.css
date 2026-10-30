@@ -196,3 +196,12 @@ button.row:hover{background:var(--paper)}
 }
 @media(max-width:600px){.field input,.field select,.field textarea{font-size:16px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Studio Desk chat (guardian portal) */
+.desk-list{display:flex;flex-direction:column;gap:.5rem;max-height:min(60vh,520px);overflow:auto;padding:.2rem}
+.desk-msg{max-width:80%;align-self:flex-start;background:var(--sage);border-radius:14px;border-bottom-left-radius:4px;padding:.6rem .85rem;font-size:.9rem;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.desk-msg.me{align-self:flex-end;background:var(--brand);color:#04231f;border-bottom-left-radius:14px;border-bottom-right-radius:4px}
+.desk-msg .who{display:block;font-size:.7rem;font-weight:800;opacity:.7;margin-bottom:.15rem}
+.desk-form{display:flex;gap:.6rem;align-items:flex-end;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line)}
+.desk-form textarea{flex:1;resize:vertical;padding:.6rem .8rem;border:1.5px solid var(--line);border-radius:12px;font:inherit;background:var(--paper)}
+@media(max-width:600px){.desk-msg{max-width:94%}.desk-form{flex-direction:column;align-items:stretch}}

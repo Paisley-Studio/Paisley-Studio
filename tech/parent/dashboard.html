@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
-<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech6" />
+<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech7" />
 </head>
 <body>
 <div id="gate"><div class="spin" role="status" aria-label="Loading"></div><p>Opening the guardian portal…</p></div>
@@ -26,7 +26,10 @@
       <button class="nav on" data-v="home" type="button"><i class="fas fa-house"></i> Overview</button>
       <button class="nav" data-v="projects" type="button"><i class="fas fa-hammer"></i> Projects <span class="badge" id="bProj" hidden>0</span></button>
       <button class="nav" data-v="progress" type="button"><i class="fas fa-chart-line"></i> Progress</button>
+      <button class="nav" data-v="live" type="button"><i class="fas fa-video"></i> Live classes</button>
+      <button class="nav" data-v="activity" type="button"><i class="fas fa-wave-square"></i> Activity</button>
       <button class="nav" data-v="coach" type="button"><i class="fas fa-comments"></i> Coach</button>
+      <button class="nav" data-v="desk" type="button"><i class="fas fa-headset"></i> Studio Desk <span class="badge" id="bDesk" hidden>0</span></button>
       <button class="nav" data-v="account" type="button"><i class="fas fa-user"></i> Account</button>
       <div id="otherPortal" hidden>
         <div class="nav-sep">Other Paisley programmes</div>
@@ -55,7 +58,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="/firebase-config.js"></script>
-<script src="/js/tech/tech-helpers.js?v=tech5"></script>
+<script src="/js/tech/writing-studio.js?v=tech7"></script>
+<script src="/js/tech/code-lab.js?v=tech7"></script>
+<script src="/js/tech/upload-pad.js?v=tech7"></script>
+<script src="/js/tech/tech-helpers.js?v=tech7"></script>
 <script>
 /* Paisley TECH guardian portal.
    A guardian is a parentAccounts identity with techGuardianLinks/{uid}_{studentUid}.
@@ -67,8 +73,8 @@ const auth=firebase.auth(), T=TechUI, esc=T.esc;
 const $=id=>document.getElementById(id);
 T.injectStyle();
 
-const S={uid:null,me:{},links:[],kids:{},cid:null,builds:[],progress:null,v:'home',openId:null,live:null,pf:'all',unsubs:[],kidUnsubs:[],buildUnsubs:[]};
-const TITLES={home:'Overview',projects:'Projects',progress:'Progress',coach:'Coach',account:'Account'};
+const S={uid:null,me:{},links:[],kids:{},cid:null,builds:[],progress:null,classes:[],activity:[],desk:{},v:'home',openId:null,live:null,pf:'all',unsubs:[],kidUnsubs:[],buildUnsubs:[]};
+const TITLES={home:'Overview',projects:'Projects',progress:'Progress',live:'Live classes',activity:'Activity',coach:'Coach',desk:'Studio Desk',account:'Account'};
 const ICON={CODE:'fa-code',DESIGN:'fa-palette',WRITING:'fa-pen-nib',RESEARCH:'fa-microscope',MEDIA:'fa-film',MUSIC:'fa-music',AI:'fa-robot',BUILD:'fa-rocket',Other:'fa-star'};
 
 const ms=x=>{ const d=T.toDate(x); return d?d.getTime():0; };
@@ -77,8 +83,9 @@ const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w.charAt(
 const dateShort=ts=>{ const d=T.toDate(ts); return d?d.toLocaleDateString([],{day:'numeric',month:'short',year:'numeric'}):''; };
 const kid=()=>S.kids[S.cid]||null;
 const first=()=>T.firstName((kid()||{}).name);
-const needsChanges=b=>b.reviewState==='changes'||b.mastery==='changes';
-const inReview=b=>b.reviewState==='requested'||b.showcase==='requested'||b.mastery==='requested';
+const needsChanges=b=>T.projectState(b)==='revision';
+const inReview=b=>['submitted','under_review'].includes(T.projectState(b));
+const kidClasses=()=>T.sortLive(S.classes.filter(c=>c.audience==='all'||(c.studentIds||[]).includes(S.cid)));
 const levels=()=>{ const o={}; T.DISCIPLINES.forEach(d=>o[d]=(S.progress&&S.progress.levels&&S.progress.levels[d])||1); return o; };
 const overall=()=>{ const l=levels(); let m=1; T.DISCIPLINES.forEach(d=>{ m=Math.max(m,l[d]); }); return m; };
 
@@ -100,8 +107,12 @@ function boot(){
   $('gate').hidden=true; $('shell').hidden=false;
   db.collection('parentAccounts').doc(S.uid).get().then(d=>{ S.me=d.exists?d.data():{}; $('avatar').textContent=initials(S.me.name||auth.currentUser.email); $('whoName').textContent=S.me.name||auth.currentUser.email; }).catch(()=>{});
   db.collection('parentStudentLinks').where('parentUid','==',S.uid).limit(1).get().then(s=>{ $('otherPortal').hidden=s.empty; }).catch(()=>{});
+  S.unsubs.push(db.collection('techLiveClasses').where('parentUids','array-contains',S.uid).onSnapshot(s=>{ S.classes=s.docs.map(d=>Object.assign({id:d.id},d.data())); refresh(); },e=>console.warn('live',e)));
+  S.unsubs.push(db.collection('parentConversations').where('parentUid','==',S.uid).onSnapshot(s=>{ S.desk={}; s.docs.forEach(d=>{ S.desk[d.data().studentUid]=d.data(); }); const n=Object.values(S.desk).filter(c=>c.unreadForParent).length, b=$('bDesk'); b.hidden=!n; b.textContent=n; },()=>{}));
+  setInterval(()=>{ if(!S.live) render(true); },60000);
   T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
     if(n.studentId&&S.kids[n.studentId]&&n.studentId!==S.cid) selectChild(n.studentId);
+    if(n.classId){ go('live'); return true; }
     if(n.chatId){ go('coach'); return true; }
     if(n.buildId){ openBuild(n.buildId); return true; }
     go('home'); return true;
@@ -135,6 +146,7 @@ function selectChild(id){
     S.builds=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>ms(b.updatedAt)-ms(a.updatedAt)); refresh();
   },e=>console.warn('builds',e)));
   S.buildUnsubs.push(db.collection('techProgress').doc(id).onSnapshot(s=>{ S.progress=s.exists?s.data():null; refresh(); },()=>{}));
+  S.buildUnsubs.push(db.collection('techActivity').where('studentId','==',id).orderBy('at','desc').limit(40).onSnapshot(s=>{ S.activity=s.docs.map(d=>d.data()); if(S.v==='activity') refresh(); },e=>console.warn('activity',e)));
   const h=(location.hash||'').slice(1);
   go(S.v&&S.v!=='home'?S.v:(TITLES[h]?h:'home'));
 }
@@ -162,11 +174,9 @@ function emptyBox(t,p,a){ return '<div class="empty"><h3>'+t+'</h3><p>'+p+'</p>'
 function panelList(title,rows,extra){ return '<section class="panel flush"><div class="panel-head"><h2>'+esc(title)+'</h2>'+(extra||'')+'</div>'+rows+'</section>'; }
 function kpi(i,cls,lab,val){ return '<div class="kpi-card"><div class="kpi-icon '+cls+'"><i class="fas '+i+'"></i></div><div><span class="kpi-label">'+lab+'</span><span class="kpi-value">'+val+'</span></div></div>'; }
 function flags(b){
-  const f=[];
-  if(needsChanges(b)) f.push('<span class="pill bad">Coach asked for changes</span>');
-  else if(inReview(b)) f.push('<span class="pill warn">With the coach</span>');
-  if(b.mastery==='approved') f.push('<span class="pill ok">Mastered</span>');
-  if(b.showcase==='approved') f.push('<span class="pill gold">On the Tech Wall</span>');
+  const f=[T.statePill(b,'pill')];
+  if(b.gradeLabel) f.push('<span class="pill gold">Grade: '+esc(b.gradeLabel)+(b.gradeScore!=null&&b.gradeScore!==''?' · '+esc(b.gradeScore)+'%':'')+'</span>');
+  if(b.showcase==='approved') f.push('<span class="pill gold">Published</span>');
   return f.join('');
 }
 function track(status){
@@ -176,7 +186,7 @@ function track(status){
 function segs(L){ return '<ol class="segs" aria-label="Level '+L+' of 7">'+T.LEVELS.map((n,k)=>'<li class="'+((k+1)<L?'done':((k+1)===L?'now':''))+'"><span></span><b>'+esc(cap(n))+'</b></li>').join('')+'</ol>'; }
 function projectRow(b){
   const icon=ICON[b.category]||ICON.Other, d=dateShort(b.updatedAt);
-  return '<button class="row" type="button" data-open="'+esc(b.id)+'"><span class="ico"><i class="fas '+icon+'"></i></span><span class="t"><b>'+esc(b.title)+'</b><span>'+esc(T.STATUS_LABEL[b.status]||b.status||'')+(d?' · updated '+esc(d):'')+'</span></span><span class="tags">'+flags(b)+'</span><i class="fas fa-chevron-right chev"></i></button>';
+  return '<button class="row" type="button" data-open="'+esc(b.id)+'"><span class="ico"><i class="fas '+icon+'"></i></span><span class="t"><b>'+esc(b.title)+'</b><span>'+esc(T.isSelfLed(b)?'Self-led student project':'Assigned mission')+(d?' · updated '+esc(d):'')+'</span></span><span class="tags">'+T.originTag(b)+flags(b)+'</span><i class="fas fa-chevron-right chev"></i></button>';
 }
 
 /* ---------- views ---------- */
@@ -186,8 +196,13 @@ home(){
   const L=overall(), mastered=S.builds.filter(b=>b.mastery==='approved').length, wall=S.builds.filter(b=>b.showcase==='approved').length;
   const changes=S.builds.filter(needsChanges);
   const status=k.status==='Active'?'':'<section class="panel"><p><b>'+esc(first())+'\'s TECH account is '+esc((k.status||'pending').toLowerCase())+'.</b> <span class="muted">'+(k.status==='Pending'?'The Studio Desk will approve it soon.':'Please contact the Studio Desk if this is unexpected.')+'</span></p></section>';
+  const up=kidClasses().filter(c=>/live|upcoming/.test(T.liveState(c))).slice(0,2);
+  const graded=S.builds.filter(b=>b.reviewedAt).sort((a,b)=>ms(b.reviewedAt)-ms(a.reviewedAt)).slice(0,4);
+  const self=S.builds.filter(b=>T.isSelfLed(b)).length;
   return '<div class="stack">'+status+
-    '<div class="kpi-grid">'+kpi('fa-layer-group','ki-1','Level',L+' · '+esc(cap(T.levelName(L))))+kpi('fa-hammer','ki-2','Projects',S.builds.length)+kpi('fa-award','ki-4','Mastered',mastered)+kpi('fa-star','ki-2','On the Tech Wall',wall)+'</div>'+
+    (up.length?'<section class="stack" style="gap:.7rem">'+up.map(c=>T.liveCardHtml(c,{banner:true})).join('')+'</section>':'')+
+    '<div class="kpi-grid">'+kpi('fa-layer-group','ki-1','Level',L+' · '+esc(cap(T.levelName(L))))+kpi('fa-hammer','ki-2','Projects',S.builds.length)+kpi('fa-lightbulb','ki-2','Self-led',self)+kpi('fa-award','ki-4','Mastered',mastered)+kpi('fa-star','ki-2','Published',wall)+'</div>'+
+    (graded.length?panelList('Latest reviews and grades',graded.map(projectRow).join('')):'')+
     '<div class="cols">'+
       '<section class="panel"><div class="panel-head"><h2>'+esc(first())+'\'s coach</h2></div>'+
         (k.coachId?'<p class="lvl-name" style="font-size:1.25rem">'+esc(k.coachName||'Coach')+'</p><p class="muted" style="margin:.3rem 0 1rem">Reviews every project and approves mastery.</p><button class="btn" type="button" data-go="coach"><i class="fas fa-comments"></i> Message the coach</button>'
@@ -201,8 +216,8 @@ home(){
 },
 projects(){
   if(S.openId) return '';
-  const F={all:()=>true,active:b=>b.status!=='READY',review:inReview,changes:needsChanges,mastered:b=>b.mastery==='approved'};
-  const LAB={all:'All',active:'In progress',review:'With the coach',changes:'Changes asked',mastered:'Mastered'};
+  const F={all:()=>true,mission:b=>!T.isSelfLed(b),self:b=>T.isSelfLed(b),active:b=>T.projectState(b)==='in_progress',review:inReview,changes:needsChanges,approved:b=>['approved','mastered'].includes(T.projectState(b)),published:b=>b.showcase==='approved'};
+  const LAB={all:'All',mission:'Assigned missions',self:'Self-led',active:'Being built',review:'Submitted',changes:'Revision required',approved:'Approved',published:'Published'};
   if(!S.builds.length) return emptyBox('No projects yet',esc(first())+' has not started a project.');
   const list=S.builds.filter(F[S.pf]||F.all);
   return '<div class="chips" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="chip'+(S.pf===k?' on':'')+'" type="button" aria-pressed="'+(S.pf===k)+'" data-pf="'+k+'">'+LAB[k]+'<em>'+S.builds.filter(F[k]).length+'</em></button>').join('')+'</div>'+
@@ -214,6 +229,14 @@ progress(){
     '<section class="panel flush"><div class="panel-head"><h2>By discipline</h2></div><div class="drow head"><span>Discipline</span><span>Progress</span><span>Level</span><span style="text-align:right">Mastered</span></div>'+
     T.DISCIPLINES.map(d=>'<div class="drow"><span class="dn">'+esc(d)+'</span><div class="bar" aria-hidden="true"><i style="width:'+Math.round(lv[d]/7*100)+'%"></i></div><span class="dl">'+esc(cap(T.levelName(lv[d])))+'</span><span class="dm">'+(mc[d]||0)+' mastered</span></div>').join('')+'</section>'+
     '<p class="muted" style="font-size:.85rem">A level goes up each time the coach approves mastery on a project in that discipline. Uneven progress is normal: builders lean into what they love.</p></div>';
+},
+live(){
+  const all=kidClasses();
+  if(!all.length) return emptyBox('No live classes yet','When '+esc(first())+'\'s coach schedules a class it appears here, with the time and the Google Meet link.');
+  return '<div class="stack" style="gap:.8rem">'+all.map(c=>T.liveCardHtml(c)).join('')+'</div>';
+},
+activity(){
+  return '<section class="panel"><div class="panel-head"><h2>'+esc(first())+'\'s activity</h2></div><p class="muted" style="margin:-.6rem 0 1rem">Last seen '+esc(T.ago(T.lastSeen(kid())))+'. What they did in TECH, newest first.</p>'+T.activityRows(S.activity)+'</section>';
 },
 account(){
   const kids=S.links.map(l=>S.kids[l.studentUid]).filter(Boolean);
@@ -231,6 +254,7 @@ function render(silent){
   $('pageTitle').textContent=TITLES[S.v]||'Overview';
   $('pageSub').textContent=k?(S.v==='account'?'':k.name+(k.coachName?' · coach '+k.coachName:'')):'';
   if(S.v==='coach') return openCoach();
+  if(S.v==='desk') return openDesk();
   if(S.v==='projects'&&S.openId) return openBuild(S.openId);
   $('view').innerHTML=k?(VIEWS[S.v]||VIEWS.home)():'';
   if(!silent) window.scrollTo(0,0);
@@ -243,34 +267,44 @@ function openCoach(){
   $('view').innerHTML='<p class="muted" style="margin:-.4rem 0 1rem">Messages go to '+esc(first())+'\'s TECH coach'+(k.coachId?'':' (the Studio Desk until a coach is assigned)')+'. You\'ll also get an email when they reply.</p><div id="liveHost"></div>';
   S.live=T.mountChat($('liveHost'),{kind:'guardian',parentUid:S.uid,parentName:S.me.name||'',studentId:k.id,studentName:k.name||'',coachId:k.coachId||'',coachName:k.coachName||'',me:{uid:S.uid,role:'guardian',name:S.me.name||'Guardian'}});
 }
-/* Read-only project view: guardians see everything the coach sees, but change nothing. */
+/* Parent ↔ Studio Desk: the same parentConversations thread the Parent Portal uses
+   (parentConversations/{parentUid}_{studentUid}), allowed for TECH guardians by
+   techGuardianLinks. Kept apart from the coach chats. */
+function openDesk(){
+  const k=kid(); if(!k) return;
+  kill();
+  const cid=S.uid+'_'+k.id, ref=db.collection('parentConversations').doc(cid);
+  $('view').innerHTML='<p class="muted" style="margin:-.4rem 0 1rem">Private between you and the Paisley Studio Desk (not the coach) about '+esc(first())+'. Use it for accounts, schedules, consent and anything else for the school office. You get an email when the desk replies.</p>'+
+    '<section class="panel"><div class="desk-list" id="dkList"><p class="muted">Loading…</p></div><div class="desk-form"><textarea id="dkText" rows="2" maxlength="4000" placeholder="Write to the Studio Desk…"></textarea><button class="btn" type="button" id="dkSend"><i class="fas fa-paper-plane"></i> Send</button></div><div class="msg" id="dkMsg" role="status"></div></section>';
+  const list=$('dkList');
+  const u=ref.collection('messages').orderBy('createdAt').limitToLast(200).onSnapshot(s=>{
+    const msgs=s.docs.map(d=>Object.assign({id:d.id},d.data()));
+    list.innerHTML=msgs.length?msgs.map(m=>'<div class="desk-msg'+(m.senderRole==='parent'?' me':'')+'"><span class="who">'+esc(m.senderRole==='parent'?'You':(m.senderName||'Studio Desk'))+' · '+esc(T.fmt(m.createdAt))+'</span>'+esc(m.text)+'</div>').join(''):'<p class="muted">No messages yet.</p>';
+    list.scrollTop=list.scrollHeight;
+    const unread=msgs.filter(m=>m.senderRole==='admin'&&m.read!==true);
+    if(unread.length){ const b=db.batch(); unread.forEach(m=>b.update(ref.collection('messages').doc(m.id),{read:true})); b.update(ref,{unreadForParent:false}); b.commit().catch(()=>{}); }
+  },e=>{ list.innerHTML='<p class="muted">Could not load messages: '+esc(T.errMsg(e))+'</p>'; });
+  $('dkSend').onclick=async()=>{
+    const text=$('dkText').value.trim(); if(!text) return; const btn=$('dkSend'); btn.disabled=true;
+    try{
+      const b=db.batch();
+      b.set(ref,{parentUid:S.uid,studentUid:k.id,parentName:S.me.name||'',studentName:k.name||'',programme:'tech',lastMessage:text.slice(0,140),lastMessageAt:firebase.firestore.FieldValue.serverTimestamp(),lastSenderRole:'parent',unreadForAdmin:true,unreadForParent:false},{merge:true});
+      b.set(ref.collection('messages').doc(),{conversationId:cid,parentUid:S.uid,studentUid:k.id,adminUid:null,senderUid:S.uid,senderRole:'parent',senderName:S.me.name||'',text:text.slice(0,4000),read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      await b.commit(); $('dkText').value='';
+    }catch(e){ $('dkMsg').textContent='Could not send: '+T.errMsg(e); }
+    btn.disabled=false;
+  };
+  S.live={destroy(){ u(); }};
+}
+/* Read-only project view: the same workspace the builder and coach use, with nothing editable.
+   Guardians see the work, submissions, grades, feedback and the AI reflection. */
 function openBuild(id){
   kill();
   S.v='projects'; S.openId=id; setNav('projects');
-  $('view').innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Projects</button><div id="liveHost"><div class="empty">Opening project…</div></div>';
-  const host=$('liveHost'), ref=db.collection('techBuilds').doc(id);
-  let b=null, fb=[];
-  function paint(){
-    if(!b){ host.innerHTML=emptyBox('Project not found','It may have been deleted.'); return; }
-    $('pageTitle').textContent=b.title||'Project';
-    const files=(b.files||[]).filter(f=>T.safeUrl(f.url)), res=(b.resources||[]).filter(r=>T.safeUrl(r.url));
-    const vers=(b.versions||[]).slice().reverse();
-    const r=b.aiReflection||{};
-    host.innerHTML='<div class="stack"><section class="panel"><div class="panel-head"><h2>'+esc(b.title)+'</h2><div class="pills"><span class="pill">'+esc(T.CREATION_LABEL[b.category]||b.category||'Project')+'</span>'+flags(b)+'</div></div>'+
-      track(b.status)+'<div class="bar" aria-hidden="true"><i style="width:'+Math.max(0,Math.min(100,Number(b.progress)||0))+'%"></i></div>'+
-      (b.brief?'<h3 style="margin:1.1rem 0 .4rem;font-size:.9rem;color:var(--brand-deep)">The idea</h3><div class="note">'+esc(b.brief)+'</div>':'')+
-      (T.disciplinesOf(b).length?'<div class="pills" style="margin-top:.9rem">'+T.disciplinesOf(b).map(d=>'<span class="pill">'+esc(d)+'</span>').join('')+'</div>':'')+'</section>'+
-      '<section class="panel"><div class="panel-head"><h2>Coach feedback</h2></div>'+(fb.length?fb.map(f=>'<div class="fb'+(f.role==='student'?'':' coach')+'"><span class="who">'+esc(f.role==='student'?T.firstName(b.studentName):(f.authorName||'Coach'))+(f.kind==='approved'?' · approved':f.kind==='changes'?' · asked for changes':'')+' · '+esc(T.fmt(f.createdAt))+'</span>'+esc(f.text)+'</div>').join(''):'<p class="muted">No feedback yet.</p>')+'</section>'+
-      (vers.length?panelList('Versions',vers.map((v,i)=>'<div class="row"><span class="ico"><b>v'+(vers.length-i)+'</b></span><span class="t"><b>'+esc(v.note||'')+'</b><span>'+esc(v.at?new Date(v.at).toLocaleDateString():'')+'</span></span>'+(T.safeUrl(v.url)?'<a class="btn light sm" href="'+esc(T.safeUrl(v.url))+'" target="_blank" rel="noopener">Open</a>':'')+'</div>').join('')):'')+
-      ((files.length||res.length)?panelList('Files and links',files.concat(res).map(f=>'<div class="row"><span class="ico"><i class="fas fa-'+(f.name?'file':'link')+'"></i></span><span class="t"><b>'+esc(f.name||f.title||f.url)+'</b></span><a class="btn light sm" href="'+esc(T.safeUrl(f.url))+'" target="_blank" rel="noopener">Open</a></div>').join('')):'')+
-      ((r.purpose||r.learned)?'<section class="panel"><div class="panel-head"><h2>How '+esc(T.firstName(b.studentName))+' used AI</h2></div>'+
-        ((r.tools||[]).length?'<div class="pills" style="margin-bottom:.7rem">'+r.tools.map(t=>'<span class="pill">'+esc(t)+'</span>').join('')+'</div>':'')+
-        (r.purpose?'<p><b>What the AI did:</b> '+esc(r.purpose)+'</p>':'')+(r.changes?'<p style="margin-top:.4rem"><b>What they changed:</b> '+esc(r.changes)+'</p>':'')+(r.learned?'<p style="margin-top:.4rem"><b>What they learned:</b> '+esc(r.learned)+'</p>':'')+'</section>':'')+
-    '</div>';
-  }
-  const u1=ref.onSnapshot(s=>{ b=s.exists?Object.assign({id:s.id},s.data()):null; paint(); },e=>{ host.innerHTML=emptyBox('Could not open this project',esc(T.errMsg(e))); });
-  const u2=ref.collection('feedback').orderBy('createdAt').onSnapshot(s=>{ fb=s.docs.map(d=>d.data()); if(b) paint(); },()=>{});
-  S.live={destroy(){ u1(); u2(); }};
+  const b=S.builds.find(x=>x.id===id);
+  $('pageTitle').textContent=b?b.title:'Project';
+  $('view').innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Projects</button><p class="muted" style="margin:-.4rem 0 .8rem;font-size:.85rem"><i class="fas fa-eye"></i> Read-only. Only '+esc(first())+' and their coach can change this project.</p><div id="liveHost"></div>';
+  S.live=T.mountWorkspace($('liveHost'),{id,me:{uid:S.uid,role:'guardian',name:S.me.name||'Guardian'},tab:'submit'});
   window.scrollTo(0,0);
 }
 

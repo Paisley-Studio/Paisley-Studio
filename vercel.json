@@ -27,6 +27,7 @@
     { "source": "/tech/coach/:slug",        "destination": "/tech/coach/index.html" },
     { "source": "/tech/parent",             "destination": "/tech/parent/index.html" },
     { "source": "/tech/parent/dashboard",   "destination": "/tech/parent/dashboard.html" },
+    { "source": "/tech/p/:id",             "destination": "/tech/project.html" },
 
     { "source": "/student",                 "destination": "/student/index.html" },
     { "source": "/student/dashboard",       "destination": "/student/dashboard.html" },

@@ -1,0 +1,182 @@
+{
+  "_comment": "Single source of truth for picture and sound. All times are seconds. production/build_audio.py reads this file too.",
+  "fps": 30,
+  "duration": 60,
+  "bpm": 120,
+  "scenes": {
+    "spark": [
+      0,
+      5
+    ],
+    "igcse": [
+      5,
+      16
+    ],
+    "cbc": [
+      16,
+      27
+    ],
+    "tech": [
+      27,
+      38
+    ],
+    "connected": [
+      38,
+      47
+    ],
+    "parent": [
+      47,
+      55
+    ],
+    "reveal": [
+      55,
+      60
+    ]
+  },
+  "vo": [
+    {
+      "file": "vo1.wav",
+      "at": 0.9
+    },
+    {
+      "file": "vo2.wav",
+      "at": 5.8
+    },
+    {
+      "file": "vo3.wav",
+      "at": 16.8
+    },
+    {
+      "file": "vo4.wav",
+      "at": 27.8
+    },
+    {
+      "file": "vo5.wav",
+      "at": 38.9
+    },
+    {
+      "file": "vo6.wav",
+      "at": 47.4
+    },
+    {
+      "file": "vo7.wav",
+      "at": 56.3
+    },
+    {
+      "file": "vo8.wav",
+      "at": 57.75
+    }
+  ],
+  "events": {
+    "pencilStart": 0.25,
+    "lineIgnite": 2.5,
+    "titlePossibility": 3.55,
+    "toWebsite": 5.0,
+    "igcseTitle": 6.0,
+    "igcseCardPick": 9.0,
+    "toClassroom": 10.5,
+    "openMaths": 12.5,
+    "toCbc": 16.0,
+    "cbcTitle": 17.0,
+    "cbcPortal": 20.5,
+    "cbcGrades": 22.0,
+    "toTech": 27.0,
+    "techTitle": 28.55,
+    "codeTypeStart": 30.5,
+    "codeTypeEnd": 33.0,
+    "previewRender": 33.5,
+    "projectSubmit": 35.5,
+    "toConnected": 38.0,
+    "release": 38.5,
+    "notify": 39.5,
+    "openWork": 40.0,
+    "attach": 40.2,
+    "submit": 40.5,
+    "gradeTypeStart": 40.75,
+    "gradeTypeEnd": 41.3,
+    "gradeRelease": 41.5,
+    "projectApproved": 42.5,
+    "connectedWord": 43.7,
+    "toParent": 47.0,
+    "parentNotify": 48.4,
+    "parentOpen": 49.3,
+    "parentActivity": 53.1,
+    "riser": 54.6,
+    "impact": 56.0,
+    "techWords": [
+      29.6,
+      30.1,
+      30.6
+    ],
+    "studentGraded": 41.9,
+    "toWide": 43.0,
+    "flowToParent": 45.2,
+    "parentProgress": 50.75,
+    "parentFeedback": 51.85,
+    "parentTitle": 53.0,
+    "words": {
+      "CLASSES.": 39.0,
+      "ASSESSMENTS.": 40.5,
+      "FEEDBACK.": 41.5,
+      "PROJECTS.": 42.5,
+      "CONNECTED.": 43.7
+    }
+  },
+  "captions": [
+    [
+      1.1,
+      4.7,
+      "Every extraordinary future begins with a possibility."
+    ],
+    [
+      6.0,
+      10.7,
+      "From IGCSE, where focused learning meets academic ambition."
+    ],
+    [
+      17.0,
+      21.9,
+      "To CBC, where curiosity, understanding and growth come together."
+    ],
+    [
+      27.9,
+      30.2,
+      "And into AI and technology,"
+    ],
+    [
+      30.2,
+      33.6,
+      "where young minds move beyond learning, to creating."
+    ],
+    [
+      39.0,
+      43.5,
+      "Classes, assignments, assessments, feedback and projects."
+    ],
+    [
+      43.6,
+      46.5,
+      "Connected, in one learning experience."
+    ],
+    [
+      47.5,
+      50.5,
+      "And for parents, the journey becomes clearer,"
+    ],
+    [
+      50.5,
+      54.3,
+      "with progress, feedback and learning activity in view."
+    ],
+    [
+      56.5,
+      57.75,
+      "Paisley Studio."
+    ],
+    [
+      57.9,
+      59.7,
+      "Every possibility, connected."
+    ]
+  ]
+}

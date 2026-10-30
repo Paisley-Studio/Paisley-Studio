@@ -313,6 +313,34 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
 .more summary:hover{color:var(--brand)}
 .actions{display:flex;gap:.8rem;margin-top:1rem}
 
+/* ---------- journey home ---------- */
+.nav-sep{margin:.9rem .9rem .3rem;font-size:.66rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.nav .badge.live{background:#E74C3C;color:#fff}
+.live-strip{display:grid;gap:.8rem}
+.continue .cm-title{font-size:1.3rem;line-height:1.25;color:var(--brand-deep);font-weight:800}
+.next-step{display:flex;gap:.6rem;align-items:flex-start;background:var(--sage);border-radius:12px;padding:.75rem 1rem;margin:.4rem 0 .8rem;font-weight:700;color:var(--brand-deep);font-size:.92rem}
+.next-step i{margin-top:.2rem}
+.lp-row{display:grid;grid-template-columns:110px 1fr 90px;gap:.8rem;align-items:center;padding:.45rem 0}
+.lp-row .dn{font-weight:800;color:var(--brand-deep);font-size:.88rem}.lp-row .dl{font-weight:800;font-size:.8rem;color:var(--brand-deep);text-align:right}
+.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.9rem}
+.quick-card{display:flex;flex-direction:column;gap:.3rem;align-items:flex-start;text-align:left;padding:1rem 1.1rem;border-radius:16px;border:1px solid var(--line);background:var(--paper);transition:border-color .2s,transform .2s}
+.quick-card:hover{border-color:var(--brand);transform:translateY(-2px)}
+.quick-card i{font-size:1.2rem;color:var(--brand-deep);margin-bottom:.2rem}.quick-card b{color:var(--brand-deep);font-size:.95rem}.quick-card span{font-size:.8rem;color:var(--muted);font-weight:500}
+.share-row{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;justify-content:space-between;padding:.9rem 0;border-top:1px solid var(--line-soft)}
+.share-row:first-of-type{border-top:0}.share-row .t b{color:var(--brand-deep)}
+.share-link{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}.share-link input{min-width:240px;padding:.45rem .7rem;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:.82rem;background:var(--paper)}
+.modal.wide{width:min(720px,100%)}
+.self-tag{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .7rem;border-radius:6px;background:#FFF4D6;border:1px solid rgba(245,200,66,.6);color:#7a5c00;font-size:.68rem;font-weight:800;letter-spacing:.08em;margin-bottom:.6rem}
+.type-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.6rem}
+.type-card{position:relative;display:flex;flex-direction:column;gap:.2rem;padding:.8rem .9rem;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;background:var(--surface)}
+.type-card input{position:absolute;opacity:0;pointer-events:none}
+.type-card i{color:var(--brand-deep);font-size:1.1rem}.type-card b{font-size:.88rem;color:var(--brand-deep)}.type-card span{font-size:.74rem;color:var(--muted);font-weight:500;line-height:1.35}
+.type-card:has(input:checked){border-color:var(--brand-deep);background:var(--sage);box-shadow:0 0 0 2px rgba(36,95,90,.15)}
+.type-card:has(input:focus-visible){outline:3px solid var(--brand-deep);outline-offset:2px}
+ul.crit{margin:.2rem 0 0 1.2rem;line-height:1.7}
+.note.coach-note{background:rgba(245,200,66,.18);margin-bottom:1rem}
+.drow .dm small{font-weight:600;color:var(--brand-deep)}
+
 /* keep the shared workspace and chat flat too */
 .tk-bar>i{background:var(--brand-deep)!important}
 .tk-btn:hover{transform:none!important;box-shadow:none!important;border-color:var(--brand)}
@@ -327,6 +355,7 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
   .topbar{padding:1rem 1.2rem}
   .content{padding:1.5rem 1.2rem 3rem}
   .cols{grid-template-columns:1fr}
+  .lp-row{grid-template-columns:90px 1fr 70px}
   .hero-banner{flex-direction:column;align-items:flex-start;padding-bottom:200px}
   .hero-image-wrap{height:200px;width:100%}
   .hero-image{max-height:200px;width:100%;object-position:bottom center}
@@ -360,11 +389,18 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
     </div>
     <nav class="sidebar-nav" id="nav">
       <button class="nav on" data-v="home" type="button"><i class="fas fa-house"></i> Home</button>
-      <button class="nav" data-v="projects" type="button"><i class="fas fa-hammer"></i> Projects <span class="badge" id="navProjBadge" hidden>0</span></button>
-      <button class="nav" data-v="learn" type="button"><i class="fas fa-book-open"></i> Learn</button>
+      <div class="nav-sep">Learn</div>
       <button class="nav" data-v="missions" type="button"><i class="fas fa-bullseye"></i> Missions</button>
+      <button class="nav" data-v="learn" type="button"><i class="fas fa-book-open"></i> Learn</button>
+      <button class="nav" data-v="practice" type="button"><i class="fas fa-flask"></i> Practice</button>
+      <button class="nav" data-v="live" type="button"><i class="fas fa-video"></i> Live classes <span class="badge live" id="navLiveBadge" hidden></span></button>
+      <div class="nav-sep">Build</div>
+      <button class="nav" data-v="projects" type="button"><i class="fas fa-hammer"></i> My projects</button>
+      <button class="nav" data-v="feedback" type="button"><i class="fas fa-clipboard-check"></i> Coach feedback <span class="badge" id="navFbBadge" hidden>0</span></button>
+      <button class="nav" data-v="showcase" type="button"><i class="fas fa-globe"></i> My showcase</button>
+      <div class="nav-sep">Grow</div>
+      <button class="nav" data-v="progress" type="button"><i class="fas fa-chart-line"></i> Learning path</button>
       <button class="nav" data-v="toolbox" type="button"><i class="fas fa-wand-magic-sparkles"></i> AI Toolbox</button>
-      <button class="nav" data-v="progress" type="button"><i class="fas fa-chart-line"></i> Progress</button>
       <button class="nav" data-v="coach" type="button"><i class="fas fa-comments"></i> Coach</button>
       <button class="nav" data-v="profile" type="button"><i class="fas fa-user"></i> Profile</button>
     </nav>
@@ -380,7 +416,7 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
       <button class="menu-toggle" id="menuBtn" type="button" aria-label="Open menu"><i class="fas fa-bars"></i></button>
       <div class="titles"><h1 id="pageTitle">Home</h1><p id="pageSub"></p></div>
       <div id="bellHost"></div>
-      <button class="btn" type="button" data-newbuild aria-label="New project"><i class="fas fa-plus"></i> <span>New project</span></button>
+      <button class="btn" type="button" data-newbuild aria-label="Create something"><i class="fas fa-plus"></i> <span>Create something</span></button>
     </header>
     <main class="content" id="view" aria-live="polite"></main>
   </div>
@@ -391,10 +427,10 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../js/tech/tech-helpers.js?v=tech5"></script>
-<script src="../js/tech/writing-studio.js"></script>
-<script src="../js/tech/code-lab.js"></script>
-<script src="../js/tech/upload-pad.js"></script>
+<script src="../js/tech/writing-studio.js?v=tech7"></script>
+<script src="../js/tech/code-lab.js?v=tech7"></script>
+<script src="../js/tech/upload-pad.js?v=tech7"></script>
+<script src="../js/tech/tech-helpers.js?v=tech7"></script>
 <script>
 (function(){
 'use strict';
@@ -402,14 +438,15 @@ const auth=firebase.auth(), T=TechUI, esc=T.esc, FV=()=>firebase.firestore.Field
 const $=id=>document.getElementById(id);
 T.injectStyle();
 
-const S={uid:null,p:null,content:{},builds:[],wall:[],progress:null,v:'home',ws:null,chat:null,openId:null,projFilter:'all',mtab:'missions',unsubs:[]};
+const S={uid:null,p:null,content:{},builds:[],wall:[],progress:null,live:{},practice:[],activity:[],v:'home',ws:null,chat:null,openId:null,openTab:null,pr:null,projFilter:'all',mtab:'missions',unsubs:[]};
 const KINDS=['path','topic','mission','challenge','tool','resource','template','aiTool'];
-const TITLES={home:'Home',projects:'Projects',learn:'Learn',missions:'Missions',toolbox:'AI Toolbox',progress:'Progress',coach:'Coach',profile:'Profile'};
-const ALIAS={studio:'home',messages:'coach',portfolio:'projects',challenges:'missions'};
+const TITLES={home:'Home',missions:'Missions',learn:'Learn',practice:'Practice',projects:'My projects',feedback:'Coach feedback',live:'Live classes',showcase:'My showcase',progress:'Learning path',toolbox:'AI Toolbox',coach:'Coach',profile:'Profile'};
+const ALIAS={studio:'home',messages:'coach',portfolio:'showcase',challenges:'missions'};
 const DISCIPLINES=T.DISCIPLINES;
 const CREATION_ICON={CODE:'fa-code',DESIGN:'fa-palette',WRITING:'fa-pen-nib',RESEARCH:'fa-microscope',MEDIA:'fa-film',MUSIC:'fa-music',AI:'fa-robot',BUILD:'fa-rocket',Other:'fa-star'};
+const CREATE_TYPES=[['CODE','Code','Websites, games and apps in the Code IDE.'],['WRITING','Blog / writing','Articles and stories in the Writing Studio.'],['RESEARCH','Research','Investigate a question and write it up.'],['DESIGN','Design / AI images','Images, posters and visual work.'],['MEDIA','Media','Video, animation and podcasts.'],['MUSIC','Music','Songs, beats and sound.'],['AI','AI project','Explore what AI can do, responsibly.'],['BUILD','Invention','Anything that mixes disciplines.']];
+const PRACTICE_TYPES=[['code','Coding experiment'],['writing','Writing practice'],['research','Research activity'],['ai','AI exploration']];
 const KI={path:'route',topic:'layer-group',mission:'bullseye',challenge:'trophy',tool:'wand-magic-sparkles',resource:'book-open',template:'clone',aiTool:'robot'};
-const HINT={IDEA:'Shape the idea and write your brief.',LEARNING:'Learn what you need, then start building.',BUILDING:'Build your first version and save it as v1.',TESTING:'Test it, fix what breaks, then ask your coach to review.',READY:'Ready. Ask your coach for a showcase.'};
 
 /* ---------- small helpers ---------- */
 const cap=s=>{ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase(); };
@@ -419,13 +456,18 @@ const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w.charAt(
 const byKind=k=>(S.content[k]||[]).slice().sort((a,b)=>(a.order||0)-(b.order||0)||String(a.title).localeCompare(String(b.title)));
 const item=id=>{ for(const k of KINDS){ const f=(S.content[k]||[]).find(x=>x.id===id); if(f) return f; } return null; };
 const buildFor=(field,id)=>S.builds.find(b=>b[field]===id);
-const needsChanges=b=>b.reviewState==='changes'||b.mastery==='changes';
-const inReview=b=>b.reviewState==='requested'||b.showcase==='requested';
-const isShared=b=>b.showcase==='approved'||b.visibility==='public'||b.visibility==='family';
+const st=b=>T.projectState(b);
 const myLevels=()=>{ if(S.progress&&S.progress.levels) return S.progress.levels; const o={}; DISCIPLINES.forEach(d=>o[d]=1); return o; };
 const myMastery=()=>{ if(S.progress&&S.progress.masteryCount) return S.progress.masteryCount; const o={}; DISCIPLINES.forEach(d=>o[d]=0); return o; };
 const overallLevel=()=>{ const lv=myLevels(); let m=1; DISCIPLINES.forEach(d=>{ m=Math.max(m,lv[d]||1); }); return m; };
-const currentBuild=()=>S.builds.find(b=>b.mastery!=='approved'&&b.status!=='READY')||S.builds.find(b=>b.status!=='READY')||S.builds[0];
+const missions=()=>byKind('mission').concat(byKind('challenge')).filter(m=>T.missionFor(m,S.uid));
+const lockOf=m=>T.missionLock(m,myLevels(),S.builds);
+const lives=()=>T.sortLive(Object.values(S.live));
+const upcomingLive=()=>lives().filter(c=>/live|upcoming/.test(T.liveState(c))&&(T.toDate(c.startAt)||0)-Date.now()<14*864e5);
+const me=()=>({uid:S.uid,role:'student',name:S.p.name});
+const log=(type,label,extra)=>T.logActivity(me(),type,label,extra);
+/* The project to pick up next: anything waiting on the builder first, then the latest active one. */
+const currentBuild=()=>S.builds.find(b=>st(b)==='revision')||S.builds.find(b=>['in_progress','approved'].includes(st(b))&&b.showcase!=='approved')||S.builds.find(b=>st(b)!=='mastered')||S.builds[0];
 
 function showGate(html){ $('shell').hidden=true; $('gate').hidden=false; $('gate').innerHTML=html; }
 function gateCard(title,body,btn){ return '<div class="gate-card"><h1>'+title+'</h1><p>'+body+'</p>'+(btn||'')+'</div>'; }
@@ -458,9 +500,13 @@ document.addEventListener('click',e=>{ if(e.target.closest('#gSign')) leave(); }
 function boot(){
   $('gate').hidden=true; $('shell').hidden=false;
   $('avatar').textContent=initials(S.p.name); $('whoName').textContent=S.p.name||'Builder'; $('whoId').textContent=T.builderId(S.uid);
-  db.collection('techStudents').doc(S.uid).update({lastLoginAt:FV().serverTimestamp()}).catch(()=>{});
+  db.collection('techStudents').doc(S.uid).update({lastLoginAt:FV().serverTimestamp(),lastActiveAt:FV().serverTimestamp()}).catch(()=>{});
+  log('session','Opened TECH Studio');
+  setInterval(()=>{ if(document.visibilityState==='visible') T.touchActive(me()); },3*60000);
   S.bell=T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
-    if(n.buildId&&S.builds.some(b=>b.id===n.buildId)){ openBuild(n.buildId); return true; }
+    if(n.buildId&&S.builds.some(b=>b.id===n.buildId)){ openBuild(n.buildId,n.type==='tech_feedback'?'submit':null); return true; }
+    if(n.classId){ go('live'); return true; }
+    if(n.missionId&&item(n.missionId)){ openItem(n.missionId); return true; }
     if(n.chatId){ go('coach'); return true; }
     return true;
   }});
@@ -478,42 +524,55 @@ function boot(){
     S.builds=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>(T.toDate(b.updatedAt)||0)-(T.toDate(a.updatedAt)||0));
     softRender();
   },e=>console.warn('builds',e)));
-  S.unsubs.push(db.collection('techProgress').doc(S.uid).onSnapshot(s=>{
-    S.progress=s.exists?s.data():null; softRender();
-  },e=>{ /* progress doc may not exist yet */ }));
+  S.unsubs.push(db.collection('techProgress').doc(S.uid).onSnapshot(s=>{ S.progress=s.exists?s.data():null; softRender(); },()=>{}));
+  const liveIn=key=>s=>{ Object.keys(S.live).forEach(id=>{ if(S.live[id]._src===key) delete S.live[id]; }); s.docs.forEach(d=>{ S.live[d.id]=Object.assign({id:d.id,_src:key},d.data()); }); softRender(); };
+  S.unsubs.push(db.collection('techLiveClasses').where('audience','==','all').onSnapshot(liveIn('all'),e=>console.warn('live',e)));
+  S.unsubs.push(db.collection('techLiveClasses').where('studentIds','array-contains',S.uid).onSnapshot(liveIn('mine'),e=>console.warn('live mine',e)));
+  S.unsubs.push(db.collection('techPractice').where('studentId','==',S.uid).onSnapshot(s=>{ S.practice=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>(T.toDate(b.updatedAt)||0)-(T.toDate(a.updatedAt)||0)); softRender(); },e=>console.warn('practice',e)));
+  S.unsubs.push(db.collection('techActivity').where('studentId','==',S.uid).orderBy('at','desc').limit(15).onSnapshot(s=>{ S.activity=s.docs.map(d=>d.data()); softRender(); },e=>console.warn('activity',e)));
   db.collection('techShowcase').get().then(s=>{ S.wall=s.docs.map(d=>Object.assign({id:d.id},d.data())); softRender(); }).catch(()=>{});
+  /* Live / upcoming states change with the clock. */
+  setInterval(()=>softRender(),60000);
   let h=(location.hash||'').slice(1);
   if(h==='challenges') S.mtab='challenges';
-  if(h==='portfolio') S.projFilter='shared';
   h=ALIAS[h]||h;
   go(TITLES[h]?h:'home');
 }
 function softRender(){
   if(!S.p) return;
   updateBadges();
-  if(!S.ws&&!S.openId) render(true);
+  if(!S.ws&&!S.pr&&!S.openId) render(true);
+  else if(S.openId&&!S.ws&&!S.pr) render(true);
 }
-function updateBadges(){ const n=S.builds.filter(needsChanges).length, b=$('navProjBadge'); if(!b) return; b.hidden=!n; b.textContent=n; }
+function updateBadges(){
+  const n=S.builds.filter(b=>st(b)==='revision').length, b=$('navFbBadge'); if(b){ b.hidden=!n; b.textContent=n; }
+  const l=upcomingLive().filter(c=>T.liveState(c)==='live').length, lb=$('navLiveBadge'); if(lb){ lb.hidden=!l; lb.textContent=l?'Live':''; }
+}
 
 /* ---------- navigation ---------- */
 function setNav(v){ document.querySelectorAll('.nav[data-v]').forEach(b=>{ const on=b.dataset.v===v; b.classList.toggle('on',on); if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); }); }
 function subFor(v){
   const n=T.firstName(S.p.name);
   return ({
-    home:S.builds.length?'Hi '+n+'. Pick up where you left off.':'Hi '+n+'. Start with any idea.',
-    projects:'Everything you’re making.',
+    home:S.builds.length?'Hi '+n+'. Here is your next step.':'Hi '+n+'. Start with a mission or an idea of your own.',
+    missions:'Missions from your coaches. Learn, practise, then build.',
     learn:'Paths and topics from your coaches.',
-    missions:'Short, practical builds. Each one becomes a project.',
-    toolbox:'AI tools your coaches have approved.',
+    practice:'Try things out. Practice is never graded.',
+    projects:'Your missions and your own self-led projects.',
+    feedback:'Reviews, revision requests and approvals.',
+    live:'Join your live classes on Google Meet.',
+    showcase:'Approved projects you can share.',
     progress:'Your level in each discipline.',
+    toolbox:'AI tools your coaches have approved.',
     coach:S.p.coachName||'Your coach will appear here.',
     profile:'Builder ID '+T.builderId(S.uid)
   })[v]||'';
 }
 function setHead(){ $('pageTitle').textContent=TITLES[S.v]||'Home'; $('pageSub').textContent=subFor(S.v); }
+function kill(){ if(S.ws){ S.ws.destroy(); S.ws=null; } if(S.chat){ S.chat.destroy(); S.chat=null; } if(S.pr){ S.pr.destroy(); S.pr=null; } }
 function go(v,keep){
-  if(S.ws){ S.ws.destroy(); S.ws=null; } if(S.chat){ S.chat.destroy(); S.chat=null; }
-  S.v=v; if(!keep) S.openId=null;
+  kill();
+  S.v=v; if(!keep){ S.openId=null; S.openTab=null; }
   setNav(v); $('sidebar').classList.remove('open'); $('scrim').classList.remove('open');
   try{ history.replaceState(null,'','#'+v); }catch(e){}
   render(); window.scrollTo(0,0);
@@ -524,31 +583,15 @@ $('menuBtn').addEventListener('click',()=>{ $('sidebar').classList.add('open'); 
 $('scrim').addEventListener('click',()=>{ $('sidebar').classList.remove('open'); $('scrim').classList.remove('open'); });
 
 /* ---------- pieces ---------- */
-function stagePill(b){ return '<span class="pill'+(b.status==='READY'?' ok':'')+'">'+esc(T.STATUS_LABEL[b.status]||b.status)+'</span>'; }
 function flags(b){
-  const f=[];
-  if(needsChanges(b)) f.push('<span class="pill bad">Changes requested</span>');
-  else if(inReview(b)) f.push('<span class="pill warn">Awaiting review</span>');
-  if(b.mastery==='approved') f.push('<span class="pill ok">Mastered</span>');
-  if(b.showcase==='approved') f.push('<span class="pill gold">On the Tech Wall</span>');
-  else if(b.visibility==='family') f.push('<span class="pill">Family share</span>');
+  const f=[T.statePill(b,'pill')];
+  if(b.gradeLabel) f.push('<span class="pill gold">'+esc(b.gradeLabel)+'</span>');
+  if(b.showcase==='approved') f.push('<span class="pill gold">Published</span>');
   return f.join('');
 }
-function track(status){
-  const all=T.STATUSES, i=all.indexOf(status), last=i===all.length-1;
-  return '<ol class="track" aria-label="Project stage">'+all.map((s,k)=>{
-    const cls=(k<i||last)?'done':(k===i?'now':'');
-    return '<li class="'+cls+'"'+(k===i?' aria-current="step"':'')+'><span></span><b>'+esc(T.STATUS_LABEL[s])+'</b></li>';
-  }).join('')+'</ol>';
-}
-function segs(L,named){
-  return '<ol class="segs'+(named?'':' plain')+'" aria-label="Level '+L+' of 7">'+T.LEVELS.map((n,k)=>{
-    const cls=(k+1)<L?'done':((k+1)===L?'now':'');
-    return '<li class="'+cls+'"><span></span><b>'+esc(cap(n))+'</b></li>';
-  }).join('')+'</ol>';
-}
+function origin(b){ return T.originTag(b); }
 function buildThumb(b){
-  const img=(b.files||[]).find(f=>/\.(png|jpe?g|gif|webp)(\?|$)/i.test(f.name||f.url||''));
+  const img=(b.files||[]).find(f=>/\.(png|jpe?g|gif|webp)(\?|$)/i.test(f.name||f.url||'')||/^image\//.test(f.type||''));
   if(img&&T.safeUrl(img.url)) return '<img class="thumb" src="'+esc(img.url)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">';
   return '';
 }
@@ -556,57 +599,89 @@ function buildCard(b){
   const kind=b.category||'Other', icon=CREATION_ICON[kind]||CREATION_ICON.Other;
   return '<button class="card" type="button" data-open="'+esc(b.id)+'">'+buildThumb(b)+
     '<div class="card-top"><span class="kind"><i class="fas '+icon+'"></i>'+esc(T.CREATION_LABEL[kind]||kind)+'</span><span>'+esc(dateShort(b.updatedAt))+'</span></div>'+
-    '<h3>'+esc(b.title)+'</h3><div class="pills">'+stagePill(b)+flags(b)+'</div>'+
+    '<div style="margin-bottom:.5rem">'+origin(b)+'</div>'+
+    '<h3>'+esc(b.title)+'</h3><div class="pills">'+flags(b)+'</div>'+
     '<div class="bar" aria-hidden="true"><i style="width:'+Math.max(0,Math.min(100,Number(b.progress)||0))+'%"></i></div></button>';
 }
-function projectRow(b){
+function projectRow(b,tab){
   const kind=b.category||'Other', icon=CREATION_ICON[kind]||CREATION_ICON.Other, d=dateShort(b.updatedAt);
-  return '<button class="row" type="button" data-open="'+esc(b.id)+'"><span class="ico"><i class="fas '+icon+'"></i></span><span class="t"><b>'+esc(b.title)+'</b><span>'+esc(T.STATUS_LABEL[b.status]||b.status)+(d?', updated '+esc(d):'')+'</span></span><span class="tags">'+flags(b)+'</span><i class="fas fa-chevron-right chev"></i></button>';
+  return '<button class="row" type="button" data-open="'+esc(b.id)+'"'+(tab?' data-tab="'+tab+'"':'')+'><span class="ico"><i class="fas '+icon+'"></i></span><span class="t"><b>'+esc(b.title)+'</b><span>'+esc(T.isSelfLed(b)?'Self-led project':'Mission')+(d?' · updated '+esc(d):'')+'</span></span><span class="tags">'+flags(b)+'</span><i class="fas fa-chevron-right chev"></i></button>';
+}
+function missionRow(it){
+  const own=it.kind==='challenge'?buildFor('challengeId',it.id):buildFor('missionId',it.id), lock=own?'':lockOf(it);
+  const discs=Array.isArray(it.disciplines)?it.disciplines:[];
+  return '<button class="row" type="button" data-item="'+esc(it.id)+'"><span class="ico"><i class="fas fa-'+(lock?'lock':(KI[it.kind]||'star'))+'"></i></span><span class="t"><b>'+esc(it.title)+'</b><span>'+esc(lock||(it.summary||'').slice(0,140))+'</span></span><span class="tags">'+
+    T.statePill(own||'not_started','pill')+(it.level?'<span class="pill">'+esc(lvlName(it.level))+'</span>':'')+(discs[0]?'<span class="pill">'+esc(discs[0])+'</span>':'')+(it.deadline?'<span class="pill warn">Due '+esc(it.deadline)+'</span>':'')+
+    '</span><i class="fas fa-chevron-right chev"></i></button>';
 }
 function itemRow(it,showKind){
-  const started=(it.kind==='mission'&&buildFor('missionId',it.id))||(it.kind==='challenge'&&buildFor('challengeId',it.id));
   const kindLabel=it.kind==='aiTool'?'AI tool':cap(it.kind);
   return '<button class="row" type="button" data-item="'+esc(it.id)+'"><span class="ico"><i class="fas fa-'+(KI[it.kind]||'star')+'"></i></span><span class="t"><b>'+esc(it.title)+'</b><span>'+esc((it.summary||'').slice(0,140))+'</span></span><span class="tags">'+
-    (started?'<span class="pill ok">Started</span>':'')+(showKind?'<span class="pill">'+esc(kindLabel)+'</span>':'')+(it.level?'<span class="pill">'+esc(lvlName(it.level))+'</span>':'')+
+    (showKind?'<span class="pill">'+esc(kindLabel)+'</span>':'')+(it.level?'<span class="pill">'+esc(lvlName(it.level))+'</span>':'')+
     '</span><i class="fas fa-chevron-right chev"></i></button>';
 }
 function panelList(title,rows,goTo,goLabel){
   return '<section class="panel flush"><div class="panel-head"><h2>'+esc(title)+'</h2>'+(goTo?'<button class="link" type="button" data-go="'+goTo+'">'+esc(goLabel)+'</button>':'')+'</div>'+rows+'</section>';
 }
+function segs(L,named){
+  return '<ol class="segs'+(named?'':' plain')+'" aria-label="Level '+L+' of 7">'+T.LEVELS.map((n,k)=>{
+    const cls=(k+1)<L?'done':((k+1)===L?'now':'');
+    return '<li class="'+cls+'"><span></span><b>'+esc(cap(n))+'</b></li>';
+  }).join('')+'</ol>';
+}
+/* What the builder should do next on a project, and which workspace tab that is. */
+function nextStep(b){
+  const m=b.missionId?item(b.missionId):null, j=T.journeyOf(b,m), s=st(b), ws=T.WORKSPACE_NAME[T.workspaceFor(b.category)];
+  if(s==='revision') return ['Revise it and resubmit. Your coach explained what to change.',T.workspaceFor(b.category),'Revise now'];
+  if(s==='submitted'||s==='under_review') return ['Your coach is reviewing it. You can keep improving it meanwhile.','submit','See status'];
+  if(s==='mastered') return [b.showcase==='approved'?'Published. Share your link.':'Mastered. Ask your coach to publish it, or start the next mission.',b.showcase==='approved'?'submit':'submit','Open'];
+  if(s==='approved') return ['Approved. Ask to publish it, or keep polishing.','submit','Open'];
+  if(m&&!j.done.LEARN) return ['Study the mission materials first.','mission','Start learning'];
+  if(m&&!j.done.PRACTICE) return ['Try the practice activities before the main task.','mission','Practise'];
+  if(!j.done.BUILD) return ['Build it in the '+ws+'.',T.workspaceFor(b.category),'Keep building'];
+  return ['Add your AI reflection and submit it for review.','submit','Submit'];
+}
 
 /* ---------- render ---------- */
 function render(silent){
-  if(S.ws||S.chat) return;
+  if(S.ws||S.chat||S.pr) return;
   const v=S.v, el=$('view');
   setHead();
-  if(v==='projects'&&S.openId){
-    el.innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Projects</button><div id="wsHost"></div>';
-    S.ws=T.mountWorkspace($('wsHost'),{id:S.openId,me:{uid:S.uid,role:'student',name:S.p.name},onDeleted:()=>{ S.openId=null; go('projects'); }});
-    return;
-  }
+  if(v==='projects'&&S.openId) return mountProject();
   if(v==='coach') return renderCoach();
+  if(v==='practice'&&S.openId) return openPractice(S.openId);
   el.innerHTML=(VIEWS[v]||VIEWS.home)();
   if(!silent){ el.classList.remove('view-in'); void el.offsetWidth; el.classList.add('view-in'); }
+}
+function mountProject(){
+  const b=S.builds.find(x=>x.id===S.openId), m=b&&b.missionId?item(b.missionId):null;
+  $('view').innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> My projects</button><div id="wsHost"></div>';
+  S.ws=T.mountWorkspace($('wsHost'),{id:S.openId,me:me(),mission:m,tab:S.openTab,findMission:item,
+    onPractice:(act,mission,build,i)=>startPractice({type:act&&act.type,title:act&&act.title,instructions:act&&act.instructions,starter:act&&act.starter,missionId:mission.id,missionTitle:mission.title,buildId:build.id,activity:i}),
+    onDeleted:()=>{ S.openId=null; go('projects'); }});
 }
 function renderCoach(){
   const el=$('view'), p=S.p;
   if(!p.coachId){ el.innerHTML=emptyBox('No coach yet','A coach will be assigned to you soon. Until then, try a mission or start a project.','<button class="btn" type="button" data-go="missions">Browse missions</button>'); return; }
   el.innerHTML='<div id="chatHost"></div>';
-  S.chat=T.mountChat($('chatHost'),{studentId:S.uid,studentName:p.name,coachId:p.coachId,coachName:p.coachName,me:{uid:S.uid,role:'student',name:p.name}});
+  S.chat=T.mountChat($('chatHost'),{studentId:S.uid,studentName:p.name,coachId:p.coachId,coachName:p.coachName,me:me()});
+}
+function liveBanner(){
+  const up=upcomingLive();
+  if(!up.length) return '';
+  return '<section class="live-strip" aria-label="Live classes">'+up.slice(0,2).map(c=>T.liveCardHtml(c,{banner:true})).join('')+(up.length>2?'<button class="link" type="button" data-go="live">All live classes</button>':'')+'</section>';
 }
 
 const VIEWS={
 home(){
   const cur=currentBuild();
   const m=cur&&cur.missionId?item(cur.missionId):null;
-  const attention=S.builds.filter(b=>b!==cur&&(needsChanges(b)||inReview(b)));
   const started=new Set(S.builds.map(b=>b.missionId||b.challengeId).filter(Boolean));
-  const ch=byKind('challenge').find(x=>!started.has(x.id));
-  const next=(ch?[ch]:[]).concat(byKind('mission').filter(x=>!started.has(x.id)).slice(0,ch?2:3));
-  const recent=S.builds.filter(b=>b!==cur&&attention.indexOf(b)===-1).slice(0,3);
-  const L=overallLevel();
+  const next=missions().filter(x=>!started.has(x.id)&&!lockOf(x)).slice(0,3);
+  const L=overallLevel(), lv=myLevels();
   const mastered=S.builds.filter(b=>b.mastery==='approved').length;
   const onWall=S.builds.filter(b=>b.showcase==='approved').length;
+  const fb=S.builds.filter(b=>b.reviewedAt||['revision','submitted','under_review'].includes(st(b))).sort((a,b)=>(T.toDate(b.reviewedAt||b.submittedAt)||0)-(T.toDate(a.reviewedAt||a.submittedAt)||0)).slice(0,4);
 
   /* The Hero Banner with Image */
   const heroBanner = '<div class="hero-banner">'+
@@ -624,70 +699,125 @@ home(){
     '</div>'+
   '</div>';
 
-  /* The KPI Grid (SkillzHub style) */
   const kpiGrid = '<div class="kpi-grid">'+
     '<div class="kpi-card"><div class="kpi-icon ki-1"><i class="fas fa-layer-group"></i></div><div class="kpi-info"><span class="kpi-label">Level</span><span class="kpi-value">'+L+'</span></div></div>'+
     '<div class="kpi-card"><div class="kpi-icon ki-2"><i class="fas fa-hammer"></i></div><div class="kpi-info"><span class="kpi-label">Projects</span><span class="kpi-value">'+S.builds.length+'</span></div></div>'+
     '<div class="kpi-card"><div class="kpi-icon ki-4"><i class="fas fa-award"></i></div><div class="kpi-info"><span class="kpi-label">Mastered</span><span class="kpi-value">'+mastered+'</span></div></div>'+
-    '<div class="kpi-card"><div class="kpi-icon ki-5"><i class="fas fa-star"></i></div><div class="kpi-info"><span class="kpi-label">On the Wall</span><span class="kpi-value">'+onWall+'</span></div></div>'+
+    '<div class="kpi-card"><div class="kpi-icon ki-5"><i class="fas fa-star"></i></div><div class="kpi-info"><span class="kpi-label">Published</span><span class="kpi-value">'+onWall+'</span></div></div>'+
   '</div>';
 
-  const continuePanel=cur
-    ? '<section class="panel"><div class="panel-head"><h2>Continue building</h2><div class="pills">'+flags(cur)+'</div></div>'+
-        '<h3 style="font-size:1.3rem;line-height:1.25;color:var(--brand-deep)">'+esc(cur.title)+'</h3>'+
-        '<p class="muted" style="margin-top:.3rem">'+(m?'From the mission “‘'+esc(m.title)+'”. ':'')+esc(HINT[cur.status]||'')+'</p>'+
-        track(cur.status)+
-        '<button class="btn" type="button" data-open="'+esc(cur.id)+'">Open project</button></section>'
-    : '<section class="panel"><div class="panel-head"><h2>Start your first project</h2></div><p class="muted" style="margin-bottom:1rem">Begin with any idea, even a rough one. You can change it later.</p><button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> New project</button></section>';
-
-  const levelPanel='<section class="panel"><div class="panel-head"><h2>Your level</h2></div>'+
-    '<p class="lvl-name">'+esc(lvlName(L))+'<small>Level '+L+' of 7</small></p>'+
-    '<p class="muted" style="font-size:.88rem;margin-top:.2rem">'+esc(T.LEVEL_BLURB[T.levelName(L)]||'')+'</p>'+
-    segs(L,false)+
-    '<button class="btn light sm" type="button" data-go="progress" style="margin-top:.9rem">See progress</button></section>';
-
+  let cont;
+  if(cur){
+    const ns=nextStep(cur), discs=T.disciplinesOf(cur), lvl=discs.length?Math.max.apply(null,discs.map(d=>lv[d]||1)):L;
+    cont='<section class="panel continue"><div class="panel-head"><h2>'+(T.isSelfLed(cur)?'Continue your project':'Continue mission')+'</h2><div class="pills">'+origin(cur)+'</div></div>'+
+      '<h3 class="cm-title">'+esc(cur.title)+'</h3>'+
+      '<div class="pills" style="margin:.4rem 0 .2rem">'+flags(cur)+(discs[0]?'<span class="pill">'+esc(discs.join(' · '))+'</span>':'')+'<span class="pill">'+esc(lvlName(lvl))+'</span></div>'+
+      T.journeyHtml(cur,m)+
+      '<div class="next-step"><i class="fas fa-arrow-right"></i><span>'+esc(ns[0])+'</span></div>'+
+      '<div class="bar" aria-hidden="true" style="margin:.2rem 0 1rem"><i style="width:'+Math.max(0,Math.min(100,Number(cur.progress)||0))+'%"></i></div>'+
+      '<div style="display:flex;gap:.6rem;flex-wrap:wrap"><button class="btn" type="button" data-open="'+esc(cur.id)+'" data-tab="'+ns[1]+'">'+esc(ns[2])+'</button><button class="btn light" type="button" data-go="projects">All projects</button></div></section>';
+  } else {
+    cont='<section class="panel continue"><div class="panel-head"><h2>Start your first mission</h2></div><p class="muted" style="margin-bottom:1rem">Pick a mission from your coaches, or create something of your own.</p><div style="display:flex;gap:.6rem;flex-wrap:wrap"><button class="btn" type="button" data-go="missions">See missions</button><button class="btn light" type="button" data-newbuild><i class="fas fa-plus"></i> Create something</button></div></section>';
+  }
+  const path='<section class="panel"><div class="panel-head"><h2>Learning path</h2><button class="link" type="button" data-go="progress">Details</button></div>'+
+    DISCIPLINES.filter(d=>(lv[d]||1)>1||S.builds.some(b=>T.disciplinesOf(b).includes(d))).concat(DISCIPLINES).filter((d,i,a)=>a.indexOf(d)===i).slice(0,5).map(d=>{
+      const l=lv[d]||1;
+      return '<div class="lp-row"><span class="dn">'+esc(d)+'</span><div class="bar" aria-hidden="true"><i style="width:'+Math.round(l/7*100)+'%"></i></div><span class="dl">'+esc(lvlName(l))+'</span></div>';
+    }).join('')+'<p class="muted" style="font-size:.8rem;margin-top:.6rem">Each discipline levels up on its own when your coach approves mastery.</p></section>';
+  const fbPanel=fb.length?panelList('Coach feedback',fb.map(b=>projectRow(b,'submit')).join(''),'feedback','All feedback')
+    :'<section class="panel"><div class="panel-head"><h2>Coach feedback</h2></div><p class="muted">Reviews and grades show up here after you submit work.</p></section>';
+  const acts='<section class="panel"><div class="panel-head"><h2>Recent activity</h2></div>'+T.activityRows(S.activity.slice(0,6))+'</section>';
+  const practice=S.practice.length?'':'';
   return '<div class="stack">'+
     heroBanner+
+    liveBanner()+
     kpiGrid+
-    (attention.length?panelList('Needs your attention',attention.map(projectRow).join('')):'')+
-    '<div class="cols">'+continuePanel+levelPanel+'</div>'+
-    (next.length?panelList('Up next',next.map(it=>itemRow(it,true)).join(''),'missions','All missions'):'')+
-    (recent.length?panelList('Recent projects',recent.map(projectRow).join(''),'projects','All projects'):'')+
-  '</div>';
-},
-
-projects(){
-  const F={all:()=>true,ready:b=>b.status==='READY',mastered:b=>b.mastery==='approved',review:inReview,shared:isShared};
-  const LAB={all:'All',ready:'Ready',mastered:'Mastered',review:'In review',shared:'Shared'};
-  const f=F[S.projFilter]?S.projFilter:'all';
-  if(!S.builds.length) return emptyBox('No projects yet','Start with any idea. You can change it later.','<button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> New project</button>');
-  const list=S.builds.filter(F[f]);
-  return '<div class="chips" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="chip'+(f===k?' on':'')+'" type="button" aria-pressed="'+(f===k)+'" data-projfilter="'+k+'">'+LAB[k]+'<em>'+S.builds.filter(F[k]).length+'</em></button>').join('')+'</div>'+
-    (f==='shared'?'<p class="note-line">Only projects your coach approves go on the public Tech Wall. Family shares stay between you and your family.</p>':'')+
-    (list.length?'<div class="cards">'+list.map(buildCard).join('')+'</div>':emptyBox('Nothing here yet','Projects will show up here as they move along.'));
-},
-
-learn(){
-  if(S.openId){ const p=item(S.openId); if(p) return itemDetail(p); }
-  const paths=byKind('path'), topics=byKind('topic');
-  if(!paths.length&&!topics.length) return emptyBox('Learning paths are on their way','Your coaches are preparing them. Meanwhile, try a mission.','<button class="btn" type="button" data-go="missions">Browse missions</button>');
-  return '<div class="stack">'+
-    (paths.length?panelList('Learning paths',paths.map(x=>itemRow(x,false)).join('')):'')+
-    (topics.length?panelList('Topics',topics.map(x=>itemRow(x,false)).join('')):'')+
+    '<div class="cols">'+cont+path+'</div>'+
+    '<div class="cols">'+fbPanel+acts+'</div>'+
+    (next.length?panelList('Up next',next.map(missionRow).join(''),'missions','All missions'):'')+
+    '<section class="panel quick"><div class="panel-head"><h2>Practise or create</h2></div><div class="quick-grid">'+
+      '<button class="quick-card" type="button" data-go="practice"><i class="fas fa-flask"></i><b>Practice</b><span>Experiments and small challenges, never graded.</span></button>'+
+      '<button class="quick-card" type="button" data-newbuild><i class="fas fa-lightbulb"></i><b>Create something</b><span>A self-led project of your own.</span></button>'+
+      '<button class="quick-card" type="button" data-go="toolbox"><i class="fas fa-wand-magic-sparkles"></i><b>AI Toolbox</b><span>Tools your coaches approved.</span></button>'+
+      '<button class="quick-card" type="button" data-go="showcase"><i class="fas fa-globe"></i><b>My showcase</b><span>Share published work.</span></button>'+
+    '</div></section>'+practice+
   '</div>';
 },
 
 missions(){
   if(S.openId){ const p=item(S.openId); if(p) return itemDetail(p); }
-  const ms=byKind('mission'), cs=byKind('challenge'), tab=S.mtab==='challenges'?'challenges':'missions', list=tab==='challenges'?cs:ms;
+  const ms=missions().filter(x=>x.kind==='mission'), cs=missions().filter(x=>x.kind==='challenge'), tab=S.mtab==='challenges'?'challenges':'missions', list=tab==='challenges'?cs:ms;
+  const open=list.filter(x=>!lockOf(x)||buildFor(x.kind==='challenge'?'challengeId':'missionId',x.id)), locked=list.filter(x=>open.indexOf(x)===-1);
   return '<div class="chips" role="group" aria-label="Show">'+
       '<button class="chip'+(tab==='missions'?' on':'')+'" type="button" aria-pressed="'+(tab==='missions')+'" data-mtab="missions">Missions<em>'+ms.length+'</em></button>'+
       '<button class="chip'+(tab==='challenges'?' on':'')+'" type="button" aria-pressed="'+(tab==='challenges')+'" data-mtab="challenges">Challenges<em>'+cs.length+'</em></button></div>'+
     (list.length
-      ? '<section class="panel flush">'+list.map(x=>itemRow(x,false)).join('').replace('class="row"','class="row" style="border-top:0"')+'</section>'
+      ? '<div class="stack">'+(open.length?panelList('Open to you',open.map(missionRow).join('')):'')+(locked.length?panelList('Locked for now',locked.map(missionRow).join('')):'')+'</div>'
       : (tab==='challenges'
           ? emptyBox('No open challenges','A new one drops every month.')
-          : emptyBox('Missions are on their way','Meanwhile, start a project of your own.','<button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> New project</button>')));
+          : emptyBox('Missions are on their way','Meanwhile, create a project of your own.','<button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> Create something</button>')));
+},
+
+learn(){
+  if(S.openId){ const p=item(S.openId); if(p) return itemDetail(p); }
+  const paths=byKind('path'), topics=byKind('topic'), res=byKind('resource');
+  const withMat=missions().filter(m=>(m.materials||[]).length&&!lockOf(m));
+  if(!paths.length&&!topics.length&&!withMat.length&&!res.length) return emptyBox('Learning paths are on their way','Your coaches are preparing them. Meanwhile, try a mission.','<button class="btn" type="button" data-go="missions">Browse missions</button>');
+  return '<div class="stack">'+
+    (withMat.length?panelList('Study materials in your missions',withMat.map(missionRow).join('')):'')+
+    (paths.length?panelList('Learning paths',paths.map(x=>itemRow(x,false)).join('')):'')+
+    (topics.length?panelList('Topics',topics.map(x=>itemRow(x,false)).join('')):'')+
+    (res.length?panelList('Resources',res.map(x=>itemRow(x,false)).join('')):'')+
+  '</div>';
+},
+
+practice(){
+  const fromMissions=[];
+  S.builds.filter(b=>b.missionId&&st(b)!=='mastered').forEach(b=>{ const m=item(b.missionId); (m&&m.practice||[]).forEach((a,i)=>fromMissions.push({a,i,m,b})); });
+  return '<div class="stack">'+
+    '<section class="panel"><div class="panel-head"><h2>Start practising</h2></div><p class="muted" style="margin:-.6rem 0 1rem">Experiment freely. Save what you like, retry anything, and ask your coach for help.</p>'+
+      '<div class="quick-grid">'+PRACTICE_TYPES.map(t=>'<button class="quick-card" type="button" data-newpractice="'+t[0]+'"><i class="fas '+({code:'fa-code',writing:'fa-pen-nib',research:'fa-microscope',ai:'fa-robot'})[t[0]]+'"></i><b>'+t[1]+'</b></button>').join('')+'</div></section>'+
+    (fromMissions.length?panelList('Practice from your missions',fromMissions.map(x=>'<button class="row" type="button" data-mpractice="'+esc(x.b.id)+'|'+x.i+'"><span class="ico"><i class="fas fa-flask"></i></span><span class="t"><b>'+esc(x.a.title||'Practice')+'</b><span>'+esc(x.m.title)+' · '+esc((x.a.instructions||'').slice(0,90))+'</span></span><span class="tags">'+((x.b.practiceIds||[]).some(p=>String(p).indexOf('m'+x.i+'_')===0)?'<span class="pill ok">Practised</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
+    (S.practice.length?panelList('My practice',S.practice.map(p=>'<button class="row" type="button" data-practice="'+esc(p.id)+'"><span class="ico"><i class="fas fa-flask-vial"></i></span><span class="t"><b>'+esc(p.title||'Practice')+'</b><span>'+esc((PRACTICE_TYPES.find(t=>t[0]===p.type)||[0,'Practice'])[1])+(p.missionTitle?' · '+esc(p.missionTitle):'')+' · '+esc(dateShort(p.updatedAt))+'</span></span><span class="tags">'+(p.done?'<span class="pill ok">Done</span>':'')+(p.helpRequested?'<span class="pill warn">Help asked</span>':'')+(p.coachNote?'<span class="pill gold">Coach note</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
+  '</div>';
+},
+
+projects(){
+  const F={all:()=>true,mission:b=>!T.isSelfLed(b),self:b=>T.isSelfLed(b),progress:b=>st(b)==='in_progress',review:b=>['submitted','under_review'].includes(st(b)),revision:b=>st(b)==='revision',approved:b=>['approved','mastered'].includes(st(b)),published:b=>b.showcase==='approved'};
+  const LAB={all:'All',mission:'Missions',self:'Self-led',progress:'In progress',review:'Submitted',revision:'Revision',approved:'Approved',published:'Published'};
+  const f=F[S.projFilter]?S.projFilter:'all';
+  if(!S.builds.length) return emptyBox('No projects yet','Start a mission, or create something of your own.','<button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> Create something</button>');
+  const list=S.builds.filter(F[f]);
+  return '<div class="chips" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="chip'+(f===k?' on':'')+'" type="button" aria-pressed="'+(f===k)+'" data-projfilter="'+k+'">'+LAB[k]+'<em>'+S.builds.filter(F[k]).length+'</em></button>').join('')+'</div>'+
+    (f==='self'?'<p class="note-line">Self-led projects are real projects: submit them for review like a mission, and publish them once approved.</p>':'')+
+    (list.length?'<div class="cards">'+list.map(buildCard).join('')+'</div>':emptyBox('Nothing here yet','Projects will show up here as they move along.'));
+},
+
+feedback(){
+  const rev=S.builds.filter(b=>st(b)==='revision'), wait=S.builds.filter(b=>['submitted','under_review'].includes(st(b))), done=S.builds.filter(b=>['approved','mastered'].includes(st(b)));
+  if(!rev.length&&!wait.length&&!done.length) return emptyBox('No feedback yet','Submit a project and your coach’s review, grade and comments will appear here.','<button class="btn" type="button" data-go="projects">My projects</button>');
+  const row=b=>'<button class="row" type="button" data-open="'+esc(b.id)+'" data-tab="submit"><span class="ico"><i class="fas '+(st(b)==='revision'?'fa-pen-to-square':st(b)==='mastered'?'fa-award':st(b)==='approved'?'fa-check':'fa-hourglass-half')+'"></i></span><span class="t"><b>'+esc(b.title)+'</b><span>'+esc(b.reviewNote?b.reviewNote.slice(0,150):(b.submittedAt?'Submitted '+dateShort(b.submittedAt):''))+'</span></span><span class="tags">'+flags(b)+'</span><i class="fas fa-chevron-right chev"></i></button>';
+  return '<div class="stack">'+
+    (rev.length?panelList('Revision required',rev.map(row).join('')):'')+
+    (wait.length?panelList('Waiting for your coach',wait.map(row).join('')):'')+
+    (done.length?panelList('Approved',done.map(row).join('')):'')+'</div>';
+},
+
+live(){
+  const all=lives();
+  if(!all.length) return emptyBox('No live classes yet','When your coach schedules one it appears here and on your home page, with a Join button.');
+  const up=all.filter(c=>/live|upcoming/.test(T.liveState(c))), past=all.filter(c=>up.indexOf(c)===-1).slice(0,10);
+  return '<div class="stack">'+(up.length?'<section class="stack" style="gap:.8rem">'+up.map(c=>T.liveCardHtml(c)).join('')+'</section>':emptyBox('Nothing coming up','Check back soon.'))+
+    (past.length?'<h3 class="group" style="margin-top:.6rem">Past and cancelled</h3><section class="stack" style="gap:.8rem">'+past.map(c=>T.liveCardHtml(c)).join('')+'</section>':'')+'</div>';
+},
+
+showcase(){
+  const pub=S.builds.filter(b=>b.showcase==='approved'), ready=S.builds.filter(b=>b.showcase!=='approved'&&['approved','mastered'].includes(st(b)));
+  if(!pub.length&&!ready.length) return emptyBox('Nothing to share yet','When your coach approves a project you can ask for it to be published, with a link you can share.','<button class="btn" type="button" data-go="projects">My projects</button>');
+  return '<div class="stack">'+
+    (pub.length?'<section class="panel"><div class="panel-head"><h2>Published</h2></div>'+pub.map(b=>{ const u=T.shareUrl(b.id); return '<div class="share-row"><div class="t"><b>'+esc(b.title)+'</b> '+origin(b)+'</div><div class="share-link"><input readonly value="'+esc(u)+'" onclick="this.select()" aria-label="Share link"><button class="btn light sm" type="button" data-copy="'+esc(u)+'"><i class="fas fa-copy"></i> Copy</button><a class="btn light sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open</a></div></div>'; }).join('')+'</section>':'')+
+    (ready.length?panelList('Approved, not yet published',ready.map(b=>projectRow(b,'submit')).join('')):'')+
+    '<p class="note-line" style="margin:0">Published pages show your first name and the work, nothing else. You can take a project down at any time.</p></div>';
 },
 
 toolbox(){
@@ -702,15 +832,15 @@ toolbox(){
 progress(){
   const L=overallLevel(), lv=myLevels(), mc=myMastery();
   const rows=DISCIPLINES.map(d=>{
-    const l=lv[d]||1, n=mc[d]||0;
-    return '<div class="drow"><span class="dn">'+esc(d)+'</span><div class="bar" aria-hidden="true"><i style="width:'+Math.round(l/7*100)+'%"></i></div><span class="dl">'+esc(lvlName(l))+'</span><span class="dm">'+n+' mastered</span></div>';
+    const l=lv[d]||1, n=mc[d]||0, nextM=missions().find(m=>(m.disciplines||[]).includes(d)&&lockOf(m)&&Number(m.level)===l+1);
+    return '<div class="drow"><span class="dn">'+esc(d)+'</span><div class="bar" aria-hidden="true"><i style="width:'+Math.round(l/7*100)+'%"></i></div><span class="dl">'+esc(lvlName(l))+'</span><span class="dm">'+n+' mastered'+(nextM?'<br><small>Next: '+esc(nextM.title)+'</small>':'')+'</span></div>';
   }).join('');
   return '<div class="stack">'+
     '<section class="panel"><div class="panel-head"><h2>Overall</h2></div><p class="lvl-name">'+esc(lvlName(L))+'<small>Level '+L+' of 7</small></p>'+
       '<p class="muted" style="font-size:.9rem;margin-top:.2rem">'+esc(T.LEVEL_BLURB[T.levelName(L)]||'')+'</p>'+segs(L,true)+'</section>'+
     '<section class="panel flush"><div class="panel-head"><h2>By discipline</h2></div>'+
       '<div class="drow head"><span>Discipline</span><span>Progress</span><span>Level</span><span style="text-align:right">Mastered</span></div>'+rows+'</section>'+
-    '<p class="note-line" style="margin:0">Progress is uneven by design. Lean into what you love.</p>'+
+    '<p class="note-line" style="margin:0">Each mastered project in a discipline moves that discipline up one level and unlocks its next missions.</p>'+
   '</div>';
 },
 
@@ -718,11 +848,11 @@ profile(){
   const p=S.p, tp=p.techProfile||{}, L=overallLevel();
   const pub=S.builds.filter(b=>b.showcase==='approved').length;
   const mastered=S.builds.filter(b=>b.mastery==='approved').length;
-  const feat=S.wall.filter(w=>S.builds.some(b=>b.id===w.buildId||b.id===w.id)&&w.featured).length;
+  const self=S.builds.filter(b=>T.isSelfLed(b)).length;
   const num=(n,l)=>'<div><b>'+n+'</b><span>'+l+'</span></div>';
   return '<div class="stack" style="max-width:640px">'+
     '<section class="panel"><div class="panel-head" style="margin-bottom:.2rem"><h2>'+esc(p.name||'')+'</h2></div><p class="pid">'+esc(T.builderId(S.uid))+'</p>'+
-      '<div class="idrow">'+num(S.builds.length,'Projects')+num(mastered,'Mastered')+num(pub,'On the Tech Wall')+num(feat,'Featured')+num(esc(lvlName(L)),'Level '+L)+'</div></section>'+
+      '<div class="idrow">'+num(S.builds.length,'Projects')+num(self,'Self-led')+num(mastered,'Mastered')+num(pub,'Published')+num(esc(lvlName(L)),'Level '+L)+'</div></section>'+
     '<section class="panel"><div class="panel-head"><h2>About you</h2></div>'+
       '<div class="field"><label for="pId">What describes you?</label><select id="pId"><option value="">Choose one</option>'+['Student','Creator','Future entrepreneur','Researcher','Problem solver','Curious explorer'].map(x=>'<option'+(tp.identity===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'+
       '<div class="field"><span class="lbl" id="intLbl">What do you want to explore?</span><div class="opts" id="pInts" role="group" aria-labelledby="intLbl">'+['Create','Research','Study smarter','Start something','Solve problems','Build projects','Work faster','Understand AI','Stay safe online'].map(x=>'<label class="opt"><input type="checkbox" value="'+x+'"'+((tp.interests||[]).indexOf(x)>-1?' checked':'')+'> '+x+'</label>').join('')+'</div></div>'+
@@ -731,7 +861,7 @@ profile(){
       '<button class="btn" type="button" id="pSave">Save profile</button><div class="msg" id="pMsg" role="status"></div></section>'+
     '<section class="panel"><div class="panel-head"><h2>Family</h2></div>'+
       ((p.guardianAccounts||[]).length
-        ? '<p class="muted" style="margin-bottom:.6rem">They can follow your projects and progress, and message your coach.</p>'+(p.guardianAccounts||[]).map(g=>'<div class="reslink"><i class="fas fa-user-shield"></i> '+esc(g.name||'Guardian')+'</div>').join('')
+        ? '<p class="muted" style="margin-bottom:.6rem">They can follow your projects and progress (read-only), and message your coach.</p>'+(p.guardianAccounts||[]).map(g=>'<div class="reslink"><i class="fas fa-user-shield"></i> '+esc(g.name||'Guardian')+'</div>').join('')
         : '<p class="muted">'+((p.guardians||[]).length?'Your parent or guardian gets their own login once your account is approved.':'No parent or guardian is linked. Ask the Studio Desk if you want someone to follow your projects.')+'</p>')+
     '</section>'+
   '</div>';
@@ -741,7 +871,9 @@ profile(){
 function itemDetail(it){
   const kids=it.kind==='path'?byKind('topic').filter(t=>t.parentId===it.id):it.kind==='topic'?byKind('mission').filter(m=>m.parentId===it.id):[];
   const direct=it.kind==='path'?byKind('mission').filter(m=>m.parentId===it.id):[];
-  const own=(it.kind==='mission'||it.kind==='challenge')?buildFor(it.kind==='mission'?'missionId':'challengeId',it.id):null;
+  const isM=it.kind==='mission'||it.kind==='challenge';
+  const own=isM?buildFor(it.kind==='mission'?'missionId':'challengeId',it.id):null;
+  const lock=isM&&!own?lockOf(it):'';
   const discs=Array.isArray(it.disciplines)&&it.disciplines.length?it.disciplines:(it.discipline?[it.discipline]:[]);
   const kindLabel=it.kind==='aiTool'?'AI tool':cap(it.kind);
   const block=(title,html)=>'<div class="block"><h3>'+title+'</h3>'+html+'</div>';
@@ -754,24 +886,31 @@ function itemDetail(it){
       '<dl class="kv">'+kv('Allowed',t.permitted)+kv('Not allowed',t.restrictions)+kv('Age',t.ageGuidance)+kv('Safety',t.safety)+kv('Disclose',t.disclosure)+'</dl></div>'+
       (u?'<a class="btn light sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open</a>':'')+'</div>';
   }).join('');
-  const action=(it.kind==='mission'||it.kind==='challenge')
-    ? (own?'<button class="btn" type="button" data-open="'+esc(own.id)+'">Continue project</button>':'<button class="btn" type="button" data-start="'+esc(it.id)+'">Start this '+it.kind+'</button>')
+  const action=isM
+    ? (own?'<button class="btn" type="button" data-open="'+esc(own.id)+'" data-tab="'+nextStep(own)[1]+'">Continue: '+esc(nextStep(own)[2])+'</button>'
+        :(lock?'<p class="note-line" style="margin:0"><i class="fas fa-lock"></i> '+esc(lock)+'</p>':'<button class="btn" type="button" data-start="'+esc(it.id)+'">Start this '+it.kind+'</button>'))
     : '';
+  const prac=(it.practice||[]).map(p=>'<div class="reslink"><i class="fas fa-flask"></i> <span><b>'+esc(p.title||'Practice')+'</b><br><span class="muted" style="font-weight:500">'+esc(p.instructions||'')+'</span></span></div>').join('');
+  const crit=(it.criteria||[]).map(c=>'<li><b>'+esc(c.name)+'</b>'+(c.description?': '+esc(c.description):'')+'</li>').join('');
   return '<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Back</button>'+
     '<div class="stack"><section class="panel detail">'+
-      '<div class="facts"><span class="pill">'+esc(kindLabel)+'</span>'+(it.level?'<span class="pill">'+esc(lvlName(it.level))+'</span>':'')+discs.map(d=>'<span class="pill">'+esc(d)+'</span>').join('')+(it.creationType?'<span class="pill">'+esc(T.CREATION_LABEL[it.creationType]||it.creationType)+'</span>':'')+(it.deadline?'<span class="pill warn">Due '+esc(it.deadline)+'</span>':'')+'</div>'+
+      '<div class="facts">'+(isM?'<span class="pill">'+esc(T.MISSION_LABEL)+'</span>'+T.statePill(own||'not_started','pill'):'<span class="pill">'+esc(kindLabel)+'</span>')+(it.level?'<span class="pill">'+esc(lvlName(it.level))+'</span>':'')+discs.map(d=>'<span class="pill">'+esc(d)+'</span>').join('')+(it.creationType?'<span class="pill">'+esc(T.CREATION_LABEL[it.creationType]||it.creationType)+' · '+esc(T.WORKSPACE_NAME[T.workspaceFor(it.creationType)])+'</span>':'')+(it.deadline?'<span class="pill warn">Due '+esc(it.deadline)+'</span>':'')+'</div>'+
       '<h2>'+esc(it.title)+'</h2>'+(it.summary?'<p class="lede">'+esc(it.summary)+'</p>':'<div style="height:.8rem"></div>')+
+      (isM?'<div style="margin:-.6rem 0 1rem">'+T.journeyHtml(own,it)+'</div>':'')+
       (it.objectives?block('Learning objectives',note(it.objectives)):'')+
-      (it.body?'<div class="block prose">'+esc(it.body)+'</div>':'')+
-      (it.brief?block('Creation brief',note(it.brief)):'')+
+      (it.body?block(isM?'Instructions':'Details','<div class="prose">'+esc(it.body)+'</div>'):'')+
+      ((it.materials||[]).length?block('Study materials',T.materialsHtml(it,own&&own.materialsSeen)+(own?'':'<p class="note-line" style="margin:.6rem 0 0">Start the mission to track what you have studied.</p>')):'')+
+      (prac?block('Practise first',prac):'')+
+      (it.brief?block('The task',note(it.brief)):'')+
       (it.submissionReq?block('What to submit',note(it.submissionReq)):'')+
+      (crit?block('How it is assessed','<ul class="crit">'+crit+'</ul>'):'')+
       (tools?block('Approved AI tools',tools):'')+
       (it.aiRules?block('AI rules for this mission',note(it.aiRules)):'')+
       (T.safeUrl(it.url)?'<div class="block"><a href="'+esc(T.safeUrl(it.url))+'" target="_blank" rel="noopener">Open link <i class="fas fa-arrow-up-right-from-square"></i></a></div>':'')+
       (res?block('Resources',res):'')+
       action+
     '</section>'+
-    ((kids.length||direct.length)?panelList(it.kind==='path'?'Topics':'Missions',kids.concat(direct).map(x=>itemRow(x,false)).join('')):'')+
+    ((kids.length||direct.length)?panelList(it.kind==='path'?'Topics':'Missions',kids.concat(direct).map(x=>x.kind==='mission'?missionRow(x):itemRow(x,false)).join('')):'')+
     '</div>';
 }
 
@@ -779,43 +918,55 @@ function itemDetail(it){
 async function createBuild(d){
   const p=S.p;
   const doc={studentId:S.uid,studentName:p.name||'',displayName:T.firstName(p.name),coachId:p.coachId||'',coachName:p.coachName||'',
-    title:String(d.title||'Untitled build').slice(0,120),brief:String(d.brief||'').slice(0,2000),category:d.category||'Other',status:'IDEA',progress:0,showcase:'none',reviewState:'none',mastery:'none',
+    title:String(d.title||'Untitled project').slice(0,120),brief:String(d.brief||'').slice(0,2000),category:d.category||'Other',status:'IDEA',progress:0,showcase:'none',reviewState:'none',mastery:'none',
+    origin:d.missionId||d.challengeId?'mission':'self',submissionCount:0,materialsSeen:[],practiceIds:[],
     files:[],resources:(d.resources||[]).slice(0,30),versions:[],skills:[],workText:'',workUrl:'',
     writingHtml:'',codeFiles:[],codeActive:'',visibility:'private',
-    aiReflection:{tools:[],purpose:'',changes:'',kept:'',learned:''},
-    disciplines:d.disciplines||[],creationType:d.creationType||'',
+    aiReflection:{tools:[],purpose:'',contribution:'',changes:'',kept:'',learned:''},
+    disciplines:d.disciplines||[],creationType:d.creationType||d.category||'',
     createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
   if(d.missionId) doc.missionId=d.missionId; if(d.challengeId) doc.challengeId=d.challengeId; if(d.templateId) doc.templateId=d.templateId;
-  if(d.missionId){
-    const mission=item(d.missionId);
-    if(mission){
-      if(Array.isArray(mission.aiTools)&&mission.aiTools.length) doc.aiTools=mission.aiTools.map(t=>({name:t.name||'',url:T.safeUrl(t.url)||'',category:t.category||''}));
-      if(mission.aiRules) doc.aiRules=String(mission.aiRules).slice(0,2000);
-      if(Array.isArray(mission.disciplines)&&mission.disciplines.length) doc.disciplines=mission.disciplines.slice();
-      if(mission.creationType) doc.creationType=mission.creationType;
-    }
+  const mission=d.missionId?item(d.missionId):(d.challengeId?item(d.challengeId):null);
+  if(mission){
+    if(Array.isArray(mission.aiTools)&&mission.aiTools.length) doc.aiTools=mission.aiTools.map(t=>({name:t.name||'',url:T.safeUrl(t.url)||'',category:t.category||''}));
+    if(mission.aiRules) doc.aiRules=String(mission.aiRules).slice(0,2000);
+    if(Array.isArray(mission.disciplines)&&mission.disciplines.length) doc.disciplines=mission.disciplines.slice();
+    if(mission.creationType){ doc.creationType=mission.creationType; doc.category=mission.creationType; }
+    if(mission.level) doc.level=mission.level;
   }
-  const ref=await db.collection('techBuilds').add(doc); return ref.id;
+  const ref=await db.collection('techBuilds').add(doc);
+  log(mission?'mission_started':'project_created',(mission?'Started the mission ':'Created the self-led project ')+'“'+doc.title+'”',{buildId:ref.id,missionId:d.missionId||d.challengeId||'',origin:mission?'mission':'self'});
+  return ref.id;
 }
-function openBuild(id){
-  if(S.ws){ S.ws.destroy(); S.ws=null; }
-  S.openId=id; S.v='projects'; setNav('projects');
+function openBuild(id,tab){
+  kill();
+  S.openId=id; S.openTab=tab||null; S.v='projects'; setNav('projects');
   try{ history.replaceState(null,'','#projects'); }catch(e){}
   render(); window.scrollTo(0,0);
 }
+function openItem(id){
+  const it=item(id); if(!it) return;
+  const map={path:'learn',topic:'learn',mission:'missions',challenge:'missions',tool:'toolbox',resource:'learn',template:'learn',aiTool:'toolbox'};
+  kill();
+  S.openId=it.id; S.v=map[it.kind]||'learn';
+  if(it.kind==='challenge') S.mtab='challenges'; if(it.kind==='mission') S.mtab='missions';
+  setNav(S.v); try{ history.replaceState(null,'','#'+S.v); }catch(er){}
+  render(); window.scrollTo(0,0);
+}
 
+/* Self-led projects: "Create something" */
 function newBuildModal(){
-  const tpls=byKind('template'), missions=byKind('mission');
+  const tpls=byKind('template');
   const m=document.createElement('div'); m.className='modal-bg';
-  m.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-labelledby="nbHead"><h2 id="nbHead">New project</h2>'+
-    '<div class="field"><label for="nbN">What are you building?</label><input id="nbN" maxlength="120" placeholder="For example: AI study buddy"></div>'+
-    '<div class="field"><label for="nbC">What kind of project is it?</label><select id="nbC">'+T.CREATION_TYPES.map(c=>'<option value="'+c+'">'+esc(T.CREATION_LABEL[c]||c)+'</option>').join('')+'<option value="Other">Other</option></select></div>'+
-    '<div class="field"><label for="nbB">Your idea in a sentence or two</label><textarea id="nbB" maxlength="2000"></textarea></div>'+
+  m.innerHTML='<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="nbHead"><span class="self-tag"><i class="fas fa-lightbulb"></i> '+esc(T.SELF_LED_LABEL)+'</span><h2 id="nbHead">Create something</h2>'+
+    '<div class="field"><span class="lbl" id="nbCL">What kind of project?</span><div class="type-grid" role="radiogroup" aria-labelledby="nbCL">'+CREATE_TYPES.map((c,i)=>'<label class="type-card"><input type="radio" name="nbC" value="'+c[0]+'"'+(i===0?' checked':'')+'><i class="fas '+(CREATION_ICON[c[0]]||'fa-star')+'"></i><b>'+esc(c[1])+'</b><span>'+esc(c[2])+'</span></label>').join('')+'</div></div>'+
+    '<div class="field"><label for="nbN">Title</label><input id="nbN" maxlength="120" placeholder="For example: My climate blog"></div>'+
+    '<div class="field"><label for="nbB">Describe it in a sentence or two</label><textarea id="nbB" maxlength="2000"></textarea></div>'+
     '<details class="more"><summary>More options</summary>'+
-      (missions.length?'<div class="field"><label for="nbM">Start from a mission</label><select id="nbM"><option value="">No, it’s my own idea</option>'+missions.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.title)+'</option>').join('')+'</select></div>':'')+
       (tpls.length?'<div class="field"><label for="nbT">Start from a template</label><select id="nbT"><option value="">None</option>'+tpls.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.title)+'</option>').join('')+'</select></div>':'')+
-      '<div class="field" style="margin-bottom:0"><span class="lbl" id="nbDL">Disciplines</span><div class="opts" id="nbD" role="group" aria-labelledby="nbDL">'+DISCIPLINES.map(d=>'<label class="opt"><input type="checkbox" value="'+d+'"> '+d+'</label>').join('')+'</div></div>'+
+      '<div class="field" style="margin-bottom:0"><span class="lbl" id="nbDL">Disciplines (mix as many as you like)</span><div class="opts" id="nbD" role="group" aria-labelledby="nbDL">'+DISCIPLINES.map(d=>'<label class="opt"><input type="checkbox" value="'+d+'"> '+d+'</label>').join('')+'</div></div>'+
     '</details>'+
+    '<p class="note-line" style="margin:.2rem 0 0">It opens in the right workspace for its type. You can submit it for coach review and publish it once approved, just like a mission.</p>'+
     '<div class="actions"><button class="btn" type="button" id="nbGo">Create project</button><button class="btn light" type="button" id="nbX">Cancel</button></div><div class="msg" id="nbMsg" role="status"></div></div>';
   document.body.appendChild(m);
   const close=()=>{ document.removeEventListener('keydown',onKey); m.remove(); };
@@ -823,45 +974,103 @@ function newBuildModal(){
   document.addEventListener('keydown',onKey);
   m.querySelector('#nbX').onclick=close;
   m.addEventListener('click',e=>{ if(e.target===m) close(); });
-  const selM=m.querySelector('#nbM'), selT=m.querySelector('#nbT');
-  if(selM) selM.onchange=()=>{ const it=item(selM.value); if(it){ m.querySelector('#nbN').value=it.title; m.querySelector('#nbB').value=it.summary||it.brief||''; if(it.creationType) m.querySelector('#nbC').value=it.creationType; } };
+  const selT=m.querySelector('#nbT');
   if(selT) selT.onchange=()=>{ const t=item(selT.value); if(t){ m.querySelector('#nbN').value=t.title; m.querySelector('#nbB').value=t.summary||''; } };
   m.querySelector('#nbGo').onclick=async()=>{
     const title=m.querySelector('#nbN').value.trim();
-    if(!title){ m.querySelector('#nbMsg').textContent='Give your project a name.'; m.querySelector('#nbN').focus(); return; }
-    const disciplines=[...m.querySelectorAll('#nbD input:checked')].map(x=>x.value);
+    if(!title){ m.querySelector('#nbMsg').textContent='Give your project a title.'; m.querySelector('#nbN').focus(); return; }
+    const cat=(m.querySelector('input[name="nbC"]:checked')||{}).value||'Other';
+    const auto={CODE:['Coding'],WRITING:['Writing'],RESEARCH:['Research'],DESIGN:['Design'],MEDIA:['Media'],MUSIC:['Music'],AI:['AI'],BUILD:[]}[cat]||[];
+    let disciplines=[...m.querySelectorAll('#nbD input:checked')].map(x=>x.value); if(!disciplines.length) disciplines=auto;
     const tplId=selT?selT.value:'', tplItem=tplId?item(tplId):null;
     m.querySelector('#nbGo').disabled=true;
     try{
-      const id=await createBuild({title,brief:m.querySelector('#nbB').value,category:m.querySelector('#nbC').value,missionId:selM?selM.value:'',templateId:tplId,resources:tplItem?(tplItem.resources||[]):[],disciplines});
-      close(); openBuild(id);
+      const id=await createBuild({title,brief:m.querySelector('#nbB').value,category:cat,creationType:cat,templateId:tplId,resources:tplItem?(tplItem.resources||[]):[],disciplines});
+      close(); openBuild(id,T.workspaceFor(cat));
     }catch(e){ m.querySelector('#nbMsg').textContent='Could not create the project: '+T.errMsg(e); m.querySelector('#nbGo').disabled=false; }
   };
   m.querySelector('#nbN').focus();
 }
 
-document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-open],[data-item],[data-start],[data-back],[data-newbuild],[data-go],[data-projfilter],[data-mtab],#pSave'); if(!t||!S.p) return;
-  if(t.dataset.open){ openBuild(t.dataset.open); }
-  else if(t.dataset.item){
-    const it=item(t.dataset.item); if(!it) return;
-    const map={path:'learn',topic:'learn',mission:'missions',challenge:'missions',tool:'toolbox',resource:'learn',template:'learn',aiTool:'toolbox'};
-    if(S.ws){ S.ws.destroy(); S.ws=null; }
-    S.openId=it.id; S.v=map[it.kind]||'learn';
-    if(it.kind==='challenge') S.mtab='challenges'; if(it.kind==='mission') S.mtab='missions';
-    setNav(S.v); try{ history.replaceState(null,'','#'+S.v); }catch(er){}
+/* ---------- practice ---------- */
+async function startPractice(d){
+  const doc={studentId:S.uid,studentName:S.p.name||'',coachId:S.p.coachId||'',type:d.type||'code',title:String(d.title||((PRACTICE_TYPES.find(t=>t[0]===d.type)||[0,'Practice'])[1])).slice(0,120),
+    instructions:String(d.instructions||'').slice(0,1500),missionId:d.missionId||'',missionTitle:d.missionTitle||'',buildId:d.buildId||'',activity:d.activity==null?null:d.activity,
+    writingHtml:'',codeFiles:[],text:d.type==='code'||d.type==='writing'?'':String(d.starter||''),done:false,helpRequested:false,createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
+  if(d.type==='code') doc.codeFiles=[{name:'index.html',lang:'html',content:d.starter||'<!DOCTYPE html>\n<html>\n<body>\n  <h1>Hello!</h1>\n</body>\n</html>'}];
+  if(d.type==='writing'&&d.starter) doc.writingHtml='<p>'+esc(d.starter)+'</p>';
+  try{
+    const ref=await db.collection('techPractice').add(doc);
+    if(d.buildId&&d.activity!=null) db.collection('techBuilds').doc(d.buildId).update({practiceIds:FV().arrayUnion('m'+d.activity+'_'+ref.id),updatedAt:FV().serverTimestamp()}).catch(()=>{});
+    log('practice_saved','Started practice: '+doc.title,{practiceId:ref.id,missionId:doc.missionId});
+    kill(); S.v='practice'; S.openId=ref.id; setNav('practice'); try{ history.replaceState(null,'','#practice'); }catch(e){}
     render(); window.scrollTo(0,0);
+  }catch(e){ alert('Could not start practice: '+T.errMsg(e)); }
+}
+function openPractice(id){
+  const el=$('view');
+  el.innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Practice</button><div id="prHost"><div class="empty">Opening…</div></div>';
+  const host=$('prHost'), ref=db.collection('techPractice').doc(id);
+  let p=null, mod=null, unsub=null, dead=false;
+  const save=patch=>{ patch.updatedAt=FV().serverTimestamp(); return ref.update(patch).then(()=>{ Object.assign(p,patch); log('practice_saved','Saved practice: '+(p.title||''),{practiceId:id}); const m=host.querySelector('#prMsg'); if(m) m.textContent='Saved ✓'; }); };
+  function paint(){
+    if(mod){ try{ mod.destroy(); }catch(e){} mod=null; }
+    const tools=byKind('aiTool').filter(t=>T.safeUrl(t.url));
+    host.innerHTML='<section class="panel"><div class="panel-head"><h2>'+esc(p.title)+'</h2><div class="pills"><span class="pill">Practice · not graded</span>'+(p.missionTitle?'<span class="pill">'+esc(p.missionTitle)+'</span>':'')+(p.done?'<span class="pill ok">Done</span>':'')+'</div></div>'+
+      (p.instructions?'<div class="note" style="margin-bottom:1rem">'+esc(p.instructions)+'</div>':'')+
+      (p.coachNote?'<div class="note coach-note"><b>'+esc(p.coachNoteBy||'Your coach')+':</b> '+esc(p.coachNote)+'</div>':'')+
+      (p.type==='ai'&&tools.length?'<div class="pills" style="margin:.4rem 0 1rem">'+tools.map(t=>'<a class="pill" href="'+esc(T.safeUrl(t.url))+'" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>&nbsp;'+esc(t.name||t.title)+'</a>').join('')+'</div>':'')+
+      '<div id="prTool"></div>'+
+      ((p.type==='research'||p.type==='ai')?'<div class="field" style="margin-top:1rem"><label for="prText">'+(p.type==='ai'?'Your prompts, what the AI gave you, and what you think of it':'Your notes, sources and findings')+'</label><textarea id="prText" style="min-height:220px" maxlength="20000">'+esc(p.text||'')+'</textarea></div>':'')+
+      '<div class="actions" style="flex-wrap:wrap">'+((p.type==='research'||p.type==='ai')?'<button class="btn" type="button" id="prSave">Save</button>':'')+
+        '<button class="btn light" type="button" id="prDone">'+(p.done?'Mark as not done':'Mark as done')+'</button>'+
+        '<button class="btn light" type="button" id="prHelp"'+(p.helpRequested?' disabled':'')+'>'+(p.helpRequested?'Help requested':'Ask my coach for help')+'</button>'+
+        '<button class="btn light" type="button" id="prRetry">Start again</button>'+
+        '<button class="btn light" type="button" id="prDel">Delete</button></div><div class="msg" id="prMsg" role="status"></div></section>';
+    const tool=host.querySelector('#prTool'), fake={id:p.id,studentId:p.studentId,codeFiles:p.codeFiles,codeActive:p.codeActive,writingHtml:p.writingHtml,files:[]};
+    if(p.type==='code'&&window.CodeLab) mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save});
+    else if(p.type==='writing'&&window.WritingStudio) mod=WritingStudio.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,files:[]});
+    const q=s=>host.querySelector(s);
+    if(q('#prSave')) q('#prSave').onclick=()=>save({text:q('#prText').value.slice(0,20000)}).catch(e=>{ q('#prMsg').textContent=T.errMsg(e); });
+    q('#prDone').onclick=()=>{ const done=!p.done; save({done}).then(()=>{ if(done) log('practice_done','Finished practice: '+(p.title||''),{practiceId:id,missionId:p.missionId}); paint(); }); };
+    q('#prHelp').onclick=()=>save({helpRequested:true}).then(()=>{ log('help_requested','Asked for help with practice: '+(p.title||''),{practiceId:id}); paint(); });
+    q('#prRetry').onclick=()=>{ if(!confirm('Clear this practice and start again?')) return; save({codeFiles:p.type==='code'?[{name:'index.html',lang:'html',content:'<!DOCTYPE html>\n<html>\n<body>\n</body>\n</html>'}]:[],writingHtml:'',text:'',done:false}).then(paint); };
+    q('#prDel').onclick=()=>{ if(!confirm('Delete this practice?')) return; ref.delete().then(()=>go('practice')); };
   }
+  unsub=ref.onSnapshot(s=>{
+    if(dead) return;
+    if(!s.exists){ host.innerHTML=emptyBox('Not found','This practice was deleted.'); return; }
+    const first=!p; const prevNote=p&&p.coachNote; p=Object.assign({id:s.id},s.data());
+    if(first||prevNote!==p.coachNote) paint();
+  },e=>{ host.innerHTML=emptyBox('Could not open',esc(T.errMsg(e))); });
+  S.pr={destroy(){ dead=true; if(unsub) unsub(); if(mod){ try{ mod.destroy(); }catch(e){} } }};
+}
+
+document.addEventListener('click',async e=>{
+  const j=e.target.closest('[data-joinlive]'); if(j&&S.p){ const c=S.live[j.dataset.joinlive]; log('live_joined','Joined the live class '+((c&&c.topic)||'')); return; }
+  const t=e.target.closest('[data-open],[data-item],[data-start],[data-back],[data-newbuild],[data-go],[data-projfilter],[data-mtab],[data-newpractice],[data-mpractice],[data-practice],[data-copy],#pSave'); if(!t||!S.p) return;
+  if(t.closest('#wsHost')&&!t.matches('[data-back]')) return;   // the workspace handles its own clicks
+  if(t.dataset.open){ openBuild(t.dataset.open,t.dataset.tab||null); }
+  else if(t.dataset.item){ openItem(t.dataset.item); }
   else if(t.dataset.start){
-    const it=item(t.dataset.start); if(!it) return; t.disabled=true;
-    try{ const id=await createBuild({title:it.title,brief:it.summary||it.brief,category:it.creationType||'Other',resources:it.resources,missionId:it.kind==='mission'?it.id:'',challengeId:it.kind==='challenge'?it.id:'',disciplines:it.disciplines||[]}); openBuild(id); }
+    const it=item(t.dataset.start); if(!it) return;
+    if(lockOf(it)){ alert(lockOf(it)); return; }
+    t.disabled=true;
+    try{ const id=await createBuild({title:it.title,brief:it.brief||it.summary,category:it.creationType||'Other',resources:it.resources,missionId:it.kind==='mission'?it.id:'',challengeId:it.kind==='challenge'?it.id:'',disciplines:it.disciplines||[]}); openBuild(id,(it.materials||[]).length||(it.practice||[]).length?'mission':T.workspaceFor(it.creationType)); }
     catch(er){ t.disabled=false; alert('Could not start: '+T.errMsg(er)); }
   }
-  else if(t.dataset.back!==undefined){ if(S.v==='projects'&&S.openId){ S.openId=null; go('projects'); } else if(S.openId){ S.openId=null; render(); window.scrollTo(0,0); } else go(S.v); }
+  else if(t.dataset.back!==undefined){ const v=S.v; S.openId=null; S.openTab=null; go(v); }
   else if(t.dataset.newbuild!==undefined){ newBuildModal(); }
   else if(t.dataset.go){ go(t.dataset.go); }
   else if(t.dataset.projfilter){ S.projFilter=t.dataset.projfilter; render(true); }
   else if(t.dataset.mtab){ S.mtab=t.dataset.mtab; render(true); }
+  else if(t.dataset.newpractice){ startPractice({type:t.dataset.newpractice}); }
+  else if(t.dataset.mpractice){
+    const [bid,i]=t.dataset.mpractice.split('|'), b=S.builds.find(x=>x.id===bid), m=b&&item(b.missionId), a=m&&(m.practice||[])[Number(i)];
+    if(a) startPractice({type:a.type,title:a.title,instructions:a.instructions,starter:a.starter,missionId:m.id,missionTitle:m.title,buildId:b.id,activity:Number(i)});
+  }
+  else if(t.dataset.practice){ kill(); S.openId=t.dataset.practice; render(); window.scrollTo(0,0); }
+  else if(t.dataset.copy){ const v=t.dataset.copy; (navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>{ t.innerHTML='<i class="fas fa-check"></i> Copied'; },()=>prompt('Copy this link',v)); }
   else if(t.id==='pSave'){
     const tp={identity:$('pId').value,interests:[...document.querySelectorAll('#pInts input:checked')].map(x=>x.value)};
     const msg=$('pMsg'); msg.style.color='';

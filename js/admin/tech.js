@@ -38,7 +38,8 @@
     root.classList.add('cr-root');
     var S = {
       tab: 'applications',
-      students: [], builds: [], wall: [], content: [], chats: [], gchats: [],
+      students: [], builds: [], wall: [], content: [], chats: [], gchats: [], classes: [], desk: [],
+      bf: 'all', panel: null,
       coaches: [], legacy: 0, loaded: false,
       q: '', status: 'all',
       kind: 'all', discipline: 'all', level: 'all',
@@ -52,7 +53,9 @@
     function activeCoaches() { return S.coaches.filter(function (c) { return c.status === 'Active'; }); }
     function call(name, data) { return firebase.functions().httpsCallable(name)(data || {}).then(function (r) { return r.data; }); }
     function toast(m, bad) { var el = root.querySelector('#txMsg'); if (el) { el.textContent = m; el.style.color = bad ? 'var(--error,#E74C3C)' : 'var(--brand-deep,#245F5A)'; setTimeout(function () { if (el.textContent === m) el.textContent = ''; }, 4000); } }
-    function cleanLive() { if (S.ws) { S.ws.destroy(); S.ws = null; } if (S.chat) { S.chat.destroy(); S.chat = null; } }
+    function cleanLive() { if (S.ws) { S.ws.destroy(); S.ws = null; } if (S.chat) { S.chat.destroy(); S.chat = null; } if (S.panel) { S.panel.destroy(); S.panel = null; } }
+    var me = function () { return { uid: o.uid, role: 'admin', name: o.name || 'Studio Desk' }; };
+    var missionOf = function (id) { return S.content.filter(function (c) { return c.id === id; })[0] || null; };
 
     /* ---------------- data ---------------- */
     function listen(q, key, after) {
@@ -60,7 +63,9 @@
         S[key] = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
         if (after) after();
         if (key === 'students') S.loaded = true;
-        if (S.loaded && !document.querySelector('.cr-overlay')) render(); else if (S.loaded) renderTabsOnly();
+        /* Open modals and the live Activity / Practice panels keep their state; only the tab badges refresh. */
+        var busy = document.querySelector('.cr-overlay') || (S.panel && (S.tab === 'activity' || S.tab === 'practice'));
+        if (S.loaded && !busy) render(); else if (S.loaded) renderTabsOnly();
       }, function (e) { console.warn('tech ' + key + ':', e); if (key === 'students') { root.innerHTML = '<div class="cr-panel"><div class="cr-empty">Could not load TECH students: ' + esc(errMsg(e)) + '</div></div>'; } }));
     }
     listen(db.collection('techStudents'), 'students');
@@ -70,6 +75,8 @@
     listen(db.collection('techChats'), 'chats', function () { S.chats.sort(function (a, b) { return ts(b.lastAt) - ts(a.lastAt); }); });
     listen(db.collection('techGuardianChats'), 'gchats', function () { S.gchats.sort(function (a, b) { return ts(b.lastAt) - ts(a.lastAt); }); });
     listen(db.collection('techCoaches'), 'coaches', function () { S.coaches.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }); });
+    listen(db.collection('techLiveClasses'), 'classes', function () { S.classes = T.sortLive(S.classes); });
+    listen(db.collection('parentConversations').where('programme', '==', 'tech'), 'desk', function () { S.desk.sort(function (a, b) { return ts(b.lastMessageAt) - ts(a.lastMessageAt); }); });
     /* Legacy TECH builders still stored as students/{uid} studentType "tech" (before migrateTechArchitecture). */
     db.collection('students').where('studentType', '==', 'tech').get().then(function (snap) {
       S.legacy = snap.docs.filter(function (d) { return !d.data().techMigratedAt; }).length;
@@ -83,11 +90,17 @@
         ['applications', 'fa-user-plus', 'Applications', pa],
         ['builders', 'fa-user-graduate', 'Builders', 0],
         ['coaches', 'fa-chalkboard-user', 'Coaches', 0],
-        ['builds', 'fa-hammer', 'Builds', rv],
-        ['content', 'fa-bullseye', 'Studio Builder', 0],
+        ['builds', 'fa-hammer', 'Projects & reviews', rv],
+        ['missions', 'fa-bullseye', 'Missions', 0],
+        ['content', 'fa-layer-group', 'Studio Builder', 0],
         ['aitools', 'fa-robot', 'AI Toolbox', 0],
+        ['live', 'fa-video', 'Live classes', S.classes.filter(function (c) { return T.liveState(c) === 'live'; }).length],
+        ['activity', 'fa-wave-square', 'Activity', 0],
+        ['practice', 'fa-flask', 'Practice', 0],
+        ['reports', 'fa-chart-column', 'Performance', 0],
         ['messages', 'fa-comments', 'Messages', 0],
-        ['wall', 'fa-trophy', 'TECH Wall', 0]
+        ['desk', 'fa-headset', 'Family desk', S.desk.filter(function (c) { return c.unreadForAdmin; }).length],
+        ['wall', 'fa-trophy', 'Showcase', 0]
       ];
       return '<div class="cr-tabs" role="tablist" id="txTabs">' + tabs.map(function (t) {
         return '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="cr-btn ' + (S.tab === t[0] ? 'on' : '') + '" data-a="tab" data-v="' + t[0] + '"><i class="fas ' + t[1] + '"></i> ' + t[2] +
@@ -101,7 +114,7 @@
       mountAdminBell();
       var b = root.querySelector('#txBody');
       if (!S.loaded) { b.innerHTML = '<div class="cr-empty">Loading TECH…</div>'; return; }
-      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, content: content, aitools: aiTools, messages: messages, wall: wall }[S.tab] || applications);
+      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, missions: missionsTab, content: content, aitools: aiTools, live: liveTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall }[S.tab] || applications);
       view(b);
     }
     /* The TECH bell survives re-renders: its element is moved into each new header row. */
@@ -111,6 +124,8 @@
       if (!bellEl) { bellEl = document.createElement('div'); S.bell = T.mountBell(bellEl, { uid: o.uid, onOpen: function (n) {
         if (n.buildId && S.builds.some(function (x) { return x.id === n.buildId; })) { openBuild(n.buildId); return true; }
         if (n.type === 'tech_application') { S.tab = 'applications'; render(); return true; }
+        if (n.classId) { S.tab = 'live'; render(); return true; }
+        if (n.type === 'tech_desk_message') { S.tab = 'desk'; render(); return true; }
         if (n.chatId) { S.tab = 'messages'; render(); return true; }
         return true;
       } }); }
@@ -176,9 +191,10 @@
         var id = esc(s.id);
         var ng = (s.guardianAccounts || []).length;
         return '<tr><td><b>' + esc(s.name) + '</b><div class="cr-note">' + esc(s.email) + '</div>' + ((s.programmes || []).length ? '<span class="badge b-plain">Also: ' + esc(s.programmes.join(', ')) + '</span>' : '') + '</td><td>' + badge(status(s)) + '</td>' +
-          '<td>' + esc(s.coachName || coachName(s.coachId) || '—') + '</td><td>' + (ng ? ng + ' linked' : ((s.guardians || []).length ? '<span class="cr-note">Not linked</span>' : '—')) + '</td><td>' + nb + '</td><td>' + nm + '</td><td class="cr-note">' + fmtDate(s.lastLoginAt) + '</td>' +
+          '<td>' + esc(s.coachName || coachName(s.coachId) || '—') + '</td><td>' + (ng ? ng + ' linked' : ((s.guardians || []).length ? '<span class="cr-note">Not linked</span>' : '—')) + '</td><td>' + nb + '</td><td>' + nm + '</td><td class="cr-note" title="' + esc(fmtDate(T.lastSeen(s))) + '">' + esc(T.ago(T.lastSeen(s))) + '</td>' +
           '<td><div class="cr-actions"><button type="button" class="cr-btn sm" data-a="coach" data-id="' + id + '" title="Pair coach"><i class="fas fa-chalkboard-user"></i></button>' +
           '<button type="button" class="cr-btn sm" data-a="guardians" data-id="' + id + '" title="Parents and guardians"><i class="fas fa-user-shield"></i></button>' +
+          '<button type="button" class="cr-btn sm" data-a="actof" data-id="' + id + '" title="Activity timeline"><i class="fas fa-wave-square"></i></button>' +
           (s.status === 'Active' ? '<button type="button" class="cr-btn sm danger" data-a="lock" data-id="' + id + '" title="Lock account"><i class="fas fa-lock"></i></button>'
             : '<button type="button" class="cr-btn sm primary" data-a="unlock" data-id="' + id + '" title="Unlock account"><i class="fas fa-lock-open"></i> Unlock</button>') + '</div></td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -258,29 +274,141 @@
     }
 
     /* ---------------- builds ---------------- */
+    /* Every project — assigned missions and SELF-LED student projects, submitted or not. */
     function builds(b) {
-      var h = '<div class="cr-bar"><div><h3>Builds</h3><div class="cr-sub">Everything students are making. Open one to read the brief, review work, approve mastery, or approve for the TECH Wall.</div></div></div>';
-      if (!S.builds.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No student builds yet.</div></div>'; return; }
-      b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Build</th><th>Builder</th><th>Discipline</th><th>Stage</th><th>Mastery</th><th>Needs</th><th></th></tr></thead><tbody>' + S.builds.map(function (x) {
-        var disc = Array.isArray(x.disciplines) && x.disciplines.length ? x.disciplines.join(', ') : (x.discipline || '—');
-        var needs = [];
-        if (x.showcase === 'requested') needs.push('<span class="badge b-pending">Wall request</span>');
-        if (x.reviewState === 'requested') needs.push('<span class="badge b-pending">Review</span>');
-        if (x.mastery === 'requested') needs.push('<span class="badge b-pending">Mastery</span>');
-        if (x.showcase === 'approved') needs.push('<span class="badge b-confirmed">On the Wall</span>');
-        if (!needs.length) needs = ['—'];
-        var mastery = x.mastery === 'approved' ? '<span class="badge b-confirmed">Approved</span>' :
-                     x.mastery === 'changes' ? '<span class="badge b-declined">Changes</span>' :
-                     x.mastery === 'requested' ? '<span class="badge b-pending">Requested</span>' : '—';
-        return '<tr><td><b>' + esc(x.title) + '</b><div class="cr-note">' + esc(x.category || '') + '</div></td><td>' + esc(x.studentName) + '</td><td class="cr-note">' + esc(disc) + '</td><td><span class="badge b-plain">' + esc(T.STATUS_LABEL[x.status] || x.status) + '</span> ' + (Number(x.progress) || 0) + '%</td><td>' + mastery + '</td><td>' + needs.join(' ') + '</td>' +
+      var F = {
+        all: function () { return true; },
+        waiting: function (x) { return x.reviewState === 'requested' || x.reviewState === 'reviewing' || x.showcase === 'requested'; },
+        mission: function (x) { return !T.isSelfLed(x); }, self: function (x) { return T.isSelfLed(x); },
+        draft: function (x) { return T.projectState(x) === 'in_progress'; },
+        revision: function (x) { return T.projectState(x) === 'revision'; },
+        approved: function (x) { return ['approved', 'mastered'].indexOf(T.projectState(x)) !== -1; },
+        published: function (x) { return x.showcase === 'approved'; },
+        nocoach: function (x) { return !x.coachId; }
+      };
+      var LAB = { all: 'All', waiting: 'Waiting for review', mission: 'Missions', self: 'Self-led', draft: 'Not submitted', revision: 'Revision', approved: 'Approved', published: 'Published', nocoach: 'No coach' };
+      var list = S.builds.filter(F[S.bf] || F.all);
+      var h = '<div class="cr-bar"><div><h3>Projects &amp; reviews</h3><div class="cr-sub">Every mission and self-led project, including work not submitted yet. Open one to see the work, assess it, grade it, approve mastery or publish it.</div></div></div>' +
+        '<div class="cr-filters">' + Object.keys(LAB).map(function (k) { return '<button type="button" class="cr-btn sm ' + (S.bf === k ? 'on primary' : '') + '" data-a="bf" data-v="' + k + '">' + LAB[k] + ' (' + S.builds.filter(F[k]).length + ')</button>'; }).join('') + '</div>';
+      if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">Nothing here.</div></div>'; return; }
+      b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Project</th><th>Builder</th><th>Coach</th><th>State</th><th>Grade</th><th>Updated</th><th></th></tr></thead><tbody>' + list.map(function (x) {
+        var disc = T.disciplinesOf(x).join(', ');
+        return '<tr><td><b>' + esc(x.title) + '</b><div style="margin:.2rem 0">' + T.originTag(x) + '</div><div class="cr-note">' + esc(T.CREATION_LABEL[x.category] || x.category || '') + (disc ? ' · ' + esc(disc) : '') + '</div></td><td>' + esc(x.studentName) + '</td><td class="cr-note">' + esc(x.coachName || '—') + '</td>' +
+          '<td>' + T.statePill(x) + (x.showcase === 'approved' ? ' <span class="tk-pill gold">Published</span>' : x.showcase === 'requested' ? ' <span class="tk-pill warn">Publish request</span>' : '') + ((Number(x.submissionCount) || 0) > 1 ? '<div class="cr-note">' + x.submissionCount + ' submissions</div>' : '') + '</td>' +
+          '<td>' + (x.gradeLabel ? esc(x.gradeLabel) + (x.gradeScore != null && x.gradeScore !== '' ? ' · ' + esc(x.gradeScore) + '%' : '') : '—') + '</td><td class="cr-note">' + fmtDate(x.updatedAt) + '</td>' +
           '<td><button type="button" class="cr-btn sm primary" data-a="open" data-id="' + esc(x.id) + '"><i class="fas fa-eye"></i> Open</button></td></tr>';
       }).join('') + '</tbody></table></div>';
+    }
+
+    /* ---------------- Missions (shared editor with the coach portal) ---------------- */
+    function missionsTab(b) {
+      var list = S.content.filter(function (c) { return c.kind === 'mission' || c.kind === 'challenge'; });
+      var h = '<div class="cr-bar"><div><h3>Missions</h3><div class="cr-sub">Learning objectives, instructions, study materials and videos, practice, the task, submission requirements, assessment criteria, AI tools, level, availability and who gets it. Coaches write missions for their own builders; you can edit any.</div></div><button type="button" class="cr-btn primary" data-a="newm"><i class="fas fa-plus"></i> New mission</button></div>';
+      if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No missions yet.</div></div>'; return; }
+      b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Mission</th><th>Level</th><th>Materials</th><th>For</th><th>Started</th><th>By</th><th>Status</th><th></th></tr></thead><tbody>' + list.map(function (c) {
+        var mats = c.materials || [], vids = mats.filter(function (x) { return x.type === 'video'; }).length;
+        var started = S.builds.filter(function (x) { return x.missionId === c.id || x.challengeId === c.id; });
+        return '<tr><td><b>' + esc(c.title) + '</b><div class="cr-note">' + esc(c.kind === 'challenge' ? 'Challenge' : 'Mission') + ((c.disciplines || []).length ? ' · ' + esc(c.disciplines.join(', ')) : '') + (c.deadline ? ' · due ' + esc(c.deadline) : '') + '</div></td>' +
+          '<td>' + (c.level ? esc(T.levelName(c.level)) : '—') + '</td><td class="cr-note">' + mats.length + (vids ? ' (' + vids + ' video' + (vids === 1 ? '' : 's') + ')' : '') + ' · ' + (c.practice || []).length + ' practice · ' + (c.criteria || []).length + ' criteria</td>' +
+          '<td class="cr-note">' + (c.audience === 'selected' ? (c.studentIds || []).length + ' builder(s)' : 'Everyone') + '</td>' +
+          '<td>' + started.length + ' <span class="cr-note">(' + started.filter(function (x) { return x.mastery === 'approved'; }).length + ' mastered)</span></td>' +
+          '<td class="cr-note">' + esc(coachName(c.createdBy) || (c.createdByName || 'Studio Desk')) + '</td>' +
+          '<td>' + (c.status === 'published' ? '<span class="badge b-confirmed">Released</span>' : '<span class="badge b-pending">Draft</span>') + '</td>' +
+          '<td><div class="cr-actions"><button type="button" class="cr-btn sm" data-a="editm" data-id="' + esc(c.id) + '"><i class="fas fa-pen"></i></button><button type="button" class="cr-btn sm" data-a="toggle" data-id="' + esc(c.id) + '" title="' + (c.status === 'published' ? 'Unrelease' : 'Release') + '"><i class="fas ' + (c.status === 'published' ? 'fa-eye-slash' : 'fa-paper-plane') + '"></i></button></div></td></tr>';
+      }).join('') + '</tbody></table></div>';
+    }
+    function openMission(id) {
+      TechManage.editMission({ me: me(), item: id ? missionOf(id) : null, students: S.students, missions: S.content,
+        aiTools: S.content.filter(function (c) { return c.kind === 'aiTool' && c.status === 'published'; }), onSaved: function () { toast('Mission saved.'); } });
+    }
+
+    /* ---------------- Live classes ---------------- */
+    function liveTab(b) {
+      var h = '<div class="cr-bar"><div><h3>Live classes</h3><div class="cr-sub">Google Meet sessions. Builders, their parents or guardians, the coach and admins are notified when a class is scheduled, changed or cancelled.</div></div><button type="button" class="cr-btn primary" data-a="newlive"><i class="fas fa-plus"></i> Schedule a class</button></div>';
+      b.innerHTML = h + (S.classes.length ? '<div style="display:grid;gap:.7rem">' + S.classes.map(function (c) {
+        return T.liveCardHtml(c, { manage: true }) + '<div class="cr-note" style="margin:-.3rem 0 0 .4rem">' + (c.audience === 'selected' ? 'For ' + esc((c.studentIds || []).map(function (id) { var s = S.students.filter(function (x) { return x.id === id; })[0]; return s ? s.name : 'a builder'; }).join(', ')) : 'For every active builder') + ((c.parentUids || []).length ? ' · ' + c.parentUids.length + ' guardian(s) can see it' : '') + '</div>';
+      }).join('') + '</div>' : '<div class="cr-panel"><div class="cr-empty">No live classes yet.</div></div>');
+    }
+    function activityTab(b) {
+      b.innerHTML = '<div class="cr-bar"><div><h3>Activity</h3><div class="cr-sub">Real events recorded as builders work: sessions, projects opened and saved, materials and videos, practice, submissions, revisions, reviews, mastery and publication. Last seen is the latest of sign-in and activity.</div></div></div><div id="txPanel"></div>';
+      S.panel = TechManage.mountActivity(b.querySelector('#txPanel'), { me: me(), students: S.students });
+    }
+    function practiceTab(b) {
+      b.innerHTML = '<div class="cr-bar"><div><h3>Practice</h3><div class="cr-sub">Practice work is never graded. Coaches answer help requests; you can too.</div></div></div><div id="txPanel"></div>';
+      S.panel = TechManage.mountPractice(b.querySelector('#txPanel'), { me: me(), students: S.students });
+    }
+    function openActivityOf(id) {
+      var s = S.students.filter(function (x) { return x.id === id; })[0]; if (!s) return;
+      var m = CU.openModal({ title: (s.name || 'Builder') + ' · activity', wide: true, onClose: cleanLive });
+      m.body.innerHTML = '<div id="txAct"></div>';
+      S.panel = TechManage.mountActivity(m.body.querySelector('#txAct'), { me: me(), students: S.students, studentId: id });
+      m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
+      m.foot.querySelector('[data-a="x"]').onclick = function () { cleanLive(); m.close(); };
+    }
+
+    /* ---------------- Performance ---------------- */
+    function reports(b) {
+      var act = S.students.filter(function (s) { return s.status === 'Active'; });
+      var week = Date.now() - 7 * 864e5;
+      var seen7 = act.filter(function (s) { return (CU.toDate(T.lastSeen(s)) || 0) > week; }).length;
+      var subs = S.builds.filter(function (x) { return (Number(x.submissionCount) || 0) > 0; });
+      var grades = {}; T.GRADES.forEach(function (g2) { grades[g2] = 0; });
+      S.builds.forEach(function (x) { if (x.gradeLabel && grades[x.gradeLabel] != null) grades[x.gradeLabel]++; });
+      var byDisc = T.DISCIPLINES.map(function (d) {
+        var inD = S.builds.filter(function (x) { return T.disciplinesOf(x).indexOf(d) !== -1; });
+        return '<tr><td><b>' + esc(d) + '</b></td><td>' + inD.length + '</td><td>' + inD.filter(function (x) { return (Number(x.submissionCount) || 0) > 0; }).length + '</td><td>' + inD.filter(function (x) { return x.mastery === 'approved'; }).length + '</td><td>' + inD.filter(function (x) { return x.showcase === 'approved'; }).length + '</td></tr>';
+      }).join('');
+      var byCoach = S.coaches.map(function (c) {
+        var cb = S.builds.filter(function (x) { return x.coachId === c.id; });
+        var waiting = cb.filter(function (x) { return x.reviewState === 'requested' || x.reviewState === 'reviewing'; });
+        var oldest = waiting.reduce(function (m2, x) { var t2 = ts(x.submittedAt); return t2 && (!m2 || t2 < m2) ? t2 : m2; }, 0);
+        return '<tr><td><b>' + esc(c.name) + '</b></td><td>' + S.students.filter(function (s) { return s.coachId === c.id && s.status === 'Active'; }).length + '</td><td>' + waiting.length + '</td><td class="cr-note">' + (oldest ? T.ago(new Date(oldest)) : '—') + '</td><td>' + cb.filter(function (x) { return x.reviewedAt; }).length + '</td></tr>';
+      }).join('');
+      b.innerHTML = '<div class="cr-bar"><div><h3>Performance</h3><div class="cr-sub">Live figures from TECH records.</div></div></div>' +
+        '<div class="cr-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:1rem">' + stat(act.length, 'Active builders') + stat(seen7, 'Seen in the last 7 days') + stat(S.builds.length, 'Projects') + stat(S.builds.filter(function (x) { return T.isSelfLed(x); }).length, 'Self-led projects') + stat(subs.length, 'Submitted at least once') + stat(S.builds.filter(function (x) { return x.reviewState === 'requested' || x.reviewState === 'reviewing'; }).length, 'Waiting for review') + stat(S.builds.filter(function (x) { return x.mastery === 'approved'; }).length, 'Mastered') + stat(S.builds.filter(function (x) { return x.showcase === 'approved'; }).length, 'Published') + '</div>' +
+        '<h4 style="margin:.4rem 0 .6rem;color:var(--brand-deep)">Grades given</h4><div class="cr-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:1rem">' + T.GRADES.map(function (g2) { return stat(grades[g2], g2); }).join('') + '</div>' +
+        '<h4 style="margin:.4rem 0 .6rem;color:var(--brand-deep)">By discipline</h4><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Discipline</th><th>Projects</th><th>Submitted</th><th>Mastered</th><th>Published</th></tr></thead><tbody>' + byDisc + '</tbody></table></div>' +
+        '<h4 style="margin:1.2rem 0 .6rem;color:var(--brand-deep)">By coach</h4><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Coach</th><th>Builders</th><th>Waiting</th><th>Oldest waiting</th><th>Reviewed</th></tr></thead><tbody>' + (byCoach || '<tr><td colspan="5">No coaches.</td></tr>') + '</tbody></table></div>';
+    }
+
+    /* ---------------- Family desk (parent ↔ Studio Desk) ---------------- */
+    function deskTab(b) {
+      var h = '<div class="cr-bar"><div><h3>Family desk</h3><div class="cr-sub">Private messages from TECH parents and guardians to the Studio Desk (the same system as the Parent Portal). Coach conversations stay in Messages.</div></div></div>';
+      b.innerHTML = h + (S.desk.length ? '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Parent / guardian</th><th>Builder</th><th>Last message</th><th>When</th><th></th></tr></thead><tbody>' + S.desk.map(function (c) {
+        return '<tr><td><b>' + esc(c.parentName || 'Guardian') + '</b></td><td>' + esc(c.studentName || '') + '</td><td class="cr-note">' + (c.unreadForAdmin ? '<span class="badge b-pending">New</span> ' : '') + esc(c.lastMessage || '') + '</td><td class="cr-note">' + fmtDate(c.lastMessageAt) + '</td>' +
+          '<td><button type="button" class="cr-btn sm primary" data-a="desk" data-id="' + esc(c.parentUid + '_' + c.studentUid) + '"><i class="fas fa-comments"></i> Open</button></td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="cr-panel"><div class="cr-empty">No messages from TECH families yet.</div></div>');
+    }
+    function openDesk(cid) {
+      var c = S.desk.filter(function (x) { return x.parentUid + '_' + x.studentUid === cid; })[0]; if (!c) return;
+      var ref = db.collection('parentConversations').doc(cid);
+      var m = CU.openModal({ title: (c.parentName || 'Guardian') + ' about ' + (c.studentName || 'their child'), wide: true, onClose: cleanLive });
+      m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.6rem"><i class="fas fa-lock"></i> Private between the Studio Desk and this family. They get an email when you reply.</div><div id="dkList" style="max-height:360px;overflow:auto;display:flex;flex-direction:column;gap:.4rem"></div>' +
+        '<textarea id="dkText" rows="3" maxlength="4000" style="width:100%;margin-top:.8rem;padding:.6rem;border:1.5px solid var(--line);border-radius:10px;font:inherit" placeholder="Reply…"></textarea>';
+      var list = m.body.querySelector('#dkList');
+      var u = ref.collection('messages').orderBy('createdAt').limitToLast(200).onSnapshot(function (s) {
+        var msgs = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        list.innerHTML = msgs.map(function (x) { var mine = x.senderRole === 'admin'; return '<div style="align-self:' + (mine ? 'flex-end' : 'flex-start') + ';max-width:80%;background:' + (mine ? 'var(--brand,#55BFB3)' : 'var(--sage,#E5F2EF)') + ';border-radius:12px;padding:.5rem .75rem;white-space:pre-wrap"><div class="cr-note" style="font-weight:800">' + esc(mine ? (x.senderName || 'Studio Desk') : (x.senderName || 'Parent')) + ' · ' + fmtDate(x.createdAt) + '</div>' + esc(x.text) + '</div>'; }).join('') || '<div class="cr-empty">No messages.</div>';
+        list.scrollTop = list.scrollHeight;
+        var unread = msgs.filter(function (x) { return x.senderRole === 'parent' && x.read !== true; });
+        if (unread.length) { var bt = db.batch(); unread.forEach(function (x) { bt.update(ref.collection('messages').doc(x.id), { read: true }); }); bt.update(ref, { unreadForAdmin: false }); bt.commit().catch(function () { }); }
+      });
+      S.panel = { destroy: u };
+      m.foot.innerHTML = '<span class="cr-err" id="txErr"></span><button type="button" class="cr-btn" data-a="x">Close</button><button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-paper-plane"></i> Send</button>';
+      m.foot.querySelector('[data-a="x"]').onclick = function () { cleanLive(); m.close(); };
+      m.foot.querySelector('[data-a="go"]').onclick = function () {
+        var text = m.body.querySelector('#dkText').value.trim(), btn = this; if (!text) return; btn.disabled = true;
+        var bt = db.batch();
+        bt.set(ref, { lastMessage: text.slice(0, 140), lastMessageAt: FV().serverTimestamp(), lastSenderRole: 'admin', unreadForAdmin: false, unreadForParent: true }, { merge: true });
+        bt.set(ref.collection('messages').doc(), { conversationId: cid, parentUid: c.parentUid, studentUid: c.studentUid, adminUid: o.uid, senderUid: o.uid, senderRole: 'admin', senderName: o.name || 'Studio Desk', text: text.slice(0, 4000), read: false, createdAt: FV().serverTimestamp() });
+        bt.commit().then(function () { m.body.querySelector('#dkText').value = ''; btn.disabled = false; }).catch(function (e) { btn.disabled = false; m.foot.querySelector('#txErr').textContent = errMsg(e); });
+      };
     }
     function openBuild(id) {
       var x = S.builds.filter(function (y) { return y.id === id; })[0]; if (!x) return;
       var m = CU.openModal({ title: x.title || 'Build', wide: true, onClose: cleanLive });
       m.body.innerHTML = '<div id="txWs"></div>';
-      S.ws = T.mountWorkspace(m.body.querySelector('#txWs'), { id: id, me: { uid: o.uid, role: 'admin', name: o.name || 'Studio Desk' } });
+      S.ws = T.mountWorkspace(m.body.querySelector('#txWs'), { id: id, me: me(), mission: x.missionId ? missionOf(x.missionId) : null, findMission: missionOf });
       m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
       m.foot.querySelector('[data-a="x"]').onclick = function () { cleanLive(); m.close(); };
     }
@@ -302,6 +430,7 @@
         '<div class="cr-filters"><select data-f="kind" aria-label="Type"><option value="all">All types</option>' + KINDS.map(function (k) { return '<option value="' + k[0] + '"' + (S.kind === k[0] ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('') + '</select>' +
         '<select data-f="discipline" aria-label="Discipline">' + discOpts + '</select>' +
         '<select data-f="level" aria-label="Level">' + levelOpts + '</select></div>';
+      h += '<div class="cr-note" style="margin:-.3rem 0 .8rem">Missions and challenges, with study materials and videos, are edited in the <b>Missions</b> tab.</div>';
       if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">Nothing here yet. Add the first item.</div></div>'; return; }
       b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Title</th><th>Type</th><th>Level</th><th>Discipline</th><th>By</th><th>Status</th><th></th></tr></thead><tbody>' + list.map(function (c) {
         var live = c.status === 'published', id = esc(c.id);
@@ -497,6 +626,12 @@
         }).catch(function (e) { t.disabled = false; out.textContent = errMsg(e); });
       }
       else if (a === 'open') openBuild(id);
+      else if (a === 'bf') { S.bf = t.dataset.v; render(); }
+      else if (a === 'newm') openMission(null);
+      else if (a === 'editm') openMission(id);
+      else if (a === 'newlive') TechManage.editLive({ me: me(), students: S.students, coaches: S.coaches });
+      else if (a === 'actof') openActivityOf(id);
+      else if (a === 'desk') openDesk(id);
       else if (a === 'new') openEditor();
       else if (a === 'new-ai') {
         /* Jump to the editor pre-set to aiTool */
@@ -510,12 +645,17 @@
           if (k) { k.value = 'aiTool'; k.dispatchEvent(new Event('change')); }
         }, 20);
       }
-      else if (a === 'edit') openEditor(id);
+      else if (a === 'edit') { var ed = missionOf(id); if (ed && (ed.kind === 'mission' || ed.kind === 'challenge')) openMission(id); else openEditor(id); }
       else if (a === 'toggle') { var it = S.content.filter(function (x) { return x.id === id; })[0]; if (it) db.collection('techContent').doc(id).update({ status: it.status === 'published' ? 'draft' : 'published', updatedAt: FV().serverTimestamp() }).catch(fail); }
       else if (a === 'del') { if (confirm('Delete this item? This cannot be undone.')) db.collection('techContent').doc(id).delete().catch(fail); }
       else if (a === 'chat') openChat(id);
       else if (a === 'feat') { var w = S.wall.filter(function (x) { return x.id === id; })[0]; if (w) db.collection('techShowcase').doc(id).update({ featured: !w.featured }).catch(fail); }
       else if (a === 'unpub') { if (confirm('Remove this build from the public TECH Wall?')) T.removeShowcase({ id: id }).then(function () { toast('Removed from the Wall.'); }).catch(fail); }
+    });
+    /* Live-class cards render their own edit buttons (TechUI.liveCardHtml). */
+    root.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-editlive]'); if (!t) return;
+      TechManage.editLive({ me: me(), item: S.classes.filter(function (c) { return c.id === t.dataset.editlive; })[0], students: S.students, coaches: S.coaches });
     });
     root.addEventListener('input', function (e) { if (e.target.dataset.f === 'q') { S.q = e.target.value; var pos = e.target.selectionStart; render(); var i = root.querySelector('[data-f="q"]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (x) { } } } });
     root.addEventListener('change', function (e) {

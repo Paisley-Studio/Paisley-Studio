@@ -161,11 +161,18 @@ TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH
 | `techGuardianLinks/{parentUid}_{studentUid}` | admin / Cloud Functions | the guardian, admin | admin |
 | `techGuardianChats/{parentUid}_{studentUid}` (+ `messages`) | the linked guardian (coachId must be the builder's current coach), or that coach | guardian, the chat's coach, admin | participants: last-message fields only. Message `senderRole` must match the sender |
 | `techNotifications` | Cloud Functions only | recipient, admin | recipient may only flip `read` |
-| `techBuilds` (+ `feedback`) | active builder; `coachId` must equal their current coach | builder, their coach, linked guardians, admin | builder (cannot change coach / approve themselves), coach (review fields only), admin |
+| `techBuilds` (+ `feedback`) | active builder; `coachId` must equal their current coach | builder, their coach, linked guardians, admin | builder (cannot change coach / approve themselves / write grade or review fields, `techReviewKeys()`), coach (review, grading and publication fields only), admin |
+| `techBuilds/{id}/submissions` | the active builder, `status: 'submitted'`, no review fields | builder, their coach, linked guardians, admin | coach: review fields and `status` only; admin. Never the submitted work |
+| `techPractice` | active builder, own, no coach note | builder, their coach, admin | builder (not the coach note); coach: note and `helpRequested` only; admin |
+| `techActivity` | active builder, own events only, `at == request.time`, listed `type`s (Cloud Functions add review / mastery / publication events) | builder, their coach, linked guardians, admin | nobody (admin may delete) |
+| `techLiveClasses` | admin (any audience); coach with `coachId` = self, `audience: 'selected'`, no `parentUids` | admin, any active coach, active builders when `audience == 'all'` or listed in `studentIds`, guardians listed in `parentUids` (set by `onTechLiveClassWritten`) | admin; the class's coach (still `selected`, cannot touch `parentUids` / `notifyKey`) |
+| `parentConversations` (TECH) | guardians linked by `techGuardianLinks` may use the Studio Desk thread too (`isDeskParent`) | | |
 | `techShowcase/{buildId}` (public Tech Wall) | admin, or the build's coach | anyone | admin or the build's coach; the builder may delete (take it down) |
 | `shareTokens/{buildId}` (family links) | admin, the builder, or the build's coach | same | same |
 | `techChats`, `techProgress`, `techContent` | as before, but "coach" now means an active `techCoaches` doc, never a tutor | | |
 
 Storage `techBuilds/{studentId}/{buildId}/…`: uploads by admins or an **Active** builder into one of their own builds. Reads by the builder, their **Active** coach, linked guardians and admins.
+
+Storage `techContent/{contentId}/…` (mission study materials): uploads by admins or the **Active** coach who created that mission (the mission doc must exist first); videos up to 500 MB, documents, images and audio up to 50 MB, never HTML or JavaScript. Reads by admins and Active builders and coaches.
 
 Guardians sign in with their `parentAccounts` identity, so a parent who already uses the Parent Portal keeps one login. Rules tests: `tests/rules/tech.rules.test.js`. Deployment order: `TECH_UPGRADE.md`.

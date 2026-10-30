@@ -247,6 +247,34 @@ service firebase.storage {
       allow delete: if isSignedIn() && (request.auth.uid == studentId || isAdmin());
     }
 
+    // =====================================================
+    // PAISLEY TECH — mission study materials (techContent/{contentId}/{file})
+    // Videos, documents, images and examples a coach or the Studio Desk attaches
+    // to a mission. The mission doc must exist first; a coach may only upload to
+    // their own missions. Read by any TECH builder, coach or admin.
+    // =====================================================
+    function techActiveIn(coll) {
+      return firestore.exists(/databases/(default)/documents/$(coll)/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/$(coll)/$(request.auth.uid)).data.status == 'Active';
+    }
+    match /techContent/{contentId}/{fileName} {
+      allow read: if isSignedIn() && (isAdmin() || techActiveIn('techStudents') || techActiveIn('techCoaches'));
+      allow create, update: if isSignedIn() &&
+        (isAdmin() ||
+          (techActiveIn('techCoaches') &&
+            firestore.get(/databases/(default)/documents/techContent/$(contentId)).data.createdBy == request.auth.uid)) &&
+        ((request.resource.contentType.matches('video/.*') && request.resource.size < 500 * 1024 * 1024) ||
+          ((isEducationalFile() || request.resource.contentType.matches('text/(plain|csv)') ||
+            request.resource.contentType.matches('application/(msword|vnd[.]openxmlformats-officedocument[.].*|vnd[.]ms-.*|zip)')) &&
+            request.resource.size < 50 * 1024 * 1024)) &&
+        !request.resource.contentType.matches('text/html') &&
+        !request.resource.contentType.matches('.*javascript.*');
+      allow delete: if isSignedIn() &&
+        (isAdmin() ||
+          (techActiveIn('techCoaches') &&
+            firestore.get(/databases/(default)/documents/techContent/$(contentId)).data.createdBy == request.auth.uid));
+    }
+
     // Default deny
     match /{allPaths=**} {
       allow read, write: if false;

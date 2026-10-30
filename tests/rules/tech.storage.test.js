@@ -45,3 +45,20 @@ test("builder, active coach and linked guardian can read build files", async () 
   await assertFails(st("paused").ref("techBuilds/kid1/b1/seed.png").getMetadata());
   await assertFails(st("stranger").ref("techBuilds/kid1/b1/seed.png").getMetadata());
 });
+
+test("mission materials: the mission's coach or an admin uploads; TECH members read", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc("techCoaches/coach2").set({ status: "Active" });
+    await ctx.firestore().doc("admins/admin1").set({ name: "Desk" });
+    await ctx.firestore().doc("techContent/m1").set({ createdBy: "coach1", kind: "mission", status: "draft" });
+  });
+  const video = { contentType: "video/mp4" }, pdf = { contentType: "application/pdf" };
+  await assertSucceeds(st("coach1").ref("techContent/m1/intro.mp4").put(file(), video));
+  await assertSucceeds(st("coach1").ref("techContent/m1/notes.pdf").put(file(), pdf));
+  await assertSucceeds(st("admin1").ref("techContent/m1/extra.pdf").put(file(), pdf));
+  await assertFails(st("coach2").ref("techContent/m1/x.mp4").put(file(), video));
+  await assertFails(st("kid1").ref("techContent/m1/x.png").put(file(), meta));
+  await assertFails(st("coach1").ref("techContent/m1/x.html").put(file(), { contentType: "text/html" }));
+  await assertSucceeds(st("kid1").ref("techContent/m1/intro.mp4").getMetadata());
+  await assertFails(st("stranger").ref("techContent/m1/intro.mp4").getMetadata());
+});

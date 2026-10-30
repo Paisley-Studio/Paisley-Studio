@@ -21,12 +21,23 @@
      onTechEnrolmentUpdated   first approval: welcome + guardian accounts linked;
                               coach change: coach, builder and guardians told,
                               builds re-pointed at the new coach.
-     onTechBuildCreated       coach + guardians told a project started.
-     onTechBuildUpdated       review / showcase / mastery requests -> coach;
-                              showcase approved -> builder + guardians;
-                              mastery approved -> techProgress recomputed,
-                              builder + guardians told.
-     onTechFeedbackCreated    build comment: bell to the other side.
+     onTechBuildCreated       coach + guardians told a mission or self-led
+                              project started.
+     onTechBuildUpdated       submissions / resubmissions -> coach (email) and
+                              guardians; review outcomes, publication and
+                              mastery go on the activity timeline (techActivity);
+                              published -> builder + guardians with the
+                              /tech/p/{id} link; mastery -> techProgress
+                              recomputed, "next level unlocked" per discipline.
+     onTechFeedbackCreated    coach review (approve / revision / grade) ->
+                              builder + guardians, bell and email.
+     onTechContentWritten     mission / challenge released -> its audience
+                              (all active builders or studentIds) + guardians.
+     onTechLiveClassWritten   live class scheduled / changed / cancelled ->
+                              builders, guardians, coach, admins; fills
+                              parentUids so guardians can read the class.
+     onTechFamilyDeskMessage  TECH guardian -> Studio Desk (parentConversations)
+                              raises the admin TECH bell.
      onTechMessageCreated     builder <-> coach chat.
      onTechGuardianMessageCreated  guardian <-> coach chat.
    Callables (admin only)
@@ -37,7 +48,7 @@
    HTTP
      techShare                GET /tech/b/:id share page (unchanged).
 ========================================================= */
-const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
@@ -67,18 +78,44 @@ const LINKS = {
 /* ---------------------------------------------------------
    TECH notifications — techNotifications only.
 --------------------------------------------------------- */
+/* extra.id makes the notification idempotent: the same event retried (or re-saved)
+   writes the same doc once, so nobody gets a duplicate. Returns false when it already existed. */
 async function techNotify(recipientId, recipientRole, type, title, message, extra) {
-  if (!recipientId) return;
+  if (!recipientId) return false;
+  const x = extra || {};
+  const doc = {
+    recipientId, recipientRole, type, title: String(title || "").slice(0, 140), message: String(message || "").slice(0, 400),
+    studentId: x.studentId || "", buildId: x.buildId || "", chatId: x.chatId || "",
+    missionId: x.missionId || "", classId: x.classId || "",
+    link: x.link || LINKS[recipientRole] || "/tech",
+    read: false, createdAt: FV().serverTimestamp()
+  };
+  const col = admin.firestore().collection("techNotifications");
+  try {
+    if (x.id) await col.doc(String(x.id).replace(/[^w-]/g, "_").slice(0, 300) + "_" + recipientId).create(doc);
+    else await col.add(doc);
+    return true;
+  } catch (e) {
+    if (e && (e.code === 6 || /already exists/i.test(e.message || ""))) return false;
+    console.warn("techNotify failed:", e.message); return false;
+  }
+}
+/* One event on a builder's activity timeline (techActivity). Server-side events
+   use the same shape as the ones builders record from the studio. */
+async function logActivity(studentId, type, label, extra) {
+  if (!studentId) return;
   const x = extra || {};
   try {
-    await admin.firestore().collection("techNotifications").add({
-      recipientId, recipientRole, type, title: String(title || "").slice(0, 140), message: String(message || "").slice(0, 400),
-      studentId: x.studentId || "", buildId: x.buildId || "", chatId: x.chatId || "",
-      link: x.link || LINKS[recipientRole] || "/tech",
-      read: false, createdAt: FV().serverTimestamp()
+    await admin.firestore().collection("techActivity").add({
+      studentId, studentName: x.studentName || "", type, label: String(label || "").slice(0, 200),
+      buildId: x.buildId || "", missionId: x.missionId || "", origin: x.origin || "", by: x.by || "system",
+      at: FV().serverTimestamp()
     });
-  } catch (e) { console.warn("techNotify failed:", e.message); }
+  } catch (e) { console.warn("logActivity failed:", e.message); }
 }
+const sha = (s) => crypto.createHash("sha1").update(String(s)).digest("hex");
+const isSelfLed = (b) => !(b && (b.missionId || b.challengeId));
+const projectWord = (b) => (isSelfLed(b) ? "self-led project" : "mission");
 async function email(to, subject, opts) {
   if (!to) return false;
   try { return !!(await notifications.sendEmail(to, subject, render(opts)) || {}).sent; } catch (e) { console.warn("tech email failed:", e.message); return false; }
@@ -349,16 +386,24 @@ exports.onTechBuildCreated = onDocumentCreated(
   { document: "techBuilds/{pid}", region: LOCATION },
   async (event) => {
     const p = event.data.data() || {};
-    const extra = { studentId: p.studentId, buildId: event.params.pid };
-    if (p.coachId) await techNotify(p.coachId, "coach", "tech_build_started", `${p.studentName || "A builder"} started a project`, p.title || "New project", extra);
-    await notifyGuardians(p.studentId, "tech_build_started", "New project started", `${first(p.studentName, "Your child")} started “${p.title || "a new project"}”.`, extra);
+    const pid = event.params.pid;
+    const extra = { studentId: p.studentId, buildId: pid, id: `build_${pid}_created` };
+    const kind = isSelfLed(p) ? "a self-led project" : "a mission";
+    const msg = `${p.studentName || "A builder"} started ${kind}: “${p.title || "New project"}”.`;
+    if (p.coachId) await techNotify(p.coachId, "coach", "tech_build_started", isSelfLed(p) ? "New self-led project" : "Mission started", msg, extra);
+    await notifyGuardians(p.studentId, "tech_build_started", isSelfLed(p) ? "New self-led project" : "Mission started",
+      `${first(p.studentName, "Your child")} started ${kind}: “${p.title || "a new project"}”.`, extra);
   }
 );
 
 /* Levels are 1–7 from the number of mastered builds in each discipline:
-   0 -> 1 (DISCOVER), 1 -> 2, ... 6+ -> 7 (STUDIO). Idempotent. */
+   0 -> 1 (DISCOVER), 1 -> 2, ... 6+ -> 7 (STUDIO). Idempotent.
+   Returns { levels, before } so callers can tell which levels went up. */
 async function recomputeProgress(studentId, buildId) {
   const db = admin.firestore();
+  const ref = db.collection("techProgress").doc(studentId);
+  const prev = await ref.get();
+  const before = (prev.exists && prev.data().levels) || {};
   const snap = await db.collection("techBuilds").where("studentId", "==", studentId).where("mastery", "==", "approved").get();
   const masteryCount = {};
   TECH_DISCIPLINES.forEach((d) => { masteryCount[d] = 0; });
@@ -369,10 +414,10 @@ async function recomputeProgress(studentId, buildId) {
   });
   const levels = {};
   TECH_DISCIPLINES.forEach((d) => { levels[d] = Math.max(1, Math.min(TECH_LEVELS.length, (masteryCount[d] || 0) + 1)); });
-  await db.collection("techProgress").doc(studentId).set({
+  await ref.set({
     levels, masteryCount, updatedAt: FV().serverTimestamp(), updatedBy: "system:mastery-approved", lastBuildId: buildId
   }, { merge: true });
-  return levels;
+  return { levels, before };
 }
 
 exports.onTechBuildUpdated = onDocumentUpdated(
@@ -381,41 +426,96 @@ exports.onTechBuildUpdated = onDocumentUpdated(
     const b = event.data.before.data() || {}, a = event.data.after.data() || {};
     const pid = event.params.pid, sid = a.studentId, extra = { studentId: sid, buildId: pid };
     const who = a.studentName || "A builder", title = a.title || "a project";
+    const act = { studentName: a.studentName || "", buildId: pid, missionId: a.missionId || "", origin: isSelfLed(a) ? "self" : "mission" };
+    const n = Number(a.submissionCount) || 0;
 
     /* Builder asked for something — the coach (or the desk, if there's no coach yet) decides. */
     const asked = [];
-    if (b.reviewState !== "requested" && a.reviewState === "requested") asked.push("a review");
-    if (b.showcase !== "requested" && a.showcase === "requested") asked.push("a Tech Wall showcase");
+    if (b.reviewState !== "requested" && a.reviewState === "requested") asked.push(n > 1 ? "a review of their revision" : "a review");
+    if (b.showcase !== "requested" && a.showcase === "requested") asked.push("a public showcase");
     if (b.mastery !== "requested" && a.mastery === "requested") asked.push("mastery approval");
     if (asked.length) {
-      const msg = `${who} asked for ${asked.join(" and ")} on “${title}”.`;
-      if (a.coachId) await techNotify(a.coachId, "coach", "tech_review_request", "Review requested", msg, extra);
-      else await notifyAdmins("tech_review_request", "Review requested (no coach)", msg, extra);
+      const msg = `${who} asked for ${asked.join(" and ")} on the ${projectWord(a)} “${title}”.`;
+      const key = { id: `build_${pid}_ask_${n}_${a.reviewState}_${a.showcase}_${a.mastery}` };
+      if (a.coachId) {
+        const fresh = await techNotify(a.coachId, "coach", "tech_review_request", n > 1 ? "Resubmission received" : "Submission received", msg, Object.assign({}, extra, key));
+        if (fresh) {
+          await email(await coachEmail(a.coachId), `${n > 1 ? "Resubmission" : "Submission"}: ${title}`, {
+            preheader: msg, heading: n > 1 ? "A revision is ready to review." : "New work to review.",
+            intro: esc(msg), body: `<p style="margin:0;">Open the coach portal to assess the work, grade it, and approve it or ask for a revision.</p>`,
+            cta: { label: "Open the coach portal", url: APP + LINKS.coach }
+          });
+        }
+      } else await notifyAdmins("tech_review_request", "Submission received (no coach)", msg, Object.assign({}, extra, key));
+      if (b.reviewState !== "requested" && a.reviewState === "requested") {
+        await notifyGuardians(sid, "tech_submitted", n > 1 ? "Revision submitted" : "Work submitted",
+          `${first(who)} submitted the ${projectWord(a)} “${title}” for their coach to review.`, Object.assign({}, extra, key));
+      }
+    }
+
+    /* Review outcomes go on the timeline here; people are told by onTechFeedbackCreated,
+       which carries the coach's words and grade. */
+    if (b.reviewState !== a.reviewState) {
+      if (a.reviewState === "approved") await logActivity(sid, "approved", `Approved: ${title}`, act);
+      if (a.reviewState === "changes") await logActivity(sid, "revision_requested", `Revision requested: ${title}`, act);
+      if (a.reviewState === "reviewing") await logActivity(sid, "under_review", `Coach started reviewing: ${title}`, act);
     }
 
     if (b.showcase !== "approved" && a.showcase === "approved") {
-      await techNotify(sid, "student", "tech_showcase", "You're on the TECH Wall", `${title} is now public. Share it with your family and friends.`, extra);
-      await notifyGuardians(sid, "tech_showcase", "On the TECH Wall", `${first(who)}'s project “${title}” was approved for the public TECH Wall.`, extra);
+      const url = `${APP}/tech/p/${pid}`;
+      const pubKey = { id: `build_${pid}_published_${sha(String(a.publishedAt && a.publishedAt.seconds || "")).slice(0, 8)}` };
+      await logActivity(sid, "published", `Published: ${title}`, act);
+      const fresh = await techNotify(sid, "student", "tech_showcase", "Your project is published", `${title} is now public. Your link: ${url}`, Object.assign({}, extra, pubKey));
+      await notifyGuardians(sid, "tech_showcase", "Project published", `${first(who)}'s project “${title}” was approved for the public TECH showcase.`, Object.assign({}, extra, pubKey), fresh ? {
+        subject: `${first(who)}'s project is published`,
+        opts: (g) => ({
+          preheader: "A TECH project was approved for the public showcase.", heading: "Published on Paisley TECH.",
+          intro: `Hi ${esc(first(g.name))}, ${esc(first(who))}'s project “${esc(title)}” is now on the public TECH showcase. Only their first name is shown.`,
+          body: `<p style="margin:0;">You can share this link: ${esc(url)}</p>`,
+          cta: { label: "View the project", url }
+        })
+      } : null);
+      const st = fresh ? await techStudent(sid) : null;
+      if (st && st.email) {
+        await email(st.email, `Published — ${title}`, {
+          preheader: "Your project is on the TECH showcase.", heading: "Your project is published.",
+          intro: `Hi ${esc(first(st.name))}, your coach approved “${esc(title)}” for the public showcase.`,
+          body: `<p style="margin:0;">Share it with this link: ${esc(url)}</p>`, cta: { label: "View your project", url }
+        });
+      }
     }
+    if (b.showcase === "approved" && a.showcase !== "approved") await logActivity(sid, "unpublished", `Taken off the showcase: ${title}`, act);
 
     if (b.mastery !== "approved" && a.mastery === "approved" && sid) {
-      let levels = null;
-      try { levels = await recomputeProgress(sid, pid); } catch (e) { console.warn("recomputeProgress failed", e.message || e); }
+      let res = null;
+      try { res = await recomputeProgress(sid, pid); } catch (e) { console.warn("recomputeProgress failed", e.message || e); }
+      const levels = res && res.levels;
       const discs = Array.isArray(a.disciplines) && a.disciplines.length ? a.disciplines : TECH_DISCIPLINES;
       const top = levels ? discs.filter((d) => levels[d]).sort((x, y) => levels[y] - levels[x])[0] : "";
       const lvl = top ? TECH_LEVELS[levels[top] - 1] : "";
       const line = lvl ? `You're now ${lvl} in ${top}.` : "Keep building.";
-      await techNotify(sid, "student", "tech_mastery", "Mastery approved 🎉", `${title} was approved. ${line}`, extra);
+      await logActivity(sid, "mastered", `Mastered: ${title}`, act);
+      const fresh = await techNotify(sid, "student", "tech_mastery", "Mastery approved 🎉", `${title} was approved. ${line}`, Object.assign({ id: `build_${pid}_mastery_${sha(String(a.masteryAt && a.masteryAt.seconds || "")).slice(0, 8)}` }, extra));
+      /* Next level unlocked — only for disciplines whose level actually went up. */
+      const ups = levels ? TECH_DISCIPLINES.filter((d) => (levels[d] || 1) > ((res.before && res.before[d]) || 1)) : [];
+      for (const d of ups) {
+        const L = TECH_LEVELS[levels[d] - 1], lk = { id: `level_${sid}_${d}_${levels[d]}` };
+        await logActivity(sid, "level_unlocked", `${L} unlocked in ${d}`, act);
+        await techNotify(sid, "student", "tech_level", `${L} unlocked in ${d}`, `New ${d} missions at ${L} are open to you.`, Object.assign({}, extra, lk));
+        await notifyGuardians(sid, "tech_level", `${L} unlocked in ${d}`, `${first(who)} reached ${L} in ${d}.`, Object.assign({}, extra, lk));
+        if (a.coachId) await techNotify(a.coachId, "coach", "tech_level", `${first(who)} reached ${L} in ${d}`, `After mastering “${title}”.`, Object.assign({}, extra, lk));
+      }
+      if (!fresh) return;
       const st = await techStudent(sid);
       if (st && st.email) {
         await email(st.email, `Mastery approved — ${title}`, {
           preheader: "Your coach approved your build.", heading: "Mastery approved.",
           intro: `Hi ${esc(first(st.name))}, your coach approved “${esc(title)}”.`,
-          body: `<p style="margin:0;">${esc(line)} Open your studio to see what unlocked next.</p>`,
+          body: `<p style="margin:0;">${esc(line)}${ups.length ? " Unlocked: " + esc(ups.map((d) => TECH_LEVELS[levels[d] - 1] + " in " + d).join(", ")) + "." : ""} Open your studio to see what is next.</p>`,
           cta: { label: "Open TECH Studio", url: APP + LINKS.student }
         });
       }
-      await notifyGuardians(sid, "tech_mastery", "Mastery approved", `${first(who)} mastered “${title}”.${lvl ? ` Now ${lvl} in ${top}.` : ""}`, extra, {
+      await notifyGuardians(sid, "tech_mastery", "Mastery approved", `${first(who)} mastered “${title}”.${lvl ? ` Now ${lvl} in ${top}.` : ""}`, Object.assign({ id: `build_${pid}_mastery` }, extra), {
         subject: `${first(who)} mastered a TECH project`,
         opts: (g) => ({
           preheader: "A coach approved a TECH project.", heading: "Mastery approved.",
@@ -428,23 +528,183 @@ exports.onTechBuildUpdated = onDocumentUpdated(
   }
 );
 
+/* Feedback on a build. A coach review (kind "changes" / "approved", optionally with a grade)
+   tells the builder and their guardians, by bell and email. */
 exports.onTechFeedbackCreated = onDocumentCreated(
-  { document: "techBuilds/{pid}/feedback/{fid}", region: LOCATION },
+  { document: "techBuilds/{pid}/feedback/{fid}", region: LOCATION, secrets: SMTP_SECRETS },
   async (event) => {
     const f = event.data.data() || {};
-    const p = (await admin.firestore().collection("techBuilds").doc(event.params.pid).get()).data();
+    const pid = event.params.pid, fid = event.params.fid;
+    const p = (await admin.firestore().collection("techBuilds").doc(pid).get()).data();
     if (!p) return;
-    const extra = { studentId: p.studentId, buildId: event.params.pid };
-    const preview = String(f.text || "").slice(0, 140);
+    const extra = { studentId: p.studentId, buildId: pid, id: `fb_${fid}` };
+    const preview = String(f.text || "").slice(0, 160);
     if (f.role === "student") {
       if (p.coachId) await techNotify(p.coachId, "coach", "tech_feedback", `${p.studentName || "A builder"} replied`, `${p.title}: ${preview}`, extra);
       return;
     }
-    const title = f.kind === "approved" ? "Build approved" : f.kind === "changes" ? "Changes requested" : "New feedback";
-    await techNotify(p.studentId, "student", "tech_feedback", title, `${p.title}: ${preview}`, extra);
-    if (f.kind === "approved" || f.kind === "changes") {
-      await notifyGuardians(p.studentId, "tech_feedback", title, `${first(p.studentName, "Your child")}'s coach on “${p.title}”: ${preview}`, extra);
+    const grade = f.gradeLabel ? ` Grade: ${f.gradeLabel}${f.gradeScore != null && f.gradeScore !== "" ? ` (${f.gradeScore}%)` : ""}.` : "";
+    const title = f.kind === "approved" ? "Project approved" : f.kind === "changes" ? "Revision requested" : (grade ? "Grade released" : "New feedback");
+    const fresh = await techNotify(p.studentId, "student", "tech_feedback", title, `${p.title}:${grade} ${preview}`, extra);
+    if (!fresh || !(f.kind === "approved" || f.kind === "changes" || grade)) return;
+    await notifyGuardians(p.studentId, "tech_feedback", title, `${first(p.studentName, "Your child")}'s coach on “${p.title}”:${grade} ${preview}`, extra, {
+      subject: `${title}: ${p.title}`,
+      opts: (g) => ({
+        preheader: preview, heading: title + ".",
+        intro: `Hi ${esc(first(g.name))}, ${esc(first(p.studentName, "your child"))}'s coach reviewed “${esc(p.title)}”.`,
+        body: `${grade ? `<p style="margin:0 0 8px;"><strong>${esc(grade.trim())}</strong></p>` : ""}<p style="margin:0;white-space:pre-wrap;">${esc(preview)}</p>`,
+        cta: { label: "Open the TECH guardian portal", url: APP + LINKS.guardian }
+      })
+    });
+    const st = await techStudent(p.studentId);
+    if (st && st.email) {
+      await email(st.email, `${title}: ${p.title}`, {
+        preheader: preview, heading: title + ".",
+        intro: `Hi ${esc(first(st.name))}, your coach reviewed “${esc(p.title)}”.`,
+        body: `${grade ? `<p style="margin:0 0 8px;"><strong>${esc(grade.trim())}</strong></p>` : ""}<p style="margin:0;white-space:pre-wrap;">${esc(preview)}</p>` +
+          (f.kind === "changes" ? `<p style="margin:12px 0 0;">Open the same project, make the changes, then resubmit.</p>` : ""),
+        cta: { label: f.kind === "changes" ? "Revise my project" : "Open TECH Studio", url: APP + LINKS.student + "#projects" }
+      });
     }
+  }
+);
+
+/* =========================================================
+   Missions released — techContent kind mission / challenge
+   moving to "published". audience "selected" = studentIds only;
+   otherwise every active builder. One bell (and email) per builder
+   per mission, however often it is re-saved or re-published.
+========================================================= */
+async function missionAudience(c) {
+  if (c.audience === "selected" && Array.isArray(c.studentIds)) {
+    const out = [];
+    for (const id of c.studentIds.slice(0, 500)) { const s = await techStudent(id); if (s && s.status === "Active") out.push(s); }
+    return out;
+  }
+  const snap = await admin.firestore().collection("techStudents").where("status", "==", "Active").get();
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+}
+exports.onTechContentWritten = onDocumentWritten(
+  { document: "techContent/{cid}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    if (!a || ["mission", "challenge"].indexOf(a.kind) === -1) return;
+    if (a.status !== "published" || (b && b.status === "published")) return;
+    const cid = event.params.cid, kind = a.kind === "challenge" ? "challenge" : "mission";
+    const lvl = a.level ? TECH_LEVELS[Math.max(1, Math.min(7, a.level)) - 1] : "";
+    const msg = `${a.title || "A new " + kind}${lvl ? ` (${lvl})` : ""}${a.deadline ? ` · due ${a.deadline}` : ""}. ${String(a.summary || "").slice(0, 160)}`;
+    for (const s of await missionAudience(a)) {
+      const fresh = await techNotify(s.id, "student", "tech_mission", `New ${kind} released`, msg, { studentId: s.id, missionId: cid, id: `mission_${cid}`, link: LINKS.student + "#missions" });
+      if (!fresh) continue;
+      if (s.email) {
+        await email(s.email, `New TECH ${kind}: ${a.title || ""}`, {
+          preheader: msg, heading: `A new ${kind} is ready.`,
+          intro: `Hi ${esc(first(s.name))}, ${esc(a.createdByName || "your coach")} released “${esc(a.title || "")}”.`,
+          body: `<p style="margin:0;">${esc(String(a.summary || "Open your studio to read the brief, study the materials and practise before you build."))}</p>`,
+          cta: { label: "Open the mission", url: APP + LINKS.student + "#missions" }
+        });
+      }
+      for (const g of await guardiansOf(s.id)) {
+        await techNotify(g.parentUid, "guardian", "tech_mission", `New ${kind} for ${first(s.name)}`, msg, { studentId: s.id, missionId: cid, id: `mission_${cid}_${s.id}` });
+      }
+    }
+  }
+);
+
+/* =========================================================
+   Live classes (Google Meet) — techLiveClasses/{id}
+   { topic, description, learn, coachId, coachName, startAt, durationMins,
+     meetUrl, status: scheduled | cancelled | completed,
+     audience: all | selected, studentIds[], parentUids[] (filled here), notifyKey }
+   Builders, their guardians, the coach and admins are told when a class is
+   scheduled, when its time / link / topic / audience changes, and when it is
+   cancelled. notifyKey (a hash of what people were told) stops repeats.
+========================================================= */
+function whenText(ts) {
+  const d = ts && typeof ts.toDate === "function" ? ts.toDate() : (ts ? new Date(ts) : null);
+  if (!d || isNaN(d)) return "";
+  return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Nairobi" }) + " (EAT)";
+}
+exports.onTechLiveClassWritten = onDocumentWritten(
+  { document: "techLiveClasses/{id}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const db = admin.firestore();
+    const id = event.params.id;
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    const c = a || b;
+    const start = c.startAt && c.startAt.toDate ? c.startAt.toDate().getTime() : 0;
+    const key = sha([c.topic, start, c.durationMins, c.meetUrl, c.status, c.audience, (c.studentIds || []).slice().sort().join(",")].join("|")).slice(0, 16);
+    let action;
+    if (!a) {
+      /* Deleting a class that was still to come counts as cancelling it. */
+      if (b.status === "cancelled" || !start || start < Date.now()) return;
+      action = "cancelled";
+    } else {
+      if (a.notifyKey === key) return;
+      action = a.status === "cancelled" ? "cancelled" : (!b || !b.notifyKey ? "scheduled" : "updated");
+      if (a.status === "completed") action = "";
+    }
+
+    let students;
+    if (c.audience === "all") {
+      const snap = await db.collection("techStudents").where("status", "==", "Active").get();
+      students = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    } else {
+      students = [];
+      for (const sid of (c.studentIds || []).slice(0, 300)) { const s = await techStudent(sid); if (s) students.push(s); }
+    }
+    const guardians = [];
+    for (const s of students) for (const g of await guardiansOf(s.id)) guardians.push(Object.assign({ studentId: s.id, studentName: s.name }, g));
+    const parentUids = Array.from(new Set(guardians.map((g) => g.parentUid))).slice(0, 2000);
+    if (a) await event.data.after.ref.set({ parentUids, notifyKey: key, notifiedAt: FV().serverTimestamp() }, { merge: true });
+    if (!action) return;
+
+    const when = whenText(c.startAt);
+    const verb = { scheduled: "Live class scheduled", updated: "Live class updated", cancelled: "Live class cancelled" }[action];
+    const line = `${c.topic || "TECH live class"} · ${when}${c.coachName ? ` · with ${c.coachName}` : ""}`;
+    const nid = `live_${id}_${key}`;
+    const mail = (name, portal) => ({
+      preheader: line, heading: verb + ".",
+      intro: `Hi ${esc(first(name))}, ${action === "cancelled" ? "this class has been cancelled" : action === "updated" ? "a live class has changed" : "a live class is on the timetable"}:`,
+      body: `<p style="margin:0 0 6px;"><strong>${esc(c.topic || "TECH live class")}</strong></p>` +
+        `<p style="margin:0 0 6px;">${esc(when)}${c.durationMins ? ` · ${esc(c.durationMins)} min` : ""}${c.coachName ? ` · ${esc(c.coachName)}` : ""}</p>` +
+        (c.learn ? `<p style="margin:0 0 6px;">What you will learn: ${esc(c.learn)}</p>` : "") +
+        (action !== "cancelled" && c.meetUrl ? `<p style="margin:0;">Google Meet: ${esc(c.meetUrl)}</p>` : ""),
+      cta: { label: action === "cancelled" ? "Open Paisley TECH" : "Open the class", url: APP + portal }
+    });
+    for (const s of students) {
+      if (s.status !== "Active") continue;
+      const fresh = await techNotify(s.id, "student", "tech_live", verb, line, { studentId: s.id, classId: id, id: nid, link: LINKS.student + "#live" });
+      if (fresh && s.email) await email(s.email, `${verb}: ${c.topic || "TECH live class"}`, mail(s.name, LINKS.student + "#live"));
+    }
+    for (const g of guardians) {
+      const fresh = await techNotify(g.parentUid, "guardian", "tech_live", `${verb} for ${first(g.studentName)}`, line, { studentId: g.studentId, classId: id, id: `${nid}_${g.studentId}`, link: LINKS.guardian + "#live" });
+      if (fresh && g.email) await email(g.email, `${verb} for ${first(g.studentName)}: ${c.topic || "TECH live class"}`, mail(g.name, LINKS.guardian + "#live"));
+    }
+    if (c.coachId) {
+      const fresh = await techNotify(c.coachId, "coach", "tech_live", verb, line, { classId: id, id: nid, link: LINKS.coach + "#live" });
+      if (fresh) await email(await coachEmail(c.coachId), `${verb}: ${c.topic || "TECH live class"}`, mail(c.coachName, LINKS.coach + "#live"));
+    }
+    for (const ad of await adminList()) await techNotify(ad.id, "admin", "tech_live", verb, line, { classId: id, id: nid });
+  }
+);
+
+/* Parent ↔ Studio Desk uses parentConversations (shared with the Parent Portal). A TECH
+   guardian's message raises the TECH bell for admins; onParentConversationMessage
+   already emails the desk's replies to the parent. */
+exports.onTechFamilyDeskMessage = onDocumentCreated(
+  { document: "parentConversations/{cid}/messages/{mid}", region: LOCATION },
+  async (event) => {
+    const m = event.data.data() || {};
+    if (m.senderRole !== "parent") return;
+    const cid = event.params.cid;
+    const link = await admin.firestore().collection("techGuardianLinks").doc(cid).get();
+    if (!link.exists) return;
+    const l = link.data() || {};
+    await notifyAdmins("tech_desk_message", `${m.senderName || "A TECH guardian"} wrote to the Studio Desk`,
+      `About ${first(l.studentName, "their child")}: ${String(m.text || "").slice(0, 160)}`, { studentId: l.studentUid || "", id: `desk_${event.params.mid}`, link: "/admin#tech" });
   }
 );
 
@@ -720,7 +980,8 @@ exports.techShare = onRequest({ region: LOCATION, cors: true }, async (req, res)
     }
   }
 
-  const dest = `${APP}/tech${allowed ? "?build=" + encodeURIComponent(id) : ""}`;
+  /* Published projects have their own page, /tech/p/{id} (tech/project.html). */
+  const dest = isPublic ? `${APP}/tech/p/${encodeURIComponent(id)}` : `${APP}/tech${allowed ? "?build=" + encodeURIComponent(id) : ""}`;
   const titleBase = build ? `${build.title || "Untitled build"} — built with Paisley TECH` : "Paisley TECH | Digital Creator Studio";
   const descBase = build
     ? `Built by ${build.displayName || "a Paisley student"}. ${String(build.brief || "").slice(0, 160)}`
