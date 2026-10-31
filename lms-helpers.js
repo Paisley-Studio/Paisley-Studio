@@ -1722,7 +1722,7 @@ function lmzNotifCategory(n) {
   if (ent === 'exam' || t.indexOf('exam') === 0) return 'exams';
   if (t.indexOf('ticket') !== -1) return 'tickets';
   if (t.indexOf('message') !== -1) return 'messages';
-  if (t.indexOf('lesson') !== -1 || t.indexOf('classroom') !== -1) return 'classroom';
+  if (ent === 'lesson' || t.indexOf('lesson') !== -1 || t.indexOf('classroom') !== -1) return 'classroom';
   return 'other';
 }
 
@@ -1750,6 +1750,10 @@ function lmzInjectBellStyle() {
     '.lmz-bell-item b{display:block;font-size:.8rem}',
     '.lmz-bell-item span.m{display:block;font-size:.76rem;color:var(--muted,#5A6E6A);line-height:1.4}',
     '.lmz-bell-item small{display:block;font-size:.68rem;color:var(--muted,#5A6E6A);margin-top:.15rem}',
+    '.lmz-bell-board{display:inline-block;margin:.2rem 0 .1rem;padding:.05rem .45rem;border-radius:99px;font-size:.64rem;font-weight:800;color:#fff}',
+    '.lmz-bell-board.b-cambridge{background:#0F766E}',
+    '.lmz-bell-board.b-edexcel{background:#C53030}',
+    '.lmz-bell-board.b-oxford_aqa{background:#6B3FC4}',
     '.lmz-bell-empty{padding:1.4rem;text-align:center;color:var(--muted,#5A6E6A);font-size:.82rem}'
   ].join('\n');
   document.head.appendChild(st);
@@ -1779,6 +1783,7 @@ function mountNotificationBell(containerEl, uid, role, opts) {
     listEl.innerHTML = recent.length ? recent.map(function (n, i) {
       var cat = lmzNotifCategory(n), d = n.createdAt && n.createdAt.toDate ? n.createdAt.toDate() : null;
       return '<div class="lmz-bell-item' + (n.read ? '' : ' unread') + '" data-i="' + i + '" role="menuitem" tabindex="0"><div class="ic"><i class="fas ' + (ICONS[cat] || ICONS.other) + '"></i></div><div><b>' + esc(n.title || 'Notification') + '</b><span class="m">' + esc(n.message || '') + '</span>' +
+        (n.board ? '<span class="lmz-bell-board b-' + esc(lmzBoardId(n.board)) + '">' + esc(lmzBoardLabel(n.board)) + '</span>' : '') +
         (d ? '<small>' + esc(d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</small>' : '') + '</div></div>';
     }).join('') : '<div class="lmz-bell-empty"><i class="fas fa-bell-slash"></i><br>You are all caught up.</div>';
     // nav badges, per category

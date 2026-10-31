@@ -181,12 +181,13 @@ async function handleWorkWrite(event, kind) {
 
   // 1. Student handed work in (first creation only)
   if (!before && !paper) {
+    const classroom = await W.classroomOf(cid);
     for (const rid of await tutorRecipientsFor(cid, item, [tutorRecipient])) {
       await W.notify(rid, "tutor", {
         type: kind === "exam" ? "exam_submitted" : "homework_submitted",
         title: `${noun} handed in`,
-        message: `${after.studentName || "A student"} handed in ${item.title || "work"} (${item.subjectName || item.subject || ""}).`,
-        relatedEntity: relEntity, relatedEntityId: entityId
+        message: `${after.studentName || "A student"} handed in ${item.title || "work"} (${W.classTag(item.subjectName || item.subject || "", classroom)}).`,
+        relatedEntity: relEntity, relatedEntityId: entityId, extra: W.boardExtra(classroom)
       });
     }
     return;
@@ -201,12 +202,13 @@ async function handleWorkWrite(event, kind) {
   if (before && before.status === "Corrections" && after.status === "Submitted") {
     // The tutor who sent it back for corrections is the one who should mark the corrected work.
     const attempt = (Array.isArray(after.history) ? after.history.length : 1) + 1;
+    const classroom = await W.classroomOf(cid);
     for (const rid of await tutorRecipientsFor(cid, item, [before.gradedBy, tutorRecipient])) {
       await W.notify(rid, "tutor", {
         type: kind === "exam" ? "exam_resubmitted" : "homework_resubmitted",
         title: `${noun} RESUBMITTED (attempt ${attempt})`,
-        message: `${after.studentName || "A student"} resubmitted corrected work for ${item.title || "work"} (${item.subjectName || item.subject || ""}). It is ready for you to grade.`,
-        relatedEntity: relEntity, relatedEntityId: entityId
+        message: `${after.studentName || "A student"} resubmitted corrected work for ${item.title || "work"} (${W.classTag(item.subjectName || item.subject || "", classroom)}). It is ready for you to grade.`,
+        relatedEntity: relEntity, relatedEntityId: entityId, extra: W.boardExtra(classroom)
       });
     }
     return;

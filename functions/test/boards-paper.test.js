@@ -51,6 +51,38 @@ test("browser and server agree on what a tutor covers", () => {
   assert.equal(W.tutorTeachesBoard(t, { keyStage: KS4, subjectId: "english" }), false);
 });
 
+test("tutor notifications name the board; CBC has none", () => {
+  const edx = { keyStage: KS4, subjectId: "mathematics", board: "edexcel", year: 10 };
+  assert.equal(W.boardLabel(edx), "Pearson Edexcel");
+  assert.equal(W.boardLabel({ keyStage: KS4 }), "Cambridge");
+  assert.equal(W.classTag("Mathematics", edx), "Mathematics, Pearson Edexcel, Year 10");
+  assert.deepEqual(W.boardExtra(edx), { board: "edexcel" });
+  const cbc = { keyStage: "CBC Junior School (Grades 7-9)", year: 8 };
+  assert.equal(W.classTag("English", cbc), "English");
+  assert.deepEqual(W.boardExtra(cbc), {});
+  assert.equal(W.classTag("English", null), "English");
+});
+
+test("posted-work notification names the board and reaches only tutors of that board", async () => {
+  const { notifyTutorsOfPost } = require("../publishing")._internals;
+  const saved = { db: W.db, classroomOf: W.classroomOf, notifyOnce: W.notifyOnce };
+  const sent = [];
+  const tutors = [
+    { id: "both", data: () => ({ subjects: ["mathematics"], keyStages: [KS4], boardScope: [`${KS4}|mathematics|cambridge`, `${KS4}|mathematics|edexcel`] }) },
+    { id: "camOnly", data: () => ({ subjects: ["mathematics"], keyStages: [KS4], boardScope: [`${KS4}|mathematics|cambridge`] }) }
+  ];
+  W.db = () => ({ collection: () => ({ get: async () => ({ docs: tutors }) }) });
+  W.classroomOf = async () => ({ subjectId: "mathematics", subjectName: "Mathematics", keyStage: KS4, year: 10, board: "edexcel" });
+  W.notifyOnce = async (id, rid, type, f) => { sent.push({ rid, f }); return true; };
+  try {
+    await notifyTutorsOfPost({ item: { title: "Algebra sheet" }, cid: "c", entity: "c/t/a", what: "assignment" });
+  } finally { Object.assign(W, saved); }
+  assert.deepEqual(sent.map((s) => s.rid), ["both"]);
+  assert.equal(sent[0].f.title, "New Pearson Edexcel material from the Studio Desk");
+  assert.equal(sent[0].f.message, "Algebra sheet (Mathematics, Pearson Edexcel, Year 10) is ready for you in the Classroom.");
+  assert.deepEqual(sent[0].f.extra, { board: "edexcel" });
+});
+
 test("teaching saved before boards existed counts as Cambridge", () => {
   const t = { teaching: [{ keyStage: KS4, subjectId: "english", years: [10, 11] }] };
   assert.deepEqual(Array.from(L.lmzTutorTeaching(t)[0].boards), ["cambridge"]);

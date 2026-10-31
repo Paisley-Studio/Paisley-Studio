@@ -357,6 +357,7 @@ async function notifyTutorsOfPost({ item, cid, entity, what }) {
   if (!classroom) return;
   const snap = await W.db().collection("tutorAccounts").get();
   const key = W.stableId(entity, "tutors");
+  const board = W.boardLabel(classroom);
   for (const d of snap.docs) {
     const t = d.data() || {};
     if (String(t.status || "Active").toLowerCase() === "suspended") continue;
@@ -364,9 +365,9 @@ async function notifyTutorsOfPost({ item, cid, entity, what }) {
     if ((t.keyStages || []).length && t.keyStages.indexOf(classroom.keyStage) === -1) continue;
     if (!W.tutorTeachesBoard(t, classroom)) continue;
     await W.notifyOnce(`work_${key}_${d.id}`, d.id, "tutor", {
-      type: "material_posted", title: "New material from the Studio Desk",
-      message: `${item.title || what} (${item.subjectName || classroom.subjectName || ""}) is ready for you in the Classroom.`,
-      relatedEntity: what, relatedEntityId: entity
+      type: "material_posted", title: `New ${board ? board + " " : ""}material from the Studio Desk`,
+      message: `${item.title || what} (${W.classTag(item.subjectName || classroom.subjectName || "", classroom)}) is ready for you in the Classroom.`,
+      relatedEntity: what, relatedEntityId: entity, extra: W.boardExtra(classroom)
     });
   }
 }
@@ -425,11 +426,12 @@ exports.onResourcePosted = onDocumentCreated(
   { document: "classroomResources/{rid}", region: W.LOCATION },
   async (event) => {
     const r = (event.data && event.data.data()) || {};
+    const cls = r.keyStage ? r : null;   // a resource with no Key Stage has no board to name
     for (const d of await tutorsOfSubject(r.subjectId, r.keyStage, r.board)) {
       await W.notifyOnce(`res_${event.params.rid}_${d.id}`, d.id, "tutor", {
-        type: "material_posted", title: "New resource from the Studio Desk",
-        message: `${r.category || "Resource"}: ${r.title || ""} (${r.subjectName || ""}${r.topicTitle ? ", " + r.topicTitle : ""}) is in your Resources folder.`,
-        relatedEntity: "resource", relatedEntityId: event.params.rid
+        type: "material_posted", title: `New ${W.boardLabel(cls) ? W.boardLabel(cls) + " " : ""}resource from the Studio Desk`,
+        message: `${r.category || "Resource"}: ${r.title || ""} (${W.classTag(r.subjectName || "", cls)}${r.topicTitle ? ", " + r.topicTitle : ""}) is in your Resources folder.`,
+        relatedEntity: "resource", relatedEntityId: event.params.rid, extra: W.boardExtra(cls)
       });
     }
   }
@@ -441,11 +443,12 @@ exports.onResourceMessage = onDocumentCreated(
     if (m.authorRole !== "admin") return;
     const res = await W.db().doc(`classroomResources/${event.params.rid}`).get();
     const r = res.data() || {};
+    const cls = r.keyStage ? r : null;
     for (const d of await tutorsOfSubject(r.subjectId, r.keyStage, r.board)) {
       await W.notifyOnce(`resmsg_${event.params.mid}_${d.id}`, d.id, "tutor", {
         type: "material_posted", title: "Studio Desk replied about a resource",
-        message: `${r.title || "Resource"} (${r.subjectName || ""}${r.topicTitle ? ", " + r.topicTitle : ""}): ${String(m.text || "").slice(0, 100)}`,
-        relatedEntity: "resource", relatedEntityId: event.params.rid
+        message: `${r.title || "Resource"} (${W.classTag(r.subjectName || "", cls)}${r.topicTitle ? ", " + r.topicTitle : ""}): ${String(m.text || "").slice(0, 100)}`,
+        relatedEntity: "resource", relatedEntityId: event.params.rid, extra: W.boardExtra(cls)
       });
     }
   }
@@ -491,4 +494,4 @@ exports.backfillAudiences = onCall(
   }
 );
 
-exports._internals = { parsePath, audiencesFor, legacyAudiences, publishOne, publishItems, releaseWork, tutorTeaches, becameVisible, TYPES };
+exports._internals = { parsePath, audiencesFor, legacyAudiences, publishOne, publishItems, releaseWork, tutorTeaches, becameVisible, notifyTutorsOfPost, TYPES };

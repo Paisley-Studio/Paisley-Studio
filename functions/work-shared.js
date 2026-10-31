@@ -162,6 +162,18 @@ function tutorTeachesBoard(tutor, classroom) {
   if (Array.isArray(tutor && tutor.boardScope)) return tutor.boardScope.indexOf(classroom.keyStage + "|" + classroom.subjectId + "|" + b) !== -1;
   return b === DEFAULT_BOARD;
 }
+const BOARD_LABELS = { cambridge: "Cambridge", edexcel: "Pearson Edexcel", oxford_aqa: "Oxford AQA" };
+/* The board a tutor notification names; CBC classrooms have none. */
+function boardLabel(c) {
+  if (!c || /^CBC/i.test(String(c.keyStage || ""))) return "";
+  return BOARD_LABELS[boardOf(c)];
+}
+function boardExtra(c) { return boardLabel(c) ? { board: boardOf(c) } : {}; }
+/* "Mathematics, Pearson Edexcel, Year 10" */
+function classTag(subjectName, c) {
+  const label = boardLabel(c);
+  return [subjectName, label, label && c.year != null ? "Year " + c.year : ""].filter(Boolean).join(", ");
+}
 
 
 /* Is `item` currently visible to `audience`?  `liveStatus` is the status an
@@ -318,6 +330,6 @@ module.exports = {
   db, FV, toDate, subjectKey, notify, addStudentNotice, claimOnce,
   classroomOf, resolveStudents, parentsOfStudent,
   AUDIENCES, studentAudience, itemPostedTo, isVisibleTo, studentMaySee, notifyOnce, stableId,
-  workPredatesStudent, isPaperStudent, boardId, boardOf, studentBoard, tutorTeachesBoard, DEFAULT_BOARD,
+  workPredatesStudent, isPaperStudent, boardId, boardOf, studentBoard, tutorTeachesBoard, boardLabel, boardExtra, classTag, DEFAULT_BOARD,
   pathFromDownloadUrl, downloadStoredFile, saveStoredPdf, cidTidFromRef
 };

@@ -326,12 +326,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js?v=pw1"></script>
+<script src="../lms-helpers.js?v=boards4"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=boards3"></script>
+<script src="../js/classroom/classroom-helpers.js?v=boards4"></script>
 <script src="../js/classroom/paper-handins.js?v=boards3"></script>
 <script src="../js/classroom/resources-folder.js?v=boards3"></script>
-<script src="../js/classroom/work-helpers.js?v=boards3"></script>
+<script src="../js/classroom/work-helpers.js?v=boards4"></script>
 <script src="../js/classroom/ink-grader.js?v=boards2"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script>
@@ -541,8 +541,12 @@ function mountTutorBell(){
   if(tutorBellMounted || !tutor) return; tutorBellMounted = true;
   mountNotificationBell(document.getElementById('bellHost'), tutor.id, 'tutor', {
     navBadges: { classroom:'#navClassroomCount' },   // homework/exam bubbles are live "to mark" counts (renderOverview)
-    navigate: (cat)=>{
-      const view = { homework:'hwmgmt', exams:'exmgmt', classroom:'classroom', tickets:'tickets' }[cat];
+    navigate: (cat, n)=>{
+      // "cid/tid/itemId" or "cid/flat/examId": go straight to that board's classroom.
+      const path = String((n && n.relatedEntityId) || '').split('/');
+      if(path.length === 3 && (cat === 'homework' || cat === 'exams')) window.__wkFocus = { cid: path[0], itemId: path[2] };
+      if(path.length === 3 && cat === 'classroom') window.__crFocus = path[0];
+      const view = { homework:'hwmgmt', exams:'exmgmt', classroom:'classroom', tickets:'tickets' }[cat] || (n && n.relatedEntity === 'resource' ? 'resources' : null);
       const btn = view && document.querySelector('.nav-item[data-view="'+view+'"]'); if(btn) btn.click();
     }
   });
@@ -553,7 +557,8 @@ document.querySelector('.nav-item[data-view="classroom"]').addEventListener('cli
   host.innerHTML = '';
   const box = document.createElement('div');
   host.appendChild(box);
-  ClassroomUI.mountManager(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching });
+  const focusCid = window.__crFocus || null; window.__crFocus = null;   // set by a notification click
+  ClassroomUI.mountManager(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching, focusCid });
 });
 document.querySelectorAll('#contentSubtabs .subtab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -822,6 +827,7 @@ async function subscribeHomeworkSubmissions(gen){
                   id: d.id,
                   kind: 'homework',
                   cid: cls.id, tid: t.id, itemId: a.id,
+                  board: lmzIsCbcBand(cls.keyStage) ? '' : lmzBoardOf(cls),
                   homeworkId: a.id,
                   homeworkTitle: a.title || '(untitled)',
                   subject: a.subject || cls.subjectName || '',
@@ -859,6 +865,7 @@ async function subscribeHomeworkSubmissions(gen){
                   id: d.id,
                   kind: 'classwork',
                   cid: cls.id, tid: t.id, itemId: l.id,
+                  board: lmzIsCbcBand(cls.keyStage) ? '' : lmzBoardOf(cls),
                   lessonId: l.id,
                   homeworkTitle: l.title || '(untitled)',
                   subject: l.subjectName || cls.subjectName || '',
@@ -902,6 +909,7 @@ async function subscribeFlatExamSubmissions(gen){
                 id: d.id,
                 kind: 'exam',
                 cid: cls.id, itemId: ex.id,
+                board: lmzIsCbcBand(cls.keyStage) ? '' : lmzBoardOf(cls),
                 examId: ex.id,
                 examTitle: ex.title || '(untitled)',
                 subject: ex.subjectName || '',
@@ -1064,7 +1072,7 @@ function renderOverview(){
     return `<tr${r.resub ? ' style="background:#F4F7FF;"' : ''}>
     <td><i class="fas ${r.icon}" style="color:var(--brand); margin-right:.4rem;"></i>${escapeHtml(r.what)}</td>
     <td class="cell-name">${escapeHtml(r.who)}</td>
-    <td>${escapeHtml(r.item)}</td>
+    <td>${escapeHtml(r.item)}${r.s.board ? `<div class="cell-sub">${escapeHtml(lmzBoardLabel(r.s.board))}</div>` : ''}</td>
     <td>${fmtDate(r.when)} ${pill}</td>
     <td class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-kind="${escapeHtml(r.s.kind)}" data-cid="${escapeHtml(r.s.cid||'')}" data-item="${escapeHtml(r.s.itemId||'')}" onclick="openMarkItem(this)"><i class="fas fa-pen"></i> ${r.resub ? 'Mark resubmission' : 'Mark'}</button></td>
   </tr>`;}).join('');

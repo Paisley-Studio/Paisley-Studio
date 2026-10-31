@@ -807,10 +807,11 @@ exports.onFlatExamPosted = onDocumentWritten(
             recipientId: tutorId,
             recipientType: "tutor",
             type: "exam_posted",
-            title: "New exam posted",
-            message: `${exam.title || "An exam"} (${exam.subjectName || ""})${examDate ? " on " + examDate.toLocaleDateString("en-GB") : ""} — you will be able to grade hand-ins once the submission window opens.`,
+            title: `New ${WS.boardLabel(examClassroom) ? WS.boardLabel(examClassroom) + " " : ""}exam posted`,
+            message: `${exam.title || "An exam"} (${WS.classTag(exam.subjectName || "", examClassroom)})${examDate ? " on " + examDate.toLocaleDateString("en-GB") : ""} — you will be able to grade hand-ins once the submission window opens.`,
             relatedEntity: "exam",
             relatedEntityId: `${cid}/flat/${eid}`,
+            ...WS.boardExtra(examClassroom),
             read: false, emailSent: !!tutor.email,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
           });
@@ -826,7 +827,7 @@ exports.onFlatExamPosted = onDocumentWritten(
           try {
             const t = templates.examPostedStudent({
               student: { name: tutor.name || "Tutor" },
-              exam,
+              exam: { ...exam, subjectName: WS.classTag(exam.subjectName || "", examClassroom) },
               examDate
             });
             await sendEmail(tutor.email, t.subject, t.html, paperAttachment || undefined);
@@ -876,10 +877,12 @@ exports.onFlatExamSubmissionWritten = onDocumentWritten(
         const ex = await db.doc(`classrooms/${cid}/exams/${eid}`).get();
         const e = ex.exists ? ex.data() : {};
         if (e.tutorId) {
+          const cls = await WS.classroomOf(cid);
+          const board = WS.boardLabel(cls);
           await WS.notify(e.tutorId, "tutor", {
             type: "exam_submitted", title: "Exam resubmitted",
-            message: `${after.studentName || "A student"} resubmitted corrected work for ${e.title || "an exam"}.`,
-            relatedEntity: "exam", relatedEntityId: `${cid}/flat/${eid}`
+            message: `${after.studentName || "A student"} resubmitted corrected work for ${e.title || "an exam"}${board ? " (" + board + ")" : ""}.`,
+            relatedEntity: "exam", relatedEntityId: `${cid}/flat/${eid}`, extra: WS.boardExtra(cls)
           });
         }
       } catch (err) { console.warn("onFlatExamSubmissionWritten: tutor resubmit notice failed", err.message || err); }

@@ -793,29 +793,40 @@
         list.sort(function (a, b) { return U.displayName(a).localeCompare(U.displayName(b)) || (a.year || 0) - (b.year || 0); });
         h += '<div class="cr-grid">' + list.map(function (c) {
           return '<button type="button" class="cr-card" data-a="open" data-id="' + esc(c.id) + '"><div class="ic"><i class="fas ' + (kind === 'exam' ? 'fa-file-pen' : 'fa-book-open') + '"></i></div><h4>' + esc(U.displayName(c)) +
-            '</h4><div class="meta">Year ' + esc(c.year) + ' \u00b7 ' + esc(U.ksShort(c.keyStage)) + '</div><div style="margin-top:.4rem">' + U.boardBadge(c) + '</div></button>';
+            '</h4><div class="meta">Year ' + esc(c.year) + ' \u00b7 ' + esc(U.ksShort(c.keyStage)) + '</div>' +
+            (isAdmin ? '<div style="margin-top:.4rem">' + U.boardBadge(c) + '</div>' : U.tutorBoardChips(U.tutorBoardRows(S.classrooms, tutorScope, c))) + '</button>';
         }).join('') + '</div>';
       }
       root.innerHTML = h;
       if (!isAdmin) fillTutorBubbles();
     }
     var bubbleToken = 0;
+    function boardCount(cid) {
+      var what = kind === 'exam' ? 'exams' : 'homework';
+      return tutorPendingDetail(cid, what).then(function (d) {
+        var live = typeof opts.pendingFor === 'function' ? opts.pendingFor(cid, what) : null;
+        return { n: d.unreleased + (live ? live.toMark : d.toMark), resub: live ? live.resub : d.resub };
+      });
+    }
     function fillTutorBubbles() {
       var token = ++bubbleToken;
       Array.prototype.forEach.call(root.querySelectorAll('.cr-card[data-a="open"]'), function (card) {
-        var cid = card.dataset.id;
-        var what = kind === 'exam' ? 'exams' : 'homework';
-        tutorPendingDetail(cid, what).catch(function () { return { unreleased: 0, toMark: 0, resub: 0 }; }).then(function (d) {
-          if (token !== bubbleToken || !card.isConnected) return;
-          var live = typeof opts.pendingFor === 'function' ? opts.pendingFor(cid, what) : null;
-          var toMark = live ? live.toMark : d.toMark, resub = live ? live.resub : d.resub;
-          var n = d.unreleased + toMark;
-          Array.prototype.forEach.call(card.querySelectorAll('.cr-badge-red'), function (x) { x.remove(); });
-          if (!n) return;
-          card.insertAdjacentHTML('afterbegin',
-            (resub ? '<div class="cr-badge-red" style="right:26px;background:#4a6fd6;box-shadow:0 2px 6px rgba(74,111,214,.4)" title="' + resub + ' resubmitted after corrections"><i class="fas fa-rotate" style="font-size:.6rem;margin-right:.2rem"></i>' + resub + '</div>' : '') +
-            '<div class="cr-badge-red" title="' + n + ' waiting on you">' + n + '</div>');
+        var c = (S.classrooms || []).filter(function (x) { return x.id === card.dataset.id; })[0];
+        if (!c) return;
+        var rows = U.tutorBoardRows(S.classrooms, tutorScope, c);
+        U.tutorBoardCounts(rows, boardCount).then(function (counts) {
+          if (token === bubbleToken && card.isConnected) U.paintBoardCard(card, rows, counts);
         });
+      });
+    }
+    function fillBoardSwitcher() {
+      if (isAdmin) return;
+      var rows = U.tutorBoardRows(S.classrooms, tutorScope, S.cls);
+      if (rows.length < 2) return;
+      if (S.boardCounts) { U.paintBoardSwitcher(root, rows, S.boardCounts); return; }
+      U.tutorBoardCounts(rows, boardCount).then(function (counts) {
+        S.boardCounts = counts;
+        if (S.screen === 'class') U.paintBoardSwitcher(root, rows, counts);
       });
     }
     if (!isAdmin) {
@@ -835,6 +846,7 @@
         if (!doc.exists) throw new Error('Classroom not found.');
         S.cls = Object.assign({ id: doc.id }, doc.data());
         S.view = 'active';
+        S.boardCounts = null;
         await reload();
       } catch (e) { root.innerHTML = '<div class="cr-empty">Could not open: ' + esc(e.message || e) + '</div>'; return; }
       render();
@@ -944,7 +956,7 @@
         topBtn = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add Topic</button>' : '';
       }
       var h = '<div class="cr-crumb"><a data-a="back">' + title + '</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3>' + (isAdmin ? U.boardSwitcherHtml(c) : '<div class="cr-board-row">' + U.boardBadge(c) + '</div>') + '<div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !S.monitoringOnly && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
+        '<div class="cr-bar"><div><h3>' + esc(name) + ' \u2014 Year ' + esc(c.year) + '</h3>' + (isAdmin ? U.boardSwitcherHtml(c) : U.tutorBoardSwitcher(U.tutorBoardRows(S.classrooms, tutorScope, c), c)) + '<div class="cr-sub">' + esc(U.ksShort(c.keyStage)) + ' \u00b7 ' + S.enrolled.length + ' enrolled student' + (S.enrolled.length === 1 ? '' : 's') + '</div>' + (isAdmin && !S.monitoringOnly && !opts.audience ? '<div class="cr-note" style="margin-top:.25rem">Prepared work reaches students only when you post it: Classroom \u2192 Publish.</div>' : '') + '</div>' +
         topBtn + '</div>' +
         '<div class="cr-tabs"><button type="button" class="cr-btn ' + (S.view === 'active' ? 'on' : '') + '" data-a="view" data-v="active"><i class="fas fa-inbox"></i> Current</button>' +
         '<button type="button" class="cr-btn ' + (S.view === 'past' ? 'on' : '') + '" data-a="view" data-v="past"><i class="fas fa-box-archive"></i> Past Work (' + pastCount + ')</button></div>' +
@@ -1034,6 +1046,7 @@
         });
       }
       root.innerHTML = h;
+      fillBoardSwitcher();
     }
 
     async function openDetail(it) {

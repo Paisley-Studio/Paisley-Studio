@@ -144,6 +144,62 @@
     return hit.id;
   }
 
+  // A tutor gets one card per subject + Year. Its rows are the boards the Studio Desk gave them
+  // there; `room` is empty until a classroom exists for that board. CBC has no boards (id '').
+  function tutorBoardRows(list, scope, c) {
+    if (isCbcStage(c.keyStage)) return [{ id: '', label: '', room: c }];
+    var rooms = (list || []).filter(function (x) { return x.subjectId === c.subjectId && Number(x.year) === Number(c.year) && x.keyStage === c.keyStage; });
+    return BOARDS.filter(function (b) { return lmzTutorCovers(scope, c.subjectId, c.keyStage, c.year, b.id); }).map(function (b) {
+      return { id: b.id, label: b.label, room: rooms.filter(function (x) { return boardOf(x) === b.id; })[0] || null };
+    });
+  }
+  function tutorBoardChips(rows) {
+    var h = rows.filter(function (r) { return r.id; }).map(function (r) {
+      return '<span class="cr-board b-' + esc(r.id) + (r.room ? '' : ' none') + '"' + (r.room ? '' : ' title="Nothing posted for ' + esc(r.label) + ' yet"') + '><i class="fas fa-landmark"></i> ' + esc(r.label) + '</span>';
+    }).join('');
+    return h ? '<div class="cr-board-chips">' + h + '</div>' : '';
+  }
+  function tutorBoardSwitcher(rows, c) {
+    if (isCbcStage(c.keyStage)) return '';
+    if (rows.length < 2) return '<div class="cr-board-row">' + boardBadge(c) + '</div>';
+    return '<div class="cr-board-row"><span class="cr-note" style="margin:0">Exam board:</span>' + rows.map(function (r) {
+      var on = r.id === boardOf(c);
+      return '<button type="button" class="cr-btn sm' + (on ? ' primary' : '') + '" data-a="switch-board" data-b="' + esc(r.id) + '"' + (on ? ' aria-pressed="true"' : '') +
+        (r.room ? '' : ' disabled title="Nothing posted for ' + esc(r.label) + ' yet"') + '>' + (on ? '<i class="fas fa-check"></i> ' : '') + esc(r.label) + (r.room ? '' : ' (nothing yet)') +
+        '<span class="cr-board-n b-' + esc(r.id) + '" data-board-n="' + esc(r.id) + '" hidden></span></button>';
+    }).join('') + '</div>';
+  }
+  // countFn(classroomId) resolves to a number or { n, resub }. Counts line up with rows.
+  function tutorBoardCounts(rows, countFn) {
+    return Promise.all(rows.map(function (r) {
+      if (!r.room) return { n: 0, resub: 0 };
+      return Promise.resolve(countFn(r.room.id)).then(function (x) { return typeof x === 'number' ? { n: x, resub: 0 } : x; }).catch(function () { return { n: 0, resub: 0 }; });
+    }));
+  }
+  function paintBoardCard(card, rows, counts) {
+    var old = card.querySelector('.cr-bubbles'); if (old) old.remove();
+    var h = rows.map(function (r, i) {
+      var c = counts[i], where = r.label ? ' in ' + r.label : '';
+      if (!c.n) return '';
+      return (c.resub ? '<div class="cr-badge-red" style="background:#4a6fd6;--bub:74,111,214" title="' + c.resub + ' resubmitted after corrections' + esc(where) + '"><i class="fas fa-rotate" style="font-size:.6rem;margin-right:.2rem"></i>' + c.resub + '</div>' : '') +
+        '<div class="cr-badge-red' + (r.id ? ' b-' + esc(r.id) : '') + '" title="' + c.n + ' waiting on you' + esc(where) + '" aria-label="' + c.n + ' waiting on you' + esc(where) + '">' + c.n + '</div>';
+    }).join('');
+    if (h) card.insertAdjacentHTML('afterbegin', '<div class="cr-bubbles">' + h + '</div>');
+    // A click lands on the board that has work, unless the remembered board has some too.
+    var cur = rows.map(function (r) { return r.room && r.room.id; }).indexOf(card.dataset.id);
+    if (cur === -1 || !counts[cur].n) {
+      rows.some(function (r, i) { if (r.room && counts[i].n) { card.dataset.id = r.room.id; return true; } return false; });
+    }
+  }
+  function paintBoardSwitcher(host, rows, counts) {
+    rows.forEach(function (r, i) {
+      var el = r.id && host.querySelector('[data-board-n="' + r.id + '"]');
+      if (!el) return;
+      el.textContent = counts[i].n ? String(counts[i].n) : '';
+      el.hidden = !counts[i].n;
+    });
+  }
+
   // Has THIS tutor released it? releasedTo is shared between tutors, so it cannot answer that.
   // Older releases with no log count as released.
   function releasedByMe(it, uid) {
@@ -266,8 +322,8 @@
       '.cr-card .ic{width:40px;height:40px;border-radius:12px;background:rgba(85,191,179,.14);color:var(--brand-deep,#245F5A);display:flex;align-items:center;justify-content:center;margin-bottom:.7rem}',
       '.cr-card h4{margin:0 0 .15rem;font-size:.95rem;color:var(--brand-deep,#245F5A)}',
       '.cr-card .meta{font-size:.76rem;color:var(--muted,#5A6E6A)}',
-      '.cr-badge-red{position:absolute;top:-8px;right:-8px;background:#E74C3C;color:#fff;border-radius:50%;min-width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;box-shadow:0 2px 6px rgba(231,76,60,.4);border:2px solid #fff;padding:0 4px;animation:cr-bubble 2.4s ease-in-out infinite}',
-      '@keyframes cr-bubble{0%,100%{transform:scale(1);box-shadow:0 2px 6px rgba(231,76,60,.4)}50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(231,76,60,.14)}}',
+      '.cr-badge-red{position:absolute;top:-8px;right:-8px;background:#E74C3C;color:#fff;border-radius:50%;min-width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;box-shadow:0 2px 6px rgba(var(--bub,231,76,60),.4);border:2px solid #fff;padding:0 4px;animation:cr-bubble 2.4s ease-in-out infinite}',
+      '@keyframes cr-bubble{0%,100%{transform:scale(1);box-shadow:0 2px 6px rgba(var(--bub,231,76,60),.4)}50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(var(--bub,231,76,60),.14)}}',
       '@media (prefers-reduced-motion:reduce){.cr-badge-red{animation:none}}',
       '.cr-panel{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:1.1rem 1.2rem;margin-bottom:.9rem}',
       '.cr-empty{padding:1.6rem 1rem;text-align:center;color:var(--muted,#5A6E6A);font-size:.86rem}',
@@ -302,7 +358,19 @@
       '.cr-btn.cr-released,.cr-btn.cr-released:hover{background:#2EB872;border-color:#2EB872;color:#fff}',
       '.cr-board{display:inline-flex;align-items:center;gap:.3rem;padding:.16rem .55rem;border-radius:99px;font-size:.68rem;font-weight:800;background:#E6F1EF;color:#245F5A;border:1px solid #BFD9D5}',
       '.cr-board.b-edexcel{background:#FDECEC;color:#9B2C2C;border-color:#F2C4C4}',
-      '.cr-board.b-oxford_aqa{background:#EAF0FD;color:#2A4BA0;border-color:#C5D3F5}',
+      '.cr-board.b-oxford_aqa{background:#F1ECFB;color:#5B3A9E;border-color:#D8CBF2}',
+      '.cr-board.none{opacity:.55}',
+      '.cr-board-chips{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.4rem}',
+      '.cr-bubbles{position:absolute;top:-8px;right:-8px;display:flex;gap:4px;z-index:1}',
+      '.cr-bubbles .cr-badge-red{position:static}',
+      '.cr-badge-red.b-cambridge{background:#0F766E;--bub:15,118,110}',
+      '.cr-badge-red.b-edexcel{background:#C53030;--bub:197,48,48}',
+      '.cr-badge-red.b-oxford_aqa{background:#6B3FC4;--bub:107,63,196}',
+      '.cr-board-n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:.35rem;padding:0 4px;border-radius:99px;font-size:.66rem;font-weight:800;color:#fff}',
+      '.cr-board-n[hidden]{display:none}',
+      '.cr-board-n.b-cambridge{background:#0F766E}',
+      '.cr-board-n.b-edexcel{background:#C53030}',
+      '.cr-board-n.b-oxford_aqa{background:#6B3FC4}',
       '.cr-board-new{display:inline-block;margin-left:.3rem;padding:.12rem .4rem;border-radius:5px;font-size:.6rem;font-weight:900;letter-spacing:.05em;background:#F5A524;color:#fff;vertical-align:middle}',
       '.cr-board-row{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.35rem 0 .8rem}',
       '.cr-pick{display:flex;flex-direction:column;gap:.6rem;max-width:460px}',
@@ -779,7 +847,7 @@
           ? (isScoped
               ? 'Build lessons and materials for ' + scopeWho + '. Every lesson you save is posted to ' + scopeName + ' only.'
               : 'Every subject and Year — prepare lessons and homework, then post them to the right audience from the Publish tab.')
-          : 'The subjects you teach. Open one to view the material the Studio Desk has posted to you.') + '</div></div>' +
+          : 'The subjects you teach. Open one to view the material the Studio Desk has posted to you, and switch exam board inside it. Bubble colours match the board.') + '</div></div>' +
         (isAdmin ? '<button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add classroom</button>' : '') + '</div>';
       if (isAdmin && !isScoped) {
         h += '<div class="cr-tabs"><button type="button" class="cr-btn ' + (S.tab === 'classrooms' ? 'on' : '') + '" data-a="tab" data-v="classrooms"><i class="fas fa-chalkboard"></i> Classrooms</button>' +
@@ -814,18 +882,32 @@
         list.sort(function (a, b) { return displayName(a).localeCompare(displayName(b)) || (a.year || 0) - (b.year || 0) || boardOf(a).localeCompare(boardOf(b)); });
         h += '<div class="cr-grid">' + list.map(function (c) {
           return '<button type="button" class="cr-card" data-a="open" data-id="' + esc(c.id) + '"><div class="ic"><i class="fas fa-chalkboard"></i></div>' +
-            '<h4>' + esc(displayName(c)) + '</h4><div class="meta">Year ' + esc(c.year) + ' · ' + esc(ksShort(c.keyStage)) + '</div><div style="margin-top:.4rem">' + boardBadge(c) + '</div></button>';
+            '<h4>' + esc(displayName(c)) + '</h4><div class="meta">Year ' + esc(c.year) + ' · ' + esc(ksShort(c.keyStage)) + '</div>' +
+            (isAdmin ? '<div style="margin-top:.4rem">' + boardBadge(c) + '</div>' : tutorBoardChips(tutorBoardRows(S.classrooms, tutorScope, c))) + '</button>';
         }).join('') + '</div>';
       }
       root.innerHTML = h;
       if (!isAdmin && window.WorkUI && window.WorkUI.tutorPendingCount) {
-        Array.prototype.forEach.call(root.querySelectorAll('.cr-card[data-a="open"]'), function (card) {
-          window.WorkUI.tutorPendingCount(card.dataset.id, 'classwork').then(function (n) {
-            if (!n || !card.isConnected || card.querySelector('.cr-badge-red')) return;
-            card.insertAdjacentHTML('afterbegin', '<div class="cr-badge-red">' + n + '</div>');
-          }).catch(function () { /* badge is best-effort */ });
+        list.forEach(function (c) {
+          var card = root.querySelector('.cr-card[data-a="open"][data-id="' + c.id + '"]');
+          if (!card) return;
+          var rows = tutorBoardRows(S.classrooms, tutorScope, c);
+          tutorBoardCounts(rows, classworkCount).then(function (counts) {
+            if (card.isConnected) paintBoardCard(card, rows, counts);
+          });
         });
       }
+    }
+    function classworkCount(cid) { return window.WorkUI.tutorPendingCount(cid, 'classwork'); }
+    function fillBoardSwitcher() {
+      if (isAdmin || !window.WorkUI || !window.WorkUI.tutorPendingCount) return;
+      var rows = tutorBoardRows(S.classrooms, tutorScope, S.cls);
+      if (rows.length < 2) return;
+      if (S.boardCounts) { paintBoardSwitcher(root, rows, S.boardCounts); return; }
+      tutorBoardCounts(rows, classworkCount).then(function (counts) {
+        S.boardCounts = counts;
+        if (S.screen === 'classroom') paintBoardSwitcher(root, rows, counts);
+      });
     }
 
     function selectHtml(id, allLabel, pairs, cur) {
@@ -890,6 +972,7 @@
         var doc = await clsRef(cid).get();
         if (!doc.exists) throw new Error('Classroom not found.');
         S.cls = Object.assign({ id: doc.id }, doc.data());
+        S.boardCounts = null;
         var audForLoad = isAdmin ? null : 'tutors';
         var topicsOpen = await loadTopics(cid);
         S.topics = topicsOpen; S.lessons = await loadLessonsForTopics(cid, topicsOpen, false, audForLoad);
@@ -914,7 +997,6 @@
       var c = S.cls;
       var name = displayName(c);
       var yearTxt = (c.year != null) ? ' — Year ' + c.year : '';
-      var boardChip = boardBadge(c);
       var headingAttr = isAdmin
         ? ' class="cr-title-edit" data-a="rename-subject" role="button" tabindex="0" title="Click to rename this classroom"'
         : ' class="cr-title-edit" style="cursor:default"';
@@ -940,7 +1022,7 @@
         (yearTxt ? '<span class="cr-year-suffix">' + esc(yearTxt) + '</span>' : '') +
         pen +
         '</h3>' +
-        (isAdmin ? boardSwitcherHtml(c) : '<div class="cr-board-row">' + boardChip + '</div>') +
+        (isAdmin ? boardSwitcherHtml(c) : tutorBoardSwitcher(tutorBoardRows(S.classrooms, tutorScope, c), c)) +
         '<div class="cr-sub">' + esc(ksShort(c.keyStage)) + ' · ' + esc(tutorHint) + '</div></div>' +
         addTopicBtn + '</div>';
 
@@ -997,6 +1079,7 @@
           }).join('') + '</div>';
       }
       root.innerHTML = h;
+      fillBoardSwitcher();
     }
 
     function openAddClassroom() {
@@ -1518,7 +1601,7 @@
       }
     });
 
-    loadClassrooms();
+    loadClassrooms().then(function () { if (opts.focusCid) openClassroom(opts.focusCid); });
     return { reload: loadClassrooms };
   }
 
@@ -1831,7 +1914,7 @@
       findClassroomCached: findClassroomCached, loadTopicsCached: loadTopicsCached, loadLessonsCached: loadLessonsCached, memo: memo, clearMemo: clearMemo, loaderHtml: loaderHtml, effAud: effAud, findClassroom: findClassroom, ensureClassroom: ensureClassroom, fileIcon: fileIcon, fmtSize: fmtSize, safeUrl: safeUrl,
       KEY_STAGES: KEY_STAGES, audFor: audFor, isCbcStage: isCbcStage,
       releasedByMe: releasedByMe, releaseBtnHtml: releaseBtnHtml,
-      BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, groupClassrooms: groupClassrooms, boardSwitcherHtml: boardSwitcherHtml, switchBoardTarget: switchBoardTarget, studentBoardFor: studentBoardFor, boardAssigned: boardAssigned, boardAssignHtml: boardAssignHtml, readBoardAssign: readBoardAssign
+      BOARDS: BOARDS, DEFAULT_BOARD: DEFAULT_BOARD, boardOf: boardOf, boardLabel: boardLabel, boardBadge: boardBadge, boardOptionsHtml: boardOptionsHtml, groupClassrooms: groupClassrooms, boardSwitcherHtml: boardSwitcherHtml, switchBoardTarget: switchBoardTarget, tutorBoardRows: tutorBoardRows, tutorBoardChips: tutorBoardChips, tutorBoardSwitcher: tutorBoardSwitcher, tutorBoardCounts: tutorBoardCounts, paintBoardCard: paintBoardCard, paintBoardSwitcher: paintBoardSwitcher, studentBoardFor: studentBoardFor, boardAssigned: boardAssigned, boardAssignHtml: boardAssignHtml, readBoardAssign: readBoardAssign
     }
   };
 })(window);
