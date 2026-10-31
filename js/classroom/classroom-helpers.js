@@ -155,7 +155,9 @@
   }
   function tutorBoardChips(rows) {
     var h = rows.filter(function (r) { return r.id; }).map(function (r) {
-      return '<span class="cr-board b-' + esc(r.id) + (r.room ? '' : ' none') + '"' + (r.room ? '' : ' title="Nothing posted for ' + esc(r.label) + ' yet"') + '><i class="fas fa-landmark"></i> ' + esc(r.label) + '</span>';
+      // Short name so all the boards sit on one line; the full name is in the tooltip.
+      var short = r.id === 'edexcel' ? 'Pearson' : r.label;
+      return '<span class="cr-board b-' + esc(r.id) + (r.room ? '' : ' none') + '" title="' + esc(r.room ? r.label : 'Nothing posted for ' + r.label + ' yet') + '">' + esc(short) + '</span>';
     }).join('');
     return h ? '<div class="cr-board-chips">' + h + '</div>' : '';
   }
@@ -360,7 +362,8 @@
       '.cr-board.b-edexcel{background:#FDECEC;color:#9B2C2C;border-color:#F2C4C4}',
       '.cr-board.b-oxford_aqa{background:#F1ECFB;color:#5B3A9E;border-color:#D8CBF2}',
       '.cr-board.none{opacity:.55}',
-      '.cr-board-chips{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.4rem}',
+      '.cr-board-chips{display:flex;flex-wrap:nowrap;gap:.2rem;margin-top:.45rem}',
+      '.cr-board-chips .cr-board{padding:.08rem .36rem;font-size:.58rem;font-weight:700;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;display:block}',
       '.cr-bubbles{position:absolute;top:-8px;right:-8px;display:flex;gap:4px;z-index:1}',
       '.cr-bubbles .cr-badge-red{position:static}',
       '.cr-badge-red.b-cambridge{background:#0F766E;--bub:15,118,110}',
