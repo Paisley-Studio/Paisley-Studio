@@ -52,6 +52,8 @@ test("a builder starts their own class work, routed to their own coach", async (
 
 test("a builder edits and hands in, but cannot mark or change handed-in work", async () => {
   await assertSucceeds(as("kid1").doc("techLessonWork/kid1_live").update({ codeFiles: [], updatedAt: new Date() }));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_live").update({ taskAnswers: { q1: "An <a> tag" } }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ taskAnswers: { q1: "changed after hand-in" } }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_live").update({ grade: 10 }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_live").update({ status: "Graded" }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_live").update({ coachId: "coach2" }));

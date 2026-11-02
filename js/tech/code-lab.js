@@ -46,6 +46,7 @@
   var MAX_FILE_BYTES = 200 * 1024;
   var MAX_ASSETS = 60;
   var MAX_ASSET_BYTES = 50 * 1024 * 1024;
+  var UP_ACCEPT = 'image/*,video/*,audio/*,font/*,.ttf,.otf,.woff,.woff2';
   var LANGS = {
     html: { label: 'HTML', icon: 'fab fa-html5', mode: 'htmlmixed' },
     css: { label: 'CSS', icon: 'fab fa-css3-alt', mode: 'css' },
@@ -264,6 +265,7 @@
       '<div class="cl-shell' + (docMode ? ' cl-docmode' : '') + '">' +
         '<div class="cl-head">' +
           (docMode ? '' : '<button type="button" class="cl-btn cl-treebtn" data-clcmd="tree" title="Files" aria-label="Show files"><i class="fas fa-folder-tree"></i></button>') +
+          (docMode ? '' : '<span class="cl-brand" title="Paisley VS Code"><i class="fas fa-code"></i><b>Paisley VS Code</b></span>') +
           '<div class="cl-crumb" aria-live="polite"></div>' +
           '<div class="cl-people" aria-label="Who is here"></div>' +
           '<div class="cl-actions">' +
@@ -277,7 +279,7 @@
           (docMode ? '' : '<aside class="cl-tree" aria-label="Project files"><div class="cl-tree-acts">' +
             (canEdit ? '<button type="button" class="cl-btn" data-clcmd="add" title="New file"><i class="fas fa-file-circle-plus"></i></button>' +
               '<button type="button" class="cl-btn" data-clcmd="folder" title="New folder"><i class="fas fa-folder-plus"></i></button>' +
-              (opts.uploadAsset ? '<label class="cl-btn" title="Upload images, video or sound" style="margin:0"><i class="fas fa-upload"></i><input type="file" class="cl-upin" multiple hidden accept="image/*,video/*,audio/*,font/*,.ttf,.otf,.woff,.woff2"></label>' : '') : '') +
+              (opts.uploadAsset ? '<label class="cl-btn cl-uplabel" title="Upload pictures, videos or sounds from your computer" style="margin:0"><i class="fas fa-upload"></i><input type="file" class="cl-upin" multiple hidden accept="' + UP_ACCEPT + '"></label>' : '') : '') +
             '</div><div class="cl-tree-list"></div><div class="cl-tree-note"></div></aside>') +
           '<div class="cl-edit-wrap"><div class="cl-edit-host"><textarea class="cl-fallback" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"' + (canEdit ? '' : ' readonly') + ' aria-label="Code"></textarea></div>' +
             '<div class="cl-meta"><span class="cl-lang"></span><span class="cl-status" role="status"></span></div></div>' +
@@ -321,6 +323,7 @@
         return sub.map(function (x) {
           var open = openFolder[x] !== false;
           return '<div class="cl-node cl-dir' + (curFolder === x ? ' on' : '') + '" style="' + pad + '" data-dir="' + esc(x) + '"><i class="fas fa-folder' + (open ? '-open' : '') + '"></i> ' + esc(baseOf(x)) +
+            (canEdit && opts.uploadAsset ? '<button type="button" class="cl-up" data-clnode="upto" data-p="' + esc(x) + '" title="Upload ' + esc(pickWord(x)) + ' from your computer into ' + esc(x) + '/" aria-label="Upload into ' + esc(x) + '"><i class="fas fa-upload"></i> Upload</button>' : '') +
             (canEdit ? '<span class="cl-node-acts"><button type="button" data-clnode="newin" data-p="' + esc(x) + '" title="New file here" aria-label="New file in ' + esc(x) + '"><i class="fas fa-plus"></i></button><button type="button" data-clnode="deldir" data-p="' + esc(x) + '" title="Delete folder" aria-label="Delete folder ' + esc(x) + '"><i class="fas fa-trash"></i></button></span>' : '') + '</div>' +
             (open ? itemsIn(x) : '');
         }).join('') + fs.map(function (f) {
@@ -335,7 +338,7 @@
         }).join('');
       }
       treeEl.innerHTML = '<div class="cl-node cl-dir cl-root' + (curFolder === '' ? ' on' : '') + '" data-dir=""><i class="fas fa-box-archive"></i> ' + esc(opts.title || 'My project') + '</div>' + itemsIn('');
-      var n = q('.cl-tree-note'); if (n) n.textContent = assets.length ? 'Click a picture or sound to put it in your code.' : (opts.uploadAsset && canEdit ? 'Upload pictures, video or sound, then use them in your code.' : '');
+      var n = q('.cl-tree-note'); if (n) n.textContent = assets.length ? 'Click a picture or video to put it in your code.' : (opts.uploadAsset && canEdit ? 'Make a folder (for example images or videos), press its Upload button and pick files from your computer.' : '');
     }
     function renderCrumb() {
       var f = activeFile();
@@ -668,6 +671,27 @@
       if (curFolder && n.indexOf('/') === -1) n = curFolder + '/' + n;
       if (allFolders().indexOf(n) !== -1) { setStatus('That folder already exists.', 'err'); return; }
       folders.push(n); delete deleted[n]; openFolder[n] = true; curFolder = n; structural();
+      if (opts.uploadAsset) {
+        setStatus('Folder ' + n + ' made. Press its Upload button to add ' + pickWord(n) + ' from your computer.', 'ok', true);
+        /* A pictures or videos folder opens the file picker straight away (if the browser allows it). */
+        if (MEDIA_DIR.test(baseOf(n))) pickInto(n);
+      }
+    }
+    /* What a folder is for, from its name: images, videos, sounds or anything. */
+    var MEDIA_DIR = /^(images?|imgs?|pictures?|pics?|photos?|videos?|movies?|clips?|media|assets|sounds?|audio|music)$/i;
+    function pickWord(dir) {
+      var b = baseOf(dir);
+      return /^(images?|imgs?|pictures?|pics?|photos?)$/i.test(b) ? 'pictures' : /^(videos?|movies?|clips?)$/i.test(b) ? 'videos' : /^(sounds?|audio|music)$/i.test(b) ? 'sounds' : 'pictures or videos';
+    }
+    function acceptFor(dir) {
+      var w = dir == null ? '' : pickWord(dir);
+      return w === 'pictures' ? 'image/*' : w === 'videos' ? 'video/*' : w === 'sounds' ? 'audio/*' : UP_ACCEPT;
+    }
+    var upDir = null;
+    function pickInto(dir) {
+      if (!upIn) return;
+      upDir = dir; upIn.accept = acceptFor(dir);
+      try { upIn.click(); } catch (e) { }
     }
     function renameFile(name) {
       var f = file(name); if (!f) return;
@@ -723,14 +747,18 @@
       assets = assets.filter(function (a) { return a.name !== name; }); deleted[name] = true; structural();
     }
     var upIn = q('.cl-upin');
+    /* The toolbar's upload goes to the folder that is selected; a folder's own Upload button goes there. */
+    var upLabel = q('.cl-uplabel');
+    if (upLabel) upLabel.addEventListener('click', function (e) { if (e.target !== upIn) { upDir = null; upIn.accept = UP_ACCEPT; } });
     if (upIn) upIn.addEventListener('change', function (e) {
       var list = [].slice.call(e.target.files || []); e.target.value = '';
+      var target = upDir; upDir = null; upIn.accept = UP_ACCEPT;
       list.reduce(function (p, f) {
         return p.then(function () {
           if (assets.length >= MAX_ASSETS) { setStatus('A project can hold ' + MAX_ASSETS + ' uploads.', 'err'); return; }
           if (f.size > MAX_ASSET_BYTES) { setStatus(f.name + ' is over 50 MB.', 'err'); return; }
           if (!/^(image|video|audio|font)\//.test(f.type || '') && !/\.(ttf|otf|woff2?)$/i.test(f.name)) { setStatus(f.name + ': upload pictures, video, sound or fonts.', 'err'); return; }
-          var dir = curFolder || (/^image\//.test(f.type) ? 'images' : /^video\//.test(f.type) ? 'videos' : /^audio\//.test(f.type) ? 'sounds' : 'fonts');
+          var dir = target != null ? target : (curFolder || (/^image\//.test(f.type) ? 'images' : /^video\//.test(f.type) ? 'videos' : /^audio\//.test(f.type) ? 'sounds' : 'fonts'));
           var n = cleanName(dir + '/' + f.name); var k = 1;
           while (taken(n)) { n = cleanName(dir + '/' + f.name.replace(/(\.\w+)?$/, '-' + (++k) + '$1')); }
           setStatus('Uploading ' + f.name + '…', '', true);
@@ -768,6 +796,7 @@
         else if (a === 'newin') addFile(p);
         else if (a === 'deldir') deleteFolder(p);
         else if (a === 'delasset') deleteAsset(p);
+        else if (a === 'upto') { curFolder = p; openFolder[p] = true; renderTree(); pickInto(p); }
         return;
       }
       if (b.dataset.file != null) {
@@ -846,6 +875,10 @@
     st.textContent = [
       '.cl-shell{display:flex;flex-direction:column;border:1.5px solid var(--line,rgba(38,51,49,.12));border-radius:14px;overflow:hidden;background:#fff;position:relative}',
       '.cl-head{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.4rem .5rem;background:var(--paper,#F1F9F7);border-bottom:1px solid var(--line,rgba(38,51,49,.12))}',
+      '.cl-brand{display:inline-flex;align-items:center;gap:.35rem;flex:none;padding:.22rem .6rem;border-radius:8px;background:var(--brand-deep,#245F5A);color:#fff;font-size:.74rem;font-weight:800;letter-spacing:.01em;white-space:nowrap}.cl-brand i{color:#F5C842}',
+      '@media(max-width:520px){.cl-brand b{display:none}}',
+      '.cl-up{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:.25rem;border:1px solid rgba(192,138,0,.45);background:#FFF7E6;color:#8A6200;border-radius:99px;padding:.05rem .45rem;font:inherit;font-size:.62rem;font-weight:800;cursor:pointer}.cl-up:hover{background:#F5C842;color:#3d2c00}.cl-up i{color:inherit!important;width:auto!important;opacity:1!important}',
+      '.cl-up + .cl-node-acts{margin-left:.2rem}',
       '.cl-crumb{flex:1;min-width:120px;font-weight:800;font-size:.8rem;color:var(--brand-deep,#245F5A);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cl-crumb i{opacity:.75;margin-right:.2rem}',
       '.cl-actions{display:flex;gap:.25rem;flex-wrap:wrap}',
       '.cl-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;border:1.5px solid var(--line,rgba(38,51,49,.12));border-radius:8px;background:#fff;color:var(--brand-deep,#245F5A);font:inherit;font-weight:800;font-size:.72rem;cursor:pointer}',

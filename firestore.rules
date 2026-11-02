@@ -1195,11 +1195,11 @@ service cloud.firestore {
     // can list their builders' hand-ins, and functions keep it in step.
     function techWorkKeys() {
       return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
-        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind'];
+        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind', 'taskAnswers'];
     }
     function techWorkCreateKeys() {
       return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
-        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind',
+        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind', 'taskAnswers',
         'studentId', 'coachId', 'lessonId', 'courseId', 'courseName', 'topicId', 'topicTitle', 'track', 'createdAt'];
     }
     function techMarkKeys() {

@@ -171,7 +171,7 @@ TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH
 | `techLessons/{id}/private/key` (the answers) | admin, the lesson's coach | admin, active coach. Never builders or parents | admin, the lesson's coach |
 | `techLessonProgress/{uid}_{lessonId}` | active builder, own, no score fields | builder, their coach, linked guardian, admin | builder: only opened / watched fields. Scores come from `submitTechQuiz` |
 | `techAttempts` | `submitTechQuiz` only | builder, their coach, linked guardian, admin | nobody |
-| `techLessonWork/{uid}_{lessonId}` | active builder, own, routed to their coach, status Draft or Submitted, no mark fields | builder (also before it exists), their coach, linked guardian, admin | builder: work fields only, while Draft or Corrections, may hand in. Coach of the builder: mark fields only (`techMarkKeys()`). Admin: anything |
+| `techLessonWork/{uid}_{lessonId}` | active builder, own, routed to their coach, status Draft or Submitted, no mark fields | builder (also before it exists), their coach, linked guardian, admin | builder: work fields only (code, writing, `taskAnswers`), while Draft or Corrections, may hand in. Coach of the builder: mark fields only (`techMarkKeys()`). Admin: anything |
 | `techGroups/{gid}` | admin, active coach (own `createdBy`), up to 30 members | admin, active coach, members | admin, or the coach who made it |
 | `techGroups/{gid}/tasks/{tid}` | admin, active coach, status Draft | admin, active coach, members | admin and active coaches (marking); members: shared work fields only (`techGroupWorkKeys()`), while Draft or Corrections, may hand in |
 | `techGroups/{gid}/tasks/{tid}/presence/{uid}` | the member themselves | admin, active coach, members | the member themselves |

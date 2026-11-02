@@ -16,7 +16,7 @@
 
    A lesson needs no title of its own: class > topic names it, and it shows
    as "Lesson 1", "Lesson 2" in its topic (labelsFor). A lesson with a task
-   opens in steps: Learn (video, notes, files) > Make it (Code IDE or writing
+   opens in steps: Learn (video, notes, files) > Make it (Paisley VS Code or writing
    pad, handed in and marked with ink) > Quiz.
 
    A class belongs to one level track: beginner, or advanced (intermediate
@@ -326,13 +326,29 @@
         '<div class="cr-field"><label>PDFs and files (optional)</label><div id="tcFiles"></div><div class="cr-actions" style="margin-top:.4rem"><label class="cr-btn sm" style="margin:0;cursor:pointer"><i class="fas fa-upload"></i> Upload file<input type="file" id="tcFileIn" multiple hidden accept="application/pdf,image/*,audio/*,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip"></label></div><div class="cr-note" id="tcFileNote" style="margin-top:.35rem">PDFs open on the page. Files up to 50 MB.</div></div>') +
       '<div class="tc-section"><i class="fas fa-circle-question"></i> ' + (isTest ? 'Questions' : 'Quiz to test understanding (optional)') + '</div><div class="cr-note" style="margin-bottom:.5rem">Options are up to you. A written answer needs no options or answer: builders type it and you read it in Results. Multiple choice, true or false, and short answers with accepted answers are marked automatically. Builders can try again.</div><div id="tcQs"></div>' +
       '<div class="tc-section"><i class="fas fa-laptop-code"></i> Practice for this lesson</div>' +
-      '<div class="cr-note" style="margin-bottom:.5rem">Attach a practice tool to this ' + (isTest ? 'test' : 'lesson') + '. Under the video, builders get a Practise button that opens it full size with your requirements beside it: the Code IDE (autocomplete, Emmet, folders, picture uploads, full screen) or the writing pad. They hand it in, and you mark it with ink in Results > Class work hand-ins. Their family sees your feedback.</div>' +
-      '<div class="cr-row2"><div class="cr-field"><label for="tcTaskT">Practice tool</label><select id="tcTaskT">' + [['', 'None'], ['code', 'Code IDE (HTML, CSS, JavaScript)'], ['writing', 'Writing pad']].map(function (p) { var cur = item && item.task && g.TechWork ? g.TechWork.kindOf(item.task) : ''; return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></div><div></div></div>' +
-      '<div class="cr-field" id="tcTaskBox"><label for="tcTask">Requirements (what they should make)</label><textarea id="tcTask" rows="4" maxlength="3000" placeholder="e.g. Make a page with a heading, a picture of your favourite animal and a button that changes the colour.">' + esc((item && item.task && item.task.brief) || '') + '</textarea><div class="cr-note" style="margin-top:.3rem">Optional. Without it they practise what the lesson showed.</div></div>';
+      '<div class="cr-note" style="margin-bottom:.5rem">Attach a practice tool to this ' + (isTest ? 'test' : 'lesson') + '. Under the video, builders get a Practise button that opens it full size with your requirements beside it: Paisley VS Code (autocomplete, Emmet, folders, picture and video uploads, full screen) or the writing pad. The pop-up carries the class, topic and lesson name. Add questions for a short quiz or test beside the work: builders answer them there and hand them in with the work, and you mark both with ink in Results > Class work hand-ins. Their family sees your feedback.</div>' +
+      '<div class="cr-row2"><div class="cr-field"><label for="tcTaskT">Practice tool</label><select id="tcTaskT">' + [['', 'None'], ['code', 'Paisley VS Code (HTML, CSS, JavaScript)'], ['writing', 'Writing pad']].map(function (p) { var cur = item && item.task && g.TechWork ? g.TechWork.kindOf(item.task) : ''; return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></div><div></div></div>' +
+      '<div class="cr-field" id="tcTaskBox"><label for="tcTask">Requirements (what they should make)</label><textarea id="tcTask" rows="4" maxlength="3000" placeholder="e.g. Make a page with a heading, a picture of your favourite animal and a button that changes the colour.">' + esc((item && item.task && item.task.brief) || '') + '</textarea><div class="cr-note" style="margin-top:.3rem">Optional. Without it they practise what the lesson showed.</div></div>' +
+      '<div class="cr-field" id="tcTaskQBox"><label>Questions to answer with the work (optional)</label><div class="cr-note" style="margin-bottom:.45rem">A short quiz or test that goes with the work, for example “Which tag makes a link?” or “Explain what your code does”. Builders answer beside the work and hand everything in together; you read and mark the answers with the work (they are not marked automatically).</div><div id="tcTaskQs"></div>' +
+      '<button type="button" class="cr-btn sm" id="tcTaskQAdd"><i class="fas fa-plus"></i> Add a question</button></div>';
     var $ = function (s) { return m.body.querySelector(s); };
     var notes = isTest ? null : notesEditor($('#tcNotes'), item && item.notes);
     var qs = questionBuilder($('#tcQs'), item && item.questions, key);
-    var syncTask = function () { $('#tcTaskBox').style.display = $('#tcTaskT').value ? '' : 'none'; };
+    var syncTask = function () { var on = $('#tcTaskT').value ? '' : 'none'; $('#tcTaskBox').style.display = on; $('#tcTaskQBox').style.display = on; };
+    /* The task's own questions: just wording; the coach marks the answers with the work. */
+    var tq = (((item && item.task) || {}).questions || []).filter(function (x) { return x && x.id; }).map(function (x) { return { id: x.id, text: x.text || '' }; });
+    var newQid = function () { return 'tq' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); };
+    function readTq() { [].forEach.call(m.body.querySelectorAll('[data-tqid]'), function (inp) { tq.forEach(function (x) { if (x.id === inp.dataset.tqid) x.text = inp.value; }); }); }
+    function paintTq() {
+      $('#tcTaskQs').innerHTML = tq.map(function (x, i) {
+        return '<div style="display:flex;gap:.45rem;align-items:center;margin-bottom:.4rem"><b class="cr-note" style="min-width:1.3rem">' + (i + 1) + '.</b><input type="text" maxlength="500" data-tqid="' + esc(x.id) + '" value="' + esc(x.text) + '" placeholder="Type the question" aria-label="Question ' + (i + 1) + '" style="flex:1;min-width:0">' +
+          '<button type="button" class="cr-btn sm danger" data-tqdel="' + i + '" aria-label="Remove question ' + (i + 1) + '"><i class="fas fa-xmark"></i></button></div>';
+      }).join('');
+      $('#tcTaskQAdd').style.display = tq.length >= 10 ? 'none' : '';
+    }
+    paintTq();
+    $('#tcTaskQAdd').onclick = function () { readTq(); tq.push({ id: newQid(), text: '' }); dirty = true; paintTq(); var ins = m.body.querySelectorAll('[data-tqid]'); if (ins.length) ins[ins.length - 1].focus(); };
+    $('#tcTaskQs').addEventListener('click', function (e) { var b = e.target.closest('[data-tqdel]'); if (!b) return; readTq(); tq.splice(Number(b.dataset.tqdel), 1); dirty = true; paintTq(); });
     $('#tcTaskT').addEventListener('change', syncTask); syncTask();
     m.body.addEventListener('input', function () { dirty = true; });
     function paintFiles() {
@@ -393,13 +409,15 @@
       }
       var topicId = $('#tcTop').value, topic = topics.filter(function (t) { return t.id === topicId; })[0] || {};
       var brief = $('#tcTask').value.trim(), taskKind = $('#tcTaskT').value;
+      readTq();
+      var taskQuestions = tq.map(function (x) { return { id: x.id, text: String(x.text || '').trim().slice(0, 500) }; }).filter(function (x) { return x.text; }).slice(0, 10);
       var d = {
         type: isTest ? 'test' : 'lesson', title: title.slice(0, 160), courseId: cls.id, courseName: cls.name, topicId: topicId, topicTitle: topic.title || '',
         track: cls.track, discipline: cls.discipline, status: status,
         video: videoUrl ? { url: videoUrl, path: video.path || '', name: video.name || '' } : null,
         notes: notesHtml, instructions: $('#tcIns').value.trim().slice(0, 3000), files: files.slice(0, 20),
         questions: built.questions, questionCount: built.questions.length,
-        task: taskKind ? { brief: brief.slice(0, 3000), kind: taskKind, category: taskKind === 'writing' ? 'WRITING' : 'CODE' } : null,
+        task: taskKind ? { brief: brief.slice(0, 3000), kind: taskKind, category: taskKind === 'writing' ? 'WRITING' : 'CODE', questions: taskQuestions } : null,
         updatedAt: FV().serverTimestamp()
       };
       if (status === 'published' && !(item && item.publishedAt)) d.publishedAt = FV().serverTimestamp();
@@ -464,7 +482,7 @@
       if (l.notes) bits.push('Notes');
       if ((l.files || []).length) bits.push(l.files.length + ' file' + (l.files.length === 1 ? '' : 's'));
       if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
-      if (l.task) bits.push(g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Writing pad' : 'Code IDE');
+      if (l.task) bits.push((g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Writing pad' : 'Paisley VS Code') + (((l.task.questions || []).length) ? ' + ' + l.task.questions.length + ' question' + (l.task.questions.length === 1 ? '' : 's') : ''));
       if (l.createdByName) bits.push(l.createdByName);
       return bits.join(' · ');
     }
@@ -863,11 +881,12 @@
     function practiceCard(l) {
       if (!l.task || !g.TechWork) return '';
       var w = isWriting(l);
-      var line = l.task.brief || (w ? 'Write about what you learnt in this lesson.' : 'Try out what you learnt in this lesson in the Code IDE.');
+      var line = l.task.brief || (w ? 'Write about what you learnt in this lesson.' : 'Try out what you learnt in this lesson in Paisley VS Code.');
       return '<section class="tc-practice"><span class="ic"><i class="fas ' + (w ? 'fa-pen-nib' : 'fa-laptop-code') + '"></i></span>' +
-        '<div class="t"><b>' + (isBuilder ? (w ? 'Write it' : 'Practise it') : esc(first) + '\u2019s practice') + '</b><small>' + esc(line) + '</small><span id="tcPState"></span></div>' +
+        '<div class="t"><b>' + (isBuilder ? (w ? 'Write it' : 'Practise it') : esc(first) + '\u2019s practice') + '</b><small>' + esc(line) + '</small>' +
+          ((l.task.questions || []).length ? '<span class="tc-pill"><i class="fas fa-circle-question"></i> ' + l.task.questions.length + ' question' + (l.task.questions.length === 1 ? '' : 's') + ' to answer</span> ' : '') + '<span id="tcPState"></span></div>' +
         '<button type="button" class="tc-btn gold" data-tc="practice"><i class="fas ' + (w ? 'fa-pen-nib' : 'fa-code') + '"></i> ' +
-        (isBuilder ? (w ? 'Open the writing pad' : 'Open the IDE') : 'See ' + esc(first) + '\u2019s work') + '</button></section>';
+        (isBuilder ? (w ? 'Open the writing pad' : 'Open Paisley VS Code') : 'See ' + esc(first) + '\u2019s work') + '</button></section>';
     }
     function watchPractice(l) {
       if (S.pUnsub) { S.pUnsub(); S.pUnsub = null; }
@@ -885,12 +904,12 @@
       var pop = document.createElement('div');
       pop.className = 'tc-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-modal', 'true'); pop.setAttribute('aria-label', 'Practice');
       pop.innerHTML = '<div class="tc-pop-box"><header class="tc-pop-head"><span class="ic"><i class="fas ' + (w ? 'fa-pen-nib' : 'fa-laptop-code') + '"></i></span>' +
-        '<div class="t"><b>' + (w ? 'Writing pad' : 'Code IDE') + (isBuilder ? '' : ' · ' + esc(first)) + '</b><small>' + esc(S.course.name) + ' · ' + esc(l.topicTitle || '') + ' · ' + esc(label) + '</small></div>' +
+        '<div class="t"><b>' + esc(l.topicTitle || S.course.name) + ' · ' + esc(label) + (isBuilder ? '' : ' · ' + esc(first)) + '</b><small>' + esc(S.course.name) + ' · ' + (w ? 'Writing pad' : 'Paisley VS Code') + '</small></div>' +
         '<button type="button" class="tc-pop-x" data-pop="close" aria-label="Close" title="Close (your work is saved)"><i class="fas fa-xmark"></i></button></header><div class="tc-pop-body"></div></div>';
       document.body.appendChild(pop);
       document.documentElement.style.overflow = 'hidden';
       S.pop = pop;
-      S.work = g.TechWork.mountLessonWork(pop.querySelector('.tc-pop-body'), { me: me, student: student, lesson: l, label: label, layout: 'pop' });
+      S.work = g.TechWork.mountLessonWork(pop.querySelector('.tc-pop-body'), { me: me, student: student, lesson: Object.assign({}, l, { courseName: l.courseName || S.course.name }), label: label, layout: 'pop' });
       pop.addEventListener('click', function (e) { if (e.target.closest('[data-pop="close"]')) closePractice(); });
       if (isBuilder) T.logActivity(me, 'project_opened', 'Opened the practice for ' + label, { origin: 'class' });
     }
@@ -925,7 +944,7 @@
       var quiz = (l.questions || []).length ? '<div class="tc-panel" id="tcQuiz"></div>' : '';
       var meta = [];
       if (l.video) meta.push('<span class="tc-pill"><i class="fas fa-circle-play"></i> Video</span>');
-      if (l.task) meta.push('<span class="tc-pill"><i class="fas ' + (isWriting(l) ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (isWriting(l) ? 'Writing pad' : 'Code IDE') + '</span>');
+      if (l.task) meta.push('<span class="tc-pill"><i class="fas ' + (isWriting(l) ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (isWriting(l) ? 'Writing pad' : 'Paisley VS Code') + '</span>');
       if (l.questionCount) meta.push('<span class="tc-pill"><i class="fas fa-circle-question"></i> ' + l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's') + '</span>');
       var nav = '<div class="tc-nav">' + (prev ? '<button type="button" class="tc-btn light" data-tc="lesson" data-id="' + esc(prev.id) + '"><i class="fas fa-arrow-left"></i> Previous</button>' : '<span></span>') +
         (next ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Next ' + (next.type === 'test' ? 'practice test' : 'lesson') + ' <i class="fas fa-arrow-right"></i></button>' : '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>') + '</div>';

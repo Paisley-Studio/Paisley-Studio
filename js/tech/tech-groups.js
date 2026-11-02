@@ -103,7 +103,7 @@
       if (S.groups === null) { host.innerHTML = '<div class="cr-empty">Loading groups…</div>'; return; }
       if (S.open) return paintGroup();
       var list = S.groups.filter(visible);
-      host.innerHTML = '<div class="cr-bar"><div><h3>Groups</h3><div class="cr-sub">Put builders together, give the group a task, and they code it together in one live IDE, each seeing where the others are typing. You mark it with ink like class work.</div></div>' +
+      host.innerHTML = '<div class="cr-bar"><div><h3>Groups</h3><div class="cr-sub">Put builders together, give the group a task, and they code it together in one live Paisley VS Code, each seeing where the others are typing. You mark it with ink like class work.</div></div>' +
         '<button type="button" class="cr-btn primary" data-g="new"><i class="fas fa-plus"></i> New group</button></div>' +
         (isAdmin ? '' : '<label class="cr-note" style="display:inline-flex;gap:.4rem;align-items:center;margin-bottom:.8rem;cursor:pointer"><input type="checkbox" data-g="mineonly"' + (S.mineOnly ? ' checked' : '') + '> Only groups with my builders</label>') +
         (list.length ? '<div class="tg-grid">' + list.map(function (gr) {

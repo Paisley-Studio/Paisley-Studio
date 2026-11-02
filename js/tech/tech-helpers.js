@@ -394,7 +394,7 @@
   }
   /* The workspace a project type opens in. Every tool stays available for mixed projects. */
   var WORKSPACE_FOR = { CODE: 'code', WRITING: 'writing', RESEARCH: 'writing', DESIGN: 'upload', MEDIA: 'upload', MUSIC: 'upload', AI: 'writing', BUILD: 'code' };
-  var WORKSPACE_NAME = { code: 'Code IDE', writing: 'Writing Studio', upload: 'Media & uploads', brief: 'Project notes' };
+  var WORKSPACE_NAME = { code: 'Paisley VS Code', writing: 'Writing Studio', upload: 'Media & uploads', brief: 'Project notes' };
   function workspaceFor(category) { return WORKSPACE_FOR[category] || 'brief'; }
 
   function hasArtifact(x) {
@@ -1003,7 +1003,7 @@
     /* ---------- tab modules ---------- */
     function mountModule(kind, hostEl) {
       var lib = { writing: g.WritingStudio, code: g.CodeLab, upload: g.UploadPad }[kind];
-      var label = { writing: 'Writing Studio', code: 'Code IDE', upload: 'Upload Pad' }[kind];
+      var label = { writing: 'Writing Studio', code: 'Paisley VS Code', upload: 'Upload Pad' }[kind];
       if (!hostEl) return;
       if (!lib || !lib.mount) { hostEl.innerHTML = '<div class="tk-empty">' + label + ' is not loaded on this page.</div>'; return; }
       if (mounted[kind]) { try { mounted[kind].destroy(); } catch (e) { } mounted[kind] = null; }
@@ -1207,7 +1207,7 @@
       var tabs = [];
       if (mission) tabs.push(['mission', 'fa-bullseye', 'Mission']);
       tabs.push(['brief', 'fa-clipboard-list', 'Overview']);
-      var tools = [['writing', 'fa-pen-nib', 'Writing Studio'], ['code', 'fa-code', 'Code IDE'], ['upload', 'fa-photo-film', 'Media & uploads']];
+      var tools = [['writing', 'fa-pen-nib', 'Writing Studio'], ['code', 'fa-code', 'Paisley VS Code'], ['upload', 'fa-photo-film', 'Media & uploads']];
       tools.sort(function (x, y) { return (x[0] === pt ? -1 : 0) - (y[0] === pt ? -1 : 0); });
       tabs = tabs.concat(tools);
       tabs.push(['submit', canReview ? 'fa-clipboard-check' : 'fa-paper-plane', canReview ? 'Review' : (role === 'guardian' ? 'Status' : 'Submit')]);

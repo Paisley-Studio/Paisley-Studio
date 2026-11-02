@@ -3,13 +3,14 @@
    ---------------------------------------------------------
    A lesson (or practice test) can ask builders to make something:
      techLessons/{id}.task = { brief, kind: 'code' | 'writing' }
-   The builder does it right there, in the Code IDE (CodeLab) or the
+   The builder does it right there, in Paisley VS Code (CodeLab) or the
    writing pad (WritingStudio), and hands it in. One doc per builder:
 
      techLessonWork/{uid}_{lessonId}
        { studentId, studentName, coachId, lessonId, lessonTitle, courseId, courseName,
          topicId, topicTitle, track, kind,
          codeFiles, codeFolders, codeAssets, codeActive | writingHtml,
+         taskAnswers: { questionId: text }   (answers to task.questions, marked with the work)
          status: Draft | Submitted | Graded | Corrections, submittedAt, submitCount,
          feedback, grade, maxScore, gradedBy*, gradedAt, gradedFileUrl, inkData, history }
 
@@ -49,6 +50,17 @@
   function fmt(ts) { var d = T.toDate(ts); return d ? d.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
   function statePill(st) { var s = STATES[st] || ['Not started', 'fa-circle', '']; return '<span class="tc-pill ' + s[2] + '"><i class="fas ' + s[1] + '"></i> ' + esc(s[0]) + '</span>'; }
   function scoreText(d) { return d && d.grade != null && d.grade !== '' && d.maxScore ? d.grade + ' / ' + d.maxScore : ''; }
+  function answered(d) { var a = (d && d.taskAnswers) || {}; return Object.keys(a).filter(function (k) { return String(a[k] || '').trim(); }).length; }
+  function taskQs(task) { return ((task && task.questions) || []).filter(function (q) { return q && q.id && String(q.text || '').trim(); }); }
+  /* The questions and the builder's answers, read-only (staff viewer, family, after hand-in). */
+  function answersHtml(qs, ans, title) {
+    if (!qs || !qs.length) return '';
+    ans = ans || {};
+    return '<div class="tw-qs"><h4><i class="fas fa-circle-question"></i> ' + esc(title || 'Questions') + '</h4>' + qs.map(function (q, i) {
+      var a = String(ans[q.id] || '').trim();
+      return '<div class="tw-q"><div class="lb">' + (i + 1) + '. ' + esc(q.text) + '</div><div class="tw-ans' + (a ? '' : ' none') + '">' + (a ? esc(a) : 'No answer') + '</div></div>';
+    }).join('') + '</div>';
+  }
   function hasWork(d, kind) {
     if (!d) return false;
     if (kind === 'writing') return String(d.writingHtml || '').replace(/<[^>]+>/g, '').trim().length > 0 || /<img/i.test(d.writingHtml || '');
@@ -78,7 +90,16 @@
       '.tw-step b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);font-size:.72rem}',
       '.tw-step.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}.tw-step.on b{background:#fff}',
       '.tw-step.done b{background:#2EB872;color:#fff}',
-      '.tw-pop{display:grid;grid-template-columns:270px minmax(0,1fr);gap:1rem;align-items:start}',
+      '.tw-pop{display:grid;grid-template-columns:300px minmax(0,1fr);gap:1rem;align-items:start}',
+      '.tw-ctx{padding:0 0 .85rem;margin:0 0 .85rem;border-bottom:1px solid var(--line,rgba(38,51,49,.1))}',
+      '.tw-eyebrow{display:block;font-size:.66rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#C08A00}',
+      '.tw-ctx h3{margin:.25rem 0 .5rem;font-size:1.08rem;line-height:1.3;font-weight:800;color:var(--brand-deep,#245F5A)}.tw-ctx h3 span{color:var(--muted,#5A6E6A);font-weight:700}',
+      '.tw-qs{margin-top:1rem;padding-top:.85rem;border-top:1px solid var(--line,rgba(38,51,49,.1))}',
+      '.tw-qs h4{margin:0 0 .3rem}.tw-qs > p{margin:0 0 .7rem}',
+      '.tw-q{margin:0 0 .75rem}.tw-q label,.tw-q .lb{display:block;font-weight:700;font-size:.86rem;line-height:1.4;margin-bottom:.3rem;color:var(--ink,#263331)}',
+      '.tw-q textarea{width:100%;box-sizing:border-box;border:1.5px solid var(--line,rgba(38,51,49,.15));border-radius:10px;padding:.5rem .65rem;font:inherit;font-size:.86rem;line-height:1.45;resize:vertical;background:#fff}',
+      '.tw-q textarea:focus{outline:none;border-color:var(--brand,#2E7C74);box-shadow:0 0 0 3px rgba(46,124,116,.14)}',
+      '.tw-ans{background:var(--sage,#E5F2EF);border-radius:10px;padding:.5rem .65rem;font-size:.86rem;line-height:1.5;white-space:pre-wrap}.tw-ans.none{background:#fff;border:1px dashed var(--line,rgba(38,51,49,.2));color:var(--muted,#5A6E6A);font-style:italic}',
       '.tw-side{background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;padding:1rem;max-height:calc(100vh - 120px);overflow:auto}',
       '.tw-side h4{margin:0 0 .5rem;font-size:.92rem;font-weight:800;color:var(--brand-deep,#245F5A)}',
       '.tw-side .tw-bar{flex-direction:column;align-items:stretch;margin:.9rem 0 .4rem}.tw-side .tw-bar .grow{display:none}.tw-side .tw-bar .tc-btn{width:100%}',
@@ -175,6 +196,19 @@
       wrapWords('Task: ' + o.brief.replace(/\s+/g, ' '), sans, 9.5, W - 2 * M).slice(0, 12).forEach(function (ln) { need(13); page.drawText(ln, { x: M, y: y, size: 9.5, font: sans, color: grey }); y -= 13; });
       y -= 8;
     }
+    var pq = o.questions || [];
+    if (pq.length) {
+      need(30); page.drawText('Questions', { x: M, y: y, size: 12, font: bold, color: deep }); y -= 18;
+      pq.forEach(function (q, i) {
+        wrapWords((i + 1) + '. ' + q.text, bold, 10, W - 2 * M).forEach(function (ln) { need(14); page.drawText(ln, { x: M, y: y, size: 10, font: bold, color: ink }); y -= 14; });
+        var a = String((o.answers || {})[q.id] || '').trim();
+        (a ? a.split(/\n+/) : ['(No answer.)']).forEach(function (para) {
+          wrapWords(para, sans, 10.5, W - 2 * M - 14).forEach(function (ln) { need(15); page.drawText(ln, { x: M + 14, y: y, size: 10.5, font: sans, color: a ? ink : grey }); y -= 15; });
+        });
+        y -= 8;
+      });
+      y -= 6;
+    }
     if (o.kind === 'writing') {
       var blocks = textBlocks(o.writingHtml);
       if (!blocks.length) blocks = [{ t: 'p', s: '(Nothing written.)' }];
@@ -230,7 +264,7 @@
     var d = o.data || {};
     var bytes;
     try {
-      bytes = await workPdf({ title: o.title, who: o.who, kind: o.kind, brief: o.brief, files: d.codeFiles || [], writingHtml: o.kind === 'doc' ? g.CodeLab.mdHtml(((d.codeFiles || [])[0] || {}).content || '') : d.writingHtml, assets: d.codeAssets || [] });
+      bytes = await workPdf({ title: o.title, who: o.who, kind: o.kind, brief: o.brief, questions: o.questions || [], answers: d.taskAnswers || {}, files: d.codeFiles || [], writingHtml: o.kind === 'doc' ? g.CodeLab.mdHtml(((d.codeFiles || [])[0] || {}).content || '') : d.writingHtml, assets: d.codeAssets || [] });
     } catch (e) { alert('Could not prepare the work for marking: ' + T.errMsg(e)); return; }
     g.InkGrader.open({
       docRef: o.ref,
@@ -256,12 +290,13 @@
       return '<div class="tw-bar">' + statePill(d.status) + (d.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(d.submittedAt)) + (d.submittedByName ? ' by ' + esc(d.submittedByName) : '') + (d.submitCount > 1 ? ' · round ' + d.submitCount : '') + '</span>' : '') +
         (o.subtitle ? '<span class="tw-note grow" style="text-align:right">' + esc(o.subtitle) + '</span>' : '') + '</div>' +
         (o.brief ? '<div class="tc-panel" style="padding:.8rem 1rem"><b style="color:var(--brand-deep,#245F5A)">What they had to make</b><div class="tc-plain" style="margin-top:.3rem;font-size:.9rem">' + esc(o.brief) + '</div></div>' : '') +
+        ((o.questions || []).length ? '<div class="tc-panel" style="padding:.2rem 1rem .4rem">' + answersHtml(o.questions, d.taskAnswers, 'Their answers').replace('class="tw-qs"', 'class="tw-qs" style="border:0;margin-top:0"') + '</div>' : '') +
         feedbackHtml(d);
     }
     m.body.innerHTML = '<div id="twHead">' + head() + '</div><div id="twWork"></div>';
     var hostW = m.body.querySelector('#twWork');
     if (o.kind === 'writing') hostW.innerHTML = d.writingHtml ? '<div class="tw-article">' + T.cleanHtml(d.writingHtml) + '</div>' : '<div class="tc-empty">Nothing written yet.</div>';
-    else if (!g.CodeLab) hostW.innerHTML = '<div class="tc-empty">The Code IDE is not loaded on this page.</div>';
+    else if (!g.CodeLab) hostW.innerHTML = '<div class="tc-empty">Paisley VS Code is not loaded on this page.</div>';
     else lab = g.CodeLab.mount(hostW, { build: d, canEdit: false, mode: o.kind === 'doc' ? 'doc' : 'code', title: o.who, collab: o.live ? { ref: o.ref, presence: o.presence, me: { uid: o.me.uid, name: o.me.name } } : null });
     if (o.live) unsub = o.ref.onSnapshot(function (s) { if (s.exists) { d = s.data(); var h = m.body.querySelector('#twHead'); if (h) h.innerHTML = head(); paintFoot(); } }, function () { });
     function paintFoot() {
@@ -273,7 +308,7 @@
       var mk = m.foot.querySelector('[data-mark]');
       if (mk) mk.onclick = function () {
         mk.disabled = true;
-        openMarking({ me: o.me, ref: o.ref, data: d, title: o.title, subtitle: o.subtitle, who: o.who, kind: o.kind, brief: o.brief, folder: o.folder, key: o.key,
+        openMarking({ me: o.me, ref: o.ref, data: d, title: o.title, subtitle: o.subtitle, who: o.who, kind: o.kind, brief: o.brief, questions: o.questions, folder: o.folder, key: o.key,
           onDone: function () { m.close(); if (o.onDone) o.onDone(); } }).then(function () { mk.disabled = false; });
       };
     }
@@ -309,12 +344,45 @@
       return creating;
     }
     var briefText = l.task.brief || (kind === 'writing' ? 'Write about what you learnt in this lesson.' : 'Try out what you learnt in this lesson.');
-    /* layout 'pop': requirements and hand-in on the left, the IDE or writing pad filling the rest. */
-    if (o.layout === 'pop') host.innerHTML = '<div class="tw-pop"><aside class="tw-side"><h4><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-list-check') + '"></i> ' + (kind === 'writing' ? 'What to write' : 'What to build') + '</h4>' +
-      '<div class="tc-prose tc-plain" style="font-size:.9rem">' + esc(briefText) + '</div><div id="twHead"></div></aside><div class="tw-main" id="twEd"></div></div>';
-    else host.innerHTML = '<div class="tc-panel" style="margin-bottom:.8rem"><h3><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (kind === 'writing' ? 'What to write' : 'What to build') + '</h3>' +
-      '<div class="tc-prose tc-plain">' + esc(briefText) + '</div></div>' +
+    var qs = taskQs(l.task), answers = null, ansTimer = null, ansSaving = Promise.resolve();
+    var toolName = kind === 'writing' ? 'Writing pad' : 'Paisley VS Code';
+    /* Which lesson this is, so the work always carries its class, topic and lesson. */
+    var ctx = '<div class="tw-ctx"><span class="tw-eyebrow">' + esc(l.courseName || 'Class work') + '</span><h3>' + esc(l.topicTitle || '') + (l.topicTitle ? ' <span>· ' + esc(label) + '</span>' : esc(label)) + '</h3>' +
+      '<span class="tc-pill"><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + toolName + '</span>' + (qs.length ? ' <span class="tc-pill"><i class="fas fa-circle-question"></i> ' + qs.length + ' question' + (qs.length === 1 ? '' : 's') + '</span>' : '') + '</div>';
+    /* layout 'pop': the lesson, requirements, questions and hand-in on the left; the IDE or writing pad filling the rest. */
+    if (o.layout === 'pop') host.innerHTML = '<div class="tw-pop"><aside class="tw-side">' + ctx + '<h4><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-list-check') + '"></i> ' + (kind === 'writing' ? 'What to write' : 'What to build') + '</h4>' +
+      '<div class="tc-prose tc-plain" style="font-size:.9rem">' + esc(briefText) + '</div><div id="twQs"></div><div id="twHead"></div></aside><div class="tw-main" id="twEd"></div></div>';
+    else host.innerHTML = '<div class="tc-panel" style="margin-bottom:.8rem">' + ctx + '<h3><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (kind === 'writing' ? 'What to write' : 'What to build') + '</h3>' +
+      '<div class="tc-prose tc-plain">' + esc(briefText) + '</div><div id="twQs"></div></div>' +
       '<div id="twHead"></div><div id="twEd"></div>';
+    var qsEl = host.querySelector('#twQs');
+    /* The task's questions: typed beside the work, saved as they type, handed in with it. */
+    function paintQs() {
+      if (!qs.length || !qsEl) return;
+      var ed = editable();
+      if (ed && qsEl.dataset.ed === '1') return;          /* never repaint under the builder's typing */
+      qsEl.dataset.ed = ed ? '1' : '0';
+      if (!ed) { answers = null; qsEl.innerHTML = answersHtml(qs, data && data.taskAnswers, isBuilder ? 'Your answers' : 'Questions'); return; }
+      answers = Object.assign({}, (data && data.taskAnswers) || {});
+      qsEl.innerHTML = '<div class="tw-qs"><h4><i class="fas fa-circle-question"></i> Answer these</h4><p class="tw-note">They save as you type and go in with your work.</p>' + qs.map(function (q, i) {
+        return '<div class="tw-q"><label for="twq_' + esc(q.id) + '">' + (i + 1) + '. ' + esc(q.text) + '</label><textarea id="twq_' + esc(q.id) + '" data-twq="' + esc(q.id) + '" rows="3" maxlength="3000" placeholder="Your answer">' + esc(answers[q.id] || '') + '</textarea></div>';
+      }).join('') + '</div>';
+    }
+    function saveAnswers() {
+      if (ansTimer) { clearTimeout(ansTimer); ansTimer = null; }
+      if (!answers) return ansSaving;
+      var copy = {}; qs.forEach(function (q) { if (answers[q.id] != null) copy[q.id] = String(answers[q.id]).slice(0, 3000); });
+      ansSaving = ansSaving.then(function () { return save({ taskAnswers: copy }); }).catch(function (e) {
+        var msg = host.querySelector('#twMsg'); if (msg) { msg.textContent = 'Could not save your answers: ' + T.errMsg(e); msg.style.color = '#b8362a'; }
+      });
+      return ansSaving;
+    }
+    if (qsEl) qsEl.addEventListener('input', function (e) {
+      var id = e.target.getAttribute('data-twq'); if (!id || !answers) return;
+      answers[id] = e.target.value;
+      if (ansTimer) clearTimeout(ansTimer);
+      ansTimer = setTimeout(saveAnswers, 700);
+    });
     var headEl = host.querySelector('#twHead'), edEl = host.querySelector('#twEd');
     function paintHead() {
       var st = data && data.status, first = T.firstName(student.name);
@@ -327,7 +395,7 @@
         '<div class="tw-msg" id="twMsg" role="status"></div>' +
         feedbackHtml(data, isBuilder ? 'You' : first) +
         (!isBuilder && !data ? '<div class="tc-empty">' + esc(first) + ' has not started this yet.</div>' : '') +
-        (isBuilder && editable() ? '<p class="tw-note" style="margin:0 0 .6rem">' + (kind === 'writing' ? 'It saves as you write.' : 'It saves as you type. Press Run to see your page. Make folders and upload pictures on the left, then click a picture to use it.') + '</p>' : '');
+        (isBuilder && editable() ? '<p class="tw-note" style="margin:0 0 .6rem">' + (kind === 'writing' ? 'It saves as you write.' : 'It saves as you type. Press Run to see your page. Make a folder such as images or videos, press its Upload button to add files from your computer, then click a file to use it.') + '</p>' : '');
     }
     function mountEditor() {
       var want = editable();
@@ -341,7 +409,7 @@
         if (!g.WritingStudio) { edEl.innerHTML = '<div class="tc-empty">The writing pad is not loaded on this page.</div>'; return; }
         editor = g.WritingStudio.mount(edEl, { build: build, me: me, canEdit: want, files: [], onSave: save, imagePath: function (fn) { return 'techWork/' + student.id + '/' + l.id + '/' + fn; } });
       } else {
-        if (!g.CodeLab) { edEl.innerHTML = '<div class="tc-empty">The Code IDE is not loaded on this page.</div>'; return; }
+        if (!g.CodeLab) { edEl.innerHTML = '<div class="tc-empty">Paisley VS Code is not loaded on this page.</div>'; return; }
         editor = g.CodeLab.mount(edEl, {
           build: build, me: me, canEdit: want, title: label, onSave: save,
           uploadAsset: want ? function (f) {
@@ -357,10 +425,12 @@
       if (busy) return; busy = true; btn.disabled = true;
       try {
         if (editor && editor.flush) await editor.flush();
+        await saveAnswers();
         var snap = await ref.get();
         var cur = snap.exists ? snap.data() : null;
-        if (!hasWork(cur, kind)) { msg.textContent = kind === 'writing' ? 'Write something first.' : 'Write some code first.'; msg.style.color = '#b8362a'; busy = false; btn.disabled = false; return; }
-        if (!confirm('Hand this in for marking? You cannot change it until your coach has looked at it.')) { busy = false; btn.disabled = false; return; }
+        if (!hasWork(cur, kind) && !answered(cur)) { msg.textContent = kind === 'writing' ? 'Write something first.' : 'Write some code first.'; msg.style.color = '#b8362a'; busy = false; btn.disabled = false; return; }
+        var left = qs.length - qs.filter(function (q) { return String(((cur && cur.taskAnswers) || {})[q.id] || '').trim(); }).length;
+        if (!confirm((left ? 'You have not answered ' + left + ' of the ' + qs.length + ' questions. ' : '') + 'Hand this in for marking? You cannot change it until your coach has looked at it.')) { busy = false; btn.disabled = false; return; }
         await ref.update({ status: 'Submitted', submittedAt: FV().serverTimestamp(), submitCount: FV().increment(1), updatedAt: FV().serverTimestamp() });
         T.logActivity(me, 'project_saved', 'Handed in ' + label, { origin: 'class' });
         msg.textContent = 'Handed in. Your coach is told.'; msg.style.color = 'var(--brand-deep,#245F5A)';
@@ -371,17 +441,17 @@
     var unsub = ref.onSnapshot(function (s) {
       if (dead) return;
       data = s.exists ? s.data() : null; loaded = true;
-      paintHead(); mountEditor();
+      paintHead(); paintQs(); mountEditor();
     }, function (e) {
       if (dead) return;
       /* No doc yet reads as permission-denied for a builder's own missing doc in some setups: start empty. */
-      loaded = true; data = null; paintHead(); mountEditor();
+      loaded = true; data = null; paintHead(); paintQs(); mountEditor();
       console.warn('lesson work:', e && e.code);
     });
     return {
       refresh: function () { if (editor && editor.refresh) editor.refresh(); },
-      flush: function () { return editor && editor.flush ? editor.flush() : Promise.resolve(); },
-      destroy: function () { dead = true; unsub(); if (editor) { try { editor.destroy(); } catch (e) { } } }
+      flush: function () { return Promise.all([editor && editor.flush ? editor.flush() : null, ansTimer ? saveAnswers() : null]); },
+      destroy: function () { if (ansTimer) saveAnswers(); dead = true; unsub(); if (editor) { try { editor.destroy(); } catch (e) { } } }
     };
   }
 
@@ -429,7 +499,7 @@
       db.collection('techLessons').doc(r.lessonId).get().then(function (ls) {
         var lesson = ls.exists ? ls.data() : {};
         openWorkView({ me: me, ref: r.ref, data: r, title: r.lessonTitle, subtitle: (r.courseName || '') + (r.topicTitle ? ' · ' + r.topicTitle : ''), who: (s && s.name) || r.studentName,
-          kind: r.kind || kindOf(lesson.task), brief: lesson.task && lesson.task.brief, folder: r.studentId, key: r.lessonId });
+          kind: r.kind || kindOf(lesson.task), brief: lesson.task && lesson.task.brief, questions: taskQs(lesson.task), folder: r.studentId, key: r.lessonId });
       }).catch(function () {
         openWorkView({ me: me, ref: r.ref, data: r, title: r.lessonTitle, who: r.studentName, kind: r.kind, folder: r.studentId, key: r.lessonId });
       });
@@ -444,7 +514,7 @@
   }
 
   g.TechWork = {
-    kindOf: kindOf, workId: workId, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
+    kindOf: kindOf, workId: workId, taskQs: taskQs, answersHtml: answersHtml, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
     mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
   };
 })(window);
