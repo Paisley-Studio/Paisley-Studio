@@ -1138,10 +1138,11 @@ service cloud.firestore {
     function techReorderOnly() {
       return isTechCoach() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['order', 'updatedAt']);
     }
+    // A level's classes are taught in techCourses.order (Level 1, 2, 3...); any coach may reorder.
     match /techCourses/{id} {
       allow read: if canReadTechClasses();
       allow create: if techAuthorCreate() && request.resource.data.track in ['beginner', 'intermediate', 'expert', 'advanced'];
-      allow update: if techAuthorChange();
+      allow update: if techAuthorChange() || techReorderOnly();
       allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
     }
     match /techTopics/{id} {
@@ -1166,7 +1167,7 @@ service cloud.firestore {
       }
     }
     // Opened and watched come from the builder; scores only from submitTechQuiz, and
-    // passedAt (the level is passed, the next one unlocks) only from onTechLessonProgressWritten.
+    // passedAt (the lesson is finished) only from onTechLessonProgressWritten.
     match /techLessonProgress/{id} {
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid) ||
@@ -1180,8 +1181,16 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'topicId', 'openedAt', 'watchedAt', 'updatedAt']);
       allow delete: if isAdmin();
     }
-    // Classes (or levels of one) an admin opened for one builder, whatever their level:
-    // open.{courseId} = 'all' | a lessonId (every level up to that one). Only admins open them.
+    // A class a builder has passed (every lesson finished), which unlocks the next class.
+    // Written only by functions (onTechLessonProgressWritten / onTechLessonWorkWritten).
+    match /techCourseProgress/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow write: if false;
+    }
+    // Classes an admin opened for one builder, whatever their level: open.{courseId} = 'all'.
     match /techAccess/{uid} {
       allow read: if isAdmin() || isOwner(uid) || isTechCoachOf(uid) || isTechGuardianOf(uid);
       allow write: if isAdmin();

@@ -22,14 +22,16 @@
    A class belongs to one level track: beginner, intermediate or expert (old
    classes tagged 'advanced' show to intermediate and expert). See TechUI.tracksFor.
 
-   Levels and locks. The lessons of a class, in topic then lesson order, are its
-   levels: Level 1 is open and every other one is locked (a padlock) until the
-   one before is passed. What passing takes is set per lesson in lesson.gate
-   { watch, quiz, pass (%), work } (gateSteps; functions/tech.js mirrors it and
-   records passedAt, then tells the builder, coach, admins and guardians). A class
-   with afterCourseId stays locked until every lesson of that class is passed.
-   techAccess/{uid}.open[courseId] = 'all' | lessonId is the admin opening a class
-   (or up to one lesson) for one builder, at any level.
+   Levels and locks. The classes of one level track, in techCourses.order (then
+   name), are Level 1, 2, 3… Level 1 is open; every other class shows a padlock
+   until the class before it is passed. Topics and lessons inside an open class
+   are always open. A class is passed when every lesson posted in it is finished;
+   what finishing a lesson takes is lesson.gate { watch, quiz, pass (%), work }
+   (gateSteps; functions/tech.js mirrors it, records techCourseProgress.passedAt
+   and tells the builder, coach, admins and guardians). A new class goes to the
+   end of its level, so it arrives locked.
+   techAccess/{uid}.open[courseId] = 'all' is the admin opening a class for one
+   builder, at any level.
 
      TechClasses.mountManager(host, { me })         admin and coach: build and post
      TechClasses.mountResults(host, { me, students, studentId, lessonId })
@@ -100,6 +102,8 @@
     return bits.length ? 'To pass: ' + bits.join(', ') : 'Passes when opened';
   }
   /* Every lesson of a class in the order builders meet them (topic order, then lesson order). */
+  /* Classes in learning order: Level 1, 2, 3… (order, then name). Must match functions/tech.js. */
+  function byCourse(a, b) { return (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name)); }
   function inOrder(topics, items) {
     var out = [];
     topics.slice().sort(byOrder).forEach(function (t) { items.filter(function (l) { return l.topicId === t.id; }).sort(byOrder).forEach(function (l) { out.push(l); }); });
@@ -214,6 +218,8 @@
       '.tc-row .lv{display:block;font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--brand,#55BFB3)}.tc-row.locked .lv{color:#B5C0BE}',
       '.tc-card.locked{cursor:not-allowed;background:#FAFBFB}.tc-card.locked .ic{background:#EEF2F1;color:#9AA8A5}.tc-card.locked b{color:#7d8c89}',
       '.tc-card .lockmark{position:absolute;top:.9rem;right:1rem;color:#9AA8A5;font-size:.9rem}',
+      '.tc-card .lv{display:block;margin:0 0 .15rem;font-size:.66rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--brand,#55BFB3)}.tc-card.locked .lv{color:#B5C0BE}',
+      '.tc-card.passed .ic{background:rgba(46,184,114,.14);color:#1f8557}.tc-card.passed .lv{color:#1f8557}',
       '.tc-card .opened{display:inline-block;margin-top:.45rem;font-size:.68rem;font-weight:800;color:#5b3a99}',
       '.tc-sitem.locked{cursor:not-allowed;color:#9AA8A5}.tc-sitem.locked:hover{background:none}.tc-sitem.locked .n{background:#F3F6F5;color:#9AA8A5}',
       '.tc-steps{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .9rem;padding:.6rem .85rem;margin:0 0 1rem;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;background:#fff;font-size:.8rem}',
@@ -511,8 +517,8 @@
       '<div class="cr-field" id="tcTaskBox"><label for="tcTask">Requirements (what they should make)</label><textarea id="tcTask" rows="4" maxlength="3000" placeholder="e.g. Make a page with a heading, a picture of your favourite animal and a button that changes the colour.">' + esc((item && item.task && item.task.brief) || '') + '</textarea><div class="cr-note" style="margin-top:.3rem">Optional. Without it they practise what the lesson showed.</div></div>' +
       '<div class="cr-field" id="tcTaskQBox"><label>Questions to answer with the work (optional)</label><div class="cr-note" style="margin-bottom:.45rem">A short quiz or test that goes with the work, for example “Which tag makes a link?” or “Explain what your code does”. Builders answer beside the work and hand everything in together; you read and mark the answers with the work (they are not marked automatically).</div><div id="tcTaskQs"></div>' +
       '<button type="button" class="cr-btn sm" id="tcTaskQAdd"><i class="fas fa-plus"></i> Add a question</button></div>' +
-      '<div class="tc-section"><i class="fas fa-lock"></i> To pass this level and unlock the next</div>' +
-      '<div class="cr-note" style="margin-bottom:.5rem">Each lesson is a level. Level 1 of a class is always open; every other level shows a padlock until the builder passes the one before it. Tick what passing this ' + word + ' takes. A step the ' + word + ' does not have is skipped, and with nothing ticked, opening it is enough. Passing plays a celebration and emails their family.</div>' +
+      '<div class="tc-section"><i class="fas fa-flag-checkered"></i> To finish this ' + word + '</div>' +
+      '<div class="cr-note" style="margin-bottom:.5rem">Lessons inside a class are always open. A builder passes the class (and unlocks the next class, with a celebration and an email to their family) when every lesson in it is finished. Tick what finishing this ' + word + ' takes. A step the ' + word + ' does not have is skipped, and with nothing ticked, opening it is enough.</div>' +
       '<div class="cr-field" style="display:grid;gap:.45rem">' +
         '<label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0;font-weight:700"><input type="checkbox" id="tcGW"' + (gate0.watch ? ' checked' : '') + (isTest ? ' disabled' : '') + '> Watch the video' + (isTest ? ' (lessons only)' : '') + '</label>' +
         '<label style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;text-transform:none;letter-spacing:0;font-weight:700"><input type="checkbox" id="tcGQ"' + (gate0.quiz ? ' checked' : '') + '> Pass the quiz with at least <input type="number" id="tcGP" min="0" max="100" step="5" value="' + esc(gate0.pass) + '" style="width:5rem" aria-label="Pass mark in percent">%</label>' +
@@ -657,23 +663,20 @@
       if (S.panel) return;
       if (S.screen === 'course' && S.course) return paintCourse();
       if (!S.loaded) { host.innerHTML = '<div class="cr-empty">Loading classes…</div>'; return; }
-      var list = S.courses.filter(function (c) { return onTrack(c, S.track); }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-      host.innerHTML = '<div class="cr-bar"><div><h3>Classes</h3><div class="cr-sub">Each level has its own classes. Create a class, add topics, then add lessons and practice tests. Lessons are levels: Level 1 is open and the rest stay locked until the one before is passed. Whatever you post goes to every builder on that level and their parents, with a bell and an email.</div></div><button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add class</button></div>' +
+      var list = ladderOf(S.track);
+      host.innerHTML = '<div class="cr-bar"><div><h3>Classes</h3><div class="cr-sub">Each level has its own classes, taught in order: Level 1 is open, and every class after it shows builders a padlock until they finish every lesson of the class before. A new class goes to the end, so it arrives locked; change the order inside a class with Move earlier / Move later. Inside an open class, topics and lessons are always open. Whatever you post goes to every builder on that level and their parents, with a bell and an email.</div></div><button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add class</button></div>' +
         trackTabs(S.track) +
         (list.length ? '<div class="cr-grid">' + list.map(function (c) {
-          var after = c.afterCourseId && courseName(c.afterCourseId);
-          return '<button type="button" class="cr-card" data-a="open" data-id="' + esc(c.id) + '"><div class="ic"><i class="fas ' + (ICON[c.discipline] || 'fa-chalkboard') + '"></i></div><h4>' + esc(c.name) + '</h4><div class="meta">' + esc(T.disciplineLabel(c.discipline)) + '</div><div style="margin-top:.4rem">' + levelBadge(c.track) + '</div>' +
-            (after ? '<div class="meta" style="margin-top:.35rem"><i class="fas fa-lock"></i> Unlocks after ' + esc(after) + '</div>' : '') + '</button>';
+          var n = list.indexOf(c) + 1;
+          return '<button type="button" class="cr-card" data-a="open" data-id="' + esc(c.id) + '"><div class="ic"><i class="fas ' + (ICON[c.discipline] || 'fa-chalkboard') + '"></i></div>' +
+            '<div class="meta" style="font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:.68rem;color:var(--brand,#55BFB3)">Level ' + n + (n > 1 ? ' <i class="fas fa-lock" title="Locked until Level ' + (n - 1) + ' is passed"></i>' : ' · open') + '</div>' +
+            '<h4>' + esc(c.name) + '</h4><div class="meta">' + esc(T.disciplineLabel(c.discipline)) + '</div><div style="margin-top:.4rem">' + levelBadge(c.track) + '</div></button>';
         }).join('') + '</div>' : '<div class="cr-panel"><div class="cr-empty">No ' + esc(trackName(S.track)) + ' classes yet. Use “Add class” to start one, for example Coding.</div></div>') +
         '<div class="cr-note" id="tcNote" role="status" style="margin-top:.6rem"></div>';
     }
-    function courseName(id) { var c = S.courses.filter(function (x) { return x.id === id; })[0]; return c ? c.name : ''; }
-    /* The classes another class can wait for: same level, not itself, and not one that waits for it. */
-    function afterOptions(track, selfId, cur) {
-      var opts = S.courses.filter(function (c) { return c.id !== selfId && c.afterCourseId !== selfId && (c.track === track || c.track === 'advanced' || track === 'advanced'); })
-        .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-      return '<option value="">Nothing: open from the start</option>' + opts.map(function (c) { return '<option value="' + esc(c.id) + '"' + (cur === c.id ? ' selected' : '') + '>' + esc(c.name) + ' (' + esc(trackName(c.track)) + ')</option>'; }).join('');
-    }
+    /* The classes of one level tab in learning order: Level 1, 2, 3… */
+    function ladderOf(track) { return S.courses.filter(function (c) { return onTrack(c, track); }).sort(byCourse); }
+    function nextOrder(track) { return ladderOf(track).reduce(function (m, c) { return Math.max(m, c.order || 0); }, 0) + 1; }
     function statusBadge(l) { return '<span class="cr-badge ' + (l.status === 'published' ? 'published' : 'draft') + '">' + (l.status === 'published' ? 'Posted' : 'Draft') + '</span>'; }
     function itemMeta(l) {
       var bits = [];
@@ -687,17 +690,15 @@
       return bits.join(' · ');
     }
     function paintCourse() {
-      var c = S.course, canC = canEdit(c);
+      var c = S.course, canC = canEdit(c), lvList = ladderOf(S.track), lvIdx = lvList.findIndex(function (x) { return x.id === c.id; });
       var h = '<div class="cr-crumb"><a data-a="back">Classes</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(c.name) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + esc(c.name) + '</h3><div style="margin:.3rem 0">' + levelBadge(c.track) + '</div><div class="cr-sub">' + esc(T.disciplineLabel(c.discipline)) + '. Topics and lessons appear to builders in this order, as Level 1, 2, 3… Each level unlocks when the one before is passed.' +
-          (c.afterCourseId && courseName(c.afterCourseId) ? ' <b>The whole class unlocks after ' + esc(courseName(c.afterCourseId)) + '.</b>' : '') + '</div></div><div class="cr-actions">' +
+        '<div class="cr-bar"><div><h3>' + (lvIdx > -1 ? '<span style="color:var(--brand,#55BFB3)">Level ' + (lvIdx + 1) + ' · </span>' : '') + esc(c.name) + '</h3><div style="margin:.3rem 0">' + levelBadge(c.track) + '</div><div class="cr-sub">' + esc(T.disciplineLabel(c.discipline)) + '. Topics and lessons appear to builders in this order and are always open. ' + (lvIdx === 0 ? '<b>Level 1: open to every builder on this level.</b>' : '<b>Level ' + (lvIdx + 1) + ': locked for each builder until they finish every lesson of Level ' + lvIdx + ', ' + esc(lvList[lvIdx - 1].name) + '.</b>') + '</div></div><div class="cr-actions">' +
+        '<button type="button" class="cr-btn" data-a="class-up" data-id="' + esc(c.id) + '"' + (lvIdx <= 0 ? ' disabled' : '') + ' title="Move earlier in the order"><i class="fas fa-arrow-left"></i> Move earlier</button>' +
+        '<button type="button" class="cr-btn" data-a="class-down" data-id="' + esc(c.id) + '"' + (lvIdx < 0 || lvIdx >= lvList.length - 1 ? ' disabled' : '') + ' title="Move later in the order"><i class="fas fa-arrow-right"></i> Move later</button>' +
         (isAdmin ? '<button type="button" class="cr-btn" data-a="open-for"><i class="fas fa-lock-open"></i> Open for a builder</button>' : '') +
         (canC ? '<button type="button" class="cr-btn" data-a="rename"><i class="fas fa-gear"></i> Settings</button><button type="button" class="cr-btn danger" data-a="del-class" aria-label="Delete class" title="Delete class"><i class="fas fa-trash"></i></button>' : '') +
         '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add topic</button></div></div>';
       if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">No topics yet. Add a topic (for example “Flow”), then add lessons inside it.</div></div>';
-      /* Builders meet posted lessons as levels, counted across the whole class. */
-      var levels = {};
-      inOrder(S.topics, S.items.filter(function (x) { return x.status === 'published'; })).forEach(function (x, n) { levels[x.id] = n + 1; });
       S.topics.forEach(function (t, ti) {
         var ls = S.items.filter(function (l) { return l.topicId === t.id; }).sort(byOrder), open = !S.collapsed[t.id];
         h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</span><div class="cr-actions">' +
@@ -711,7 +712,7 @@
           if (!ls.length) h += '<div class="cr-empty">No lessons in this topic yet.</div>';
           var names = labelsFor(ls);
           ls.forEach(function (l, li) {
-            h += '<div class="cr-lesson"><span class="n"><i class="fas ' + (l.type === 'test' ? 'fa-clipboard-question' : 'fa-circle-play') + '"></i></span><span class="tt">' + esc(names[l.id]) + '<small>' + esc((levels[l.id] ? 'Level ' + levels[l.id] + ' · ' : '') + (l.type === 'test' ? 'Practice test' : 'Lesson') + (itemMeta(l) ? ' · ' + itemMeta(l) : '')) + '</small></span>' + statusBadge(l) + '<div class="cr-actions">' +
+            h += '<div class="cr-lesson"><span class="n"><i class="fas ' + (l.type === 'test' ? 'fa-clipboard-question' : 'fa-circle-play') + '"></i></span><span class="tt">' + esc(names[l.id]) + '<small>' + esc((l.type === 'test' ? 'Practice test' : 'Lesson') + (itemMeta(l) ? ' · ' + itemMeta(l) : '')) + '</small></span>' + statusBadge(l) + '<div class="cr-actions">' +
               '<button type="button" class="cr-btn sm" aria-label="Move up" title="Move up" data-a="item-up" data-id="' + esc(l.id) + '"' + (li === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>' +
               '<button type="button" class="cr-btn sm" aria-label="Move down" title="Move down" data-a="item-down" data-id="' + esc(l.id) + '"' + (li === ls.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>' +
               (l.questionCount ? '<button type="button" class="cr-btn sm" data-a="item-results" data-id="' + esc(l.id) + '"><i class="fas fa-square-poll-vertical"></i> Results</button>' : '') +
@@ -731,11 +732,9 @@
       m.body.innerHTML = '<div class="cr-field"><label for="tcN">Class name</label><input type="text" id="tcN" maxlength="120" placeholder="e.g. CODING"></div>' +
         '<div class="cr-row2"><div class="cr-field"><label for="tcD">Subject</label><select id="tcD">' + T.DISCIPLINES.map(function (d) { return '<option value="' + esc(d) + '">' + esc(T.disciplineLabel(d)) + '</option>'; }).join('') + '</select></div>' +
         '<div class="cr-field"><label for="tcL">Level</label><select id="tcL">' + T.TRACKS.map(function (t) { return '<option value="' + t + '"' + (t === S.track ? ' selected' : '') + '>' + esc(trackName(t)) + '</option>'; }).join('') + '</select></div></div>' +
-        '<div class="cr-field"><label for="tcAf">Locked until this class is finished</label><select id="tcAf">' + afterOptions(S.track, '', '') + '</select></div>' +
-        '<div class="cr-note">A class is for one level: beginners, intermediate or expert builders. Make another one to teach the same subject at a different level. Pick a class above to keep this one locked (with a padlock) until a builder has passed every lesson of it.</div>';
+        '<div class="cr-note">A class is for one level: beginners, intermediate or expert builders. It goes to the end of that level\u2019s classes, so builders see it with a padlock until they finish the class before it. Move it earlier inside the class if it should come sooner.</div>';
       m.foot.innerHTML = '<span class="cr-err" id="tcE"></span><button type="button" class="cr-btn" data-x2>Cancel</button><button type="button" class="cr-btn primary" data-go>Create class</button>';
       var nm = m.body.querySelector('#tcN'), ds = m.body.querySelector('#tcD');
-      m.body.querySelector('#tcL').addEventListener('change', function () { m.body.querySelector('#tcAf').innerHTML = afterOptions(this.value, '', ''); });
       m.foot.querySelector('[data-x2]').onclick = function () { m.close(); };
       m.foot.querySelector('[data-go]').onclick = async function () {
         var b = this, name = nm.value.trim(), track = m.body.querySelector('#tcL').value, err = m.foot.querySelector('#tcE');
@@ -744,7 +743,7 @@
         if (dup) { m.close(); openCourse(dup); return; }
         b.disabled = true;
         try {
-          var d = { name: name, discipline: ds.value, track: track, afterCourseId: m.body.querySelector('#tcAf').value || '', createdBy: me.uid, createdByName: me.name || '', createdAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
+          var d = { name: name, discipline: ds.value, track: track, order: nextOrder(track), createdBy: me.uid, createdByName: me.name || '', createdAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
           var r = await COURSES().add(d);
           m.close(); openCourse(Object.assign({ id: r.id }, d));
         } catch (e) { b.disabled = false; err.textContent = T.errMsg(e); }
@@ -758,19 +757,20 @@
       m.body.innerHTML = '<div class="cr-field"><label for="tcN">Class name</label><input type="text" id="tcN" maxlength="120" value="' + esc(c.name) + '"></div>' +
         '<div class="cr-field"><label for="tcL">Level</label><select id="tcL">' + levelOpts.map(function (t) { return '<option value="' + t + '"' + (t === c.track ? ' selected' : '') + '>' + esc(trackName(t)) + '</option>'; }).join('') + '</select>' +
           (c.track === 'advanced' ? '<div class="cr-note" style="margin-top:.3rem">This class is from before each level had its own classes, so intermediate and expert builders both see it. Choose one level to separate them.</div>' : '') + '</div>' +
-        '<div class="cr-field"><label for="tcAf">Locked until this class is finished</label><select id="tcAf">' + afterOptions(c.track, c.id, c.afterCourseId || '') + '</select></div>';
+        '';
       m.foot.innerHTML = '<span class="cr-err" id="tcE"></span><button type="button" class="cr-btn" data-x2>Cancel</button><button type="button" class="cr-btn primary" data-go>Save</button>';
-      m.body.querySelector('#tcL').addEventListener('change', function () { var cur = m.body.querySelector('#tcAf').value; m.body.querySelector('#tcAf').innerHTML = afterOptions(this.value, c.id, cur); });
       m.foot.querySelector('[data-x2]').onclick = function () { m.close(); };
       m.foot.querySelector('[data-go]').onclick = function () {
-        var name = m.body.querySelector('#tcN').value.trim(), track = m.body.querySelector('#tcL').value, after = m.body.querySelector('#tcAf').value || '', b = this;
+        var name = m.body.querySelector('#tcN').value.trim(), track = m.body.querySelector('#tcL').value, b = this;
         var err = m.foot.querySelector('#tcE');
         if (!name) { err.textContent = 'Give the class a name.'; return; }
         if (track !== c.track && !isAdmin && S.items.some(function (x) { return x.createdBy !== me.uid; })) { err.textContent = 'Another coach has lessons in this class, so only an admin can change its level.'; return; }
         if (track !== c.track && !confirm('Move “' + c.name + '” to ' + trackName(track) + '? Builders on the old level stop seeing it, and only ' + trackName(track) + ' builders get its new lessons.')) return;
         b.disabled = true;
         var bt = db.batch(), now = FV().serverTimestamp();
-        bt.update(COURSES().doc(c.id), { name: name, track: track, afterCourseId: after, updatedAt: now });
+        var cu = { name: name, track: track, updatedAt: now };
+        if (track !== c.track) cu.order = nextOrder(track); /* the end of its new level */
+        bt.update(COURSES().doc(c.id), cu);
         if (track !== c.track) {
           S.topics.forEach(function (t) { bt.update(TOPICS().doc(t.id), { track: track, updatedAt: now }); });
           S.items.forEach(function (l) { bt.update(LESSONS().doc(l.id), { track: track, updatedAt: now }); });
@@ -782,13 +782,11 @@
     function openFor() {
       var c = S.course, m = CU.openModal({ title: 'Open “' + c.name + '” for a builder', wide: true });
       var builders = (o.students || []).filter(function (s) { return s.status !== 'Rejected'; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-      var posted = inOrder(S.topics, S.items.filter(function (x) { return x.status === 'published'; }));
-      var names = {}; S.topics.forEach(function (t) { var ln = labelsFor(S.items.filter(function (x) { return x.topicId === t.id; })); Object.keys(ln).forEach(function (k) { names[k] = (t.title ? t.title + ' · ' : '') + ln[k]; }); });
-      function what(v) { if (v === 'all') return 'Every level'; var n = posted.findIndex(function (x) { return x.id === v; }); return n < 0 ? 'A lesson no longer posted' : 'Up to Level ' + (n + 1) + ' · ' + (names[v] || ''); }
+      function what() { return 'the whole class'; }
       function who(id) { var s = builders.filter(function (x) { return x.id === id; })[0]; return s ? s.name + ' · ' + (T.SKILL_LABEL[s.skillLevel] || 'No level') : 'A builder'; }
-      m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.7rem">Opens the padlocks for one builder, whatever their level. They see the class with the rest of theirs, and every level you open is theirs to take straight away. Passing still unlocks the levels after it as usual.</div>' +
+      m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.7rem">Opens this class for one builder, whatever their level and wherever they are in the order. They see it with the rest of their classes, marked “Opened for you”. Passing it still unlocks the class after it as usual.</div>' +
         '<div class="cr-row2"><div class="cr-field"><label for="tcOB">Builder</label><select id="tcOB"><option value="">Choose a builder…</option>' + builders.map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.name || s.email || s.id) + ' · ' + esc(T.SKILL_LABEL[s.skillLevel] || 'No level') + (onTrack(c, T.trackOf(s.skillLevel)) ? '' : ' (another level)') + '</option>'; }).join('') + '</select></div>' +
-        '<div class="cr-field"><label for="tcOW">What to open</label><select id="tcOW"><option value="all">Every level of the class</option>' + posted.map(function (x, n) { return '<option value="' + esc(x.id) + '">Up to Level ' + (n + 1) + ' · ' + esc(names[x.id] || '') + '</option>'; }).join('') + '</select></div></div>' +
+        '<div></div></div>' +
         '<div class="cr-actions" style="margin-bottom:1rem"><button type="button" class="cr-btn primary" data-of="save"><i class="fas fa-lock-open"></i> Open it</button><span class="cr-note" id="tcOMsg" role="status"></span></div>' +
         '<div class="tc-section" style="margin-top:0">Opened by an admin</div><div id="tcOList" class="cr-note">Loading…</div>';
       m.foot.innerHTML = '<button type="button" class="cr-btn" data-x2>Close</button>';
@@ -805,7 +803,7 @@
       m.body.addEventListener('click', function (e) {
         var b = e.target.closest('[data-of]'); if (!b) return;
         if (b.dataset.of === 'save') {
-          var uid = m.body.querySelector('#tcOB').value, v = m.body.querySelector('#tcOW').value;
+          var uid = m.body.querySelector('#tcOB').value, v = 'all';
           if (!uid) { msg.textContent = 'Choose a builder first.'; return; }
           b.disabled = true; msg.textContent = 'Opening…';
           var open = {}; open[c.id] = v;
@@ -873,6 +871,7 @@
       else if (a === 'back') closeCourse();
       else if (a === 'rename') openRename();
       else if (a === 'open-for') openFor();
+      else if (a === 'class-up' || a === 'class-down') swap(COURSES(), ladderOf(S.track), id, a === 'class-up' ? -1 : 1);
       else if (a === 'del-class') {
         if (S.topics.length) { note('Remove this class’s topics first.', true); return; }
         if (confirm('Delete the class “' + S.course.name + '”?')) COURSES().doc(S.course.id).delete().catch(fail);
@@ -1028,29 +1027,38 @@
     host.classList.add('tc-learn');
     var me = o.me, student = o.student, isBuilder = me.role === 'student', track = T.trackOf(student.skillLevel), first = T.firstName(student.name);
     var S = { screen: 'home', courses: null, course: null, topics: [], items: [], progress: {}, unread: [], attempts: null, lesson: null,
-      works: {}, access: {}, extra: {}, prereq: {}, progLoaded: false, workLoaded: false, seen: null, ready: [] };
-    var unsubs = [], courseUnsubs = [], dead = false;
+      works: {}, access: {}, extra: {}, lessons: null, passes: {}, progLoaded: false, workLoaded: false, seen: null, seenLessons: null, ready: [] };
+    var unsubs = [], courseUnsubs = [], dead = false, tracks = T.tracksFor(student.skillLevel);
     var fail = function (e) { console.warn('tech classes:', e); };
     var query = function (q, fn, onErr) { return q.onSnapshot(function (s) { if (!dead) fn(s); }, function (e) { fail(e); if (onErr && !dead) onErr(e); }); };
+    function ready() { return S.courses !== null && S.lessons !== null && S.progLoaded && S.workLoaded; }
     /* Something changed that can open or close a padlock. */
     function changed() {
       if (S.screen !== 'lesson') paint(); else refreshLessonBits();
-      if (S.progLoaded && S.workLoaded) { var q = S.ready; S.ready = []; q.forEach(function (fn) { fn(); }); }
+      if (ready()) { var q = S.ready; S.ready = []; q.forEach(function (fn) { fn(); }); }
       afterData();
     }
-    function whenReady(fn) { if (S.progLoaded && S.workLoaded) fn(); else S.ready.push(fn); }
+    function whenReady(fn) { if (ready()) fn(); else S.ready.push(fn); }
 
-    unsubs.push(query(COURSES().where('track', 'in', T.tracksFor(student.skillLevel)), function (s) { S.courses = docs(s).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }); if (S.screen === 'home') paint(); }, function () { S.courses = S.courses || []; paint(); }));
+    /* The classes of my level, in the order they are learnt: Level 1, 2, 3… */
+    unsubs.push(query(COURSES().where('track', 'in', tracks), function (s) { S.courses = docs(s).sort(byCourse); changed(); }, function () { S.courses = S.courses || []; changed(); }));
+    /* Every posted lesson of those classes: a class is passed when all of its lessons are finished. */
+    unsubs.push(query(LESSONS().where('track', 'in', tracks).where('status', '==', 'published'), function (s) { S.lessons = docs(s); changed(); }, function () { S.lessons = S.lessons || []; changed(); }));
     unsubs.push(query(db.collection('techLessonProgress').where('studentId', '==', student.id), function (s) {
       S.progress = {}; s.docs.forEach(function (d) { S.progress[d.data().lessonId] = d.data(); });
       S.progLoaded = true; changed();
     }, function () { S.progLoaded = true; changed(); }));
-    /* Hand-ins count towards passing a level. */
+    /* Hand-ins count towards finishing a lesson. */
     unsubs.push(query(db.collection('techLessonWork').where('studentId', '==', student.id), function (s) {
       S.works = {}; s.docs.forEach(function (d) { S.works[d.data().lessonId] = d.data(); });
       S.workLoaded = true; changed();
     }, function () { S.workLoaded = true; changed(); }));
-    /* Classes (or levels) an admin opened for this builder, at any level. */
+    /* Classes the server recorded as passed stay passed when new lessons are added to them. */
+    unsubs.push(query(db.collection('techCourseProgress').where('studentId', '==', student.id), function (s) {
+      S.passes = {}; s.docs.forEach(function (d) { if (d.data().passedAt) S.passes[d.data().courseId] = d.data(); });
+      changed();
+    }));
+    /* Classes an admin opened for this builder, at any level. */
     unsubs.push(query(db.collection('techAccess').doc(student.id), function (d) {
       S.access = d.exists ? (d.data() || {}) : {};
       Object.keys(S.access.open || {}).forEach(function (cid) {
@@ -1061,60 +1069,60 @@
       changed();
     }));
     function accessFor(cid) { return ((S.access && S.access.open) || {})[cid] || ''; }
-    function allCourses() {
-      var list = (S.courses || []).slice();
-      Object.keys(S.extra).forEach(function (id) {
-        var c = S.extra[id];
-        if (c && accessFor(id) && !list.some(function (x) { return x.id === id; })) list.push(Object.assign({ opened: true }, c));
+    /* Opened by an admin from another level: always open, not one of my numbered levels. */
+    function extraCourses() {
+      return Object.keys(S.extra).map(function (id) { return S.extra[id]; }).filter(function (c) {
+        return c && accessFor(c.id) && !(S.courses || []).some(function (x) { return x.id === c.id; });
+      }).map(function (c) { return Object.assign({ opened: true }, c); });
+    }
+    function allCourses() { return (S.courses || []).concat(extraCourses()); }
+    function lessonState(l) { return gateSteps(l, S.progress[l.id], S.works[l.id]); }
+    function passedLesson(l) { return lessonState(l).passed; }
+    function lessonsOf(cid) { return (S.lessons || []).filter(function (l) { return l.courseId === cid; }); }
+    function courseCount(c) { var ls = lessonsOf(c.id); return { done: ls.filter(passedLesson).length, all: ls.length }; }
+    /* A class is passed when it has lessons and every one is finished (or the server already passed it). */
+    function coursePassed(c) { if (S.passes[c.id]) return true; var ls = lessonsOf(c.id); return ls.length > 0 && ls.every(passedLesson); }
+    /* Level 1 is open; each class after it opens when the one before is passed, or an admin opened it. */
+    function ladder() {
+      var list = S.courses || [], out = {};
+      list.forEach(function (c, i) {
+        out[c.id] = { n: i + 1, passed: coursePassed(c), open: i === 0 || !!accessFor(c.id) || out[list[i - 1].id].passed, prev: list[i - 1] || null, next: list[i + 1] || null };
       });
-      return list;
-    }
-    function passedLesson(l) { return gateSteps(l, S.progress[l.id], S.works[l.id]).passed; }
-    /* '' when a class is open, else the name of the class to finish first. */
-    function courseLock(c) {
-      if (!c.afterCourseId || accessFor(c.id)) return '';
-      var pre = S.prereq[c.afterCourseId];
-      if (pre === undefined) { loadPrereq(c.afterCourseId); return '…'; }
-      if (pre === 'loading') return '…';
-      if (!pre || !pre.lessons.length) return '';
-      return pre.lessons.every(passedLesson) ? '' : pre.name;
-    }
-    function loadPrereq(cid) {
-      S.prereq[cid] = 'loading';
-      Promise.all([COURSES().doc(cid).get(), LESSONS().where('courseId', '==', cid).where('status', '==', 'published').get()]).then(function (r) {
-        if (dead) return;
-        S.prereq[cid] = r[0].exists ? { name: r[0].data().name || 'the class before', lessons: docs(r[1]) } : null;
-        if (S.screen === 'home') paint();
-      }).catch(function (e) { S.prereq[cid] = null; fail(e); });
-    }
-    /* Each lesson of the open class as a level: its number, steps, and whether it is open or passed. */
-    function levelMap() {
-      var all = orderedItems(), out = {}, acc = S.course ? accessFor(S.course.id) : '';
-      var upto = acc === 'all' ? all.length - 1 : all.findIndex(function (x) { return x.id === acc; });
-      all.forEach(function (l, i) {
-        var st = gateSteps(l, S.progress[l.id], S.works[l.id]);
-        out[l.id] = { n: i + 1, steps: st.steps, passed: st.passed, open: i === 0 || i <= upto || out[all[i - 1].id].passed };
-      });
+      extraCourses().forEach(function (c) { out[c.id] = { n: 0, passed: coursePassed(c), open: true, prev: null, next: null }; });
       return out;
     }
-    /* A level passed while the builder watches: confetti, applause, and the way on. */
+    function lockedNote(c) {
+      var L = ladder()[c.id];
+      toast(L && L.prev ? 'Level ' + L.n + ', ' + c.name + ', is locked. ' + (isBuilder ? 'Finish' : first + ' needs to finish') + ' every lesson in Level ' + (L.n - 1) + ', ' + L.prev.name + ', to unlock it.' : 'This class is locked for now.');
+    }
+    /* A class passed while the builder is here: confetti, applause, and the way on. A lesson gets a small cheer. */
     function afterData() {
-      if (!isBuilder || !S.course || S.loading || S.screen === 'home' || !S.progLoaded || !S.workLoaded) return;
-      var all = orderedItems(), lv = levelMap();
-      if (!S.seen) { S.seen = {}; all.forEach(function (l) { if (lv[l.id].passed) S.seen[l.id] = 1; }); return; }
-      var fresh = all.filter(function (l) { return lv[l.id].passed && !S.seen[l.id]; });
-      fresh.forEach(function (l) { S.seen[l.id] = 1; });
-      if (!fresh.length) return;
-      var l = fresh[fresh.length - 1], i = all.indexOf(l), next = all[i + 1], c = S.course;
-      if (next) {
-        celebrate({ emoji: '🎉', badge: 'Level ' + (i + 2) + ' unlocked', title: 'You passed Level ' + (i + 1) + '!',
-          line: 'Brilliant work! Level ' + (i + 2) + ' (' + nameOf(next) + ') is open now, and your family has been told. Keep going!',
-          go: ['Continue to Level ' + (i + 2), function () { closePractice(); openLesson(next); }], stay: 'Stay here' });
-      } else {
-        var then = allCourses().filter(function (x) { return x.afterCourseId === c.id; })[0];
-        celebrate({ emoji: '🏆', badge: then ? then.name + ' unlocked' : 'Class complete', title: 'You finished ' + c.name + '!',
-          line: 'You passed every level of ' + c.name + '. ' + (then ? then.name + ' is open for you now.' : 'Your family has been told. Amazing work!'),
-          go: then ? ['Open ' + then.name, function () { closePractice(); openCourse(then); }] : ['Back to my classes', goHome], stay: 'Stay here' });
+      if (!isBuilder || !ready()) return;
+      var lad = ladder(), list = S.courses || [];
+      if (!S.seen) {
+        S.seen = {}; S.seenLessons = {};
+        list.forEach(function (c) { if (lad[c.id].passed) S.seen[c.id] = 1; });
+        (S.lessons || []).forEach(function (l) { if (passedLesson(l)) S.seenLessons[l.id] = 1; });
+        return;
+      }
+      var freshL = (S.lessons || []).filter(function (l) { return passedLesson(l) && !S.seenLessons[l.id]; });
+      freshL.forEach(function (l) { S.seenLessons[l.id] = 1; });
+      var fresh = list.filter(function (c) { return lad[c.id].passed && !S.seen[c.id]; });
+      fresh.forEach(function (c) { S.seen[c.id] = 1; });
+      if (fresh.length) {
+        var c = fresh[fresh.length - 1], L = lad[c.id], next = L.next;
+        celebrate(next ? {
+          emoji: '🎉', badge: 'Level ' + (L.n + 1) + ' unlocked', title: 'You passed Level ' + L.n + ': ' + c.name + '!',
+          line: 'Brilliant work! Level ' + (L.n + 1) + ', ' + next.name + ', is open now, and your family has been told. Keep going!',
+          go: ['Continue to ' + next.name, function () { closePractice(); openCourse(next); }], stay: 'Stay here'
+        } : {
+          emoji: '🏆', badge: 'Every level passed', title: 'You passed Level ' + L.n + ': ' + c.name + '!',
+          line: 'That was the last level for now, and your family has been told. Amazing work!',
+          go: ['Back to my classes', goHome], stay: 'Stay here'
+        });
+      } else if (freshL.length) {
+        var l = freshL[freshL.length - 1], cc = list.filter(function (x) { return x.id === l.courseId; })[0];
+        if (cc) { var k = courseCount(cc), left = k.all - k.done; toast('Lesson finished ✓ ' + k.done + ' of ' + k.all + ' done in ' + cc.name + '.' + (left && lad[cc.id].next ? ' Finish ' + (left === 1 ? 'the last one' : 'the other ' + left) + ' to unlock ' + lad[cc.id].next.name + '.' : '')); }
       }
     }
     unsubs.push(query(db.collection('techNotifications').where('recipientId', '==', me.uid).where('read', '==', false).limit(300), function (s) {
@@ -1125,25 +1133,20 @@
 
     function clearCourse() { courseUnsubs.forEach(function (u) { u(); }); courseUnsubs = []; S.topics = []; S.items = []; }
     function openCourse(c, thenLesson) {
+      var L0 = ready() ? ladder()[c.id] : null;
+      if (L0 && !L0.open) { lockedNote(c); if (S.screen !== 'home') goHome(); return; }
       clearCourse();
-      S.course = c; S.screen = 'course'; S.lesson = null; S.loading = 2; S.seen = null;
+      S.course = c; S.screen = 'course'; S.lesson = null; S.loading = 2;
       paint();
       var done = function () {
         S.loading = Math.max(0, S.loading - 1);
         if (S.loading) return;
         if (thenLesson) {
           var want = thenLesson; thenLesson = null;
-          /* A link to a lesson waits for progress, so its padlock is right. */
-          whenReady(function () {
-            if (dead || S.course !== c) return;
-            var l = S.items.filter(function (x) { return x.id === want; })[0];
-            if (l) openLesson(l); else paint();
-            afterData();
-          });
-          return;
+          var l = S.items.filter(function (x) { return x.id === want; })[0];
+          if (l) return openLesson(l);
         }
         if (S.screen === 'course') paint();
-        afterData();
       };
       courseUnsubs.push(query(TOPICS().where('courseId', '==', c.id), function (s) { S.topics = docs(s).sort(byOrder); done(); }));
       courseUnsubs.push(query(LESSONS().where('courseId', '==', c.id).where('status', '==', 'published'), function (s) { S.items = docs(s).sort(byOrder); done(); }));
@@ -1177,15 +1180,24 @@
       if (S.screen === 'course') return paintCourse();
       paintHome();
     }
+    function progHtml(k, word) {
+      if (!k.all) return '';
+      return '<span class="tc-prog" title="' + k.done + ' of ' + k.all + ' ' + word + '"><span class="bar" aria-hidden="true"><i style="width:' + Math.round(k.done / k.all * 100) + '%"></i></span>' + k.done + '/' + k.all + ' ' + word + '</span>';
+    }
     function paintHome() {
-      if (S.courses === null) { host.innerHTML = '<div class="tc-empty">Loading classes…</div>'; return; }
-      var intro = isBuilder ? 'Your classes at ' + trackName(track) + ' level.' : first + '’s classes at ' + trackName(track) + ' level. You can watch and read everything; only ' + first + ' can take the quizzes.';
-      var h = '<div class="tc-hbar"><h3>' + (isBuilder ? 'My classes' : esc(first) + '\u2019s classes') + '</h3><div class="sub">' + levelBadge(track) + '<span>' + esc(intro) + '</span></div></div>';
+      if (!ready()) { host.innerHTML = '<div class="tc-empty">Loading classes…</div>'; return; }
+      var lad = ladder();
+      var intro = isBuilder ? 'Your classes at ' + trackName(track) + ' level, in order. Finish every lesson in a class to unlock the next one.' : first + '’s classes at ' + trackName(track) + ' level, in order. Each one unlocks when ' + first + ' finishes the one before. You can watch and read everything open; only ' + first + ' can take the quizzes.';
+      var h = '<div class="tc-hbar"><h3>' + (isBuilder ? 'My classes' : esc(first) + '’s classes') + '</h3><div class="sub">' + levelBadge(track) + '<span>' + esc(intro) + '</span></div></div>';
       var list = allCourses();
       h += list.length ? '<div class="tc-grid">' + list.map(function (c) {
-        var n = unreadFor('courseId', c.id), lock = courseLock(c);
-        if (lock) return '<button type="button" class="tc-card locked" data-tc="course-locked" data-id="' + esc(c.id) + '" aria-label="' + esc(c.name) + ', locked"><i class="fas fa-lock lockmark" aria-hidden="true"></i><span class="ic"><i class="fas ' + (ICON[c.discipline] || 'fa-chalkboard') + '"></i></span><b>' + esc(c.name) + '</b><small>' + (lock === '…' ? 'Checking…' : 'Finish ' + esc(lock) + ' to unlock') + '</small></button>';
-        return '<button type="button" class="tc-card" data-tc="course" data-id="' + esc(c.id) + '">' + (n ? '<span class="tc-bub" aria-label="' + n + ' new">' + n + '</span>' : '') + '<span class="ic"><i class="fas ' + (ICON[c.discipline] || 'fa-chalkboard') + '"></i></span><b>' + esc(c.name) + '</b><small>' + esc(T.disciplineLabel(c.discipline)) + '</small>' +
+        var L = lad[c.id], n = unreadFor('courseId', c.id), k = courseCount(c);
+        var ic = '<span class="ic"><i class="fas ' + (L.open ? (ICON[c.discipline] || 'fa-chalkboard') : 'fa-lock') + '"></i></span>';
+        var lv = L.n ? '<span class="lv">Level ' + L.n + (L.passed ? ' · Passed' : '') + '</span>' : '';
+        if (!L.open) return '<button type="button" class="tc-card locked" data-tc="course-locked" data-id="' + esc(c.id) + '" aria-label="Level ' + L.n + ', ' + esc(c.name) + ', locked"><i class="fas fa-lock lockmark" aria-hidden="true"></i>' + ic + lv + '<b>' + esc(c.name) + '</b><small>Pass Level ' + (L.n - 1) + ' to unlock</small></button>';
+        return '<button type="button" class="tc-card' + (L.passed ? ' passed' : '') + '" data-tc="course" data-id="' + esc(c.id) + '">' + (n ? '<span class="tc-bub" aria-label="' + n + ' new">' + n + '</span>' : '') +
+          (L.passed ? '<i class="fas fa-circle-check lockmark" style="color:#2EB872" aria-label="Passed"></i>' : '') + ic + lv + '<b>' + esc(c.name) + '</b><small>' + esc(T.disciplineLabel(c.discipline)) + '</small>' +
+          (k.all ? '<span style="display:block;margin-top:.45rem">' + progHtml(k, 'lessons') + '</span>' : '') +
           (c.opened ? '<span class="opened"><i class="fas fa-lock-open"></i> Opened for ' + (isBuilder ? 'you' : esc(first)) + ' · ' + esc(trackName(c.track)) + '</span>' : '') + '</button>';
       }).join('') + '</div>' : '<div class="tc-empty">No classes have been posted for this level yet. New lessons appear here, with a bell and an email.</div>';
       if ((S.attempts || []).length) {
@@ -1195,52 +1207,49 @@
       }
       host.innerHTML = h;
     }
-    function itemState(l, L) {
-      var p = S.progress[l.id], out = '';
+    function itemState(l) {
+      var p = S.progress[l.id], st = lessonState(l), out = '';
       if (unreadFor('lessonId', l.id)) out += '<span class="tc-pill new">New</span>';
       if (p && p.bestPercent != null) out += '<span class="tc-pill ' + scoreClass(p.bestPercent) + '">Best ' + p.bestPercent + '%</span>';
-      if (L && L.passed) out += '<span class="tc-pill good"><i class="fas fa-check"></i> Passed</span>';
-      else if (L) { var d = L.steps.filter(function (s) { return s.done; }).length; out += '<span class="tc-pill">' + (d ? d + '/' + L.steps.length + ' steps' : 'Open') + '</span>'; }
+      if (st.passed) out += '<span class="tc-pill good"><i class="fas fa-check"></i> Finished</span>';
+      else { var d = st.steps.filter(function (s) { return s.done; }).length; if (d) out += '<span class="tc-pill">' + d + '/' + st.steps.length + ' steps</span>'; }
       return out;
     }
     function nameOf(l) { return labelsFor(S.items.filter(function (x) { return x.topicId === l.topicId; }))[l.id] || l.title || 'Lesson'; }
-    function isDone(l) { var L = levelMap()[l.id]; return !!(L && L.passed); }
-    /* "To pass Level 2: watch, quiz, hand in", ticked as they go. */
+    function isDone(l) { return passedLesson(l); }
+    /* "To finish this lesson: watch, quiz, hand in", ticked as they go, and what the class still needs. */
     function stepsHtml(l) {
-      var lv = levelMap(), L = lv[l.id]; if (!L) return '';
-      var all = orderedItems(), next = all[L.n];
-      if (L.passed) return '<div class="tc-steps passed" id="tcSteps"><span class="ok"><i class="fas fa-circle-check"></i> Level ' + L.n + ' passed</span><span class="tc-step done">' +
-        (next ? '<i class="fas fa-lock-open"></i> Level ' + (L.n + 1) + ' is open' : '<i class="fas fa-trophy"></i> ' + (isBuilder ? 'You finished this class' : esc(first) + ' finished this class')) + '</span></div>';
-      return '<div class="tc-steps" id="tcSteps"><b>To pass Level ' + L.n + '</b>' + L.steps.map(function (s) {
+      var st = lessonState(l), c = S.course, L = ladder()[c.id] || {}, k = courseCount(c), left = k.all - k.done;
+      var after = L.next ? (L.passed ? '<span class="tc-step done"><i class="fas fa-lock-open"></i> Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is open</span>'
+        : '<span class="tc-step"><i class="fas fa-lock" aria-hidden="true"></i> ' + left + ' lesson' + (left === 1 ? '' : 's') + ' left to unlock ' + esc(L.next.name) + '</span>') : '';
+      if (st.passed) return '<div class="tc-steps passed" id="tcSteps"><span class="ok"><i class="fas fa-circle-check"></i> Lesson finished</span>' + after + '</div>';
+      return '<div class="tc-steps" id="tcSteps"><b>To finish this lesson</b>' + st.steps.map(function (s) {
         return '<span class="tc-step' + (s.done ? ' done' : '') + '"><i class="fas ' + (s.done ? 'fa-circle-check' : 'fa-circle') + '" aria-hidden="true"></i>' + esc(s.label) + (s.done ? '<span class="tc-sr"> (done)</span>' : '') + '</span>';
-      }).join('') + (next ? '<span class="tc-step"><i class="fas fa-lock" aria-hidden="true"></i> then Level ' + (L.n + 1) + ' opens</span>' : '') + '</div>';
+      }).join('') + after + '</div>';
     }
     function navHtml(l) {
-      var all = orderedItems(), lv = levelMap(), i = all.findIndex(function (x) { return x.id === l.id; }), prev = all[i - 1], next = all[i + 1];
-      var nextBtn = !next ? '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>'
-        : lv[next.id].open ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Level ' + (i + 2) + ' <i class="fas fa-arrow-right"></i></button>'
-        : '<button type="button" class="tc-btn" data-tc="locked" data-id="' + esc(next.id) + '" aria-disabled="true" style="opacity:.6"><i class="fas fa-lock"></i> Level ' + (i + 2) + ' is locked</button>';
-      return '<div class="tc-nav" id="tcNav">' + (prev ? '<button type="button" class="tc-btn light" data-tc="lesson" data-id="' + esc(prev.id) + '"><i class="fas fa-arrow-left"></i> Level ' + i + '</button>' : '<span></span>') + nextBtn + '</div>';
+      var all = orderedItems(), i = all.findIndex(function (x) { return x.id === l.id; }), prev = all[i - 1], next = all[i + 1];
+      return '<div class="tc-nav" id="tcNav">' + (prev ? '<button type="button" class="tc-btn light" data-tc="lesson" data-id="' + esc(prev.id) + '"><i class="fas fa-arrow-left"></i> Previous</button>' : '<span></span>') +
+        (next ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Next ' + (next.type === 'test' ? 'practice test' : 'lesson') + ' <i class="fas fa-arrow-right"></i></button>' : '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>') + '</div>';
     }
     function refreshLessonBits() {
       if (S.screen !== 'lesson' || !S.lesson) return;
       var l = S.lesson, el;
       if ((el = host.querySelector('#tcSteps'))) el.outerHTML = stepsHtml(l);
-      if ((el = host.querySelector('#tcNav'))) el.outerHTML = navHtml(l);
       if ((el = host.querySelector('.tc-lside'))) el.outerHTML = sideList(l);
-    }
-    function lockedNote(id) {
-      var lv = levelMap(), L = lv[id];
-      toast(L ? 'Level ' + L.n + ' is locked. ' + (isBuilder ? 'Pass' : first + ' needs to pass') + ' Level ' + (L.n - 1) + ' first.' : 'This level is locked.');
     }
     function crumb(extra) { return '<div class="tc-crumb"><button type="button" data-tc="home">Classes</button>' + extra + '</div>'; }
     function paintCourse() {
       var c = S.course;
       if (S.loading) { host.innerHTML = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(c.name) + '</span>') + '<div class="tc-empty">Loading…</div>'; return; }
-      var all = orderedItems(), lv = levelMap(), done = all.filter(function (x) { return lv[x.id].passed; }).length, pct = all.length ? Math.round(done / all.length * 100) : 0;
+      var all = orderedItems(), L = ladder()[c.id] || {}, k = courseCount(c), left = k.all - k.done;
+      var nums = {}; all.forEach(function (x, n) { nums[x.id] = n < 9 ? '0' + (n + 1) : String(n + 1); });
       var h = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(c.name) + '</span>') +
-        '<div class="tc-hbar"><h3>' + esc(c.name) + '</h3><div class="sub">' + levelBadge(c.track) + '<span>' + esc(T.disciplineLabel(c.discipline)) + '</span>' +
-        (all.length ? '<span class="tc-prog" title="' + done + ' of ' + all.length + ' levels passed"><span class="bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>' + done + '/' + all.length + ' levels passed</span>' : '') + '</div></div>';
+        '<div class="tc-hbar"><h3>' + (L.n ? '<span style="color:var(--brand,#55BFB3)">Level ' + L.n + ' · </span>' : '') + esc(c.name) + '</h3><div class="sub">' + levelBadge(c.track) + '<span>' + esc(T.disciplineLabel(c.discipline)) + '</span>' +
+        progHtml(k, 'lessons finished') + (L.passed ? '<span class="tc-pill good"><i class="fas fa-check"></i> Passed</span>' : '') + '</div></div>';
+      if (L.next && ready()) h += L.passed
+        ? '<div class="tc-steps passed"><span class="ok"><i class="fas fa-lock-open"></i> Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is open</span><button type="button" class="tc-btn sm" data-tc="course" data-id="' + esc(L.next.id) + '">Go to ' + esc(L.next.name) + ' <i class="fas fa-arrow-right"></i></button></div>'
+        : '<div class="tc-steps"><span class="tc-step"><i class="fas fa-lock" aria-hidden="true"></i> ' + (isBuilder ? 'Finish' : esc(first) + ' needs to finish') + ' every lesson here to unlock Level ' + (L.n + 1) + ', ' + esc(L.next.name) + (k.all ? ' (' + left + ' to go)' : '') + '.</span></div>';
       var shown = 0;
       S.topics.forEach(function (t) {
         var ls = S.items.filter(function (l) { return l.topicId === t.id; });
@@ -1248,11 +1257,9 @@
         shown++;
         var names = labelsFor(ls);
         h += '<div class="tc-topic"><div class="tc-topic-head">' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</div>' + ls.map(function (l) {
-          var L = lv[l.id]; if (!L) return '';
           var bits = []; if (l.type === 'test') bits.push('Practice test'); if (l.video) bits.push('Video'); if (l.notes) bits.push('Notes'); if (l.task) bits.push(g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Write it' : 'Code it'); if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
-          var num = L.n < 10 ? '0' + L.n : String(L.n);
-          if (!L.open) return '<button type="button" class="tc-row locked" data-tc="locked" data-id="' + esc(l.id) + '" aria-label="Level ' + L.n + ', locked"><span class="n"><i class="fas fa-lock" aria-hidden="true"></i></span><span class="t"><span class="lv">Level ' + L.n + '</span><b>' + esc(names[l.id]) + '</b><small>Pass Level ' + (L.n - 1) + ' to unlock</small></span><i class="fas fa-lock tc-lock" aria-hidden="true"></i></button>';
-          return '<button type="button" class="tc-row' + (L.passed ? ' passed' : '') + '" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="n">' + (L.passed ? '<i class="fas fa-circle-check" title="Passed"></i>' : num) + '</span><span class="t"><span class="lv">Level ' + L.n + '</span><b>' + esc(names[l.id]) + '</b>' + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span>' + itemState(l, L) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
+          var fin = passedLesson(l);
+          return '<button type="button" class="tc-row' + (fin ? ' passed' : '') + '" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="n">' + (fin ? '<i class="fas fa-circle-check" title="Finished"></i>' : (nums[l.id] || '')) + '</span><span class="t"><b>' + esc(names[l.id]) + '</b>' + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span>' + itemState(l) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
         }).join('') + '</div>';
       });
       if (!shown) h += '<div class="tc-empty">Nothing has been posted in this class yet.</div>';
@@ -1306,18 +1313,15 @@
       if (S.pop) { S.pop.remove(); S.pop = null; document.documentElement.style.overflow = ''; }
     }
     function sideList(l) {
-      var ls = S.items.filter(function (x) { return x.topicId === l.topicId; }), names = labelsFor(ls), lv = levelMap();
-      return '<aside class="tc-lside" aria-label="Lessons in this topic"><h4>' + esc(l.topicTitle || 'This topic') + '</h4>' + ls.map(function (x) {
-        var on = x.id === l.id, L = lv[x.id] || { n: '', open: true, passed: false }, done = L.passed;
-        var bits = ['Level ' + L.n]; if (x.video) bits.push('Video'); if (x.task) bits.push(isWriting(x) ? 'Writing' : 'Code'); if (x.questionCount) bits.push('Quiz');
-        if (!L.open) return '<button type="button" class="tc-sitem locked" data-tc="locked" data-id="' + esc(x.id) + '" aria-label="Level ' + L.n + ', locked"><span class="n"><i class="fas fa-lock"></i></span><span class="t">' + esc(names[x.id]) + '<small>Level ' + L.n + ' · locked</small></span></button>';
-        return '<button type="button" class="tc-sitem' + (on ? ' on' : '') + (done ? ' done' : '') + '" data-tc="lesson" data-id="' + esc(x.id) + '"' + (on ? ' aria-current="true"' : '') + '><span class="n">' + (done ? '<i class="fas fa-check"></i>' : L.n) + '</span>' +
-          '<span class="t">' + esc(names[x.id]) + '<small>' + esc(bits.join(' · ')) + '</small></span></button>';
+      var ls = S.items.filter(function (x) { return x.topicId === l.topicId; }), names = labelsFor(ls);
+      return '<aside class="tc-lside" aria-label="Lessons in this topic"><h4>' + esc(l.topicTitle || 'This topic') + '</h4>' + ls.map(function (x, n) {
+        var on = x.id === l.id, done = passedLesson(x);
+        var bits = []; if (x.video) bits.push('Video'); if (x.task) bits.push(isWriting(x) ? 'Writing' : 'Code'); if (x.questionCount) bits.push('Quiz');
+        return '<button type="button" class="tc-sitem' + (on ? ' on' : '') + (done ? ' done' : '') + '" data-tc="lesson" data-id="' + esc(x.id) + '"' + (on ? ' aria-current="true"' : '') + '><span class="n">' + (done ? '<i class="fas fa-check"></i>' : (x.type === 'test' ? '<i class="fas fa-clipboard-question"></i>' : n + 1)) + '</span>' +
+          '<span class="t">' + esc(names[x.id]) + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span></button>';
       }).join('') + '<div style="border-top:1px solid var(--line,rgba(38,51,49,.08));margin-top:.5rem;padding-top:.5rem"><button type="button" class="tc-sitem" data-tc="back"><span class="n"><i class="fas fa-arrow-left"></i></span><span class="t">All of ' + esc(S.course.name) + '</span></button></div></aside>';
     }
     function openLesson(l) {
-      var L0 = levelMap()[l.id];
-      if (L0 && !L0.open) { lockedNote(l.id); if (S.screen !== 'course') { S.screen = 'course'; S.lesson = null; paint(); } return; }
       releaseVideos(); closePractice();
       S.screen = 'lesson'; S.lesson = l;
       var files = (l.files || []).filter(function (f) { return T.safeUrl(f.url); });
@@ -1336,7 +1340,7 @@
       if (l.video) meta.push('<span class="tc-pill"><i class="fas fa-circle-play"></i> Video</span>');
       if (l.task) meta.push('<span class="tc-pill"><i class="fas ' + (isWriting(l) ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (isWriting(l) ? 'Writing pad' : 'Paisley VS Code') + '</span>');
       if (l.questionCount) meta.push('<span class="tc-pill"><i class="fas fa-circle-question"></i> ' + l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's') + '</span>');
-      var nav = navHtml(l), lvN = (levelMap()[l.id] || {}).n;
+      var nav = navHtml(l), lvN = (ladder()[S.course.id] || {}).n;
       /* Class > topic names it; the lesson only adds its number or its own title. */
       host.innerHTML = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <button type="button" data-tc="back">' + esc(S.course.name) + '</button> <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(l.topicTitle || '') + '</span>') +
         '<div class="tc-lhead"><div class="tc-eyebrow">' + esc(S.course.name) + (lvN ? ' · Level ' + lvN : '') + '</div><h2>' + esc(l.topicTitle || S.course.name) + ' <span>· ' + esc(label) + '</span></h2><div class="tc-meta">' + meta.join('') + '</div></div>' +
@@ -1398,10 +1402,9 @@
       var a = t.dataset.tc, id = t.dataset.id;
       if (a === 'home') goHome();
       else if (a === 'course') { var c = allCourses().filter(function (x) { return x.id === id; })[0]; if (c) openCourse(c); }
-      else if (a === 'locked' || a === 'course-locked') {
+      else if (a === 'course-locked') {
         t.classList.remove('tc-shake'); void t.offsetWidth; t.classList.add('tc-shake');
-        if (a === 'locked') lockedNote(id);
-        else { var lc = allCourses().filter(function (x) { return x.id === id; })[0], nm = lc ? courseLock(lc) : ''; toast(nm && nm !== '…' ? 'This class unlocks when ' + (isBuilder ? 'you pass' : first + ' passes') + ' every level of ' + nm + '.' : 'This class is locked for now.'); }
+        var lc = allCourses().filter(function (x) { return x.id === id; })[0]; if (lc) lockedNote(lc);
       }
       else if (a === 'back') { releaseVideos(); closePractice(); if (S.pUnsub) { S.pUnsub(); S.pUnsub = null; } S.screen = 'course'; S.lesson = null; paint(); window.scrollTo(0, 0); }
       else if (a === 'practice') openPractice(S.lesson);
@@ -1432,7 +1435,7 @@
     if (o.lessonId) {
       LESSONS().doc(o.lessonId).get().then(function (d) {
         if (dead || !d.exists) return;
-        return COURSES().doc(d.data().courseId).get().then(function (c) { if (!dead && c.exists) openCourse(Object.assign({ id: c.id }, c.data()), o.lessonId); });
+        return COURSES().doc(d.data().courseId).get().then(function (c) { if (!dead && c.exists) whenReady(function () { if (!dead) openCourse(Object.assign({ id: c.id }, c.data()), o.lessonId); }); });
       }).catch(fail);
     }
     paint();

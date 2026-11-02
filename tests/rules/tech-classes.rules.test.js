@@ -138,7 +138,18 @@ test("only admins open classes for a builder; the builder, their coach and famil
   await assertSucceeds(as("admin1").collection("techAccess").get());
 });
 
-test("a builder cannot mark their own level as passed", async () => {
+test("classes: any coach may reorder; a passed class is written only by the server", async () => {
+  await assertSucceeds(as("coach2").doc("techCourses/c1").update({ order: 3, updatedAt: new Date() }));
+  await assertFails(as("coach2").doc("techCourses/c1").update({ name: "Mine" }));
+  await assertFails(as("kid1").doc("techCourseProgress/kid1_c1").set({ studentId: "kid1", courseId: "c1", passedAt: new Date() }));
+  await env.withSecurityRulesDisabled(async (ctx) => { await ctx.firestore().doc("techCourseProgress/kid1_c1").set({ studentId: "kid1", courseId: "c1", passedAt: new Date() }); });
+  await assertSucceeds(as("kid1").collection("techCourseProgress").where("studentId", "==", "kid1").get());
+  await assertSucceeds(as("mum").collection("techCourseProgress").where("studentId", "==", "kid1").get());
+  await assertSucceeds(as("coach1").doc("techCourseProgress/kid1_c1").get());
+  await assertFails(as("kid2").doc("techCourseProgress/kid1_c1").get());
+});
+
+test("a builder cannot mark their own lesson as finished", async () => {
   await assertFails(as("kid1").doc("techLessonProgress/kid1_live").update({ passedAt: new Date() }));
   await assertFails(as("kid1").doc("techLessonProgress/kid1_draft").set({ studentId: "kid1", lessonId: "draft", passedAt: new Date() }));
   await assertSucceeds(as("kid1").doc("techLessonProgress/kid1_live").update({ watchedAt: new Date(), updatedAt: new Date() }));

@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const admin = require("firebase-admin");
 if (!admin.apps.length) admin.initializeApp({ projectId: "paisley-test" });
 const { _internals } = require("../tech");
-const { gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, workSnapshotHtml } = _internals;
+const { gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, workSnapshotHtml, classPassed, byCourse } = _internals;
 
 const QUESTIONS = [
   { id: "a", type: "mcq", text: "Pick b", options: ["a", "b", "c"] },
@@ -81,6 +81,17 @@ test("a level passes only when every step it asks for is done", () => {
   assert.equal(gateMet({ type: "test", video: { url: "https://x" }, questions: [{ id: "o", type: "open", text: "Why?" }] }, { attempts: 1, lastAttemptAt: ts }, null), true);
   assert.equal(lessonGate({ type: "lesson", gate: { quiz: true, pass: "" }, questions: QUESTIONS }).pass, 50);
   assert.equal(lessonGate({ type: "lesson", gate: { quiz: true, pass: 140 }, questions: QUESTIONS }).pass, 100);
+});
+
+test("a class is passed when every posted lesson in it is finished; classes go in order", () => {
+  const ts = { toMillis: () => 1 };
+  const a = { id: "a", type: "lesson", notes: "x" }, b = { id: "b", type: "lesson", task: { kind: "code" } };
+  assert.equal(classPassed([], {}, {}), false);                                         // nothing posted yet: not passed
+  assert.equal(classPassed([a, b], { a: { openedAt: ts } }, {}), false);                 // one lesson left
+  assert.equal(classPassed([a, b], { a: { openedAt: ts } }, { b: { status: "Submitted" } }), true);
+  assert.equal(classPassed([a, b], { a: { passedAt: ts } }, { b: { status: "Graded", submitCount: 1 } }), true);
+  const order = [{ name: "Web", order: 2 }, { name: "Scratch", order: 1 }, { name: "Art" }, { name: "AI", order: 2 }].sort(byCourse).map((c) => c.name);
+  assert.deepEqual(order, ["Art", "Scratch", "AI", "Web"]);
 });
 
 test("the family's hand-in email shows the picture only from an https link", () => {

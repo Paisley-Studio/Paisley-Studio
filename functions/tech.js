@@ -737,14 +737,16 @@ function lessonTitle(l) {
 }
 
 /* =========================================================
-   Levels: passing a lesson unlocks the next one
+   Levels: passing a class unlocks the next class
    -----------------------------------------------------------
-   The lessons of a class, in topic then lesson order, are its levels. What
-   passing one takes is lesson.gate { watch, quiz, pass, work }; no gate means
-   every step the lesson has, with a 50% pass mark. Must match gateOf /
-   gateSteps in js/tech/tech-classes.js. The first time a builder meets it,
-   techLessonProgress.passedAt is set and the builder, their coach, the admins
-   (bell) and their guardians (bell and email) hear which level is next.
+   The classes of a builder's level, in techCourses.order, are Level 1, 2, 3…
+   Lessons inside a class are always open. Finishing a lesson takes
+   lesson.gate { watch, quiz, pass, work } (no gate: every step the lesson has,
+   50% pass mark); it must match gateOf / gateSteps in js/tech/tech-classes.js
+   and is recorded quietly in techLessonProgress.passedAt. When every posted
+   lesson of a class is finished, techCourseProgress/{uid}_{courseId} is created
+   once and the builder, their coach, the admins (bell) and their guardians
+   (bell and email) hear which class is next.
 ========================================================= */
 const DEFAULT_PASS = 50;
 function lessonGate(l) {
@@ -771,19 +773,19 @@ function gateMet(l, p, w) {
   if (g.work) { any = true; if (!handedIn(w)) return false; }
   return any || !!pr.openedAt;
 }
-/* The class's posted lessons in the order builders meet them. */
-async function classLevels(courseId) {
-  const db = admin.firestore();
-  const [tops, less] = await Promise.all([
-    db.collection("techTopics").where("courseId", "==", courseId).get(),
-    db.collection("techLessons").where("courseId", "==", courseId).where("status", "==", "published").get()
-  ]);
-  const byOrder = (a, b) => (a.order || 0) - (b.order || 0) || String(a.title || "").localeCompare(String(b.title || ""));
-  const topics = tops.docs.map((d) => Object.assign({ id: d.id }, d.data())).sort(byOrder);
-  const lessons = less.docs.map((d) => Object.assign({ id: d.id }, d.data()));
-  const out = [];
-  topics.forEach((t) => lessons.filter((l) => l.topicId === t.id).sort(byOrder).forEach((l) => out.push(l)));
-  return out;
+/* The classes of a builder's level, in learning order: Level 1, 2, 3… Must match
+   byCourse in js/tech/tech-classes.js (order, then name). */
+const byCourse = (a, b) => (a.order || 0) - (b.order || 0) || String(a.name || "").localeCompare(String(b.name || ""));
+async function classLadder(skill) {
+  const snap = await admin.firestore().collection("techCourses").where("track", "in", tracksFor(skill)).get();
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data())).sort(byCourse);
+}
+/* A class is passed when it has posted lessons and every one is finished. */
+function classPassed(lessons, progress, works) {
+  return lessons.length > 0 && lessons.every((l) => {
+    const p = progress[l.id];
+    return (p && p.passedAt) || gateMet(l, p, works[l.id]);
+  });
 }
 async function checkLessonPass(uid, lessonId) {
   if (!uid || !lessonId) return;
@@ -792,65 +794,80 @@ async function checkLessonPass(uid, lessonId) {
   const [ld, pd, wd] = await Promise.all([lRef.get(), pRef.get(), db.collection("techLessonWork").doc(uid + "_" + lessonId).get()]);
   if (!ld.exists || ld.data().status !== "published") return;
   const l = Object.assign({ id: ld.id }, ld.data());
-  if (pd.exists && pd.data().passedAt) return;
-  if (!gateMet(l, pd.exists ? pd.data() : null, wd.exists ? wd.data() : null)) return;
-  /* Only the first run records the pass and tells people. */
-  const isFirst = await db.runTransaction(async (tx) => {
-    const cur = await tx.get(pRef);
-    if (cur.exists && cur.data().passedAt) return false;
-    tx.set(pRef, {
+  if (!(pd.exists && pd.data().passedAt)) {
+    if (!gateMet(l, pd.exists ? pd.data() : null, wd.exists ? wd.data() : null)) return;
+    /* The lesson is finished: recorded quietly. Only a whole class is announced. */
+    await pRef.set({
       studentId: uid, lessonId, courseId: l.courseId || "", topicId: l.topicId || "", track: l.track || "",
       passedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp()
     }, { merge: true });
-    return true;
-  });
-  if (!isFirst) return;
-  await announcePass(uid, l);
+  }
+  if (l.courseId) await checkClassPass(uid, l.courseId);
 }
-async function announcePass(uid, l) {
+async function checkClassPass(uid, courseId) {
+  const db = admin.firestore();
+  const cRef = db.collection("techCourseProgress").doc(uid + "_" + courseId);
+  if ((await cRef.get()).exists) return;
+  const less = await db.collection("techLessons").where("courseId", "==", courseId).where("status", "==", "published").get();
+  const lessons = less.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  if (!lessons.length) return;
+  const progress = {}, works = {};
+  const [ps, ws] = await Promise.all([
+    db.getAll(...lessons.map((l) => db.collection("techLessonProgress").doc(uid + "_" + l.id))),
+    db.getAll(...lessons.map((l) => db.collection("techLessonWork").doc(uid + "_" + l.id)))
+  ]);
+  lessons.forEach((l, i) => { if (ps[i].exists) progress[l.id] = ps[i].data(); if (ws[i].exists) works[l.id] = ws[i].data(); });
+  if (!classPassed(lessons, progress, works)) return;
+  /* Only the first run records the pass and tells people. */
+  try {
+    await cRef.create({ studentId: uid, courseId, lessonCount: lessons.length, passedAt: FV().serverTimestamp() });
+  } catch (e) {
+    if (e && (e.code === 6 || /already exists/i.test(e.message || ""))) return;
+    throw e;
+  }
+  const cd = await db.collection("techCourses").doc(courseId).get();
+  await announceClassPass(uid, Object.assign({ id: courseId }, cd.exists ? cd.data() : { name: lessons[0].courseName || "their class" }), lessons.length);
+}
+async function announceClassPass(uid, c, lessonCount) {
   const s = await techStudent(uid);
   if (!s) return;
-  const levels = l.courseId ? await classLevels(l.courseId) : [];
-  const i = levels.findIndex((x) => x.id === l.id), n = i + 1, next = i > -1 ? levels[i + 1] : null;
-  const course = l.courseName || "their class", who = first(s.name, "Your child");
-  const nameOf = (x) => (x.title ? `${x.topicTitle ? x.topicTitle + " · " : ""}${x.title}` : lessonTitle(x));
-  const lvl = n > 0 ? `Level ${n}` : "a level";
-  /* The class may also unlock a class that waits for it. */
-  let thenClass = null;
-  if (!next && l.courseId) {
-    const after = await admin.firestore().collection("techCourses").where("afterCourseId", "==", l.courseId).limit(1).get();
-    if (!after.empty) thenClass = after.docs[0].data().name || null;
-  }
-  const done = !next;
-  const idBase = `pass_${uid}_${l.id}`;
-  const studentLine = done ? `You passed every level of ${course}.${thenClass ? ` ${thenClass} is open now.` : ""}` : `You passed ${lvl} (${nameOf(l)}). Level ${n + 1}, ${nameOf(next)}, is open now.`;
-  await techNotify(uid, "student", "tech_unlock", done ? `You finished ${course}!` : `Level ${n + 1} unlocked!`, studentLine,
-    { studentId: uid, id: idBase, section: "classes", courseId: l.courseId || "", lessonId: next ? next.id : "", link: LINKS.student + "#classes" });
-  const staffLine = done ? `${s.name || "A builder"} passed every level of ${course}.` : `${s.name || "A builder"} passed ${lvl} of ${course} (${nameOf(l)}) and moves on to Level ${n + 1}.`;
-  if (s.coachId) await techNotify(s.coachId, "coach", "tech_unlock", done ? "Class finished" : "Level passed", staffLine, { studentId: uid, id: idBase, section: "results", courseId: l.courseId || "" });
-  await notifyAdmins("tech_unlock", done ? "Class finished" : "Level passed", staffLine, { studentId: uid, id: idBase, section: "results", courseId: l.courseId || "" });
-  await logActivity(uid, "level_passed", done ? `Finished ${course}` : `Passed ${lvl} of ${course}`, { studentName: s.name || "", by: "system", origin: "class" });
-  const heading = done ? `${who} finished ${course}!` : `${who} passed ${lvl} and is moving on to Level ${n + 1}!`;
-  const famLine = done ? `${who} passed every level of ${course}.${thenClass ? ` ${thenClass} is now open for them.` : ""}` : `${who} passed ${lvl} of ${course} (${nameOf(l)}) and is moving on to Level ${n + 1}: ${nameOf(next)}.`;
+  const ladder = await classLadder(s.skillLevel);
+  const i = ladder.findIndex((x) => x.id === c.id), n = i + 1, next = i > -1 ? ladder[i + 1] || null : null;
+  const course = c.name || "their class", who = first(s.name, "Your child");
+  const lvl = n > 0 ? `Level ${n} (${course})` : course;
+  const nextLvl = next ? `Level ${n + 1} (${next.name})` : "";
+  const idBase = `classpass_${uid}_${c.id}`;
+  await techNotify(uid, "student", "tech_unlock", next ? `Level ${n + 1} unlocked: ${next.name}` : `You passed ${course}!`,
+    next ? `You passed ${lvl}. ${next.name} is open now. Keep going!` : `You passed ${lvl}. That was the last class for now. Amazing work!`,
+    { studentId: uid, id: idBase, section: "classes", courseId: next ? next.id : c.id, link: LINKS.student + "#classes" });
+  const staffLine = `${s.name || "A builder"} passed ${lvl}` + (next ? ` and moves on to ${nextLvl}.` : ".");
+  if (s.coachId) await techNotify(s.coachId, "coach", "tech_unlock", "Class passed", staffLine, { studentId: uid, id: idBase, section: "results", courseId: c.id });
+  await notifyAdmins("tech_unlock", "Class passed", staffLine, { studentId: uid, id: idBase, section: "results", courseId: c.id });
+  await logActivity(uid, "level_passed", `Passed ${lvl}`, { studentName: s.name || "", by: "system", origin: "class" });
+  const heading = next ? `${who} passed Level ${n} and is moving on to Level ${n + 1}!` : `${who} passed ${lvl}!`;
+  const famLine = next ? `${who} finished every lesson in ${course}, passing ${lvl}, and is moving on to ${nextLvl}.` : `${who} finished every lesson in ${course}, passing ${lvl}.`;
   for (const g of await guardiansOf(uid)) {
-    const fresh = await techNotify(g.parentUid, "guardian", "tech_unlock", done ? `${who} finished ${course}` : `${who} passed ${lvl}`, famLine,
-      { studentId: uid, id: idBase + "_" + g.parentUid, section: "classes", courseId: l.courseId || "", link: LINKS.guardian + "#classes" });
-    if (fresh) await email(g.email, done ? `${who} finished ${course}` : `${who} passed ${lvl} in ${course}`, {
+    const fresh = await techNotify(g.parentUid, "guardian", "tech_unlock", next ? `${who} passed Level ${n}` : `${who} passed ${course}`, famLine,
+      { studentId: uid, id: idBase + "_" + g.parentUid, section: "classes", courseId: c.id, link: LINKS.guardian + "#classes" });
+    if (fresh) await email(g.email, next ? `${who} passed Level ${n} and is moving on to Level ${n + 1}` : `${who} passed ${course}`, {
       preheader: famLine, heading,
       intro: `Hi ${esc(first(g.name))}, great news from Paisley Tech Studio.`,
       body: `<p style="margin:0 0 10px;">${esc(famLine)}</p>` +
-        `<p style="margin:0 0 10px;"><b>${esc(course)}</b>${levels.length ? ` · ${esc(Math.max(n, 0))} of ${esc(levels.length)} levels passed` : ""}</p>` +
-        `<p style="margin:0;">Each level opens only when the one before is passed, so this one was earned. A quick “well done” from you goes a long way. Keep encouraging them!</p>`,
+        `<p style="margin:0 0 10px;"><b>${esc(course)}</b> · ${esc(lessonCount)} lesson${lessonCount === 1 ? "" : "s"} finished` + (ladder.length ? ` · Level ${esc(Math.max(n, 1))} of ${esc(ladder.length)}` : "") + `</p>` +
+        `<p style="margin:0;">Each class opens only when the one before is passed, so this one was earned. A quick “well done” from you goes a long way. Keep encouraging them!</p>`,
       cta: { label: "See their progress", url: APP + LINKS.guardian + "#classes" }
     });
   }
 }
-/* Watching, a quiz score or opening it can complete a level. */
+/* Watching, a quiz score or opening it can finish a lesson, and so pass a class. */
 exports.onTechLessonProgressWritten = onDocumentWritten(
   { document: "techLessonProgress/{pid}", region: LOCATION, secrets: SMTP_SECRETS },
   async (event) => {
+    const b = event.data.before.exists ? event.data.before.data() : null;
     const a = event.data.after.exists ? event.data.after.data() : null;
-    if (!a || a.passedAt || !a.studentId || !a.lessonId) return;
+    if (!a || !a.studentId || !a.lessonId) return;
+    /* Already finished before this write: nothing new (the run that set passedAt checked the class). */
+    if (b && b.passedAt) return;
     await checkLessonPass(a.studentId, a.lessonId);
   }
 );
@@ -1582,4 +1599,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml };
+exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml, classPassed, byCourse };
