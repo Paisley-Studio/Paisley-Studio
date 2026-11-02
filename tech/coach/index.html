@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Coach sign in | Paisley Tech Studio</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#245F5A" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech7" />
+<script src="/js/ui/password-toggle.js?v=1"></script>
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-side">
+    <a class="auth-back" href="/tech.html"><i class="fas fa-arrow-left"></i> Back to Paisley Tech Studio</a>
+    <h1>Paisley Tech Studio <em>coach portal.</em></h1>
+    <p>Review builds, approve mastery, and keep builders and their families moving.</p>
+    <ul>
+      <li><i class="fas fa-check"></i>Your builders and every project they're making</li>
+      <li><i class="fas fa-check"></i>Reviews, mastery and Tech Wall requests in one queue</li>
+      <li><i class="fas fa-check"></i>Messages with builders and their parents or guardians</li>
+    </ul>
+    <picture class="auth-art">
+      <source srcset="/img/app/guy.webp" type="image/webp" />
+      <img src="/img/guy.png" alt="" width="704" height="520" decoding="async" />
+    </picture>
+  </aside>
+  <main class="auth-main">
+    <div class="auth-card">
+      <h2 id="titleText">Coach sign in</h2>
+      <p class="sub" id="subText">Use your personal coach link from the Studio Desk.</p>
+      <div class="auth-note" id="coachNote" hidden></div>
+      <div class="auth-msg err" id="errMsg" role="alert"></div><div class="auth-msg ok" id="okMsg" role="status"></div>
+      <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" enterkeyhint="go" /></div>
+      <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" enterkeyhint="go" /></div>
+      <div id="applyBox" hidden>
+        <div class="field"><label for="apName">Your full name</label><input id="apName" type="text" maxlength="120" autocomplete="name" /></div>
+        <div class="field"><label for="apPhone">Phone</label><input id="apPhone" type="tel" maxlength="40" autocomplete="tel" /></div>
+        <div class="field"><label for="apBio">What would you like to coach?</label><input id="apBio" type="text" maxlength="600" placeholder="For example, Coding with AI" /></div>
+      </div>
+      <button class="btn" id="go" type="button">Sign in</button>
+      <p class="auth-small"><a href="#" id="forgot">Forgot your password?</a></p>
+      <p class="auth-small" id="applyLine">New coach? <a href="#" id="showApply">Apply here</a>. Already have a Paisley login? Use the same email and password.</p>
+      <p class="auth-small">Builder? <a href="/tech/index.html">Builder sign in</a> · Parent? <a href="/tech/parent/index.html">Guardian sign in</a> · Tutor? <a href="/tutor/login.html">Tutor sign in</a></p>
+    </div>
+  </main>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="/firebase-config.js"></script>
+<script src="/js/tech/coach-access.js?v=tech7"></script>
+<script>
+/* Coach sign-in. Personal link: /tech/coach/{slug} (like /tutor/{slug}), resolved through
+   the public techCoachSlugs/{slug} doc. A first sign-in claims the Studio Desk's invite. */
+(function(){
+'use strict';
+const auth = firebase.auth(), $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function show(id, html){ ['errMsg','okMsg'].forEach(x => $(x).classList.remove('show')); $(id).innerHTML = html; $(id).classList.add('show'); }
+
+const slug = TechCoachAccess.readSlug();
+let link = null;   // techCoachSlugs/{slug}
+
+if (slug) {
+  TechCoachAccess.lookup(slug).then(l => {
+    if (!l) { show('errMsg', 'That coach link is not recognised. Check the link with the Studio Desk.'); return; }
+    link = l;
+    if (l.status && l.status !== 'Active') { show('errMsg', 'This coach account is paused. Please contact the Studio Desk.'); $('go').disabled = true; return; }
+    $('titleText').textContent = 'Welcome back, ' + (String(l.name || 'coach').split(' ')[0]);
+    $('subText').textContent = 'Sign in to your Tech Studio coach portal.';
+    $('coachNote').innerHTML = '<i class="fas fa-wand-magic-sparkles"></i><div>Signing in as <strong>' + esc(l.name || '') + '</strong>. Not you? Check your link with the Studio Desk.</div>';
+    $('coachNote').hidden = false;
+    if (l.email && !$('email').value) $('email').value = l.email;
+  }).catch(e => { console.warn('coach link lookup failed', e); });
+}
+
+/* Applying uses the login someone already has, or creates one. */
+let mode = 'signin', signedIn = null, applying = false, checking = false;
+function setMode(m, user){
+  mode = m; signedIn = user || null;
+  const a = m === 'apply';
+  $('applyBox').hidden = !a;
+  $('go').textContent = a ? 'Send my application' : 'Sign in';
+  $('applyLine').innerHTML = a ? 'Already a coach? <a href="#" id="showSignIn">Sign in</a>' : 'New coach? <a href="#" id="showApply">Apply here</a>. Already have a Paisley login? Use the same email and password.';
+  $('forgot').parentNode.hidden = !!user;
+  [$('email'), $('password')].forEach(x => { x.closest('.field').hidden = !!user; });
+  if (a) {
+    $('titleText').textContent = 'Apply to be a coach';
+    $('subText').textContent = user ? 'Applying as ' + (user.email || 'this login') + '. The Studio Desk reviews every application.' : 'The Studio Desk reviews every application. If you already have a Paisley login, use the same email and password.';
+    if (user && user.displayName && !$('apName').value) $('apName').value = user.displayName;
+  } else { $('titleText').textContent = 'Coach sign in'; $('subText').textContent = 'Use your personal coach link from the Studio Desk.'; }
+}
+document.addEventListener('click', e => {
+  if (e.target.id === 'showApply') { e.preventDefault(); setMode('apply'); ['errMsg','okMsg'].forEach(x => $(x).classList.remove('show')); }
+  if (e.target.id === 'showSignIn') { e.preventDefault(); setMode('signin'); ['errMsg','okMsg'].forEach(x => $(x).classList.remove('show')); }
+});
+if (new URLSearchParams(location.search).get('apply')) setMode('apply');
+
+async function finishApply(user){
+  const r = await TechCoachAccess.resolve(user);
+  if (r.state === 'active') { location.href = '/tech/coach/dashboard.html'; return; }
+  if (r.state === 'none') await TechCoachAccess.apply(user, { name: $('apName').value, phone: $('apPhone').value, bio: $('apBio').value });
+  else if (r.state === 'paused') { await auth.signOut(); show('errMsg', 'This coach account is paused. Please contact the Studio Desk.'); return; }
+  await auth.signOut();
+  setMode('signin');
+  $('email').closest('.field').hidden = false; $('password').closest('.field').hidden = false;
+  show('okMsg', 'Application received. We will email <strong>' + esc(user.email || 'you') + '</strong> once the Studio Desk approves it. Your other Paisley accounts work as usual.');
+}
+async function apply(){
+  if ($('apName').value.trim().length < 2) return show('errMsg', 'Please enter your full name.');
+  $('go').disabled = true; applying = true;
+  try {
+    let user = signedIn;
+    if (!user) {
+      const email = $('email').value.trim(), pass = $('password').value;
+      if (!email || !pass) { $('go').disabled = false; applying = false; return show('errMsg', 'Please enter your email and a password.'); }
+      try {
+        user = (await auth.signInWithEmailAndPassword(email, pass)).user;
+      } catch (e) {
+        if (e.code === 'auth/too-many-requests') throw e;
+        if (pass.length < 8) { $('go').disabled = false; applying = false; return show('errMsg', 'If you are new, choose a password of at least 8 characters. If you already have a Paisley login, enter its password.'); }
+        try { user = (await auth.createUserWithEmailAndPassword(email, pass)).user; }
+        catch (e2) {
+          $('go').disabled = false; applying = false;
+          if (e2.code === 'auth/email-already-in-use') return show('errMsg', 'That email already has a Paisley login. Enter that login\'s password to apply with it, or use "Forgot your password?".');
+          return show('errMsg', e2.code === 'auth/invalid-email' ? 'That email address is not valid.' : 'Could not create your login: ' + esc(e2.message || e2.code));
+        }
+      }
+    }
+    await finishApply(user);
+  } catch (e) {
+    show('errMsg', e.code === 'permission-denied' ? 'This login cannot apply to coach. Coaches must be adults; please contact the Studio Desk if that is a mistake.' : (e.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Could not send your application: ' + esc(e.message || e.code)));
+  }
+  $('go').disabled = false; applying = false;
+}
+
+async function check(user){
+  if (checking || applying) return; checking = true;
+  try {
+    const r = await TechCoachAccess.resolve(user);
+    if (r.state === 'active') {
+      // A personal link must belong to the account that signs in through it.
+      if (link && link.email && user.email && link.email.toLowerCase() !== user.email.toLowerCase()) {
+        await auth.signOut();
+        show('errMsg', 'Those details do not match this coach link. Use your own coach link.');
+        return;
+      }
+      location.href = '/tech/coach/dashboard.html';
+      return;
+    }
+    $('go').disabled = false;
+    if (r.state === 'paused') { await auth.signOut(); show('errMsg', 'This coach account is paused. Please contact the Studio Desk.'); return; }
+    if (r.state === 'pending') { await auth.signOut(); show('okMsg', 'Your coach application is with the Studio Desk. We will email <strong>' + esc(user.email || 'you') + '</strong> once it is approved.'); return; }
+    /* A real login with no coach account yet, for example a tutor or a parent. Offer to apply. */
+    setMode('apply', user);
+    show('okMsg', 'You do not have a coach account yet. Apply below with this same login. Tutors can still sign in at <a href="/tutor/login.html">/tutor</a>.');
+  } catch (e) {
+    $('go').disabled = false;
+    show('errMsg', 'Could not open the coach portal: ' + esc(e.message || e.code) + (e.code === 'permission-denied' ? ' (the Studio Desk needs to deploy the latest Firestore rules).' : ''));
+  } finally { checking = false; }
+}
+auth.onAuthStateChanged(u => { if (u) check(u); });
+
+function signIn(){
+  if (mode === 'apply') return apply();
+  const email = $('email').value.trim(), pass = $('password').value;
+  if (!email || !pass) return show('errMsg', 'Please enter your email and password.');
+  $('go').disabled = true;
+  auth.signInWithEmailAndPassword(email, pass).catch(err => {
+    $('go').disabled = false;
+    show('errMsg', err.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes.' : 'Incorrect email or password.');
+  });
+}
+$('go').addEventListener('click', signIn);
+['email','password'].forEach(i => $(i).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); signIn(); } }));
+$('forgot').addEventListener('click', e => {
+  e.preventDefault(); const email = $('email').value.trim();
+  if (!email) return show('errMsg', 'Enter your email above first.');
+  const done = () => show('okMsg', 'If that email has an account, a reset link is on its way.');
+  auth.sendPasswordResetEmail(email, { url: location.origin + location.pathname }).then(done, done);
+});
+})();
+</script>
+</body>
+</html>

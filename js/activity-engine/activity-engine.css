@@ -1,0 +1,454 @@
+/* =========================================================
+   ACTIVITY ENGINE — shared styles for every template
+   Uses CSS variables so it inherits the host page's palette when
+   present; falls back to a sensible default set otherwise.
+========================================================= */
+:root {
+  --act-primary: var(--brand-primary, #4f46e5);
+  --act-primary-dark: var(--brand-primary-dark, #4338ca);
+  --act-success: #16a34a;
+  --act-danger: #dc2626;
+  --act-bg: #ffffff;
+  --act-bg-alt: #f8f9fc;
+  --act-border: #e5e7eb;
+  --act-text: #1f2937;
+  --act-radius: 14px;
+  --act-shadow-sm: 0 2px 8px rgba(15,26,20,.06);
+  --act-shadow-md: 0 6px 20px rgba(36,95,90,.10);
+  --act-shadow-lg: 0 14px 40px rgba(36,95,90,.14);
+}
+
+.activity-chrome { max-width: 720px; margin: 0 auto; padding: 16px; }
+.activity-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.activity-header h2 { margin: 0; font-size: 1.25rem; color: var(--act-text); }
+.activity-progress { font-size: 0.9rem; color: #6b7280; font-weight: 600; }
+.activity-meta { display: flex; gap: 16px; font-size: 0.85rem; color: #6b7280; margin-bottom: 20px; flex-wrap: wrap; }
+.activity-meta span { background: var(--act-bg-alt); padding: 4px 10px; border-radius: 999px; }
+.activity-timer { font-variant-numeric: tabular-nums; }
+
+.activity-question-slot { animation: actFadeIn 0.25s ease; }
+@keyframes actFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* =========================================================
+   QUIZ-LIKE TEMPLATES
+========================================================= */
+.tpl-question-image { max-width: 100%; border-radius: var(--act-radius); margin-bottom: 12px; display: block; }
+.tpl-question-text { font-size: 1.15rem; font-weight: 600; color: var(--act-text); margin-bottom: 18px; line-height: 1.4; }
+
+.tpl-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .tpl-options { grid-template-columns: 1fr; } }
+
+.tpl-option-btn {
+  padding: 16px;
+  border: 2px solid var(--act-border);
+  border-radius: var(--act-radius);
+  background: var(--act-bg);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all .18s cubic-bezier(.16,1,.3,1);
+  min-height: 56px;
+  text-align: left;
+  font-family: inherit;
+  color: var(--act-text);
+  position: relative;
+  overflow: hidden;
+}
+.tpl-option-btn:hover:not(:disabled) {
+  border-color: var(--act-primary);
+  background: var(--act-bg-alt);
+  transform: translateY(-2px);
+  box-shadow: var(--act-shadow-md);
+}
+.tpl-option-btn:active:not(:disabled) { transform: translateY(0); }
+.tpl-option-btn:disabled { cursor: default; }
+
+.tpl-option-btn.is-correct {
+  border-color: var(--act-success);
+  background: #ecfdf3;
+  color: var(--act-success);
+  font-weight: 700;
+  animation: actCorrectPop .6s cubic-bezier(.16,1,.3,1);
+}
+.tpl-option-btn.is-correct::after {
+  content: '✓';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--act-success);
+}
+
+.tpl-option-btn.is-incorrect {
+  border-color: var(--act-danger);
+  background: #fef2f2;
+  color: var(--act-danger);
+  font-weight: 700;
+  animation: actWrongShake .5s ease;
+}
+.tpl-option-btn.is-incorrect::after {
+  content: '✕';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  font-weight: 900;
+  color: var(--act-danger);
+}
+
+.tpl-option-btn.is-correct-outline { border-color: var(--act-success); color: var(--act-success); }
+.tpl-option-btn.is-incorrect-outline { border-color: var(--act-danger); color: var(--act-danger); }
+
+.tpl-truefalse-options { grid-template-columns: 1fr 1fr; }
+.tpl-tf-true { border-color: #16a34a55; }
+.tpl-tf-false { border-color: #dc262655; }
+
+/* =========================================================
+   FLASHCARDS
+========================================================= */
+.tpl-flashcard-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.tpl-flashcard { width: 100%; max-width: 420px; min-height: 220px; perspective: 1200px; }
+.tpl-flashcard-face {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 220px;
+  border: 2px solid var(--act-border);
+  border-radius: var(--act-radius);
+  padding: 24px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  background: var(--act-bg-alt);
+  transition: transform .6s cubic-bezier(.16,1,.3,1);
+  backface-visibility: hidden;
+}
+.tpl-flashcard.flipped .tpl-flashcard-face { transform: rotateY(360deg); }
+.tpl-flip-btn, .tpl-clear-btn {
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 2px solid var(--act-primary);
+  background: var(--act-bg);
+  color: var(--act-primary);
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .18s ease;
+}
+.tpl-flip-btn:hover, .tpl-clear-btn:hover { background: var(--act-primary); color: #fff; }
+.tpl-flashcard-actions { display: flex; gap: 12px; }
+
+/* =========================================================
+   MATCH UP / GROUP SORT
+========================================================= */
+.tpl-matchup-hint, .tpl-anagram-hint { color: #6b7280; margin-bottom: 14px; font-size: 0.9rem; }
+.tpl-matchup-columns { display: flex; gap: 24px; }
+.tpl-matchup-col { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+
+.tpl-matchup-item {
+  padding: 14px;
+  border: 2px solid var(--act-border);
+  border-radius: 10px;
+  background: var(--act-bg);
+  cursor: pointer;
+  font-size: 0.95rem;
+  min-height: 48px;
+  text-align: left;
+  transition: all .18s cubic-bezier(.16,1,.3,1);
+  font-family: inherit;
+  color: var(--act-text);
+  position: relative;
+}
+.tpl-matchup-item:hover:not(.is-matched) {
+  border-color: var(--act-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--act-shadow-md);
+}
+.tpl-matchup-item.is-selected {
+  border-color: var(--act-primary);
+  background: #eef2ff;
+  animation: actSelectedPulse 1.4s infinite;
+}
+.tpl-matchup-item.is-matched {
+  border-color: var(--act-success);
+  background: #ecfdf3;
+  opacity: .85;
+  cursor: default;
+  animation: actMatchSnap .55s cubic-bezier(.16,1,.3,1);
+}
+.tpl-matchup-item.is-matched::after {
+  content: '✓';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--act-success);
+  font-weight: 900;
+}
+
+.tpl-groupsort-items { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.tpl-groupsort-item {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 2px solid var(--act-border);
+  background: var(--act-bg);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .18s ease;
+}
+.tpl-groupsort-item:hover { transform: translateY(-2px); box-shadow: var(--act-shadow-sm); }
+.tpl-groupsort-item.is-selected { border-color: var(--act-primary); background: #eef2ff; }
+.tpl-groupsort-item.is-placed { display: none; }
+.tpl-groupsort-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.tpl-groupsort-bucket {
+  border: 2px dashed var(--act-border);
+  border-radius: var(--act-radius);
+  padding: 12px;
+  min-height: 120px;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.tpl-groupsort-bucket:hover { border-color: var(--act-primary); background: var(--act-bg-alt); }
+.tpl-groupsort-bucket-title { font-weight: 700; margin-bottom: 8px; }
+.tpl-groupsort-placed { background: var(--act-bg-alt); border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; font-size: 0.85rem; }
+
+/* =========================================================
+   MATCHING PAIRS
+========================================================= */
+.tpl-pairs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
+.tpl-pair-card {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 2px solid var(--act-border);
+  background: var(--act-primary);
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  transition: all .3s cubic-bezier(.16,1,.3,1);
+}
+.tpl-pair-card:hover:not(.is-flipped):not(.is-matched) { transform: translateY(-3px) scale(1.03); box-shadow: var(--act-shadow-md); }
+.tpl-pair-card.is-flipped { background: var(--act-bg-alt); color: var(--act-text); font-size: 0.85rem; padding: 6px; }
+.tpl-pair-card.is-matched { background: #ecfdf3; color: var(--act-success); border-color: var(--act-success); animation: actCorrectPop .5s ease; }
+
+/* =========================================================
+   RANDOM WHEEL
+========================================================= */
+.tpl-wheel-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.tpl-wheel {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  overflow: hidden;
+  transition: transform 1.3s cubic-bezier(.17,.67,.24,1);
+  border: 4px solid var(--act-bg-alt);
+  box-shadow: var(--act-shadow-lg);
+}
+.tpl-wheel-segment {
+  position: absolute; inset: 0;
+  background: var(--seg-color);
+  clip-path: polygon(50% 50%, 50% 0%, 100% 0%);
+  transform: rotate(calc(360deg / var(--seg-total) * var(--seg-index)));
+}
+.tpl-wheel-pointer {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 16px solid var(--act-text);
+}
+
+/* =========================================================
+   OPEN THE BOX
+========================================================= */
+.tpl-openbox-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 320px; margin: 0 auto; }
+.tpl-openbox-box {
+  font-size: 2.2rem;
+  padding: 20px;
+  border-radius: 12px;
+  border: 2px solid var(--act-border);
+  background: var(--act-bg-alt);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .25s cubic-bezier(.16,1,.3,1);
+}
+.tpl-openbox-box:hover:not(.is-opened) { transform: translateY(-3px) scale(1.05); box-shadow: var(--act-shadow-md); }
+.tpl-openbox-box.is-opened { opacity: .5; animation: actCorrectPop .5s ease; }
+
+/* =========================================================
+   ANAGRAM / UNJUMBLE
+========================================================= */
+.tpl-anagram-answer, .tpl-unjumble-built {
+  min-height: 56px;
+  border: 2px dashed var(--act-border);
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  margin-bottom: 14px;
+}
+.tpl-anagram-bank, .tpl-unjumble-bank { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.tpl-anagram-tile {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 2px solid var(--act-border);
+  background: var(--act-bg);
+  font-weight: 700;
+  font-size: 1.1rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-family: inherit;
+  transition: all .18s ease;
+}
+.tpl-anagram-tile:hover { transform: translateY(-2px); box-shadow: var(--act-shadow-sm); }
+.tpl-anagram-tile.is-placed { background: #eef2ff; border-color: var(--act-primary); }
+.tpl-unjumble-word {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 2px solid var(--act-border);
+  background: var(--act-bg);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .18s ease;
+}
+.tpl-unjumble-word:hover { transform: translateY(-2px); box-shadow: var(--act-shadow-sm); }
+.tpl-unjumble-word.is-placed { background: #eef2ff; border-color: var(--act-primary); }
+
+/* =========================================================
+   RESULTS & REVIEW
+========================================================= */
+.activity-results {
+  max-width: 480px;
+  margin: 40px auto;
+  text-align: center;
+  animation: actResultsPop .6s cubic-bezier(.16,1,.3,1);
+}
+.activity-results h2 { font-size: 1.6rem; margin-bottom: 4px; }
+.activity-results-score { font-size: 2.4rem; font-weight: 800; color: var(--act-primary); }
+.activity-results-percent { font-size: 1.1rem; color: #6b7280; margin-bottom: 20px; }
+.activity-results-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+.activity-results-stats div { background: var(--act-bg-alt); border-radius: 10px; padding: 10px; }
+.activity-results-stats strong { display: block; font-size: 1.1rem; }
+.activity-results-stats span { font-size: 0.75rem; color: #6b7280; }
+.activity-results-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.btn-primary {
+  background: var(--act-primary);
+  color: #fff;
+  border: none;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .2s ease;
+}
+.btn-primary:hover { background: var(--act-primary-dark); transform: translateY(-2px); box-shadow: var(--act-shadow-md); }
+.btn-secondary {
+  background: var(--act-bg);
+  border: 2px solid var(--act-border);
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .2s ease;
+}
+.btn-secondary:hover { border-color: var(--act-primary); color: var(--act-primary); transform: translateY(-2px); }
+
+.activity-review-row { text-align: left; border: 1px solid var(--act-border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.activity-review-row.correct { border-left: 4px solid var(--act-success); }
+.activity-review-row.incorrect { border-left: 4px solid var(--act-danger); }
+.activity-review-verdict { font-weight: 700; font-size: 0.85rem; margin-top: 4px; }
+.activity-review-explanation { font-size: 0.85rem; color: #6b7280; margin-top: 4px; }
+
+.activity-error { max-width: 480px; margin: 60px auto; text-align: center; color: var(--act-danger); font-weight: 600; }
+
+/* =========================================================
+   ANIMATIONS
+========================================================= */
+
+/* Correct — bounce + green pulse */
+@keyframes actCorrectPop {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(22,163,74,.55); }
+  40%  { transform: scale(1.06); box-shadow: 0 0 0 14px rgba(22,163,74,0); }
+  100% { transform: scale(1); }
+}
+
+/* Wrong — shake + red glow */
+@keyframes actWrongShake {
+  0%,100% { transform: translateX(0); }
+  20%     { transform: translateX(-8px); }
+  40%     { transform: translateX(8px); }
+  60%     { transform: translateX(-5px); }
+  80%     { transform: translateX(5px); }
+}
+
+/* Selected — pulse ring */
+@keyframes actSelectedPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(85,191,179,.5); }
+  50%     { box-shadow: 0 0 0 8px rgba(85,191,179,0); }
+}
+
+/* Match snap — quick scale bounce */
+@keyframes actMatchSnap {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Score badge tick */
+@keyframes actScoreTick {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.35); color: var(--act-success); }
+  100% { transform: scale(1); }
+}
+.activity-score.bump { animation: actScoreTick .5s cubic-bezier(.16,1,.3,1); }
+
+/* Results pop */
+@keyframes actResultsPop {
+  0%   { opacity: 0; transform: scale(.85); }
+  60%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Confetti */
+.act-confetti-host {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+.act-confetti-piece {
+  position: absolute;
+  top: -20px;
+  width: 10px;
+  height: 14px;
+  opacity: .95;
+  animation: actConfettiFall linear forwards;
+}
+@keyframes actConfettiFall {
+  0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+@media (max-width: 480px) {
+  .tpl-matchup-columns { gap: 12px; }
+  .tpl-flashcard-face { min-height: 160px; font-size: 1rem; }
+  .tpl-wheel { width: 160px; height: 160px; }
+  .tpl-options { gap: 10px; }
+  .tpl-option-btn { padding: 14px; font-size: .95rem; }
+  .activity-results-stats { grid-template-columns: repeat(2, 1fr); }
+}

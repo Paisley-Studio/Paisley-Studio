@@ -1,0 +1,314 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =====================================================
+    // SHARED HELPERS
+    // =====================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+    function isTutor() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/tutorAccounts/$(request.auth.uid));
+    }
+    // 25MB cap on any single educational file
+    function underSizeLimit() {
+      return request.resource.size < 25 * 1024 * 1024;
+    }
+    function isEducationalFile() {
+      return request.resource.contentType.matches('image/.*') ||
+        request.resource.contentType.matches('application/pdf') ||
+        request.resource.contentType.matches('audio/.*') ||
+        request.resource.contentType.matches('video/.*');
+    }
+
+    // =====================================================
+    // ACTIVITIES — question diagrams/media
+    // =====================================================
+    match /activities/{activityId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if (isAdmin() || (isTutor() && (
+          !firestore.exists(/databases/(default)/documents/activities/$(activityId)) ||
+          firestore.get(/databases/(default)/documents/activities/$(activityId)).data.ownerId == request.auth.uid
+        )))
+        && underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // EXAMS — question diagrams
+    // =====================================================
+    match /exams/{examId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTutor() ||
+        (firestore.exists(/databases/(default)/documents/exams/$(examId)) &&
+          firestore.get(/databases/(default)/documents/exams/$(examId)).data.status == 'Published')
+      );
+      allow write: if (isAdmin() || (isTutor() && (
+          !firestore.exists(/databases/(default)/documents/exams/$(examId)) ||
+          firestore.get(/databases/(default)/documents/exams/$(examId)).data.tutorId == request.auth.uid
+        )))
+        && underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // HOMEWORK — attachments
+    // =====================================================
+    match /homework/{homeworkId}/attachments/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if (isAdmin() || (isTutor() && (
+          !firestore.exists(/databases/(default)/documents/homework/$(homeworkId)) ||
+          firestore.get(/databases/(default)/documents/homework/$(homeworkId)).data.tutorId == request.auth.uid
+        )))
+        && underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // SUBMISSIONS — student "working" uploads
+    // =====================================================
+    match /submissions/{submissionId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTutor() ||
+        firestore.get(/databases/(default)/documents/submissions/$(submissionId)).data.studentId == request.auth.uid
+      );
+      allow write: if isSignedIn() &&
+        firestore.get(/databases/(default)/documents/submissions/$(submissionId)).data.studentId == request.auth.uid &&
+        underSizeLimit() && isEducationalFile();
+    }
+
+    match /examAttempts/{attemptId}/questions/{questionId}/{fileName} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTutor() ||
+        firestore.get(/databases/(default)/documents/examAttempts/$(attemptId)).data.studentId == request.auth.uid
+      );
+      allow write: if isSignedIn() &&
+        firestore.get(/databases/(default)/documents/examAttempts/$(attemptId)).data.studentId == request.auth.uid &&
+        underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // CLASSROOM FILES — lesson attachments and notes images
+    // Path: classroom-files/{subjectId}/{classroomId}/{lessonId}/{file}
+    // =====================================================
+    function classTutorFor(subjectId) {
+      return isSignedIn() &&
+        ('subjects' in firestore.get(/databases/(default)/documents/tutorAccounts/$(request.auth.uid)).data) &&
+        subjectId in firestore.get(/databases/(default)/documents/tutorAccounts/$(request.auth.uid)).data.subjects;
+    }
+    function classFileOk() {
+      return request.resource.size < 100 * 1024 * 1024 && (
+        request.resource.contentType.matches('image/(jpeg|png|gif|webp)') ||
+        request.resource.contentType.matches('application/pdf') ||
+        request.resource.contentType.matches('application/msword') ||
+        request.resource.contentType.matches('application/vnd[.]openxmlformats-officedocument[.].*') ||
+        request.resource.contentType.matches('application/vnd[.]ms-.*') ||
+        request.resource.contentType.matches('text/(plain|csv)') ||
+        request.resource.contentType.matches('audio/.*') ||
+        request.resource.contentType.matches('video/.*')
+      );
+    }
+    match /classroom-files/{subjectId}/{classroomId}/{lessonId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if isAdmin() && classFileOk();
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // RESOURCES FOLDER — marking schemes / further resources
+    // Path: resource-files/{subjectId}/{resourceId}/{file}
+    // =====================================================
+    match /resource-files/{subjectId}/{resourceId}/{fileName} {
+      allow get: if isAdmin() || classTutorFor(subjectId);
+      allow list: if false;
+      allow create, update: if isAdmin() && classFileOk();
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // EXAM PDFs
+    // Path: classroom-files/{subjectId}/{classroomId}/exams/{examId}/{fileName}
+    // =====================================================
+    match /classroom-files/{subjectId}/{classroomId}/exams/{examId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if isAdmin() && classFileOk();
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // FLAT-EXAM SUBMISSIONS — the student's completed exam paper
+    // =====================================================
+    function studentWorkFileOk() {
+      return request.resource.size < 25 * 1024 * 1024 && (
+        request.resource.contentType.matches('image/(jpeg|png|webp)') ||
+        request.resource.contentType.matches('application/pdf'));
+    }
+    function isParentOfStudent(studentId) {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/parentStudentLinks/$(request.auth.uid + '_' + studentId));
+    }
+    match /classroom-files/{subjectId}/{classroomId}/exams/{examId}/submissions/{studentId}/{fileName} {
+      allow get: if isAdmin() || classTutorFor(subjectId) ||
+        (isSignedIn() && request.auth.uid == studentId) ||
+        isParentOfStudent(studentId);
+      allow list: if false;
+      allow create, update: if isSignedIn() && request.auth.uid == studentId && studentWorkFileOk();
+      allow delete: if isAdmin() || classTutorFor(subjectId) ||
+        (isSignedIn() && request.auth.uid == studentId);
+    }
+
+    // =====================================================
+    // STUDENT HOMEWORK / PDF-EXAM UPLOADS
+    // Path: classroom-files/{subjectId}/{classroomId}/{itemId}/submissions/{studentId}/{file}
+    // =====================================================
+    match /classroom-files/{subjectId}/{classroomId}/{itemId}/submissions/{studentId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update, delete: if isSignedIn() && request.auth.uid == studentId && studentWorkFileOk();
+      allow delete: if isAdmin() || classTutorFor(subjectId);
+    }
+
+    // =====================================================
+    // GRADED OUTPUT (ink burned in)
+    // Path: graded-submissions/{subjectId}/{classroomId}/{itemId}/{studentId}/{file}
+    // =====================================================
+    match /graded-submissions/{subjectId}/{classroomId}/{itemId}/{studentId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if (isAdmin() || classTutorFor(subjectId)) &&
+        request.resource.size < 50 * 1024 * 1024 &&
+        request.resource.contentType.matches('application/pdf');
+      allow delete: if isAdmin() || classTutorFor(subjectId);
+    }
+
+    // Legacy graded files (old path without subjectId)
+    match /graded-submissions/{classroomId}/{itemId}/{studentId}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // UNATTENDED WORK REPORTS — written by Cloud Functions
+    // =====================================================
+    match /unattended-reports/{studentId}/{fileName} {
+      allow get: if isAdmin() || (isSignedIn() && request.auth.uid == studentId) || isParentOfStudent(studentId);
+      allow list, write: if false;
+    }
+
+    // =====================================================
+    // STUDENT PROFILE FILES
+    // =====================================================
+    match /students/{studentId}/profile/{fileName} {
+      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == studentId);
+      allow write: if isSignedIn() && request.auth.uid == studentId &&
+        underSizeLimit() && isEducationalFile();
+    }
+
+    // =====================================================
+    // STUDENT PROFILE PHOTOS
+    // =====================================================
+    match /student-photos/{uid}/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if isSignedIn() && request.auth.uid == uid &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // =====================================================
+    // Paisley Tech Studio — build files (techBuilds/{studentId}/{buildId}/{file})
+    // =====================================================
+    match /techBuilds/{studentId}/{buildId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == studentId || isAdmin() ||
+        (firestore.exists(/databases/(default)/documents/techCoaches/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/techCoaches/$(request.auth.uid)).data.status == 'Active' &&
+          firestore.get(/databases/(default)/documents/techStudents/$(studentId)).data.get('coachId', '') == request.auth.uid) ||
+        firestore.exists(/databases/(default)/documents/techGuardianLinks/$(request.auth.uid + '_' + studentId)));
+      // Builder branch first: it uses techStudents + techBuilds, its 2-doc budget.
+      allow create, update: if isSignedIn() && (
+        (request.auth.uid == studentId &&
+          firestore.get(/databases/(default)/documents/techStudents/$(studentId)).data.status == 'Active' &&
+          firestore.get(/databases/(default)/documents/techBuilds/$(buildId)).data.studentId == studentId) ||
+        (request.auth.uid != studentId && isAdmin())) &&
+        underSizeLimit() &&
+        !request.resource.contentType.matches('text/html') &&
+        !request.resource.contentType.matches('.*javascript.*');
+      allow delete: if isSignedIn() && (request.auth.uid == studentId || isAdmin());
+    }
+
+    // =====================================================
+    // Paisley Tech Studio � mission study materials (techContent/{contentId}/{file})
+    // A rule may touch at most 2 distinct Firestore docs per request (admins/,
+    // techCoaches/, techContent/ ... each counts once), so every branch below
+    // stays within 2. createdBy on the mission proves the uploader is its coach:
+    // firestore.rules only lets an Active TECH coach create one with their uid.
+    // Builders open materials through the token download URL saved on the mission.
+    // =====================================================
+    function techActiveIn(coll) {
+      return firestore.exists(/databases/(default)/documents/$(coll)/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/$(coll)/$(request.auth.uid)).data.status == 'Active';
+    }
+    function techMissionOwner(contentId) {
+      return firestore.get(/databases/(default)/documents/techContent/$(contentId)).data.get('createdBy', '') == request.auth.uid;
+    }
+    match /techContent/{contentId}/{fileName} {
+      allow read: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches') || techActiveIn('techStudents'));
+      allow create, update: if isSignedIn() && (isAdmin() || techMissionOwner(contentId)) &&
+        ((request.resource.contentType.matches('video/.*') && request.resource.size < 500 * 1024 * 1024) ||
+          ((isEducationalFile() || request.resource.contentType.matches('text/(plain|csv)') ||
+            request.resource.contentType.matches('application/(msword|vnd[.]openxmlformats-officedocument[.].*|vnd[.]ms-.*|zip)')) &&
+            request.resource.size < 50 * 1024 * 1024)) &&
+        !request.resource.contentType.matches('text/html') &&
+        !request.resource.contentType.matches('.*javascript.*');
+      allow delete: if isSignedIn() && (isAdmin() || techMissionOwner(contentId));
+    }
+
+    // Paisley Tech Studio classes: lesson videos and files. Any admin or active coach can
+    // upload (the lesson may not exist yet when its video goes up). Builders and parents play
+    // them through the link saved on the lesson. Two Firestore docs at most, as above.
+    match /techLessons/{lessonId}/{fileName} {
+      allow read: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches') || techActiveIn('techStudents'));
+      allow create, update: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches')) &&
+        ((request.resource.contentType.matches('video/.*') && request.resource.size < 500 * 1024 * 1024) ||
+          ((isEducationalFile() || request.resource.contentType.matches('text/(plain|csv)') ||
+            request.resource.contentType.matches('application/(msword|vnd[.]openxmlformats-officedocument[.].*|vnd[.]ms-.*|zip)')) &&
+            request.resource.size < 50 * 1024 * 1024)) &&
+        !request.resource.contentType.matches('text/html') &&
+        !request.resource.contentType.matches('.*javascript.*');
+      allow delete: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches'));
+    }
+
+    // Tech Studio navigation video. Only the Studio Desk uploads it; only active
+    // builders can get a link to it (builders first: a request may touch only 2 Firestore docs).
+    match /techSettings/{folder}/{fileName} {
+      allow read: if isSignedIn() && (techActiveIn('techStudents') || isAdmin());
+      allow create, update: if isSignedIn() && isAdmin() &&
+        request.resource.contentType.matches('video/.*') && request.resource.size < 500 * 1024 * 1024;
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // Parent ads and newsletters: admins upload; pictures and video only.
+    // Signed-in parents and emails use the token download URL saved on the ad.
+    match /parentMedia/{fileName} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if isAdmin() && (
+        (request.resource.contentType.matches('video/.*') && request.resource.size < 500 * 1024 * 1024) ||
+        (request.resource.contentType.matches('image/(jpeg|png|gif|webp)') && request.resource.size < 25 * 1024 * 1024));
+      allow delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

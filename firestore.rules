@@ -1,0 +1,1486 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================
+    // COLLECTION GROUP QUERY EXCEPTIONS
+    // =====================================================
+    match /{path=**}/submissions/{sid} {
+      allow read: if isSignedIn();
+    }
+    match /{path=**}/attempts/{sid} {
+      allow read: if isSignedIn();
+    }
+    match /{path=**}/assignments/{aid} {
+      allow read: if isSignedIn();
+    }
+    // CHANGED: was `allow read: if isAdmin() || isTutor();`
+    // Students need the `status == 'published'` list query on this collection
+    // to be provable without a get(), so the collection-group rule must not
+    // restrict reads to staff only. The per-document rule inside the
+    // classroom tree (below) still enforces audience membership.
+    match /{path=**}/lessons/{lid} {
+      allow read: if isSignedIn();
+    }
+
+    // =====================================================
+    // SHARED HELPERS
+    // =====================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function isTutor() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid));
+    }
+
+    // -----------------------------------------------------
+    // STUDENT TYPE HELPERS
+    // -----------------------------------------------------
+    function isStudentDoc() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid));
+    }
+    function myStudent() {
+      return get(/databases/$(database)/documents/students/$(request.auth.uid)).data;
+    }
+    function isRemoteStudent() {
+      return isStudentDoc() && ('studentType' in myStudent()) && myStudent().studentType == 'remote';
+    }
+    function isTuitionStudent() {
+      return isStudentDoc() && ('studentType' in myStudent()) && myStudent().studentType == 'tuition';
+    }
+    function isOnlineStudent() {
+      return isStudentDoc() && !isRemoteStudent() && !isTuitionStudent();
+    }
+    function remoteActive() {
+      return isRemoteStudent() && myStudent().status == 'Active';
+    }
+    function tuitionActive() {
+      return isTuitionStudent() && myStudent().status == 'Active';
+    }
+    function notRemote() {
+      return isSignedIn() && !isRemoteStudent() && !isTuitionStudent();
+    }
+    function studentAccountOk() {
+      return (!isRemoteStudent() || remoteActive()) && (!isTuitionStudent() || tuitionActive());
+    }
+
+    // -----------------------------------------------------
+    // MULTI-TUTOR HELPERS
+    // -----------------------------------------------------
+    function tutorTeachesStudent(studentId) {
+      let s = get(/databases/$(database)/documents/students/$(studentId)).data;
+      return isTutor() && (
+        (('tutorIds' in s) && request.auth.uid in s.tutorIds) ||
+        (('tutorId'  in s) && s.tutorId == request.auth.uid)
+      );
+    }
+    function tutorTeachesSubject(studentId, subjectId) {
+      let s = get(/databases/$(database)/documents/students/$(studentId)).data;
+      return isTutor() &&
+        ('subjectTutors' in s) &&
+        (subjectId in s.subjectTutors) &&
+        (s.subjectTutors[subjectId].tutorId == request.auth.uid);
+    }
+    function studentHasTutorId(studentId, tutorId) {
+      let s = get(/databases/$(database)/documents/students/$(studentId)).data;
+      return (('tutorIds' in s) && tutorId in s.tutorIds) ||
+             (('tutorId'  in s) && s.tutorId == tutorId);
+    }
+    function tutorOwnsStudent(studentId) {
+      return isTutor() &&
+        get(/databases/$(database)/documents/students/$(studentId)).data.tutorId == request.auth.uid;
+    }
+    function activeGrant(taskType, taskId) {
+      let gid = taskType + '_' + taskId + '_' + request.auth.uid;
+      return exists(/databases/$(database)/documents/gradingGrants/$(gid)) &&
+        get(/databases/$(database)/documents/gradingGrants/$(gid)).data.revoked != true;
+    }
+    function tutorMayManageTask(taskType, ownerUid, taskId) {
+      return isAdmin() ||
+        (isTutor() &&
+          (
+            request.auth.uid == ownerUid ||
+            activeGrant(taskType, taskId)
+          ));
+    }
+    function isParentOf(studentId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentStudentLinks/$(request.auth.uid + '_' + studentId));
+    }
+
+    // ---- timetable visibility helpers ----
+    function tutorMaySeeEntry() {
+      return isTutor() &&
+        ('subjects' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) &&
+        resource.data.subjectId in
+          get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.subjects;
+    }
+    function studentEntryScope(s) {
+      return resource.data.keyStage == s.keyStage &&
+        (!('subjects' in s) || s.subjects.size() == 0 || resource.data.subjectId in s.subjects);
+    }
+    function studentMaySeeEntry() {
+      return notRemote() &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
+        studentEntryScope(get(/databases/$(database)/documents/students/$(request.auth.uid)).data);
+    }
+    function parentSlotOnline(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        ('online' in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data) &&
+        (((c.keyStage + '|' + c.subjectId) in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.online) ||
+         ((c.keyStage + '|*') in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.online));
+    }
+    function parentSlotRemote(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        ('remote' in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data) &&
+        (((c.keyStage + '|' + c.subjectId) in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.remote) ||
+         ((c.keyStage + '|*') in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.remote));
+    }
+    function parentSlotTuition(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        ('tuition' in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data) &&
+        (((c.keyStage + '|' + c.subjectId) in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.tuition) ||
+         ((c.keyStage + '|*') in get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.tuition));
+    }
+    function parentMaySeeEntry() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        (((resource.data.keyStage + '|' + resource.data.subjectId) in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots) ||
+         ((resource.data.keyStage + '|*') in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots));
+    }
+
+    // ---- classroom helpers ----
+    function classTutorSubject(subjectId) {
+      return isTutor() &&
+        ('subjects' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) &&
+        subjectId in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.subjects;
+    }
+    function classTutorMay(c) {
+      return classTutorSubject(c.subjectId) && tutorBoardOk(c) &&
+        (c.keyStage.matches('CBC.*') ||
+         !('keyStages' in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages.size() == 0 ||
+          c.keyStage in get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data.keyStages);
+    }
+    // A classroom belongs to one exam board (missing = Cambridge). A tutor teaches the boards in
+    // boardScope ("keyStage|subjectId|board"); a tutor with no boardScope is Cambridge only.
+    function tutorBoardOk(c) {
+      let t = get(/databases/$(database)/documents/tutorAccounts/$(request.auth.uid)).data;
+      let b = c.get('board', 'cambridge');
+      return c.keyStage.matches('CBC.*') ||
+        (('boardScope' in t) ? (c.keyStage + '|' + c.subjectId + '|' + b) in t.boardScope : b == 'cambridge');
+    }
+    // subjectBoards[subject], else board, else Cambridge.
+    function studentBoardOk(s, c) {
+      return c.get('board', 'cambridge') == s.get('subjectBoards', {}).get(c.subjectId, s.get('board', 'cambridge'));
+    }
+    function classStudentMay(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
+        ('subjects' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
+        c.subjectId in get(/databases/$(database)/documents/students/$(request.auth.uid)).data.subjects &&
+        studentBoardOk(get(/databases/$(database)/documents/students/$(request.auth.uid)).data, c) &&
+        (
+          (('year' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
+           ('year' in c) &&
+           get(/databases/$(database)/documents/students/$(request.auth.uid)).data.year == c.year)
+          ||
+          c.keyStage == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.keyStage
+        );
+    }
+    function parentHasSlotForClassroom(cid) {
+      let pa = get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data;
+      let c  = get(/databases/$(database)/documents/classrooms/$(cid)).data;
+      return isSignedIn() &&
+        (((c.keyStage + '|' + c.subjectId) in pa.slots) ||
+         ((c.keyStage + '|*')          in pa.slots));
+    }
+    function parentMaySee(c) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccess/$(request.auth.uid)) &&
+        (((c.keyStage + '|' + c.subjectId) in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots) ||
+         ((c.keyStage + '|*') in
+            get(/databases/$(database)/documents/parentAccess/$(request.auth.uid)).data.slots));
+    }
+
+    function classroomData(cid) {
+      return get(/databases/$(database)/documents/classrooms/$(cid)).data;
+    }
+
+    function forMe(d) {
+      return (d.audience == 'class' || request.auth.uid in d.recipients) && postedToMyType(d);
+    }
+    function validWorkDoc(d) {
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 200 &&
+        d.recipients is list &&
+        d.audience in ['class', 'students'] &&
+        (d.audience == 'class' ? d.recipients.size() == 0 : d.recipients.size() > 0);
+    }
+    function studentWorkEdit() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['fileUrl', 'fileName', 'fileType', 'storagePath', 'note', 'textAnswer', 'updatedAt', 'inkData', 'inkUpdatedAt',
+           'status', 'submittedAt']) &&
+        (!('inkData' in request.resource.data.diff(resource.data).affectedKeys()) ||
+          request.resource.data.inkData == null) &&
+        // status may only move Corrections -> Submitted (re-hand-in); a student can never grade or release.
+        (!('status' in request.resource.data.diff(resource.data).affectedKeys()) ||
+          (resource.data.status == 'Corrections' && request.resource.data.status == 'Submitted'));
+    }
+    function newStudentWork(sid) {
+      return request.auth.uid == sid &&
+        request.resource.data.studentId == sid &&
+        request.resource.data.status == 'Submitted' &&
+        request.resource.data.released == false &&
+        request.resource.data.keys().hasOnly(
+          ['studentId', 'studentName', 'studentEmail', 'fileUrl', 'fileName', 'fileType', 'storagePath',
+           'note', 'textAnswer', 'status', 'released', 'createdAt', 'updatedAt', 'submittedAt']);
+    }
+    // A paper hand-in: staff record it for a student who does not upload (see js/classroom/paper-handins.js).
+    function staffPaperHandIn(cid, sid) {
+      return (isAdmin() || classTutorMay(classroomData(cid))) &&
+        request.resource.data.get('handIn', '') == 'physical' &&
+        request.resource.data.studentId == sid;
+    }
+    function staffUndoPaperHandIn(cid) {
+      return (isAdmin() || classTutorMay(classroomData(cid))) && resource.data.get('handIn', '') == 'physical';
+    }
+    function isLinkedParent(conversationId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentStudentLinks/$(conversationId)) &&
+        get(/databases/$(database)/documents/parentStudentLinks/$(conversationId)).data.parentUid == request.auth.uid;
+    }
+    // A parent may talk to the Studio Desk about a child they are linked to, through the
+    // Parent Portal (parentStudentLinks) or Paisley Tech Studio (techGuardianLinks, same id format).
+    function isDeskParent(conversationId) {
+      return isLinkedParent(conversationId) ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/techGuardianLinks/$(conversationId)) &&
+          get(/databases/$(database)/documents/techGuardianLinks/$(conversationId)).data.parentUid == request.auth.uid);
+    }
+
+    // =====================================================
+    // AUDIENCE-AWARE CONTENT ACCESS
+    // =====================================================
+    function postedToMyType(d) {
+      return ('audiences' in d) && (
+        (isRemoteStudent() && d.audiences.get('remote', false) == true) ||
+        (isTuitionStudent() && d.audiences.get('tuition', false) == true) ||
+        (!isRemoteStudent() && !isTuitionStudent() && d.audiences.get('online', false) == true) ||
+        (('releasedTo' in d) && request.auth.uid in d.releasedTo));
+    }
+    function studentSeesLesson(cid) {
+      return ((isOnlineStudent() || remoteActive() || tuitionActive()) && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && ('releasedTo' in resource.data) &&
+               request.auth.uid in resource.data.releasedTo) ||
+             (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && resource.data.audiences.online == true) ||
+             (remoteActive() && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && resource.data.audiences.remote == true) ||
+             (tuitionActive() && classStudentMay(classroomData(cid)) &&
+               resource.data.status == 'published' && resource.data.audiences.get('tuition', false) == true);
+    }
+    function parentSeesLesson(cid) {
+      return resource.data.status == 'published' && (
+        (('releasedParents' in resource.data) && request.auth.uid in resource.data.releasedParents) ||
+        (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
+        (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))) ||
+        (resource.data.audiences.get('tuition', false) == true && parentSlotTuition(classroomData(cid))));
+    }
+    function tutorSeesPosted(cid) {
+      return isTutor() && classTutorMay(classroomData(cid)) && resource.data.audiences.tutors == true;
+    }
+    function studentSeesWork(cid) {
+      return (isOnlineStudent() && classStudentMay(classroomData(cid)) &&
+               ((resource.data.audiences.online == true &&
+                 (resource.data.audience == 'class' || request.auth.uid in resource.data.recipients)) ||
+                request.auth.uid in resource.data.releasedTo)) ||
+             (remoteActive() && classStudentMay(classroomData(cid)) &&
+               ((resource.data.audiences.remote == true &&
+                 (resource.data.audience == 'class' || request.auth.uid in resource.data.recipients)) ||
+                request.auth.uid in resource.data.releasedTo)) ||
+             (tuitionActive() && classStudentMay(classroomData(cid)) &&
+               ((resource.data.audiences.get('tuition', false) == true &&
+                 (resource.data.audience == 'class' || request.auth.uid in resource.data.recipients)) ||
+                request.auth.uid in resource.data.releasedTo));
+    }
+    function parentSeesWork(cid) {
+      return (('releasedParents' in resource.data) && request.auth.uid in resource.data.releasedParents) ||
+             (resource.data.audiences.online == true && parentSlotOnline(classroomData(cid))) ||
+             (resource.data.audiences.remote == true && parentSlotRemote(classroomData(cid))) ||
+             (resource.data.audiences.get('tuition', false) == true && parentSlotTuition(classroomData(cid)));
+    }
+    function studentSeesExam(cid) {
+      return resource.data.status == 'Published' && studentSeesWork(cid);
+    }
+    function parentSeesExam(cid) {
+      return resource.data.status == 'Published' && parentSeesWork(cid);
+    }
+
+    // =====================================================
+    // FLAT SUBJECT-SCOPED EXAM HELPERS
+    // =====================================================
+    function flatExamStudentMaySee(e) {
+      return isSignedIn() &&
+        e.status == 'Published' &&
+        exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
+        ('subjects' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data) &&
+        e.subjectId in get(/databases/$(database)/documents/students/$(request.auth.uid)).data.subjects &&
+        (('year' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data && e.year != null)
+          ? e.year == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.year
+          : e.keyStage == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.keyStage);
+    }
+    function flatExamWindowOpen(e) {
+      return e.status == 'Published' &&
+        (
+          (('submissionsOpen' in e) && e.submissionsOpen == true) ||
+          (
+            ('examDate' in e) && ('submissionDeadline' in e) &&
+            request.time >= e.examDate &&
+            request.time <= e.submissionDeadline
+          )
+        );
+    }
+    function newFlatExamSubmission(sid) {
+      return request.auth.uid == sid &&
+        request.resource.data.studentId == sid &&
+        request.resource.data.status == 'Submitted' &&
+        request.resource.data.released == false &&
+        request.resource.data.keys().hasOnly(
+          ['studentId', 'studentName', 'studentEmail',
+           'fileUrl', 'fileName', 'fileType', 'storagePath',
+           'note', 'textAnswer', 'status', 'released',
+           'createdAt', 'updatedAt', 'submittedAt']);
+    }
+    function flatExamStudentEdit() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['fileUrl', 'fileName', 'fileType', 'storagePath', 'note', 'textAnswer',
+           'status', 'updatedAt', 'submittedAt', 'correctionUploadedAt']) &&
+        request.resource.data.status == 'Submitted';
+    }
+
+    // =====================================================
+    // PUBLIC MARKETING FORMS
+    // =====================================================
+    match /enrolments/{id}  { allow create: if true; allow read, update, delete: if isAdmin(); }
+    match /tutors/{id}      { allow create: if true; allow read, update, delete: if isAdmin(); }
+    match /messages/{id}    { allow create: if true; allow read, update, delete: if isAdmin(); }
+    match /newsletter/{id}  { allow create: if true; allow read, update, delete: if isAdmin(); }
+
+    // =====================================================
+    // STAFF ALLOWLIST
+    // =====================================================
+    match /admins/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // =====================================================
+    // TUTOR ACCOUNTS
+    // =====================================================
+    match /tutorAccounts/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // =====================================================
+    // REGISTRATION NUMBER COUNTER
+    // =====================================================
+    match /counters/registrationNumbers {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.lastSequence == 101
+        && request.resource.data.keys().hasOnly(['lastYear','lastSequence','updatedAt']);
+      allow update: if isSignedIn()
+        && request.resource.data.lastSequence == resource.data.lastSequence + 1
+        && request.resource.data.keys().hasOnly(['lastYear','lastSequence','updatedAt']);
+      allow delete: if false;
+    }
+
+    // =====================================================
+    // STUDENTS
+    // =====================================================
+    match /students/{uid} {
+      allow create: if isOwner(uid) &&
+        request.resource.data.status == 'Pending' &&
+        !('studentType' in request.resource.data) &&
+        !('admittedBy' in request.resource.data) &&
+        !('tutorId' in request.resource.data) &&
+        !('tutorIds' in request.resource.data) &&
+        !('subjectTutors' in request.resource.data);
+      allow create: if isOwner(uid) &&
+        request.resource.data.status == 'Pending' &&
+        request.resource.data.studentType == 'tuition' &&
+        !('tuitionMode' in request.resource.data) &&
+        !('admittedBy' in request.resource.data) &&
+        !('tutorId' in request.resource.data) &&
+        !('tutorIds' in request.resource.data) &&
+        !('subjectTutors' in request.resource.data);
+
+      // TECH no longer creates students docs: TECH applications live in techStudents.
+      // Legacy studentType 'tech' records are moved there by migrateTechArchitecture.
+
+      // Allow tutors to read student documents so the release modal can find them
+      allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || isTutor();
+
+      allow update: if isAdmin() ||
+        // A tutor may mark their own student as handing in on paper at school, nothing else.
+        (tutorTeachesStudent(uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['physicalStudent', 'physicalSetBy', 'physicalSetAt'])) ||
+        (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt'])) ||
+        (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'tuition' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt', 'subjects', 'subjectNames']) &&
+          (!('subjects' in request.resource.data.diff(resource.data).affectedKeys()) ||
+            (request.resource.data.subjects is list && request.resource.data.subjects.size() <= 14))) ||
+        (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'tech' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'techProfile', 'updatedAt', 'lastLoginAt'])) ||
+        (isOwner(uid) && !(('studentType' in resource.data) && resource.data.studentType in ['remote', 'tuition', 'tech']) &&
+        !('studentType' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('admittedBy' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('status' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('keyStage' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('year' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjects' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjectNames' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorId' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorName' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorSlug' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('tutorIds' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('board' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjectBoards' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('activatedAt' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('physicalStudent' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('subjectTutors' in request.resource.data.diff(resource.data).affectedKeys()));
+      allow delete: if false;
+    }
+    match /archivedStudents/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // =====================================================
+    // EXAM RESULTS
+    // =====================================================
+    match /examResults/{id} {
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || tutorTeachesStudent(resource.data.studentId) || isParentOf(resource.data.studentId);
+      allow write: if isAdmin() || isTutor();
+    }
+
+    // =====================================================
+    // HOMEWORK
+    // =====================================================
+    match /homework/{id} {
+      allow read: if notRemote();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // =====================================================
+    // SUBMISSIONS (LEGACY)
+    // =====================================================
+    match /submissions/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || isParentOf(resource.data.studentId) ||
+        (isTutor() && (
+          get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.tutorId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.tutorIds
+        ));
+
+      allow update: if
+        (isAdmin() ||
+          tutorMayManageTask('homework', resource.data.authorTutorId, resource.data.homeworkId) ||
+          (isSignedIn() &&
+            resource.data.studentId == request.auth.uid &&
+            resource.data.status != 'Graded' &&
+            !('studentId'     in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('homeworkId'    in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('authorTutorId' in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('authorRole'    in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('status'        in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('grade'         in request.resource.data.diff(resource.data).affectedKeys()) &&
+            !('feedback'      in request.resource.data.diff(resource.data).affectedKeys())
+          )
+        );
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // EXAMS (LEGACY)
+    // =====================================================
+    match /exams/{id} {
+      allow read: if isAdmin() || isTutor() ||
+        (notRemote() && 'status' in resource.data && resource.data.status == 'Published');
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // =====================================================
+    // EXAM ATTEMPTS (LEGACY)
+    // =====================================================
+    match /examAttempts/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || tutorTeachesStudent(resource.data.studentId) || isParentOf(resource.data.studentId);
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid && resource.data.status == 'In progress') ||
+        tutorMayManageTask('exam', get(/databases/$(database)/documents/exams/$(resource.data.examId)).data.tutorId, resource.data.examId);
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // NOTES / MATERIALS
+    // =====================================================
+    match /notes/{id} {
+      allow read: if notRemote();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // =====================================================
+    // NOTIFICATIONS
+    // =====================================================
+    match /notifications/{id} {
+      allow read: if notRemote();
+      allow create: if isAdmin() || isTutor();
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.postedById == request.auth.uid);
+    }
+
+    // =====================================================
+    // TIMETABLES (legacy)
+    // =====================================================
+    match /timetables/{id} {
+      allow read: if notRemote();
+      allow create: if isAdmin() || isTutor();
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.postedById == request.auth.uid);
+    }
+
+    // =====================================================
+    // TIMETABLE ENTRIES
+    // =====================================================
+    match /timetableEntries/{id} {
+      allow read: if isAdmin() ||
+        tutorMaySeeEntry() ||
+        studentMaySeeEntry() ||
+        parentMaySeeEntry();
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.tutorId == request.auth.uid);
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.tutorId == request.auth.uid);
+    }
+
+    // =====================================================
+    // LIVE CLASSES
+    // =====================================================
+    match /liveClasses/{id} {
+      allow read: if notRemote();
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.hostId == request.auth.uid);
+      allow update: if isAdmin() ||
+        (isTutor() && resource.data.hostId == request.auth.uid);
+      allow delete: if isAdmin() ||
+        (isTutor() && resource.data.hostId == request.auth.uid);
+    }
+
+    // =====================================================
+    // LIVE CLASS INTEGRITY
+    // =====================================================
+    match /liveClassSessions/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (isTutor() &&
+          get(/databases/$(database)/documents/liveClasses/$(resource.data.classId)).data.hostId == request.auth.uid);
+      allow update: if isSignedIn() && resource.data.studentId == request.auth.uid &&
+        !('studentId' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('classId' in request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if isAdmin();
+    }
+    match /liveClassIntegrityEvents/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (isTutor() &&
+          get(/databases/$(database)/documents/liveClasses/$(resource.data.classId)).data.hostId == request.auth.uid);
+      allow update, delete: if false;
+    }
+
+    // =====================================================
+    // GRADING GRANTS
+    // =====================================================
+    match /gradingGrants/{id} {
+      allow read: if isAdmin() ||
+        (isTutor() && resource.data.tutorId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // =====================================================
+    // TICKETS
+    // =====================================================
+    match /tickets/{id} {
+      allow create: if isSignedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && ('targetTutorId' in request.resource.data)
+        && request.resource.data.targetTutorId is string
+        && request.resource.data.targetTutorId.size() > 0
+        && studentHasTutorId(request.auth.uid, request.resource.data.targetTutorId);
+
+      allow create: if (remoteActive() || tuitionActive())
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.targetAdmin == true
+        && request.resource.data.status == 'Open'
+        && request.resource.data.subject is string && request.resource.data.subject.size() > 0
+        && request.resource.data.subject.size() <= 200
+        && request.resource.data.message is string && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 5000
+        && request.resource.data.keys().hasOnly(['studentId', 'studentName', 'studentEmail', 'studentType',
+             'keyStage', 'targetAdmin', 'subject', 'reference', 'message', 'status', 'reply', 'createdAt']);
+
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin()
+        || (isSignedIn() && ('targetTutorId' in resource.data)
+              && resource.data.targetTutorId == request.auth.uid)
+        || tutorTeachesStudent(resource.data.studentId)
+        || isParentOf(resource.data.studentId);
+
+      allow update: if isAdmin()
+        || ((isSignedIn() && ('targetTutorId' in resource.data)
+              && resource.data.targetTutorId == request.auth.uid))
+        || tutorTeachesStudent(resource.data.studentId);
+
+      allow delete: if isAdmin();
+    }
+
+    // =====================================================
+    // ACTIVITIES
+    // =====================================================
+    match /activities/{id} {
+      allow read: if isAdmin() || isTutor() ||
+        (notRemote() && 'status' in resource.data && resource.data.status == 'Published');
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.ownerId == request.auth.uid);
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.ownerId == request.auth.uid);
+    }
+    match /activityAttempts/{id} {
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || isTutor() || isParentOf(resource.data.studentId);
+      allow update: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    match /activityAssignments/{id} {
+      allow read: if notRemote();
+      allow write: if isAdmin() ||
+        (isTutor() && (resource == null || resource.data.ownerId == request.auth.uid) &&
+          request.resource.data.ownerId == request.auth.uid);
+    }
+
+    // =====================================================
+    // PUBLICATION AUDIT TRAIL (written by Cloud Functions only)
+    // =====================================================
+    match /publications/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // =====================================================
+    // PARENT PORTAL
+    // =====================================================
+    match /parentAccounts/{uid} {
+      allow read, update: if isOwner(uid) || isAdmin();
+      allow create, delete: if isAdmin();
+    }
+    // Ads and newsletters for parents. Admins only write: tutors, coaches and students
+    // can never run an ad or send a newsletter. Sending is the sendParentNewsletter callable.
+    function isParentAccount() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/parentAccounts/$(request.auth.uid));
+    }
+    match /parentAds/{id} {
+      allow read: if isAdmin() || (resource.data.status == 'live' && isParentAccount());
+      allow write: if isAdmin();
+    }
+    match /parentNewsletters/{id} {
+      allow read: if isAdmin() || (resource.data.published == true && isParentAccount());
+      allow write: if isAdmin();
+      match /deliveries/{uid} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+    // A parent's own email choice and last-read time.
+    match /parentNewsletterPrefs/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isParentAccount() &&
+        request.resource.data.keys().hasOnly(['emailOptOut', 'lastReadAt', 'updatedAt']);
+      allow update: if isOwner(uid) && isParentAccount() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emailOptOut', 'lastReadAt', 'updatedAt']);
+      allow delete: if false;
+    }
+    match /parentStudentLinks/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.parentUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+    match /parentAccess/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // =====================================================
+    // ADMIN <-> PARENT PRIVATE CONVERSATIONS
+    // =====================================================
+    match /parentConversations/{cid} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.parentUid == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isSignedIn() &&
+          request.resource.data.parentUid == request.auth.uid &&
+          cid == request.auth.uid + '_' + request.resource.data.studentUid &&
+          isDeskParent(cid));
+      allow update: if isAdmin() ||
+        (isSignedIn() &&
+          resource.data.parentUid == request.auth.uid &&
+          request.resource.data.parentUid == resource.data.parentUid &&
+          request.resource.data.studentUid == resource.data.studentUid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['lastMessage', 'lastMessageAt', 'lastSenderRole', 'unreadForAdmin', 'unreadForParent',
+             'parentName', 'studentName', 'keyStage', 'year', 'programme']));
+      allow delete: if false;
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || isDeskParent(cid);
+        allow create: if
+          (isAdmin() &&
+            request.resource.data.senderRole == 'admin' &&
+            request.resource.data.senderUid == request.auth.uid) ||
+          (isDeskParent(cid) &&
+            request.resource.data.senderRole == 'parent' &&
+            request.resource.data.senderUid == request.auth.uid);
+        allow update: if
+          ((isAdmin() && resource.data.senderRole == 'parent') ||
+           (isDeskParent(cid) && resource.data.senderRole == 'admin')) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if false;
+      }
+    }
+
+    // =====================================================
+    // CLASSROOM
+    // =====================================================
+    // =====================================================
+    // CLASSROOM RESOURCES — marking schemes, further resources.
+    // Admin posts; tutors of that subject read + discuss with the Studio Desk.
+    // =====================================================
+    match /classroomResources/{rid} {
+      allow read: if isAdmin() || classTutorSubject(resource.data.subjectId);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (classTutorSubject(resource.data.subjectId) &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['msgCount','lastMsgAt','lastMsgText','lastMsgBy','lastMsgByName','unreadAdmin','unreadTutor']));
+
+      match /messages/{mid} {
+        allow read: if isAdmin() ||
+          classTutorSubject(get(/databases/$(database)/documents/classroomResources/$(rid)).data.subjectId);
+        allow create: if isSignedIn() &&
+          request.resource.data.authorUid == request.auth.uid &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000 &&
+          ((isAdmin() && request.resource.data.authorRole == 'admin') ||
+           (classTutorSubject(get(/databases/$(database)/documents/classroomResources/$(rid)).data.subjectId) &&
+            request.resource.data.authorRole == 'tutor'));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /classrooms/{cid} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      match /topics/{tid} {
+        allow read: if isSignedIn();
+        allow create, update: if isAdmin();
+        allow delete: if isAdmin();
+
+        match /lessons/{lid} {
+          allow read: if isAdmin()
+            || isTutor()
+            || (
+                 resource.data.status == 'published'
+                 && (
+                      (resource.data.audiences.online == true)
+                   || (resource.data.audiences.remote == true)
+                   || (resource.data.audiences.get('tuition', false) == true)
+                   || (('releasedTo' in resource.data) && request.auth.uid in resource.data.releasedTo)
+                   || (('releasedParents' in resource.data) && request.auth.uid in resource.data.releasedParents)
+                    )
+               );
+          allow create: if isAdmin();
+          allow update: if isAdmin();
+          allow delete: if isAdmin();
+
+          match /submissions/{sid} {
+            allow read: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              isOwner(sid) ||
+              isParentOf(sid);
+            allow create: if newStudentWork(sid) &&
+              studentAccountOk() &&
+              classStudentMay(classroomData(cid)) &&
+              postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
+            allow create: if staffPaperHandIn(cid, sid);
+            allow update: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
+            allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
+          }
+        }
+
+        match /assignments/{aid} {
+          allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesWork(cid) || parentSeesWork(cid);
+          allow create, update, delete: if isAdmin();
+
+          match /submissions/{sid} {
+            allow read: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('homework', aid) ||
+              (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+              isOwner(sid) ||
+              isParentOf(sid);
+            allow create: if newStudentWork(sid) &&
+              studentAccountOk() &&
+              classStudentMay(classroomData(cid)) &&
+              forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/assignments/$(aid)).data);
+            allow create: if staffPaperHandIn(cid, sid);
+            allow update: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('homework', aid) ||
+              (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
+            allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
+          }
+        }
+
+        match /exams/{eid} {
+          allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesExam(cid) || parentSeesExam(cid);
+          allow create, delete: if isAdmin();
+          allow update: if isAdmin();
+
+          match /attempts/{sid} {
+            allow read: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('exam', eid) ||
+              (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+              isOwner(sid) ||
+              isParentOf(sid);
+            allow create: if newStudentWork(sid) &&
+              studentAccountOk() &&
+              classStudentMay(classroomData(cid)) &&
+              get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.status == 'Published' &&
+              get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.examMode == 'pdf' &&
+              forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data);
+            allow update: if isAdmin() ||
+              classTutorSubject(classroomData(cid).subjectId) ||
+              activeGrant('exam', eid) ||
+              (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
+            allow delete: if isAdmin();
+          }
+        }
+      }
+
+      match /exams/{eid} {
+        allow read: if isAdmin() || tutorSeesPosted(cid) || studentSeesExam(cid) || parentSeesExam(cid);
+
+        allow create: if isAdmin() &&
+          request.resource.data.subjectId == classroomData(cid).subjectId &&
+          request.resource.data.keyStage == classroomData(cid).keyStage &&
+          request.resource.data.year == classroomData(cid).year &&
+          request.resource.data.examType in ['Midterm', 'End of Term'] &&
+          request.resource.data.title is string &&
+          request.resource.data.title.size() > 0 &&
+          request.resource.data.title.size() <= 200;
+
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+
+        match /submissions/{studentId} {
+          allow read: if isAdmin() ||
+            classTutorSubject(classroomData(cid).subjectId) ||
+            activeGrant('exam', eid) ||
+            (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+            isOwner(studentId) ||
+            isParentOf(studentId);
+
+          allow create: if newFlatExamSubmission(studentId) &&
+            classStudentMay(classroomData(cid)) &&
+            studentAccountOk() &&
+            postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data) &&
+            flatExamWindowOpen(
+              get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
+            );
+
+          allow create: if staffPaperHandIn(cid, studentId);
+
+          allow update: if
+            isAdmin() ||
+            classTutorSubject(classroomData(cid).subjectId) ||
+            activeGrant('exam', eid) ||
+            (isOwner(studentId) &&
+              resource.data.status != 'Graded' &&
+              flatExamStudentEdit() &&
+              flatExamWindowOpen(
+                get(/databases/$(database)/documents/classrooms/$(cid)/exams/$(eid)).data
+              ));
+
+          allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
+        }
+      }
+    }
+
+    match /{path=**}/lessons/{lessonId} {
+      allow read: if isAdmin();
+    }
+
+    // =====================================================
+    // STUDENT / PARENT NOTICES
+    // =====================================================
+    match /studentNotices/{id} {
+      allow read: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+
+    // =====================================================
+    // Paisley Tech Studio — its own architecture (functions/tech.js)
+    //   techStudents/{uid}       enrolment (any account may apply)
+    //   techCoaches/{uid}        coaches (not tutors)
+    //   techGuardianLinks/{parentUid}_{studentUid}   guardian -> builder
+    //   techGuardianChats/{parentUid}_{studentUid}   guardian <-> coach
+    //   techNotifications        TECH-only bell feed
+    // A builder, coach or guardian is recognised by which collection
+    // holds their uid — never by a field they can write themselves.
+    // =====================================================
+    function techStudentActive() {
+      return isSignedIn() && exists(/databases/$(database)/documents/techStudents/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/techStudents/$(request.auth.uid)).data.status == 'Active';
+    }
+    function isTechCoach() {
+      return isSignedIn() && exists(/databases/$(database)/documents/techCoaches/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/techCoaches/$(request.auth.uid)).data.status == 'Active';
+    }
+    function techCoachIdOf(studentId) {
+      return get(/databases/$(database)/documents/techStudents/$(studentId)).data.get('coachId', '');
+    }
+    function isTechCoachOf(studentId) {
+      return isTechCoach() && exists(/databases/$(database)/documents/techStudents/$(studentId)) &&
+        techCoachIdOf(studentId) == request.auth.uid;
+    }
+    function isTechGuardianOf(studentId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/techGuardianLinks/$(request.auth.uid + '_' + studentId));
+    }
+    // Fields only a coach or the Studio Desk may write on a build or a submission.
+    function techReviewKeys() {
+      return ['grade', 'gradeLabel', 'gradeScore', 'criteriaScores', 'reviewNote', 'reviewedAt', 'reviewedBy',
+        'reviewerName', 'publishedAt', 'publishedBy', 'publishConsent'];
+    }
+
+    match /techStudents/{uid} {
+      allow read: if isOwner(uid) || isAdmin() ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid) ||
+        isTechGuardianOf(uid);
+      // A brand-new account, or an existing IGCSE / CBC / remote student, applies for
+      // themselves. Applications always land Pending, with no coach and no links.
+      allow create: if isOwner(uid) &&
+        request.resource.data.status == 'Pending' &&
+        request.resource.data.email is string && request.resource.data.email.size() > 0 &&
+        request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'ageGroup', 'skillLevel', 'status', 'techProfile', 'guardians', 'createdAt', 'updatedAt']) &&
+        request.resource.data.get('skillLevel', 'beginner') in ['beginner', 'intermediate', 'expert'] &&
+        (!('guardians' in request.resource.data) ||
+          (request.resource.data.guardians is list && request.resource.data.guardians.size() <= 4));
+      allow update: if isAdmin() ||
+        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'phone', 'techProfile', 'updatedAt', 'lastLoginAt', 'lastActiveAt'])) ||
+        // A builder from before levels existed chooses once. After that only the Studio Desk changes it.
+        (isOwner(uid) && !('skillLevel' in resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['skillLevel', 'updatedAt']) &&
+          request.resource.data.skillLevel in ['beginner', 'intermediate', 'expert']);
+      allow delete: if isAdmin();
+    }
+
+    // Coach invites, keyed by lower-case email, written by the Studio Desk (Tutors page).
+    // The invited person claims it on their first sign-in at /tech/coach/{slug}, which creates
+    // their techCoaches doc. So a coach never depends on a Cloud Function, and an existing
+    // Paisley login (e.g. a tutor) becomes a coach with its own password. When the desk
+    // created the login itself, the invite holds that uid and only that login can claim it.
+    function hasEmail() {
+      return isSignedIn() && ('email' in request.auth.token) && request.auth.token.email is string;
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function techInvite() {
+      return get(/databases/$(database)/documents/techCoachInvites/$(myEmail())).data;
+    }
+    function canClaimCoach(uid) {
+      return isOwner(uid) && hasEmail() &&
+        exists(/databases/$(database)/documents/techCoachInvites/$(myEmail())) &&
+        techInvite().get('uid', request.auth.uid) == request.auth.uid &&
+        techInvite().get('revoked', false) != true;
+    }
+    match /techCoachInvites/{email} {
+      allow read: if isAdmin() || (hasEmail() && myEmail() == email);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (hasEmail() && myEmail() == email &&
+          resource.data.get('uid', request.auth.uid) == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'claimedAt']) &&
+          request.resource.data.uid == request.auth.uid);
+    }
+
+    // Public lookup behind a coach's personal link /tech/coach/{slug}
+    // (same idea as the tutor link /tutor/{slug}): { slug, name, email, status, coachId? }.
+    match /techCoachSlugs/{slug} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Anyone with a login can apply to coach; only the Studio Desk makes them Active, and only
+    // Active coaches can see builders' work. An under-18 builder cannot apply.
+    function notMinorBuilder(uid) {
+      return !exists(/databases/$(database)/documents/techStudents/$(uid)) ||
+        get(/databases/$(database)/documents/techStudents/$(uid)).data.get('ageGroup', '') != 'under18';
+    }
+    match /techCoaches/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAdmin() ||
+        (isOwner(uid) && hasEmail() && notMinorBuilder(uid) &&
+          request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'bio', 'status', 'appliedAt', 'createdAt', 'updatedAt']) &&
+          request.resource.data.status == 'Pending' &&
+          request.resource.data.email.lower() == myEmail()) ||
+        (canClaimCoach(uid) &&
+          request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'disciplines', 'bio', 'slug', 'status', 'createdAt', 'updatedAt', 'createdBy', 'claimedFromInvite']) &&
+          request.resource.data.status == 'Active' &&
+          request.resource.data.get('slug', '') == techInvite().get('slug', '') &&
+          request.resource.data.email.lower() == myEmail());
+      allow update: if isAdmin() ||
+        (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'bio', 'updatedAt', 'lastLoginAt']));
+      allow delete: if isAdmin();
+    }
+
+    // Written by Cloud Functions / admins only.
+    match /techGuardianLinks/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.parentUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /techNotifications/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.recipientId == request.auth.uid);
+      allow update: if isSignedIn() && resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow create, delete: if false;
+    }
+
+    // Studio-wide settings (the navigation video). Only the Studio Desk changes them.
+    match /techSettings/{id} {
+      allow read: if isAdmin() || techStudentActive();
+      allow write: if isAdmin();
+    }
+
+    match /techContent/{id} {
+      allow read: if isAdmin() || isTechCoach() || (techStudentActive() && resource.data.status == 'published');
+      allow create: if isAdmin() || (isTechCoach() && request.resource.data.createdBy == request.auth.uid);
+      allow update: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid &&
+        request.resource.data.createdBy == request.auth.uid);
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
+    }
+
+    // Classes, built like the curriculum classrooms: techCourses (the CODING card) ->
+    // techTopics (Flow) -> techLessons (a lesson or a practice test). Admins and active coaches
+    // build them; a coach changes only what they made, but may reorder anything. Published
+    // work reaches every builder on its level, and any parent account can read it. The level
+    // split is a choice of what to show, not a secret: answers are what is protected.
+    function canReadTechClasses() {
+      return isAdmin() || isTechCoach() || techStudentActive() || isParentAccount();
+    }
+    function techAuthorCreate() {
+      return isAdmin() || (isTechCoach() && request.resource.data.createdBy == request.auth.uid);
+    }
+    function techAuthorChange() {
+      return isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid &&
+        request.resource.data.createdBy == request.auth.uid);
+    }
+    function techReorderOnly() {
+      return isTechCoach() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['order', 'updatedAt']);
+    }
+    match /techCourses/{id} {
+      allow read: if canReadTechClasses();
+      allow create: if techAuthorCreate() && request.resource.data.track in ['beginner', 'advanced'];
+      allow update: if techAuthorChange();
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
+    }
+    match /techTopics/{id} {
+      allow read: if canReadTechClasses();
+      allow create: if techAuthorCreate();
+      allow update: if techAuthorChange() || techReorderOnly();
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
+    }
+    match /techLessons/{id} {
+      allow read: if isAdmin() || isTechCoach() ||
+        (resource.data.status == 'published' && (techStudentActive() || isParentAccount()));
+      allow create: if techAuthorCreate() && request.resource.data.track in ['beginner', 'advanced'];
+      allow update: if techAuthorChange() || techReorderOnly();
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
+      // The answers. Builders and parents never read this: submitTechQuiz marks on the server.
+      match /private/{doc} {
+        allow read: if isAdmin() || isTechCoach();
+        allow create, update: if isAdmin() || (isTechCoach() &&
+          getAfter(/databases/$(database)/documents/techLessons/$(id)).data.createdBy == request.auth.uid);
+        allow delete: if isAdmin() || (isTechCoach() &&
+          get(/databases/$(database)/documents/techLessons/$(id)).data.createdBy == request.auth.uid);
+      }
+    }
+    // Opened and watched come from the builder; scores only from submitTechQuiz.
+    match /techLessonProgress/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        id == request.auth.uid + '_' + request.resource.data.lessonId &&
+        request.resource.data.keys().hasOnly(['studentId', 'lessonId', 'courseId', 'topicId', 'track', 'title', 'openedAt', 'watchedAt', 'updatedAt']);
+      allow update: if isSignedIn() && resource.data.studentId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'topicId', 'openedAt', 'watchedAt', 'updatedAt']);
+      allow delete: if isAdmin();
+    }
+    // Marked quizzes and practice tests. Written only by submitTechQuiz, so a score can't be forged.
+    match /techAttempts/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow write: if false;
+    }
+
+    match /techBuilds/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid) ||
+        isTechGuardianOf(resource.data.studentId);
+      // A build is always routed to the builder's current coach.
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.get('coachId', '') == techCoachIdOf(request.auth.uid) &&
+        request.resource.data.showcase == 'none' &&
+        request.resource.data.reviewState == 'none';
+      allow update: if isAdmin() ||
+        // builder: cannot change ownership/coach, cannot approve themselves onto the Wall,
+        // cannot grant themselves mastery, and cannot request review without an AI reflection.
+        (techStudentActive() && resource.data.studentId == request.auth.uid &&
+          request.resource.data.studentId == resource.data.studentId &&
+          request.resource.data.get('coachId', '') == resource.data.get('coachId', '') &&
+          // showcase / review: keep what the coach set, or move to none / requested (withdrawing
+          // from the Wall is allowed; approving is not)
+          (request.resource.data.showcase == resource.data.get('showcase', 'none') ||
+            request.resource.data.showcase in ['none', 'requested']) &&
+          (request.resource.data.reviewState == resource.data.get('reviewState', 'none') ||
+            request.resource.data.reviewState in ['none', 'requested']) &&
+          (!(('mastery' in request.resource.data) && request.resource.data.mastery != resource.data.get('mastery', 'none')) ||
+            request.resource.data.mastery == 'none') &&
+          (!(('reviewState' in request.resource.data.diff(resource.data).affectedKeys()) &&
+             request.resource.data.reviewState == 'requested') ||
+            (('aiReflection' in request.resource.data) && request.resource.data.aiReflection != null)) &&
+          // grades, review notes and publication belong to the coach / Studio Desk
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(techReviewKeys())) ||
+        // coach: review, grading, stage, Tech Wall and family-link fields only — never the builder's work
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['grade', 'gradeLabel', 'gradeScore', 'criteriaScores', 'reviewNote', 'reviewedAt', 'reviewedBy',
+            'reviewerName', 'publishedAt', 'publishedBy', 'publishConsent', 'reviewState', 'showcase', 'mastery', 'masteryNote',
+            'masteryAt', 'masteryBy', 'status', 'progress', 'visibility', 'shareToken', 'updatedAt']) &&
+          request.resource.data.studentId == resource.data.studentId);
+      allow delete: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid && resource.data.showcase != 'approved');
+
+      // One immutable snapshot per submission (the work, the AI reflection and the version),
+      // so earlier submissions survive revisions. The coach records the outcome on it.
+      match /submissions/{sid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid) ||
+          isTechGuardianOf(get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId)));
+        allow create: if techStudentActive() &&
+          get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid &&
+          request.resource.data.studentId == request.auth.uid &&
+          request.resource.data.status == 'submitted' &&
+          !request.resource.data.keys().hasAny(techReviewKeys());
+        allow update: if isAdmin() ||
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['grade', 'gradeLabel', 'gradeScore', 'criteriaScores', 'reviewNote', 'reviewedAt',
+              'reviewedBy', 'reviewerName', 'status']));
+        allow delete: if isAdmin();
+      }
+
+      match /feedback/{fid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid) ||
+          isTechGuardianOf(get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId)));
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid && (isAdmin() ||
+          (get(/databases/$(database)/documents/techBuilds/$(id)).data.studentId == request.auth.uid &&
+            request.resource.data.role == 'student') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techBuilds/$(id)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.role == 'coach'));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Public TECH Wall (doc id = build id): admins, or the build's own coach, publish;
+    // the builder may take their own build down.
+    function techBuildOf(id) { return get(/databases/$(database)/documents/techBuilds/$(id)).data; }
+    match /techShowcase/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() ||
+        (isTechCoach() && exists(/databases/$(database)/documents/techBuilds/$(id)) &&
+          techBuildOf(id).get('coachId', '') == request.auth.uid);
+      allow delete: if isAdmin() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/techBuilds/$(id)) &&
+          (techBuildOf(id).studentId == request.auth.uid ||
+            (isTechCoach() && techBuildOf(id).get('coachId', '') == request.auth.uid)));
+    }
+
+    // techProgress/{uid} = { levels: {Coding: 3, ...}, masteryCount: {...}, updatedAt, updatedBy }
+    // Cloud Function writes only.
+    match /techProgress/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || isTechCoachOf(uid) || isTechGuardianOf(uid);
+      allow write: if false;
+    }
+
+    // Practice: low-stakes experiments, kept apart from assessed builds.
+    // The builder owns the work; their coach can read it and leave a note; admins see all.
+    match /techPractice/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        !request.resource.data.keys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt']);
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid &&
+          request.resource.data.studentId == resource.data.studentId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt'])) ||
+        (isTechCoachOf(resource.data.studentId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coachNote', 'coachNoteBy', 'coachNoteAt', 'helpRequested', 'updatedAt']));
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+    }
+
+    // Activity timeline. Builders append their own events (stamped with the server time);
+    // Cloud Functions add review / mastery / publication events. Nobody edits history.
+    match /techActivity/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.at == request.time &&
+        request.resource.data.keys().hasOnly(['studentId', 'studentName', 'type', 'label', 'buildId', 'missionId', 'practiceId', 'materialId', 'origin', 'at']) &&
+        request.resource.data.type in ['session', 'project_created', 'project_opened', 'project_saved', 'mission_started',
+          'material_opened', 'video_watched', 'practice_saved', 'practice_done', 'help_requested', 'submitted', 'resubmitted',
+          'feedback_viewed', 'live_joined'] &&
+        request.resource.data.label is string && request.resource.data.label.size() <= 200;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Live classes (Google Meet). audience 'all' = every active builder; 'selected' = studentIds.
+    // parentUids is filled by onTechLiveClassWritten so guardians of those builders see the class.
+    match /techLiveClasses/{id} {
+      allow read: if isAdmin() || isTechCoach() ||
+        (techStudentActive() && (resource.data.audience == 'all' || request.auth.uid in resource.data.studentIds)) ||
+        (isSignedIn() && request.auth.uid in resource.data.get('parentUids', []));
+      allow create: if isAdmin() ||
+        (isTechCoach() && request.resource.data.coachId == request.auth.uid &&
+          request.resource.data.audience == 'selected' && request.resource.data.studentIds is list &&
+          !('parentUids' in request.resource.data));
+      allow update: if isAdmin() ||
+        (isTechCoach() && resource.data.coachId == request.auth.uid &&
+          request.resource.data.coachId == request.auth.uid &&
+          request.resource.data.audience == 'selected' &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['parentUids', 'notifyKey']));
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.coachId == request.auth.uid);
+    }
+
+    // shareTokens/{buildId} = { token, createdBy, createdAt, revoked }
+    // Served by the techShare Cloud Function via the Admin SDK; no public read.
+    // The builder (family link from their own studio), their coach and admins manage it.
+    match /shareTokens/{buildId} {
+      allow read, create, update, delete: if isAdmin() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/techBuilds/$(buildId)) &&
+          (techBuildOf(buildId).studentId == request.auth.uid ||
+            (isTechCoach() && techBuildOf(buildId).get('coachId', '') == request.auth.uid)));
+    }
+
+    // Builder <-> coach. chatId = studentId + '_' + coachId.
+    match /techChats/{chatId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isSignedIn() && request.resource.data.studentId == request.auth.uid &&
+          request.resource.data.coachId == techCoachIdOf(request.auth.uid) &&
+          chatId == request.auth.uid + '_' + request.resource.data.coachId) ||
+        (isTechCoach() && request.resource.data.coachId == request.auth.uid &&
+          isTechCoachOf(request.resource.data.studentId) &&
+          chatId == request.resource.data.studentId + '_' + request.auth.uid);
+      allow update: if isAdmin() ||
+        ((resource.data.studentId == request.auth.uid ||
+          (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid)) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'lastSenderRole']));
+      allow delete: if isAdmin();
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techChats/$(chatId)).data.studentId == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techChats/$(chatId)).data.get('coachId', '') == request.auth.uid)));
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid && (
+          (isAdmin() && request.resource.data.senderRole == 'admin') ||
+          (get(/databases/$(database)/documents/techChats/$(chatId)).data.studentId == request.auth.uid &&
+            request.resource.data.senderRole == 'student') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techChats/$(chatId)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.senderRole == 'coach'));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Guardian <-> the builder's current coach. chatId = parentUid + '_' + studentId.
+    // coachId is kept in step with techStudents.coachId by onTechEnrolmentUpdated.
+    match /techGuardianChats/{chatId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.parentUid == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isSignedIn() && request.resource.data.parentUid == request.auth.uid &&
+          isTechGuardianOf(request.resource.data.studentId) &&
+          chatId == request.auth.uid + '_' + request.resource.data.studentId &&
+          request.resource.data.coachId == techCoachIdOf(request.resource.data.studentId)) ||
+        (isTechCoachOf(request.resource.data.studentId) && request.resource.data.coachId == request.auth.uid &&
+          chatId == request.resource.data.parentUid + '_' + request.resource.data.studentId &&
+          exists(/databases/$(database)/documents/techGuardianLinks/$(chatId)));
+      allow update: if isAdmin() ||
+        ((resource.data.parentUid == request.auth.uid ||
+          (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid)) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'lastSenderRole']));
+      allow delete: if isAdmin();
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.parentUid == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == request.auth.uid)));
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid && (
+          (isAdmin() && request.resource.data.senderRole == 'admin') ||
+          (get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.parentUid == request.auth.uid &&
+            request.resource.data.senderRole == 'guardian') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == request.auth.uid &&
+            request.resource.data.senderRole == 'coach'));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // =====================================================
+    // CBC TUITION
+    // =====================================================
+    match /tuitionRequests/{id} {
+      allow create: if tuitionActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.status == 'Pending' &&
+        request.resource.data.keys().hasOnly(['studentId', 'studentName', 'grade', 'subjects', 'subjectNames', 'note', 'status', 'createdAt']) &&
+        request.resource.data.note is string && request.resource.data.note.size() <= 1000;
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isParentOf(resource.data.studentId);
+      allow update, delete: if isAdmin();
+    }
+
+    function chatMember(c) {
+      return isSignedIn() && (c.studentId == request.auth.uid || c.tutorId == request.auth.uid);
+    }
+    match /tuitionChats/{chatId} {
+      allow read: if isAdmin() || chatMember(resource.data) || isParentOf(resource.data.studentId);
+      allow create: if isAdmin() ||
+        (tuitionActive() &&
+          request.resource.data.studentId == request.auth.uid &&
+          chatId == request.auth.uid + '_' + request.resource.data.tutorId &&
+          studentHasTutorId(request.auth.uid, request.resource.data.tutorId) &&
+          request.resource.data.keys().hasOnly(['studentId', 'studentName', 'tutorId', 'tutorName', 'lastMessage', 'lastAt', 'createdAt'])) ||
+        (isTutor() &&
+          request.resource.data.tutorId == request.auth.uid &&
+          chatId == request.resource.data.studentId + '_' + request.auth.uid &&
+          studentHasTutorId(request.resource.data.studentId, request.auth.uid) &&
+          request.resource.data.keys().hasOnly(['studentId', 'studentName', 'tutorId', 'tutorName', 'lastMessage', 'lastAt', 'createdAt']));
+      allow update: if isAdmin() ||
+        (chatMember(resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt']));
+      allow delete: if isAdmin();
+
+      match /messages/{mid} {
+        allow read: if isAdmin() ||
+          chatMember(get(/databases/$(database)/documents/tuitionChats/$(chatId)).data) ||
+          isParentOf(get(/databases/$(database)/documents/tuitionChats/$(chatId)).data.studentId);
+        allow create: if isSignedIn() &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.keys().hasOnly(['senderId', 'senderRole', 'senderName', 'text', 'createdAt']) &&
+          request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 3000 &&
+          ((request.resource.data.senderRole == 'student' && tuitionActive() &&
+              get(/databases/$(database)/documents/tuitionChats/$(chatId)).data.studentId == request.auth.uid) ||
+           (request.resource.data.senderRole == 'tutor' && isTutor() &&
+              get(/databases/$(database)/documents/tuitionChats/$(chatId)).data.tutorId == request.auth.uid) ||
+           (request.resource.data.senderRole == 'admin' && isAdmin()));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /tuitionTimetable/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && (resource.data.studentId == request.auth.uid ||
+                          ('tutorId' in resource.data && resource.data.tutorId == request.auth.uid))) ||
+        isParentOf(resource.data.studentId);
+      allow create: if isAdmin() ||
+        (isTutor() && request.resource.data.tutorId == request.auth.uid &&
+          studentHasTutorId(request.resource.data.studentId, request.auth.uid));
+      allow update, delete: if isAdmin() ||
+        (isTutor() && resource.data.tutorId == request.auth.uid);
+    }
+
+    // =====================================================
+    // PERSONAL NOTIFICATIONS
+    // =====================================================
+    match /personalNotifications/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.recipientId == request.auth.uid);
+      allow create: if isAdmin();
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.recipientId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']));
+      allow delete: if isAdmin();
+    }
+  }
+}

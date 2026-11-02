@@ -1,0 +1,41 @@
+{
+  "rewrites": [
+    { "source": "/tutor/:slug",             "destination": "/tutor/login.html" },
+    { "source": "/tutor/login",             "destination": "/tutor/login.html" },
+    { "source": "/tutor/dashboard",         "destination": "/tutor/dashboard.html" },
+    { "source": "/tutor/integrity",         "destination": "/tutor/integrity.html" },
+
+    { "source": "/parent/dashboard",        "destination": "/parent/dashboard.html" },
+    { "source": "/parent",                  "destination": "/parent/index.html" },
+
+    { "source": "/admin",                   "destination": "/admin/index.html" },
+    { "source": "/admin/",                  "destination": "/admin/index.html" },
+    { "source": "/admin/tutors",            "destination": "/admin/tutors.html" },
+    { "source": "/admin/integrity",         "destination": "/admin/integrity.html" },
+    { "source": "/admin/import-exam",       "destination": "/admin/import-exam.html" },
+
+    { "source": "/remote",                  "destination": "/remote/index.html" },
+    { "source": "/remote/dashboard",        "destination": "/remote/dashboard.html" },
+    { "source": "/tuition",                 "destination": "/tuition.html" },
+    { "source": "/tuition/login",           "destination": "/tuition/index.html" },
+    { "source": "/tuition/dashboard",       "destination": "/tuition/dashboard.html" },
+    { "source": "/tech",                    "destination": "/tech.html" },
+    { "source": "/tech/login",              "destination": "/tech/index.html" },
+    { "source": "/tech/dashboard",          "destination": "/tech/dashboard.html" },
+    { "source": "/tech/coach",              "destination": "/tech/coach/index.html" },
+    { "source": "/tech/coach/dashboard",    "destination": "/tech/coach/dashboard.html" },
+    { "source": "/tech/coach/:slug",        "destination": "/tech/coach/index.html" },
+    { "source": "/tech/parent",             "destination": "/tech/parent/index.html" },
+    { "source": "/tech/parent/dashboard",   "destination": "/tech/parent/dashboard.html" },
+    { "source": "/tech/p/:id",             "destination": "/tech/project.html" },
+
+    { "source": "/student",                 "destination": "/student/index.html" },
+    { "source": "/student/dashboard",       "destination": "/student/dashboard.html" },
+    { "source": "/student/exam",            "destination": "/student/exam.html" },
+    { "source": "/student/submit-homework", "destination": "/student/submit-homework.html" }
+  ],
+  "redirects": [
+    { "source": "/tutor",  "destination": "/tutor/login.html", "permanent": true },
+    { "source": "/tutors", "destination": "/tutor/login.html", "permanent": true }
+  ]
+}

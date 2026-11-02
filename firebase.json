@@ -1,0 +1,137 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "nodejs22",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ],
+  "hosting": {
+    "public": ".",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "functions/**",
+      "vertex-key.json",
+      "FIRESTORE_RULES.md",
+      "paisley-ad/**",
+      "**/*.zip",
+      "**/*.mp4"
+    ],
+    "redirects": [
+      {
+        "source": "/tutor",
+        "destination": "/tutor/login.html",
+        "type": 301
+      },
+      {
+        "source": "/tutors",
+        "destination": "/tutor/login.html",
+        "type": 301
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/tutor/:slug",
+        "destination": "/tutor/login.html"
+      },
+      {
+        "source": "/parent",
+        "destination": "/parent/index.html"
+      },
+      {
+        "source": "/parent/dashboard",
+        "destination": "/parent/dashboard.html"
+      },
+      {
+        "source": "/admin",
+        "destination": "/admin/index.html"
+      },
+      {
+        "source": "/admin/",
+        "destination": "/admin/index.html"
+      },
+      {
+        "source": "/student",
+        "destination": "/student/index.html"
+      },
+      {
+        "source": "/remote",
+        "destination": "/remote/index.html"
+      },
+      {
+        "source": "/remote/dashboard",
+        "destination": "/remote/dashboard.html"
+      },
+      {
+        "source": "/tuition",
+        "destination": "/tuition.html"
+      },
+      {
+        "source": "/tuition/login",
+        "destination": "/tuition/index.html"
+      },
+      {
+        "source": "/tuition/dashboard",
+        "destination": "/tuition/dashboard.html"
+      },
+      {
+        "source": "/tech",
+        "destination": "/tech.html"
+      },
+      {
+        "source": "/tech/login",
+        "destination": "/tech/index.html"
+      },
+      {
+        "source": "/tech/dashboard",
+        "destination": "/tech/dashboard.html"
+      },
+      {
+        "source": "/tech/coach",
+        "destination": "/tech/coach/index.html"
+      },
+      {
+        "source": "/tech/coach/dashboard",
+        "destination": "/tech/coach/dashboard.html"
+      },
+      {
+        "source": "/tech/coach/:slug",
+        "destination": "/tech/coach/index.html"
+      },
+      {
+        "source": "/tech/parent",
+        "destination": "/tech/parent/index.html"
+      },
+      {
+        "source": "/tech/parent/dashboard",
+        "destination": "/tech/parent/dashboard.html"
+      },
+      {
+        "source": "/tech/p/:id",
+        "destination": "/tech/project.html"
+      },
+      {
+        "source": "/tech/b/**",
+        "function": { "functionId": "techShare", "region": "us-central1" }
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

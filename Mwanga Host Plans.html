@@ -1,0 +1,387 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Mwanga Host Plans</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Layout: slim header, then a two-column workspace. Left: term picker, per-month chart, live configuration, add-ons. Right: sticky order summary. */
+:root{
+  --brand:#55BFB3; --deep:#245F5A; --soft:#7BCBC2;
+  --bg:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF; --ink:#263331; --muted:#5A6E6A;
+  --line:rgba(38,51,49,.12); --line-soft:rgba(38,51,49,.07);
+  --accent-text:#245F5A; --on-brand:#04231f; --on-deep:#FFFFFF;
+  --gold:#F5C842; --gold-ink:#4a3a05; --good:#1f8557;
+  --shadow:0 10px 30px rgba(36,95,90,.10);
+  --font:'Quicksand', ui-rounded, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1A14; --surface:#16251F; --sage:#1C2F28; --ink:#E6F1EE; --muted:#8FA8A2;
+    --line:rgba(255,255,255,.14); --line-soft:rgba(255,255,255,.08);
+    --accent-text:#7BCBC2; --on-brand:#04231f; --on-deep:#FFFFFF;
+    --good:#4fd49a; --shadow:0 10px 30px rgba(0,0,0,.35);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1A14; --surface:#16251F; --sage:#1C2F28; --ink:#E6F1EE; --muted:#8FA8A2;
+  --line:rgba(255,255,255,.14); --line-soft:rgba(255,255,255,.08);
+  --accent-text:#7BCBC2; --on-brand:#04231f; --on-deep:#FFFFFF;
+  --good:#4fd49a; --shadow:0 10px 30px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font); line-height:1.5;
+  font-size:15px; -webkit-font-smoothing:antialiased;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:20px 48px;
+}
+button{font-family:inherit; color:inherit; cursor:pointer}
+button:focus-visible{outline:3px solid var(--brand); outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:1160px; margin:0 auto; display:flex; flex-direction:column; gap:22px}
+
+/* header */
+.top{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap}
+.logo{display:flex; align-items:center; gap:12px}
+.logo-mark{width:42px; height:42px; border-radius:12px; background:linear-gradient(135deg,var(--brand),var(--deep)); display:grid; place-items:center}
+.logo-mark svg{width:22px; height:22px}
+.logo b{font-size:1.15rem; font-weight:800; letter-spacing:-.01em; display:block; line-height:1.1}
+.logo span{font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+.status{display:flex; align-items:center; gap:8px; font-size:.8rem; font-weight:700; color:var(--muted); background:var(--surface); border:1px solid var(--line-soft); padding:.45rem .9rem; border-radius:30px}
+.status i{width:8px; height:8px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 4px rgba(85,191,179,.22)}
+
+.intro h1{font-size:clamp(1.7rem, 4.2vw, 2.5rem); font-weight:800; letter-spacing:-.025em; line-height:1.12; text-wrap:balance; max-width:20ch}
+.intro p{margin-top:10px; color:var(--muted); font-weight:500; max-width:60ch}
+
+/* two column */
+.grid{display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:22px; align-items:start}
+.col{display:flex; flex-direction:column; gap:22px; min-width:0}
+.panel{background:var(--surface); border:1px solid var(--line-soft); border-radius:16px; padding:22px; min-width:0}
+.panel-head{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:16px}
+.panel-head h2{font-size:1.05rem; font-weight:800}
+.panel-head p{font-size:.8rem; color:var(--muted); font-weight:600}
+
+/* term cards */
+.terms{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
+.term{
+  position:relative; text-align:left; background:var(--bg); border:1.5px solid var(--line);
+  border-radius:14px; padding:16px 14px 14px; display:flex; flex-direction:column; gap:4px;
+  transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.term:hover{border-color:var(--brand); transform:translateY(-2px)}
+.term[aria-checked="true"]{background:var(--surface); border-color:var(--brand); box-shadow:0 0 0 3px rgba(85,191,179,.28), var(--shadow)}
+.term .t-label{font-size:.72rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--muted)}
+.term .t-price{font-size:2rem; font-weight:800; letter-spacing:-.03em; line-height:1.1; color:var(--ink)}
+.term .t-per{font-size:.8rem; font-weight:700; color:var(--accent-text)}
+.term .t-save{margin-top:8px; font-size:.72rem; font-weight:700; color:var(--muted); min-height:1.1em}
+.term.best .t-save{color:var(--good)}
+.ribbon{
+  position:absolute; top:-11px; left:12px; background:var(--gold); color:var(--gold-ink);
+  font-size:.66rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase;
+  padding:.22rem .6rem; border-radius:20px;
+}
+
+/* chart */
+.bars{display:flex; flex-direction:column; gap:12px}
+.bar-row{display:grid; grid-template-columns:72px minmax(0,1fr) 64px; align-items:center; gap:12px; font-size:.84rem; font-weight:700}
+.bar-row .b-label{color:var(--muted)}
+.track{height:14px; border-radius:8px; background:var(--sage); overflow:hidden}
+.fill{height:100%; border-radius:8px; background:var(--soft); transition:width .5s cubic-bezier(.16,1,.3,1)}
+.bar-row.sel .fill{background:var(--deep)}
+.bar-row.sel .b-label{color:var(--ink)}
+.bar-row .b-val{text-align:right}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bar-row.sel .fill{background:var(--brand)} }
+:root[data-theme="dark"] .bar-row.sel .fill{background:var(--brand)}
+.insight{margin-top:16px; padding:12px 14px; border-radius:12px; background:var(--sage); font-size:.84rem; font-weight:600; line-height:1.55}
+
+/* config tiles */
+.tiles{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px}
+.tile{background:var(--bg); border:1px solid var(--line-soft); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:6px; min-width:0}
+.tile .k{font-size:.7rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--muted)}
+.tile .v{font-size:1.35rem; font-weight:800; letter-spacing:-.02em; line-height:1.15}
+.tile .v small{font-size:.8rem; font-weight:700; color:var(--muted); margin-left:2px}
+.tile .meter{height:6px; border-radius:4px; background:var(--sage); overflow:hidden; margin-top:2px}
+.tile .meter i{display:block; height:100%; background:var(--brand); border-radius:4px; transition:width .4s ease}
+.tile .sub{font-size:.76rem; font-weight:600; color:var(--muted)}
+.tile.boosted .v{color:var(--accent-text)}
+
+/* add-ons */
+.addons{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px}
+.addon{border:1.5px solid var(--line); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:12px; background:var(--bg); transition:border-color .2s ease, background .2s ease; min-width:0}
+.addon.on{border-color:var(--brand); background:var(--surface)}
+.addon-top{display:flex; gap:12px; align-items:flex-start}
+.ic{width:38px; height:38px; border-radius:10px; background:var(--sage); display:grid; place-items:center; flex-shrink:0; color:var(--accent-text)}
+.ic svg{width:20px; height:20px}
+.addon h3{font-size:.95rem; font-weight:800; line-height:1.25}
+.addon p{font-size:.78rem; color:var(--muted); font-weight:600; line-height:1.4}
+.addon-bottom{display:flex; justify-content:space-between; align-items:center; gap:10px}
+.a-price{font-size:.86rem; font-weight:800}
+.a-price small{font-weight:600; color:var(--muted)}
+.stepper{display:flex; align-items:center; gap:2px; background:var(--sage); border-radius:30px; padding:3px}
+.stepper button{width:30px; height:30px; border-radius:50%; border:none; background:var(--surface); font-size:1.05rem; font-weight:800; line-height:1; display:grid; place-items:center}
+.stepper button:disabled{opacity:.35; cursor:not-allowed}
+.stepper output{min-width:28px; text-align:center; font-weight:800; font-size:.9rem}
+.switch{width:50px; height:28px; border-radius:30px; border:none; background:var(--line); position:relative; transition:background .2s ease}
+.switch::after{content:""; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; transition:transform .2s ease; box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.switch[aria-checked="true"]{background:var(--brand)}
+.switch[aria-checked="true"]::after{transform:translateX(22px)}
+
+/* summary */
+.summary{position:sticky; top:calc(16px + env(safe-area-inset-top, 0px)); background:var(--deep); color:#fff; border-radius:18px; padding:24px; display:flex; flex-direction:column; gap:16px; box-shadow:var(--shadow)}
+.summary h2{font-size:.72rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--soft)}
+.sum-plan{display:flex; justify-content:space-between; align-items:flex-start; gap:10px}
+.sum-plan b{font-size:1.15rem; font-weight:800; display:block}
+.sum-plan span{font-size:.8rem; color:#b9dcd7; font-weight:600}
+.lines{display:flex; flex-direction:column; gap:8px; font-size:.86rem; font-weight:600; border-top:1px solid rgba(255,255,255,.16); padding-top:14px}
+.line{display:flex; justify-content:space-between; gap:10px; color:#d6ece8}
+.line span:first-child{min-width:0}
+.line.muted{color:#9cc6c0}
+.total{border-top:1px solid rgba(255,255,255,.16); padding-top:14px; display:flex; flex-direction:column; gap:2px}
+.total .lbl{font-size:.72rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--soft)}
+.total .big{font-size:2.6rem; font-weight:800; letter-spacing:-.03em; line-height:1.1}
+.total .per{font-size:.86rem; font-weight:700; color:#b9dcd7}
+.savechip{display:inline-flex; align-self:flex-start; background:var(--gold); color:var(--gold-ink); font-weight:800; font-size:.78rem; padding:.3rem .75rem; border-radius:20px}
+.cta{border:none; background:var(--brand); color:var(--on-brand); font-weight:800; font-size:.86rem; letter-spacing:.05em; text-transform:uppercase; padding:.95rem 1rem; border-radius:12px; transition:transform .2s ease, background .2s ease}
+.cta:hover{transform:translateY(-2px); background:var(--soft)}
+.note{font-size:.76rem; color:#9cc6c0; font-weight:600; min-height:1.2em}
+.guar{display:flex; gap:8px; align-items:center; font-size:.76rem; color:#b9dcd7; font-weight:600}
+
+/* included strip */
+.included{display:flex; flex-wrap:wrap; gap:8px 10px}
+.pill{display:inline-flex; align-items:center; gap:7px; font-size:.8rem; font-weight:700; background:var(--sage); padding:.4rem .8rem; border-radius:30px}
+.pill svg{width:14px; height:14px; color:var(--accent-text)}
+
+@media (max-width:980px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .summary{position:static}
+}
+@media (max-width:640px){
+  .terms{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .addons{grid-template-columns:minmax(0,1fr)}
+  .bar-row{grid-template-columns:60px minmax(0,1fr) 56px; gap:8px}
+  .panel{padding:18px}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="logo">
+      <div class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+      </div>
+      <div><b>Mwanga Host</b><span>Web hosting</span></div>
+    </div>
+    <div class="status"><i></i> All servers online · 99.98% uptime</div>
+  </header>
+
+  <section class="intro">
+    <h1>One plan. Pick how long you want to stay.</h1>
+    <p>Fast NVMe hosting from $10 a month. Pay for longer and the monthly rate drops. Add storage, bandwidth or support only when you need them.</p>
+  </section>
+
+  <div class="grid">
+    <div class="col">
+
+      <section class="panel" aria-labelledby="h-term">
+        <div class="panel-head"><h2 id="h-term">Choose your billing term</h2><p>Same hosting on every term</p></div>
+        <div class="terms" id="terms" role="radiogroup" aria-labelledby="h-term"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-chart">
+        <div class="panel-head"><h2 id="h-chart">What you pay per month</h2><p>Hosting only, before add-ons</p></div>
+        <div class="bars" id="bars"></div>
+        <div class="insight" id="insight"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-conf">
+        <div class="panel-head"><h2 id="h-conf">Your server at a glance</h2><p>Updates as you add extras</p></div>
+        <div class="tiles" id="tiles"></div>
+        <div class="included" style="margin-top:16px" id="included"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-add">
+        <div class="panel-head"><h2 id="h-add">Add-ons</h2><p>Billed for your whole term, with the same term discount</p></div>
+        <div class="addons" id="addons"></div>
+      </section>
+    </div>
+
+    <aside class="summary" aria-label="Order summary">
+      <h2>Order summary</h2>
+      <div class="sum-plan"><div><b id="sPlan">Launch hosting</b><span id="sTerm">12 months</span></div><b class="num" id="sBase">$100.00</b></div>
+      <div class="lines" id="sLines"></div>
+      <div class="total">
+        <span class="lbl">Due today</span>
+        <span class="big num" id="sTotal">$100.00</span>
+        <span class="per num" id="sPer">$8.33 per month</span>
+      </div>
+      <span class="savechip num" id="sSave">You save $20.00</span>
+      <button class="cta" id="cta" type="button">Continue to checkout</button>
+      <div class="note" id="note" role="status"></div>
+      <div class="guar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></svg>
+        30-day money-back guarantee
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+var TERMS = [
+  {months:1,  label:'1 month',   price:10},
+  {months:3,  label:'3 months',  price:25},
+  {months:6,  label:'6 months',  price:55},
+  {months:12, label:'12 months', price:100}
+];
+var LIST = 10; /* monthly list price */
+
+var ICON = {
+  storage:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+  bandwidth:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4L3 8M7 4l4 4"/><path d="M17 20V4M17 20l-4-4M17 20l4-4"/></svg>',
+  support:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-1a8 8 0 0116 0v1"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19c0 1.5-2 2-5 2"/></svg>',
+  backups:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.4"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>',
+  email:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+  ip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.7 3.8 5.7 3.8 9S14.500 18.300 12 21c-2.500-2.700-3.800-5.700-3.800-9S9.500 5.700 12 3z"/></svg>'
+};
+var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>';
+
+var ADDONS = [
+  {id:'storage',   name:'Extra storage',     desc:'+50 GB NVMe for each unit you add.',         unit:2,   max:6, type:'step', noun:'unit'},
+  {id:'bandwidth', name:'Bandwidth boost',   desc:'+1 TB monthly transfer for each unit.',      unit:3,   max:5, type:'step', noun:'unit'},
+  {id:'support',   name:'Priority support',  desc:'Live chat and phone, first reply in 15 minutes.', unit:4, max:1, type:'switch'},
+  {id:'backups',   name:'Hourly backups',    desc:'Restore points every hour, kept for 30 days.', unit:2,  max:1, type:'switch'},
+  {id:'email',     name:'Mailbox pack',      desc:'+10 business mailboxes on your own domain.', unit:1.5, max:5, type:'step', noun:'pack'},
+  {id:'ip',        name:'Dedicated IP',      desc:'Your own address for email and SSL.',        unit:3,   max:1, type:'switch'}
+];
+
+var state = { term:3, qty:{} };
+ADDONS.forEach(function(a){ state.qty[a.id] = 0; });
+
+function usd(n){ return '$' + n.toFixed(2); }
+function usd0(n){ return Number.isInteger(n) ? '$' + n : usd(n); }
+function perMonth(t){ return t.price / t.months; }
+function saving(t){ return LIST * t.months - t.price; }
+function $(id){ return document.getElementById(id); }
+
+/* best value = biggest total saving; ties on monthly rate go to the term that saves the most money */
+var bestIdx = 0;
+TERMS.forEach(function(t,i){ if(saving(t) > saving(TERMS[bestIdx])) bestIdx = i; });
+
+function renderTerms(){
+  $('terms').innerHTML = TERMS.map(function(t,i){
+    var s = saving(t);
+    var free = (t.months===12) ? ' · 2 months free' : '';
+    return '<button type="button" role="radio" class="term' + (i===bestIdx?' best':'') + '" aria-checked="' + (i===state.term) + '" data-i="' + i + '">' +
+      (i===bestIdx ? '<span class="ribbon">Best value</span>' : '') +
+      '<span class="t-label">' + t.label + '</span>' +
+      '<span class="t-price num">' + usd0(t.price) + '</span>' +
+      '<span class="t-per num">' + usd(perMonth(t)) + ' / month</span>' +
+      '<span class="t-save num">' + (s>0 ? 'Save ' + usd0(s) + free : 'Pay as you go') + '</span>' +
+    '</button>';
+  }).join('');
+}
+
+function renderBars(){
+  $('bars').innerHTML = TERMS.map(function(t,i){
+    var w = Math.round(perMonth(t)/LIST*100);
+    return '<div class="bar-row' + (i===state.term?' sel':'') + '">' +
+      '<span class="b-label">' + t.label + '</span>' +
+      '<div class="track"><div class="fill" style="width:' + w + '%"></div></div>' +
+      '<span class="b-val num">' + usd(perMonth(t)) + '</span></div>';
+  }).join('');
+  var t3 = TERMS[1], t12 = TERMS[3], t6 = TERMS[2];
+  $('insight').innerHTML = '3 months and 12 months both come to <b class="num">' + usd(perMonth(t3)) + '</b> a month. ' +
+    'Yearly saves the most in total, <b class="num">' + usd0(saving(t12)) + '</b> against monthly billing, which is two months free. ' +
+    'The 6-month plan works out to <b class="num">' + usd(perMonth(t6)) + '</b> a month.';
+}
+
+function tile(k, v, unit, sub, pct, boosted){
+  return '<div class="tile' + (boosted?' boosted':'') + '"><span class="k">' + k + '</span>' +
+    '<span class="v num">' + v + (unit?'<small>' + unit + '</small>':'') + '</span>' +
+    (pct!=null ? '<div class="meter"><i style="width:' + pct + '%"></i></div>' : '') +
+    '<span class="sub">' + sub + '</span></div>';
+}
+
+function renderTiles(){
+  var q = state.qty;
+  var storage = 50 + 50*q.storage, bw = 1 + q.bandwidth, mail = 5 + 10*q.email;
+  $('tiles').innerHTML =
+    tile('Storage', storage, 'GB', 'NVMe SSD', Math.min(100, storage/350*100), q.storage>0) +
+    tile('Bandwidth', bw, 'TB', 'per month', Math.min(100, bw/6*100), q.bandwidth>0) +
+    tile('Mailboxes', mail, '', 'on your domain', Math.min(100, mail/55*100), q.email>0) +
+    tile('Support', q.support ? '15 min' : '12 hrs', '', q.support ? 'Chat and phone' : 'Email replies', null, !!q.support) +
+    tile('Backups', q.backups ? 'Hourly' : 'Daily', '', q.backups ? '30-day history' : '7-day history', null, !!q.backups) +
+    tile('IP address', q.ip ? 'Dedicated' : 'Shared', '', q.ip ? 'Yours alone' : 'Included', null, !!q.ip);
+  $('included').innerHTML = ['5 websites','Free SSL certificates','Free site migration','LiteSpeed caching','Nairobi and Frankfurt data centres','One-click WordPress'].map(function(x){
+    return '<span class="pill">' + CHECK + x + '</span>';
+  }).join('');
+}
+
+function renderAddons(){
+  $('addons').innerHTML = ADDONS.map(function(a){
+    var n = state.qty[a.id], on = n>0;
+    var control = a.type==='switch'
+      ? '<button type="button" class="switch" role="switch" aria-checked="' + on + '" aria-label="' + a.name + '" data-id="' + a.id + '" data-act="toggle"></button>'
+      : '<div class="stepper"><button type="button" data-id="' + a.id + '" data-act="dec" aria-label="Remove one ' + a.name + '"' + (n===0?' disabled':'') + '>&minus;</button>' +
+        '<output class="num" aria-live="polite">' + n + '</output>' +
+        '<button type="button" data-id="' + a.id + '" data-act="inc" aria-label="Add one ' + a.name + '"' + (n>=a.max?' disabled':'') + '>+</button></div>';
+    return '<div class="addon' + (on?' on':'') + '">' +
+      '<div class="addon-top"><div class="ic">' + ICON[a.id] + '</div><div><h3>' + a.name + '</h3><p>' + a.desc + '</p></div></div>' +
+      '<div class="addon-bottom"><span class="a-price num">' + usd(a.unit) + ' <small>/ month' + (a.type==='step' ? ' each' : '') + '</small></span>' + control + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderSummary(){
+  var t = TERMS[state.term];
+  var factor = t.price / (LIST * t.months);           /* term discount, applied to add-ons too */
+  var monthlyExtras = 0, lines = [];
+  ADDONS.forEach(function(a){
+    var n = state.qty[a.id];
+    if(!n) return;
+    var cost = a.unit * n * t.months * factor;
+    monthlyExtras += a.unit * n;
+    lines.push('<div class="line"><span>' + a.name + (a.type==='step' ? ' × ' + n : '') + '</span><span class="num">' + usd(cost) + '</span></div>');
+  });
+  var extrasTotal = monthlyExtras * t.months * factor;
+  var total = t.price + extrasTotal;
+  var listTotal = (LIST + monthlyExtras) * t.months;
+  var save = listTotal - total;
+  $('sTerm').textContent = t.label;
+  $('sBase').textContent = usd(t.price);
+  $('sLines').innerHTML = lines.length ? lines.join('') : '<div class="line muted"><span>No add-ons selected</span><span></span></div>';
+  $('sTotal').textContent = usd(total);
+  $('sPer').textContent = usd(total / t.months) + ' per month';
+  var chip = $('sSave');
+  if(save > 0){ chip.hidden = false; chip.textContent = 'You save ' + usd(save) + ' vs monthly billing'; } else { chip.hidden = true; }
+}
+
+function renderAll(){ renderTerms(); renderBars(); renderTiles(); renderAddons(); renderSummary(); }
+
+$('terms').addEventListener('click', function(e){
+  var b = e.target.closest('.term'); if(!b) return;
+  state.term = +b.dataset.i; $('note').textContent = '';
+  renderTerms(); renderBars(); renderSummary();
+});
+$('addons').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-act]'); if(!b) return;
+  var id = b.dataset.id, a = ADDONS.filter(function(x){ return x.id===id; })[0], act = b.dataset.act;
+  if(act==='toggle') state.qty[id] = state.qty[id] ? 0 : 1;
+  if(act==='inc') state.qty[id] = Math.min(a.max, state.qty[id]+1);
+  if(act==='dec') state.qty[id] = Math.max(0, state.qty[id]-1);
+  $('note').textContent = '';
+  renderTiles(); renderAddons(); renderSummary();
+});
+$('cta').addEventListener('click', function(){
+  $('note').textContent = 'This is a design preview, so checkout is not connected yet.';
+});
+
+renderAll();
+</script>
+
+</body></html>

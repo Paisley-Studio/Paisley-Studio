@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tutor Dashboard-Paisley Studio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<style>
+  :root{
+    --brand:#55BFB3; --brand-deep:#245F5A; --brand-soft:#7BCBC2;
+    --paper:#F1F9F7; --surface:#FFFFFF; --sage:#E5F2EF;
+    --ink:#263331; --muted:#5A6E6A; --line:rgba(38,51,49,.10); --line-soft:rgba(38,51,49,.06);
+    --gold:#F5C842; --font:'Quicksand',sans-serif;
+    --success:#2EB872; --error:#E74C3C; --warn:#E8A33D;
+    --sidebar-w:240px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--paper); color:var(--ink);}
+  #gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:50; flex-direction:column; gap:1rem;}
+  #gate .spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #gate p{color:var(--muted); font-size:.9rem;}
+  body.ready #gate{display:none;}
+  #shell{display:flex; min-height:100vh;}
+  .sidebar{width:var(--sidebar-w); background:var(--brand-deep); flex-shrink:0; display:flex; flex-direction:column; position:fixed; top:0; bottom:0; left:0; z-index:20; transition:transform .3s;}
+  .sidebar-brand{display:flex; align-items:center; gap:.6rem; padding:1.3rem 1.1rem; border-bottom:1px solid rgba(255,255,255,.08);}
+  .sidebar-brand img{width:38px; height:38px; border-radius:9px;}
+  .sidebar-brand .name{color:#fff; font-weight:800; font-size:.95rem; line-height:1.2;}
+  .sidebar-brand .name span{display:block; font-size:.6rem; color:var(--brand-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .sidebar-nav{padding:1rem .8rem; flex:1; overflow-y:auto;}
+  .nav-item{display:flex; align-items:center; gap:.7rem; padding:.68rem .8rem; border-radius:10px; color:rgba(255,255,255,.72); font-weight:700; font-size:.84rem; cursor:pointer; margin-bottom:.2rem; border:none; background:none; width:100%; text-align:left; font-family:var(--font);}
+  .nav-item i{width:16px; text-align:center;}
+  .nav-item:hover{background:rgba(255,255,255,.05); color:#fff;}
+  .nav-item.active{background:rgba(85,191,179,.16); color:#fff;}
+  .nav-badge{margin-left:auto; background:var(--brand); color:#04231f; font-size:.6rem; font-weight:800; padding:.1rem .4rem; border-radius:20px;}
+  .sidebar-foot{padding:1rem .8rem; border-top:1px solid rgba(255,255,255,.08);}
+  .tutorchip{display:flex; align-items:center; gap:.6rem; margin-bottom:.7rem;}
+  .avatar{width:34px; height:34px; border-radius:50%; background:var(--brand); color:#0f1a14; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.78rem; flex-shrink:0;}
+  .tutorchip .who{color:#fff; font-size:.8rem; font-weight:700; line-height:1.2;}
+  .tutorchip .who span{display:block; font-size:.66rem; color:var(--brand-soft); font-weight:600;}
+  .signout{width:100%; padding:.55rem 0; border-radius:9px; border:1px solid rgba(255,255,255,.14); background:none; color:rgba(255,255,255,.75); font-family:var(--font); font-weight:700; font-size:.78rem; cursor:pointer;}
+  .signout:hover{color:#fff; background:rgba(231,76,60,.18);}
+  .main{margin-left:var(--sidebar-w); flex:1; min-width:0;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:1.1rem 1.8rem; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10;}
+  .topbar-title{font-size:1.15rem; font-weight:800; color:var(--brand-deep);}
+  .topbar-sub{font-size:.78rem; color:var(--muted);}
+  .menu-toggle{display:none; background:none; border:none; font-size:1.1rem; color:var(--brand-deep); cursor:pointer;}
+  .content{padding:1.8rem;}
+  .view{display:none;}
+  .view.active{display:block; animation:fadeIn .3s;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+  .stats-row{display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.6rem;}
+  .stat-card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.2rem 1.3rem;}
+  .stat-card .icon-wrap{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:.7rem; font-size:.95rem;}
+  .ic-1{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .ic-2{background:rgba(245,200,66,.16); color:#9c7912;}
+  .ic-3{background:rgba(46,184,114,.14); color:#1d8b57;}
+  .ic-4{background:rgba(231,76,60,.1); color:#b8362a;}
+  .ic-5{background:rgba(155,89,182,.13); color:#7c3f96;}
+  .stat-card .num{font-size:1.6rem; font-weight:800; color:var(--brand-deep); line-height:1;}
+  .stat-card .lbl{font-size:.76rem; color:var(--muted); margin-top:.3rem;}
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1.4rem; margin-bottom:1.2rem;}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; flex-wrap:wrap; gap:.6rem;}
+  .panel-head h3{font-size:1rem; color:var(--brand-deep); margin:0;}
+  .panel-head .sub{font-size:.76rem; color:var(--muted); margin-top:.1rem;}
+  .subtab-bar{display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:1.2rem; border-bottom:1.5px solid var(--line); padding-bottom:.9rem;}
+  .subtab-btn{padding:.5rem .95rem; border-radius:10px; border:none; background:none; color:var(--muted); font-family:var(--font); font-weight:700; font-size:.8rem; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem;}
+  .subtab-btn:hover{background:var(--sage); color:var(--brand-deep);}
+  .subtab-btn.active{background:var(--brand-deep); color:#fff;}
+  .subview{display:none;}
+  .subview.active{display:block;}
+  .table-toolbar{display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; margin-bottom:1rem;}
+  .filter-chips{display:flex; gap:.4rem; flex-wrap:wrap;}
+  .chip-btn{padding:.38rem .85rem; border-radius:99px; border:1.5px solid var(--line); background:var(--surface); color:var(--muted); font-family:var(--font); font-weight:700; font-size:.75rem; cursor:pointer;}
+  .chip-btn:hover{border-color:var(--brand); color:var(--brand-deep);}
+  .chip-btn.active{background:var(--brand); border-color:var(--brand); color:#fff;}
+  .btn{padding:.6rem 1.1rem; border-radius:10px; border:1.5px solid var(--line); background:var(--surface); color:var(--brand-deep); font-family:var(--font); font-weight:800; font-size:.82rem; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem; text-decoration:none;}
+  .btn-primary{background:var(--brand-deep); border-color:var(--brand-deep); color:#fff;}
+  .btn-primary:hover{background:var(--brand); border-color:var(--brand);}
+  .btn-ghost:hover{border-color:var(--brand);}
+  .btn-sm{padding:.5rem .95rem; font-size:.78rem;}
+  .table-wrap{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; font-size:.83rem;}
+  thead th{text-align:left; padding:.6rem .5rem; color:var(--muted); font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; border-bottom:1.5px solid var(--line); white-space:nowrap;}
+  tbody td{padding:.65rem .5rem; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  .cell-name{font-weight:700; color:var(--ink);}
+  .cell-sub{display:block; font-size:.72rem; color:var(--muted); margin-top:.15rem;}
+  .badge{display:inline-flex; align-items:center; gap:.3rem; padding:.22rem .6rem; border-radius:99px; font-size:.7rem; font-weight:800;}
+  .b-confirmed{background:rgba(46,184,114,.12); color:#1d8b57;}
+  .b-pending{background:rgba(232,163,61,.14); color:#96690f;}
+  .b-declined{background:rgba(231,76,60,.1); color:#b8362a;}
+  .b-plain{background:var(--sage); color:var(--brand-deep); font-weight:700;}
+  .b-grant{background:rgba(155,89,182,.12); color:#7c3f96;}
+  .b-subject{background:rgba(85,191,179,.14); color:var(--brand-deep);}
+  .row-actions{display:flex; gap:.3rem; flex-wrap:wrap;}
+  .mini-btn{width:28px; height:28px; border-radius:8px; border:1.5px solid var(--line); background:var(--surface); color:var(--muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:.72rem; text-decoration:none;}
+  .mini-btn:hover{border-color:var(--brand); color:var(--brand-deep); background:var(--sage);}
+  .mini-btn.danger:hover{border-color:var(--error); color:var(--error); background:rgba(231,76,60,.06);}
+  .mini-btn.success:hover{border-color:var(--success); color:var(--success); background:rgba(46,184,114,.06);}
+  .pager{display:flex; justify-content:space-between; align-items:center; margin-top:1rem; font-size:.76rem; color:var(--muted);}
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem;}
+  .form-field{display:flex; flex-direction:column;}
+  .form-field.full{grid-column:1 / -1;}
+  .form-field label{font-size:.74rem; font-weight:700; color:var(--brand-deep); margin-bottom:.35rem;}
+  .form-field input, .form-field select, .form-field textarea{padding:.6rem .75rem; border:1.5px solid var(--line); border-radius:9px; font-family:var(--font); font-size:.85rem; background:var(--paper); color:var(--ink); width:100%;}
+  .form-field textarea{min-height:80px; resize:vertical;}
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{outline:none; border-color:var(--brand);}
+  .qbuilder-row{border:1px solid var(--line); border-radius:12px; padding:.9rem; margin-bottom:.8rem; background:var(--paper);}
+  .opt-row{display:flex; align-items:center; gap:.5rem; margin-bottom:.4rem;}
+  .opt-row input[type="text"]{flex:1; padding:.45rem .6rem; border:1.5px solid var(--line); border-radius:8px; font-family:var(--font); font-size:.82rem;}
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,26,20,.5); display:none; align-items:center; justify-content:center; z-index:60; padding:1rem;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface); border-radius:18px; max-width:620px; width:100%; max-height:88vh; overflow-y:auto;}
+  .modal.wide{max-width:920px;}
+  .modal-head{display:flex; align-items:center; justify-content:space-between; padding:1.2rem 1.4rem; border-bottom:1px solid var(--line);}
+  .modal-head h3{margin:0; font-size:1rem; color:var(--brand-deep);}
+  .modal-close{background:none; border:none; font-size:1rem; color:var(--muted); cursor:pointer;}
+  .modal-body{padding:1.3rem 1.4rem;}
+  .modal-foot{display:flex; justify-content:flex-end; gap:.6rem; padding:1rem 1.4rem; border-top:1px solid var(--line); flex-wrap:wrap;}
+  .detail-row{display:flex; gap:1rem; padding:.5rem 0; border-bottom:1px solid var(--line-soft); font-size:.84rem;}
+  .detail-row .k{min-width:150px; color:var(--muted); font-weight:700; font-size:.76rem;}
+  .detail-row .v{flex:1; word-break:break-word;}
+  .detail-block{border:1px solid var(--line); border-radius:12px; padding:.9rem 1rem; margin-bottom:.7rem;}
+  .detail-block .k{font-size:.72rem; font-weight:800; color:var(--brand-soft); text-transform:uppercase; letter-spacing:.05em; margin-bottom:.4rem;}
+  .setup-note{background:var(--sage); border-radius:12px; padding:.9rem 1.1rem; font-size:.8rem; color:var(--muted); line-height:1.55; margin-bottom:1.4rem; display:flex; gap:.6rem;}
+  .setup-note i{color:var(--brand-deep); margin-top:.15rem;}
+  .setup-note.warn{background:rgba(232,163,61,.1); color:#96690f;}
+  .setup-note.warn i{color:var(--warn);}
+  .setup-note.grant{background:rgba(155,89,182,.08); color:#5b2c73;}
+  .setup-note.grant i{color:#7c3f96;}
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%);} .sidebar.open{transform:translateX(0);}
+    .main{margin-left:0;} .menu-toggle{display:block;}
+    .stats-row{grid-template-columns:repeat(2,1fr);}
+    .form-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div id="gate"><div class="spin"></div><p>Loading your dashboard…</p></div>
+<div id="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" alt="" />
+      <div class="name">Paisley Studio<span>Tutor Portal</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-view="overview" type="button"><i class="fas fa-chart-pie"></i> Overview</button>
+      <button class="nav-item" data-view="students" type="button"><i class="fas fa-user-graduate"></i> My Students</button>
+      <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard"></i> Classroom <span class="nav-badge" id="navClassroomCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="resources" type="button"><i class="fas fa-folder-open"></i> Resources</button>
+      <button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open"></i> Homework Management <span class="nav-badge" id="navHwCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="exmgmt" type="button"><i class="fas fa-file-pen"></i> Exam Management <span class="nav-badge" id="navExamCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="granted" type="button"><i class="fas fa-user-shield"></i> Granted to Me <span class="nav-badge" id="navGrantCount">0</span></button>
+      <button class="nav-item" data-view="content" type="button"><i class="fas fa-calendar-days"></i> Timetable &amp; Notices</button>
+      <button class="nav-item" data-view="mytimetable" type="button"><i class="fas fa-calendar-week"></i> My Timetable</button>
+      <button class="nav-item" data-view="tuition" type="button"><i class="fas fa-graduation-cap"></i> CBC Tuition</button>
+      <button class="nav-item" data-view="tickets" type="button"><i class="fas fa-headset"></i> Student Tickets <span class="nav-badge" id="navTicketCount">0</span></button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="tutorchip">
+        <div class="avatar" id="sideAvatar">??</div>
+        <div class="who" id="sideWho">Loading…<span id="sideRole">Tutor</span></div>
+      </div>
+      <button class="signout" id="signOutBtn" type="button"><i class="fas fa-right-from-bracket"></i> Sign out</button>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex; align-items:center; gap:.8rem;">
+        <button class="menu-toggle" id="menuToggle" type="button"><i class="fas fa-bars"></i></button>
+        <div>
+          <div class="topbar-title" id="pageTitle">Overview</div>
+          <div class="topbar-sub" id="pageSub">Your students at a glance</div>
+        </div>
+      </div>
+      <div id="bellHost" style="margin-left:auto;"></div>
+    </div>
+    <div class="content">
+      <div class="setup-note" id="scopeNote">
+        <i class="fas fa-circle-info" aria-hidden="true"></i>
+        <div id="scopeNoteText">Everything here is limited to your own students and Key Stages.</div>
+      </div>
+      <section class="view active" id="view-overview">
+        <div class="stats-row">
+          <div class="stat-card"><div class="icon-wrap ic-1"><i class="fas fa-user-graduate"></i></div><div class="num" id="statStudents">0</div><div class="lbl">My students</div></div>
+          <div class="stat-card"><div class="icon-wrap ic-2"><i class="fas fa-book-open"></i></div><div class="num" id="statMyHomework">0</div><div class="lbl">Homework I have set</div></div>
+          <div class="stat-card"><div class="icon-wrap ic-3"><i class="fas fa-clipboard-check"></i></div><div class="num" id="statHwToMark">0</div><div class="lbl">Homework &amp; classwork to mark<br><span id="statHwResub" style="font-size:.72rem;font-weight:800;color:#4a6fd6"></span></div></div>
+          <div class="stat-card"><div class="icon-wrap ic-3"><i class="fas fa-file-circle-check"></i></div><div class="num" id="statAwaitingAttempts">0</div><div class="lbl">Exam papers to mark</div></div>
+          <div class="stat-card"><div class="icon-wrap ic-5"><i class="fas fa-user-shield"></i></div><div class="num" id="statGranted">0</div><div class="lbl">Granted to me</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div><h3>Needs your attention</h3><div class="sub" id="attentionSub">Everything currently waiting on you</div></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What</th><th>Student</th><th>Item</th><th>When</th><th></th></tr></thead>
+              <tbody id="attentionBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section class="view" id="view-students">
+        <div class="panel">
+          <div class="panel-head"><div><h3>My students</h3><div class="sub">Students assigned to you by the Studio Desk</div></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Subjects I teach them</th><th>Key Stage</th><th>Parent / Guardian</th><th>Status</th><th>Results</th><th>Signed up</th></tr></thead>
+              <tbody id="studentBody"></tbody>
+            </table>
+          </div>
+          <div class="pager"><span id="studentCount">0 records</span><span>Live from Firestore</span></div>
+        </div>
+      </section>
+      <section class="view" id="view-classroom"><div id="classroomHost"></div></section>
+      <section class="view" id="view-resources"><div id="resourcesHost"></div></section>
+      <section class="view" id="view-hwmgmt"><div id="hwHost"></div></section>
+      <section class="view" id="view-exmgmt"><div id="exHost"></div></section>
+      <section class="view" id="view-granted">
+        <div class="setup-note grant">
+          <i class="fas fa-user-shield" aria-hidden="true"></i>
+          <div>
+            These are tasks the Studio Desk has asked you to help mark. You can grade and release submissions for them, but you cannot edit or delete the task itself.
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>Granted to me</h3><div class="sub">Tasks you can grade without having posted them</div></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Task type</th><th>Title</th><th>Subject</th><th>Key Stage</th><th>Granted by</th><th>Granted on</th><th></th></tr></thead>
+              <tbody id="grantedBody"></tbody>
+            </table>
+          </div>
+          <div class="pager"><span id="grantedCount">0 records</span><span>Live from Firestore</span></div>
+        </div>
+      </section>
+      <section class="view" id="view-content">
+        <div class="subtab-bar" id="contentSubtabs">
+          <button class="subtab-btn active" data-sub="notices" type="button"><i class="fas fa-bullhorn"></i> Notices</button>
+          <button class="subtab-btn" data-sub="timetables" type="button"><i class="fas fa-table-list"></i> Timetable</button>
+        </div>
+        <div class="subview active" id="csub-notices">
+          <div class="panel">
+            <div class="table-toolbar">
+              <button class="btn btn-primary btn-sm" id="addNoticeBtn" type="button"><i class="fas fa-plus"></i> Post notice</button>
+              <div class="filter-chips" id="noticeKS" style="margin-left:auto;"></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Title</th><th>Key Stage</th><th>Priority</th><th>Posted</th><th></th></tr></thead>
+                <tbody id="noticeBody"></tbody>
+              </table>
+            </div>
+            <div class="pager"><span id="noticeCount">0 records</span><span>Live from Firestore</span></div>
+          </div>
+        </div>
+        <div class="subview" id="csub-timetables">
+          <div class="panel">
+            <div class="table-toolbar">
+              <button class="btn btn-primary btn-sm" id="addTtBtn" type="button"><i class="fas fa-plus"></i> Post timetable</button>
+              <div class="filter-chips" id="ttKS" style="margin-left:auto;"></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Title</th><th>Key Stage</th><th>Slots</th><th>Posted</th><th></th></tr></thead>
+                <tbody id="ttBody"></tbody>
+              </table>
+            </div>
+            <div class="pager"><span id="ttCount">0 records</span><span>Live from Firestore</span></div>
+          </div>
+        </div>
+      </section>
+      <section class="view" id="view-mytimetable">
+        <div class="panel">
+          <div class="panel-head"><div><h3>My Timetable</h3><div class="sub">Sessions for the subjects you teach, grouped by day — sessions assigned to you are highlighted</div></div></div>
+          <div id="tutorTeGrid"></div>
+        </div>
+      </section>
+      <section class="view" id="view-tuition"><div id="tuitionTutorHost"></div></section>
+
+      <section class="view" id="view-tickets">
+        <div class="panel">
+          <div class="table-toolbar">
+            <div class="filter-chips" id="ticketFilters">
+              <button class="chip-btn active" data-filter="all" type="button">All</button>
+              <button class="chip-btn" data-filter="Open" type="button">Open</button>
+              <button class="chip-btn" data-filter="Answered" type="button">Answered</button>
+              <button class="chip-btn" data-filter="Closed" type="button">Closed</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Subject</th><th>Message</th><th>Status</th><th>Raised</th><th></th></tr></thead>
+              <tbody id="ticketBody"></tbody>
+            </table>
+          </div>
+          <div class="pager"><span id="ticketCount">0 records</span><span>Live from Firestore</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modalBox">
+    <div class="modal-head">
+      <h3 id="modalTitle">Details</h3>
+      <button class="modal-close" id="modalClose" type="button" aria-label="Close dialog"><i class="fas fa-times" aria-hidden="true"></i></button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<script src="../js/ui/paisley-ui.js?v=1"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../lms-helpers.js?v=boards4"></script>
+<script src="../js/uploads/storage-helpers.js"></script>
+<script src="../js/classroom/classroom-helpers.js?v=boards5"></script>
+<script src="../js/classroom/paper-handins.js?v=boards3"></script>
+<script src="../js/classroom/resources-folder.js?v=boards3"></script>
+<script src="../js/classroom/work-helpers.js?v=boards4"></script>
+<script src="../js/classroom/ink-grader.js?v=boards2"></script>
+<script src="../js/tuition/tuition-helpers.js"></script>
+<script>
+const auth = firebase.auth();
+
+let tutor = null;
+let myKeyStages = [];
+let DB = { students: [], submissions: [], examResults: [], tickets: [], notifications: [], timetables: [], timetableEntries: [], myGrants: [], homework: [] };
+
+const listeners = {
+  students: [], submissions: [],
+  examResults: [], tickets: [], notifications: [], timetables: [], grants: [], homework: []
+};
+
+const acc = {
+  students: {}, submissions: {},
+  examResults: {}, tickets: {}, notifications: {}, timetables: {}, grants: {}, homework: {}
+};
+
+// Tutors may see parent NAMES only - never email or phone.
+function parentNamesOnly(s){
+  const names = [];
+  if (Array.isArray(s.guardians)) s.guardians.forEach(g=>{ if (g && g.name) names.push(String(g.name).trim()); });
+  if (!names.length && s.guardianName) names.push(String(s.guardianName).trim());
+  if (!names.length && s.parentContact) {
+    // legacy string "Name · email · phone | Name2 · ..." -> keep only the name part
+    String(s.parentContact).split('|').forEach(part=>{
+      const n = part.split('·')[0].trim();
+      if (n && !/@/.test(n) && !/^[+\d\s()-]{6,}$/.test(n)) names.push(n);
+    });
+  }
+  return names.length ? names.join(', ') : 'Parent';
+}
+function isMyStudent(id){ return DB.students.some(s=>s.id===id); }
+function isMyKeyStage(ks){ return !ks || myKeyStages.indexOf(ks) !== -1; }
+function isMine(rec){ return rec && rec.tutorId === tutor.id; }
+function isAdminPosted(rec){ return rec && !rec.tutorId; }
+function iCanSee(rec){
+  if(!rec) return false;
+  if(!isMyKeyStage(rec.keyStage)) return false;
+  return isMine(rec) || isAdminPosted(rec);
+}
+
+function myActiveGrants(){ return (DB.myGrants || []).filter(g=>!g.revoked); }
+function grantedHomework(homeworkId){ return myActiveGrants().some(g=>g.taskType === 'homework' && g.taskId === homeworkId); }
+function grantedExam(examId){ return myActiveGrants().some(g=>g.taskType === 'exam' && g.taskId === examId); }
+function canGradeHomework(rec){ return isMine(rec) || (rec && grantedHomework(rec.id)); }
+function canGradeExam(rec){ return isMine(rec) || (rec && grantedExam(rec.id)); }
+
+function escapeHtml(str){
+  if(str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function nl2br(str){ return escapeHtml(str || '').replace(/\n/g,'<br>'); }
+function toDate(ts){
+  if(!ts) return null;
+  if(typeof ts.toDate === 'function') return ts.toDate();
+  return new Date(ts);
+}
+function fmtDate(d){ if(!d) return '—'; return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); }
+function fmtDateTime(d){ if(!d) return '—'; return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+function shortKS(ks){ return (ks||'').replace(/\s*\(.*/, ''); }
+function studentName(id){ const s = DB.students.find(x=>x.id===id); return s ? s.name : '(not your student)'; }
+function studentEmail(id){ const s = DB.students.find(x=>x.id===id); return s ? (s.email||'') : ''; }
+function studentKS(id){ const s = DB.students.find(x=>x.id===id); return s ? (s.keyStage||'') : ''; }
+
+/* ---------------------------------------------------------
+   MULTI-TUTOR HELPERS
+   ---------------------------------------------------------
+   For each student doc, work out which subjects THIS tutor
+   teaches. Used by the "Subjects I teach them" column.
+--------------------------------------------------------- */
+function mySubjectsForStudent(student){
+  if(!student) return [];
+  const map = student.subjectTutors || {};
+  const out = [];
+  Object.keys(map).forEach(subjectId=>{
+    const entry = map[subjectId] || {};
+    if(entry.tutorId === tutor.id){
+      out.push(lmzSubjectLabel(subjectId));
+    }
+  });
+  // Fallback for legacy single-tutor students: if the student has no
+  // subjectTutors map but their legacy tutorId matches, show nothing
+  // specific (we don't know which subjects).
+  return out;
+}
+
+const overlay = document.getElementById('modalOverlay');
+const modalBox = document.getElementById('modalBox');
+document.getElementById('modalClose').addEventListener('click', closeModal);
+overlay.addEventListener('click', e=>{ if(e.target === overlay) closeModal(); });
+function closeModal(){ overlay.classList.remove('open'); }
+function openModal(title, bodyHtml, footHtml, wide){
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalFoot').innerHTML = footHtml || '';
+  if(wide) modalBox.classList.add('wide'); else modalBox.classList.remove('wide');
+  overlay.classList.add('open');
+}
+function row(k, v){
+  return '<div class="detail-row"><span class="k">'+escapeHtml(k)+'</span><span class="v">'+escapeHtml(v==null||v===''?'—':v)+'</span></div>';
+}
+function wireChips(containerId, setFn, renderFn){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  container.addEventListener('click', e=>{
+    const btn = e.target.closest('.chip-btn');
+    if(!btn) return;
+    document.querySelectorAll('#'+containerId+' .chip-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    setFn(btn.dataset.filter);
+    renderFn();
+  });
+}
+
+auth.onAuthStateChanged(user=>{
+  if(!user){ window.location.href = 'login.html'; return; }
+  getTutorAccount(user.uid).then(doc=>{
+    if(!doc.exists){
+      PaisleyUI.alert('This account is not a tutor account.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>window.location.href='login.html'));
+      return;
+    }
+    tutor = { id: doc.id, ...doc.data() };
+    if(tutor.status === 'Suspended'){
+      PaisleyUI.alert('This tutor account is suspended. Please contact the Studio Desk.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>window.location.href='login.html'));
+      return;
+    }
+    myKeyStages = tutor.keyStages || [];
+    document.body.classList.add('ready');
+    mountTutorBell();
+    renderIdentity();
+    buildKsBars();
+    initFirestore();
+  }).catch(err=>{
+    console.error(err);
+    PaisleyUI.alert('Could not load your tutor profile.', {type:'error', title:'Access problem'}).then(()=>auth.signOut().then(()=>window.location.href='login.html'));
+  });
+});
+
+function renderIdentity(){
+  document.getElementById('sideAvatar').textContent = lmsInitials(tutor.name);
+  document.getElementById('sideWho').innerHTML = escapeHtml(tutor.name||'Tutor') + '<span>' + escapeHtml((function(){ const l = lmzTeachingLines(tutor); return l.length ? l.slice(0,2).join(' | ') + (l.length>2 ? ' +' + (l.length-2) + ' more' : '') : 'Tutor'; })()) + '</span>';
+  document.getElementById('scopeNoteText').innerHTML =
+    'Welcome back, <strong>' + escapeHtml((tutor.name||'').split(/\s+/)[0]) + '</strong>. ' +
+    'You are one of the reasons Paisley Studio holds its standard. ' +
+    'Everything you see here is your own — your students, your posts, your grading. ' +
+    'The Studio Desk is always behind you' +
+    (myKeyStages.length ? ' — you teach ' + myKeyStages.map(k=>escapeHtml(shortKS(k))).join(', ') + ', and anything you need, ask.' : ', anything you need, ask.');
+}
+
+document.getElementById('signOutBtn').addEventListener('click', async () => {
+  if(!await PaisleyUI.confirm('Sign out of the Tutor Portal?')) return;
+  auth.signOut().then(()=>window.location.href='login.html');
+});
+document.getElementById('menuToggle').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
+
+const titles = {
+  overview:['Overview','Your students at a glance'],
+  students:['My Students','Students assigned to you'],
+  classroom:['Classroom','Material the Studio Desk has posted to you for the subjects you teach'],
+  resources:['Resources','Marking schemes and teaching materials for your subjects'],
+  hwmgmt:['Homework Management','Homework the Studio Desk has posted to you: release it to your students and mark their work.'],
+  exmgmt:['Exam Management','Exams in your subjects: see every hand-in and grade it'],
+  granted:['Granted to Me','Tasks the Studio Desk has asked you to help mark'],
+  content:['Timetable & Notices','Notices and timetables for your Key Stages'],
+  mytimetable:['My Timetable','Sessions for the subjects you teach'],
+  tuition:['CBC Tuition','Chat with and schedule lessons for your CBC tuition students'],
+  tickets:['Student Tickets','Questions raised by your students']
+};
+document.querySelectorAll('.nav-item').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    const view = btn.dataset.view;
+    document.getElementById('view-'+view).classList.add('active');
+    document.getElementById('pageTitle').textContent = titles[view][0];
+    document.getElementById('pageSub').textContent = titles[view][1];
+    if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
+  });
+});
+// Homework Management and Exam Management mount from work-helpers.js.
+// Both are tutor-restricted there: no topic create, no exam create.
+// Tutors cannot create or edit assignments. What they keep: releasing
+// admin-posted homework to their own students, grading and feedback.
+function mountWorkManagement(kind, hostId){
+  const host = document.getElementById(hostId);
+  host.innerHTML = '';
+  const box = document.createElement('div'); host.appendChild(box);
+  const focus = window.__wkFocus || null; window.__wkFocus = null;   // set by the Overview "Mark" buttons
+  WorkUI.mountManagement(box, {
+    kind, role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching, focus,
+    pendingFor: pendingForClass
+  });
+}
+document.querySelector('.nav-item[data-view="resources"]').addEventListener('click', ()=>{
+  if(!tutor) return;
+  const host = document.getElementById('resourcesHost'); host.innerHTML = '';
+  const box = document.createElement('div'); host.appendChild(box);
+  ResourcesUI.mount(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching });
+});
+document.querySelector('.nav-item[data-view="hwmgmt"]').addEventListener('click', ()=> mountWorkManagement('homework','hwHost'));
+document.querySelector('.nav-item[data-view="exmgmt"]').addEventListener('click', ()=> mountWorkManagement('exams','exHost'));
+let tutorBellMounted = false;
+function mountTutorBell(){
+  if(tutorBellMounted || !tutor) return; tutorBellMounted = true;
+  mountNotificationBell(document.getElementById('bellHost'), tutor.id, 'tutor', {
+    navBadges: { classroom:'#navClassroomCount' },   // homework/exam bubbles are live "to mark" counts (renderOverview)
+    navigate: (cat, n)=>{
+      // "cid/tid/itemId" or "cid/flat/examId": go straight to that board's classroom.
+      const path = String((n && n.relatedEntityId) || '').split('/');
+      if(path.length === 3 && (cat === 'homework' || cat === 'exams')) window.__wkFocus = { cid: path[0], itemId: path[2] };
+      if(path.length === 3 && cat === 'classroom') window.__crFocus = path[0];
+      const view = { homework:'hwmgmt', exams:'exmgmt', classroom:'classroom', tickets:'tickets' }[cat] || (n && n.relatedEntity === 'resource' ? 'resources' : null);
+      const btn = view && document.querySelector('.nav-item[data-view="'+view+'"]'); if(btn) btn.click();
+    }
+  });
+}
+document.querySelector('.nav-item[data-view="classroom"]').addEventListener('click', ()=>{
+  if(!tutor) return;
+  const host = document.getElementById('classroomHost');
+  host.innerHTML = '';
+  const box = document.createElement('div');
+  host.appendChild(box);
+  const focusCid = window.__crFocus || null; window.__crFocus = null;   // set by a notification click
+  ClassroomUI.mountManager(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching, focusCid });
+});
+document.querySelectorAll('#contentSubtabs .subtab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#contentSubtabs .subtab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('#view-content .subview').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('csub-'+btn.dataset.sub).classList.add('active');
+  });
+});
+
+let noticeKSFilter='all', ttKSFilter='all';
+let ticketFilter='all';
+
+function buildKsBars(){
+  const bars = [
+    ['noticeKS',  v=>noticeKSFilter=v,  ()=>renderNotices()],
+    ['ttKS',      v=>ttKSFilter=v,      ()=>renderTts()]
+  ];
+  const html = myKeyStages.map(k=>`<button class="chip-btn" data-filter="${escapeHtml(k)}" type="button">${escapeHtml(shortKS(k))}</button>`).join('')
+             + '<button class="chip-btn active" data-filter="all" type="button">All</button>';
+  bars.forEach(([id, setFn, renderFn])=>{
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = html;
+    wireChips(id, setFn, renderFn);
+  });
+  wireChips('ticketFilters', v=>ticketFilter=v, ()=>renderTickets());
+}
+
+function detachAll(key){
+  (listeners[key] || []).forEach(u => { try { u(); } catch(e){} });
+  listeners[key] = [];
+}
+function rebuild(key){ DB[key] = Object.values(acc[key]); }
+
+function initFirestore(){
+
+  // ---------------------------------------------------------------
+  // STUDENTS — MULTI-TUTOR
+  // ---------------------------------------------------------------
+  // A tutor now teaches many students across many subjects.
+  // The student doc carries `tutorIds: [id, id, ...]`.
+  //
+  // We listen with `array-contains` for the primary query.
+  // We ALSO keep a legacy listener on the old single `tutorId`
+  // field, so students who haven't been migrated yet still show
+  // up. Both write into the same acc.students bucket keyed by
+  // student ID, so duplicates are impossible.
+  // ---------------------------------------------------------------
+  detachAll('students');
+  acc.students = {}; DB.students = [];
+
+  function mergeStudent(id, data){
+    acc.students[id] = Object.assign({ id: id }, data, { date: toDate(data.createdAt) });
+  }
+  // Runs ONCE per snapshot (it used to run once per student document, re-subscribing every
+  // student's result/ticket listeners each time). Listeners are only re-attached when the
+  // set of students actually changes.
+  let studentSig = null;
+  function studentsChanged(){
+    rebuild('students');
+    const sig = DB.students.map(s=>s.id).sort().join(',');
+    if(sig !== studentSig){
+      studentSig = sig;
+      attachResultListeners();
+      attachTicketListeners();
+    }
+    renderAll();
+  }
+
+  // 1. Primary: students where this tutor appears in tutorIds[]
+  listeners.students.push(
+    db.collection('students').where('tutorIds','array-contains', tutor.id).onSnapshot(snap=>{
+      snap.docs.forEach(d=> mergeStudent(d.id, d.data()));
+      studentsChanged();
+    }, (e)=>handleErr(e,'students-multi'))
+  );
+
+  // 2. Legacy: students where the old single tutorId matches.
+  //    Non-destructive — this watcher keeps working even after migration,
+  //    because the admin save routine still sets tutorId to the FIRST
+  //    subject's tutor.
+  listeners.students.push(
+    db.collection('students').where('tutorId','==',tutor.id).onSnapshot(snap=>{
+      snap.docs.forEach(d=> mergeStudent(d.id, d.data()));
+      studentsChanged();
+    }, (e)=>{
+      // A missing-index error here is harmless; the multi-tutor query
+      // above already covers new-style students.
+      console.warn('Legacy tutorId listener:', e.message || e);
+    })
+  );
+
+  // Homework and flat-exam submissions — one listener per assignment /
+  // exam the tutor can see. This walks the classrooms they have subject
+  // access to, so it exactly matches what the Firestore rules allow.
+  attachSubmissionListeners();
+  // And an index of the tutor's own homework posts, used by the overview
+  // stat card.
+  attachHomeworkIndexListener();
+
+  db.collection('notifications').onSnapshot(snap=>{
+    snap.docs.forEach(d=>{ acc.notifications[d.id] = { id:d.id, ...d.data(), date: toDate(d.data().postedAt) }; });
+    rebuild('notifications'); renderAll();
+  }, (e)=>handleErr(e,'notifications'));
+
+  db.collection('timetables').onSnapshot(snap=>{
+    snap.docs.forEach(d=>{ acc.timetables[d.id] = { id:d.id, ...d.data(), date: toDate(d.data().postedAt) }; });
+    rebuild('timetables'); renderAll();
+  }, (e)=>handleErr(e,'timetables'));
+  // My Timetable: ONLY the subjects assigned to this tutor (the database rules
+  // enforce the same thing). Re-subscribes live if the Studio Desk changes the
+  // tutor's subjects or Key Stages while the portal is open.
+  let teUnsub = null, teSig = null;
+  db.collection('tutorAccounts').doc(tutor.id).onSnapshot(doc=>{
+    if(doc.exists){ tutor = { id: doc.id, ...doc.data() }; myKeyStages = tutor.keyStages || []; renderIdentity(); }
+    const sig = JSON.stringify([lmzTutorSubjectKeys(tutor).sort(), lmzTutorKeyStages(tutor).slice().sort(), Array.isArray(tutor.teaching) ? lmzTutorTeaching(tutor) : null]);
+    if(sig === teSig) return;
+    teSig = sig;
+    if(teUnsub) teUnsub();
+    DB.timetableEntries = [];
+    teUnsub = watchTimetableEntriesForTutor(tutor, list=>{ DB.timetableEntries = list; renderTutorTeGrid(); }, (e)=>handleErr(e,'timetableEntries'));
+    renderTutorTeGrid();
+    // Subjects/KS changed — re-subscribe to submissions under the new scope.
+    attachSubmissionListeners();
+  }, (e)=>handleErr(e,'tutorAccounts'));
+
+  db.collection('gradingGrants').where('tutorId','==',tutor.id).onSnapshot(snap=>{
+    snap.docs.forEach(d=>{ acc.grants[d.id] = { id:d.id, ...d.data(), date: toDate(d.data().grantedAt) }; });
+    rebuild('grants'); DB.myGrants = DB.grants;
+    attachSubmissionListeners();
+    renderAll();
+  }, (e)=>handleErr(e,'grants'));
+}
+
+// ------------------------------------------------------------------
+// SUBMISSIONS LISTENER
+// ------------------------------------------------------------------
+// Reads every homework / classwork / flat-exam submission under each
+// parent item the tutor can see. Per-item listeners — no collectionGroup.
+// ------------------------------------------------------------------
+// Startup used to call this three times (initial, tutor profile, grants) and each call
+// re-walked every classroom one at a time. Calls are coalesced, classrooms/topics are
+// fetched once per run and shared, and every classroom/topic is walked in parallel.
+// A generation counter stops a superseded run from attaching stray listeners.
+let _subTimer = null, subGen = 0, hwGen = 0, _runCache = null;
+function runCache(){ return _runCache || (_runCache = { scope: null, topics: {} }); }
+
+function attachSubmissionListeners(){
+  if(_subTimer) clearTimeout(_subTimer);
+  _subTimer = setTimeout(function(){ _subTimer = null; attachSubmissionListenersNow(); }, 250);
+}
+function attachSubmissionListenersNow(){
+  detachAll('submissions');
+  acc.submissions = {}; DB.submissions = [];
+  _runCache = null;
+  const gen = ++subGen;
+  subscribeHomeworkSubmissions(gen);
+  subscribeFlatExamSubmissions(gen);
+}
+
+// Index of the tutor's own homework posts. Reads each classroom's
+// assignments and keeps the ones where tutorId matches. Used for the
+// "Homework I have set" stat card.
+function attachHomeworkIndexListener(){
+  detachAll('homework');
+  acc.homework = {}; DB.homework = [];
+  subscribeHomeworkIndex();
+}
+
+function tutorTopicsOf(cls){
+  const c = runCache();
+  if(!c.topics[cls.id]){
+    c.topics[cls.id] = db.collection('classrooms').doc(cls.id).collection('topics').get()
+      .then(snap => snap.docs.map(d => Object.assign({ id: d.id }, d.data())))
+      .catch(() => []);
+  }
+  return c.topics[cls.id];
+}
+
+async function subscribeHomeworkIndex(){
+  const gen = ++hwGen;
+  const classrooms = await tutorClassroomsInScope();
+  await Promise.all(classrooms.map(async cls => {
+    const topics = await tutorTopicsOf(cls);
+    if(gen !== hwGen) return;
+    for (const t of topics) {
+      const unsub = db.collection('classrooms').doc(cls.id)
+        .collection('topics').doc(t.id).collection('assignments')
+        .where('audiences.tutors', '==', true)   // only work the Studio Desk posted to tutors
+        .onSnapshot(snap => {
+          snap.docs.forEach(d => {
+            const data = d.data();
+            if (data.tutorId !== tutor.id) return;
+            acc.homework[d.id] = Object.assign({ id: d.id, classroomId: cls.id, topicId: t.id }, data);
+          });
+          // Remove stale entries for assignments that no longer exist
+          const stillHere = new Set(snap.docs.map(x => x.id));
+          Object.keys(acc.homework).forEach(k => {
+            if (acc.homework[k].topicId === t.id && !stillHere.has(k)) delete acc.homework[k];
+          });
+          rebuild('homework');
+          renderAll();
+        }, (e) => handleErr(e, 'homework-index:' + t.id));
+      listeners.homework.push(unsub);
+    }
+  }));
+}
+
+function tutorClassroomsInScope(){
+  const c = runCache();
+  if(!c.scope) c.scope = tutorClassroomsInScopeFetch();
+  return c.scope;
+}
+async function tutorClassroomsInScopeFetch(){
+  const subjects = lmzTutorSubjectKeys(tutor);
+  if(!subjects.length) return [];
+  let classrooms = [];
+  try {
+    const parts = await Promise.all(subjects.map(subjectId =>
+      db.collection('classrooms').where('subjectId','==', subjectId).get()
+        .then(snap => snap.docs.map(d => Object.assign({ id: d.id }, d.data())))
+    ));
+    classrooms = [].concat.apply([], parts);
+  } catch (e) {
+    handleErr(e, 'classrooms-sub');
+    return [];
+  }
+  // Exact scope: this Key Stage + subject + Year only (KS3 English is not KS4 English).
+  return classrooms.filter(c => lmzTutorCovers(tutor, c.subjectId, c.keyStage, c.year, lmzBoardOf(c)));
+}
+
+// CHANGED:
+//   • Removed `.where('audiences.tutors','==',true)` on the assignments query. That
+//     filter missed any assignment whose parent doc was not explicitly posted to
+//     tutors (e.g. posted to online students and then handed in). The tutor's read
+//     access is already enforced by `classTutorSubject(cid)` in the rules, so
+//     enumerating all assignments is safe and is what the tutor needs to grade.
+//   • Added a NEW lessons (classwork) branch. There was NO listener for classwork
+//     submissions in the portal, which is why a lesson resubmission never reached
+//     the tutor's Overview or Homework Management.
+async function subscribeHomeworkSubmissions(gen){
+  const classrooms = await tutorClassroomsInScope();
+  await Promise.all(classrooms.map(async cls => {
+    const topics = await tutorTopicsOf(cls);
+    await Promise.all(topics.map(async t => {
+
+      // ---- assignments (homework) ----
+      let assignments = [];
+      try {
+        const aSnap = await db.collection('classrooms').doc(cls.id)
+          .collection('topics').doc(t.id).collection('assignments')
+          .get();
+        assignments = aSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      } catch (e) { return; }
+      if(gen !== subGen) return;   // a newer run replaced this one
+
+      for (const a of assignments) {
+        const unsub = db.collection('classrooms').doc(cls.id)
+          .collection('topics').doc(t.id)
+          .collection('assignments').doc(a.id)
+          .collection('submissions')
+          .onSnapshot(snap => {
+            snap.docs.forEach(d => {
+              acc.submissions[d.id] = Object.assign(
+                {
+                  id: d.id,
+                  kind: 'homework',
+                  cid: cls.id, tid: t.id, itemId: a.id,
+                  board: lmzIsCbcBand(cls.keyStage) ? '' : lmzBoardOf(cls),
+                  homeworkId: a.id,
+                  homeworkTitle: a.title || '(untitled)',
+                  subject: a.subject || cls.subjectName || '',
+                  keyStage: a.keyStage || cls.keyStage || ''
+                },
+                d.data(),
+                { date: toDate(d.data().submittedAt) || toDate(d.data().updatedAt) }
+              );
+            });
+            rebuild('submissions');
+            renderAll();
+          }, (e) => handleErr(e, 'submissions:' + a.id));
+        listeners.submissions.push(unsub);
+      }
+
+      // ---- lessons (classwork) — NEW ----
+      let lessons = [];
+      try {
+        const lSnap = await db.collection('classrooms').doc(cls.id)
+          .collection('topics').doc(t.id).collection('lessons')
+          .get();
+        lessons = lSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      } catch (e) { /* not fatal, move on */ }
+      if(gen !== subGen) return;
+
+      for (const l of lessons) {
+        const unsub = db.collection('classrooms').doc(cls.id)
+          .collection('topics').doc(t.id)
+          .collection('lessons').doc(l.id)
+          .collection('submissions')
+          .onSnapshot(snap => {
+            snap.docs.forEach(d => {
+              acc.submissions[d.id] = Object.assign(
+                {
+                  id: d.id,
+                  kind: 'classwork',
+                  cid: cls.id, tid: t.id, itemId: l.id,
+                  board: lmzIsCbcBand(cls.keyStage) ? '' : lmzBoardOf(cls),
+                  lessonId: l.id,
+                  homeworkTitle: l.title || '(untitled)',
+                  subject: l.subjectName || cls.subjectName || '',
+                  keyStage: l.keyStage || cls.keyStage || ''
+                },
+                d.data(),
+                { date: toDate(d.data().submittedAt) || toDate(d.data().updatedAt) }
+              );
+            });
+            rebuild('submissions');
+            renderAll();
+          }, (e) => handleErr(e, 'lesson-submissions:' + l.id));
+        listeners.submissions.push(unsub);
+      }
+    }));
+  }));
+}
+
+// CHANGED: removed `.where('audiences.tutors','==',true)` — same reasoning as above.
+// A flat exam the tutor can grade (activeGrant or classTutorSubject) must be enumerated
+// regardless of the parent's audiences flag.
+async function subscribeFlatExamSubmissions(gen){
+  const classrooms = await tutorClassroomsInScope();
+  await Promise.all(classrooms.map(async cls => {
+    let exams = [];
+    try {
+      const eSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
+        .get();
+      exams = eSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    } catch (e) { return; }
+    if(gen !== subGen) return;
+
+    for (const ex of exams) {
+      const unsub = db.collection('classrooms').doc(cls.id)
+        .collection('exams').doc(ex.id)
+        .collection('submissions')
+        .onSnapshot(snap => {
+          snap.docs.forEach(d => {
+            acc.submissions[d.id] = Object.assign(
+              {
+                id: d.id,
+                kind: 'exam',
+                cid: cls.id, itemId: ex.id,
+                board: lmzIsCbcBand(cls.keyStage) ? '' : lmzBoardOf(cls),
+                examId: ex.id,
+                examTitle: ex.title || '(untitled)',
+                subject: ex.subjectName || '',
+                keyStage: ex.keyStage || cls.keyStage || '',
+                homeworkTitle: ex.title || '(untitled)'
+              },
+              d.data(),
+              { date: toDate(d.data().submittedAt) || toDate(d.data().updatedAt) }
+            );
+          });
+          rebuild('submissions');
+          renderAll();
+        }, (e) => handleErr(e, 'exam-submissions:' + ex.id));
+      listeners.submissions.push(unsub);
+    }
+  }));
+}
+
+function attachResultListeners(){
+  detachAll('examResults');
+  acc.examResults = {}; DB.examResults = [];
+  const studentIds = DB.students.map(s=>s.id);
+  if(!studentIds.length){ renderAll(); return; }
+  studentIds.forEach(studentId=>{
+    const unsub = db.collection('examResults')
+      .where('studentId','==', studentId)
+      .onSnapshot(snap=>{
+        snap.docs.forEach(d=>{ acc.examResults[d.id] = { id:d.id, ...d.data() }; });
+        rebuild('examResults');
+        renderAll();
+      }, (e)=>handleErr(e,'results:'+studentId));
+    listeners.examResults.push(unsub);
+  });
+}
+
+function attachTicketListeners(){
+  detachAll('tickets');
+  acc.tickets = {}; DB.tickets = [];
+
+  // Primary: tickets addressed to me (targetTutorId).
+  listeners.tickets.push(
+    db.collection('tickets').where('targetTutorId','==',tutor.id).onSnapshot(snap=>{
+      snap.docs.forEach(d=>{ acc.tickets[d.id] = { id:d.id, ...d.data(), date: toDate(d.data().createdAt) }; });
+      rebuild('tickets');
+      renderAll();
+    }, (e)=>{
+      // Silently ignore; falls back to per-student query below.
+      console.warn('targetTutorId ticket query:', e.message || e);
+    })
+  );
+
+  // Legacy: tickets for students whose legacy tutorId is me.
+  // This keeps old tickets visible during migration.
+  const studentIds = DB.students.map(s=>s.id);
+  studentIds.forEach(studentId=>{
+    const unsub = db.collection('tickets')
+      .where('studentId','==', studentId)
+      .onSnapshot(snap=>{
+        snap.docs.forEach(d=>{
+          const data = d.data();
+          // Only keep tickets I'm addressed to OR legacy tickets with no
+          // targetTutorId that belong to one of my students.
+          if(data.targetTutorId && data.targetTutorId !== tutor.id) return;
+          acc.tickets[d.id] = { id:d.id, ...data, date: toDate(data.createdAt) };
+        });
+        rebuild('tickets');
+        renderAll();
+      }, (e)=>{ console.warn('legacy tickets listener skipped for', studentId, e && e.code); });
+    listeners.tickets.push(unsub);
+  });
+}
+
+function handleErr(err, label){
+  console.error('Firestore error' + (label ? ' [' + label + ']' : '') + ':', err);
+  const note = document.getElementById('scopeNote');
+  note.classList.add('warn');
+  document.getElementById('scopeNoteText').innerHTML =
+    '<strong>Can\'t read some data.</strong> Check your Firestore rules allow tutors to read these collections. Console error: <code>' + escapeHtml(err.message||err) + '</code>';
+}
+
+/* Dozens of listeners call renderAll() while the portal opens; coalesce them into one render. */
+var _renderAllTimer = null;
+function renderAll(){
+  if(_renderAllTimer) return;
+  _renderAllTimer = setTimeout(function(){ _renderAllTimer = null; renderAllNow(); }, 80);
+}
+function renderAllNow(){
+  renderOverview(); renderStudents();
+  renderGranted(); renderNotices(); renderTts();
+  renderTutorTeGrid(); renderTickets();
+}
+
+function myTickets(){ return DB.tickets.filter(t=>isMyStudent(t.studentId)); }
+
+// CHANGED:
+//   • "Needs your attention" now includes Corrections as well as Submitted.
+//     Corrections means the tutor already sent something back and is waiting on
+//     the student — but including it keeps that row visible before/after a
+//     resubmission, so the tutor knows the item is still theirs to action.
+//   • Handles kind === 'classwork' properly. Previously only 'exam' and
+//     'homework' were branched, so a classwork resubmission was invisible here.
+//   • statAwaitingAttempts now counts only exam submissions awaiting grading
+//     (was already correct in spirit, but the pool it filters on was empty for
+//     classwork; that is now populated by the new listener).
+function subRoundOf(s){
+  const h = Array.isArray(s.history) ? s.history : [];
+  const resub = s.status === 'Submitted' && (h.length > 0 || !!s.gradedAt);
+  return { resub, round: h.length ? h.length + 1 : (resub ? 2 : 1) };
+}
+function renderOverview(){
+  const allSubs = DB.submissions.filter(s=> isMyStudent(s.studentId) );
+  // Only work the tutor can act on right now. "Corrections" is with the student, so it is
+  // NOT listed as something to mark; it is counted separately below.
+  const toMark   = allSubs.filter(s=> s.status === 'Submitted');
+  const withStud = allSubs.filter(s=> s.status === 'Corrections');
+  const grants   = myActiveGrants();
+  const hwMark   = toMark.filter(s=> s.kind !== 'exam');
+  const exMark   = toMark.filter(s=> s.kind === 'exam');
+  const hwResub  = hwMark.filter(s=> subRoundOf(s).resub).length;
+  const exResub  = exMark.filter(s=> subRoundOf(s).resub).length;
+  document.getElementById('statStudents').textContent = DB.students.length;
+  document.getElementById('statMyHomework').textContent = DB.homework.length;
+  document.getElementById('statHwToMark').textContent = hwMark.length;
+  document.getElementById('statHwResub').textContent = hwResub ? (hwResub + ' resubmitted') : '';
+  document.getElementById('statAwaitingAttempts').textContent = exMark.length;
+  document.getElementById('statGranted').textContent = grants.length;
+  document.getElementById('navGrantCount').textContent = grants.length;
+
+  // Live "to mark" bubbles. They are driven by the work itself, not by unread notifications,
+  // so they stay until the work is actually marked (opening the tab no longer clears them).
+  setNavBubble('navHwCount', hwMark.length, hwResub);
+  setNavBubble('navExamCount', exMark.length, exResub);
+  try{ window.dispatchEvent(new CustomEvent('wk:pending-changed')); }catch(e){}
+  const sub = document.getElementById('attentionSub');
+  if(sub) sub.textContent = toMark.length
+    ? (toMark.length + ' to mark' + (hwResub + exResub ? ' — ' + (hwResub + exResub) + ' resubmitted after corrections' : '')
+       + (withStud.length ? ' · ' + withStud.length + ' with students for corrections' : ''))
+    : (withStud.length ? withStud.length + ' with students for corrections — nothing to mark right now' : 'Everything currently waiting on you');
+
+  const rows = toMark.map(s=>{
+    const r = subRoundOf(s);
+    return {
+      s, resub: r.resub, round: r.round,
+      what: s.kind === 'exam' ? 'Exam paper' : (s.kind === 'classwork' ? 'Classwork' : 'Homework'),
+      icon: s.kind === 'exam' ? 'fa-file-pen' : (s.kind === 'classwork' ? 'fa-book-open' : 'fa-clipboard-check'),
+      who: s.studentName||studentName(s.studentId),
+      item: s.examTitle || s.homeworkTitle || (s.kind === 'exam' ? 'Exam' : (s.kind === 'classwork' ? 'Classwork' : 'Homework')),
+      when: s.date
+    };
+  }).sort((a,b)=> (a.resub === b.resub ? (a.when||0)-(b.when||0) : (a.resub ? -1 : 1)));   // resubmissions first, then longest-waiting
+  const body = document.getElementById('attentionBody');
+  if(!rows.length){
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:1.4rem;">Nothing waiting on you. Nicely done.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r=>{
+    const pill = r.resub
+      ? `<span class="badge" style="background:#E6ECFF;color:#243b73;border:1px solid #6C8EE8;font-weight:800;"><i class="fas fa-rotate"></i> Resubmission – Attempt ${r.round}</span>`
+      : `<span class="badge" style="background:#FFF1D6;color:#8a5a00;border:1px solid #E8A33D;font-weight:800;">New hand-in</span>`;
+    return `<tr${r.resub ? ' style="background:#F4F7FF;"' : ''}>
+    <td><i class="fas ${r.icon}" style="color:var(--brand); margin-right:.4rem;"></i>${escapeHtml(r.what)}</td>
+    <td class="cell-name">${escapeHtml(r.who)}</td>
+    <td>${escapeHtml(r.item)}${r.s.board ? `<div class="cell-sub">${escapeHtml(lmzBoardLabel(r.s.board))}</div>` : ''}</td>
+    <td>${fmtDate(r.when)} ${pill}</td>
+    <td class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-kind="${escapeHtml(r.s.kind)}" data-cid="${escapeHtml(r.s.cid||'')}" data-item="${escapeHtml(r.s.itemId||'')}" onclick="openMarkItem(this)"><i class="fas fa-pen"></i> ${r.resub ? 'Mark resubmission' : 'Mark'}</button></td>
+  </tr>`;}).join('');
+}
+// Live hand-ins waiting to be marked in one classroom (feeds the subject-card bubbles).
+function pendingForClass(cid, what){
+  let toMark = 0, resub = 0;
+  DB.submissions.forEach(s=>{
+    if(s.cid !== cid || s.status !== 'Submitted' || !isMyStudent(s.studentId)) return;
+    if(what === 'exams' ? s.kind !== 'exam' : s.kind === 'exam') return;
+    toMark++; if(subRoundOf(s).resub) resub++;
+  });
+  return { toMark, resub };
+}
+function setNavBubble(id, total, resub){
+  const el = document.getElementById(id); if(!el) return;
+  if(!total){ el.style.display = 'none'; el.textContent = '0'; el.title = ''; return; }
+  el.style.display = 'inline-flex';
+  el.textContent = String(total);
+  el.style.background = resub ? '#4a6fd6' : '#E74C3C';
+  el.style.color = '#fff';
+  el.title = total + ' to mark' + (resub ? ' (' + resub + ' resubmitted)' : '');
+}
+// Open Homework/Exam Management straight on the item that needs marking.
+window.openMarkItem = (btn) => {
+  const kind = btn.dataset.kind, cid = btn.dataset.cid, itemId = btn.dataset.item;
+  window.__wkFocus = (cid && itemId) ? { cid, itemId } : null;
+  const view = kind === 'exam' ? 'exmgmt' : 'hwmgmt';
+  const nav = document.querySelector('.nav-item[data-view="' + view + '"]'); if(nav) nav.click();
+};
+window.openExamManagement = () => {
+  const btn = document.querySelector('.nav-item[data-view="exmgmt"]'); if(btn) btn.click();
+};
+window.openHomeworkManagement = () => {
+  const btn = document.querySelector('.nav-item[data-view="hwmgmt"]'); if(btn) btn.click();
+};
+
+function renderStudents(){
+  const body = document.getElementById('studentBody');
+  const list = DB.students.slice().sort((a,b)=>(b.date||0)-(a.date||0));
+  document.getElementById('studentCount').textContent = list.length + ' record' + (list.length===1?'':'s');
+  if(!list.length){
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:1.4rem;">No students assigned to you yet. The Studio Desk assigns students to tutors.</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(s=>{
+    const results = DB.examResults.filter(r=>r.studentId===s.id);
+    // Subjects I teach this student, from subjectTutors
+    const mySubjs = mySubjectsForStudent(s);
+    const subjHtml = mySubjs.length
+      ? mySubjs.map(x=>`<span class="badge b-subject" style="margin-right:.25rem;">${escapeHtml(x)}</span>`).join('')
+      : '<span class="cell-sub">No subject-mapped assignment</span>';
+    return `<tr>
+      <td><div class="cell-name">${escapeHtml(s.name||'—')}</div><div class="cell-sub">${escapeHtml(s.email||'')}</div></td>
+      <td>${subjHtml}</td>
+      <td>${escapeHtml(shortKS(s.keyStage))}</td>
+      <td>${escapeHtml(parentNamesOnly(s))}<div class="cell-sub">Parent of ${escapeHtml(s.name||'—')}</div></td>
+      <td><span class="badge ${s.status==='Active'?'b-confirmed':'b-pending'}">${escapeHtml(s.status||'Pending')}</span></td>
+      <td>${results.length}</td>
+      <td>${fmtDate(s.date)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderGranted(){
+  const body = document.getElementById('grantedBody');
+  if(!body) return;
+  const list = myActiveGrants().slice().sort((a,b)=>(b.date||0)-(a.date||0));
+  document.getElementById('grantedCount').textContent = list.length + ' record' + (list.length===1?'':'s');
+  if(!list.length){
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:1.4rem;">The Studio Desk has not granted you any tasks to help mark.</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(g=>{
+    let title = '—', subject = '—', keyStage = '—', openBtn = '';
+    if(g.taskType === 'homework'){
+      title = g.taskTitle || '—';
+      subject = g.subject || '—';
+      keyStage = '—';
+      openBtn = `<button class="mini-btn" title="Open Homework Management" type="button" onclick="openGrantedTask('homework','${escapeHtml(g.taskId)}')"><i class="fas fa-book-open"></i></button>`;
+    } else if(g.taskType === 'exam'){
+      title = g.taskTitle || '—';
+      subject = g.subject || '—';
+      keyStage = '—';
+      openBtn = `<button class="mini-btn" title="Open Exam Management" type="button" onclick="openGrantedTask('exam','${escapeHtml(g.taskId)}')"><i class="fas fa-file-pen"></i></button>`;
+    }
+    return `<tr>
+      <td><span class="badge b-grant">${escapeHtml(g.taskType||'—')}</span></td>
+      <td class="cell-name">${escapeHtml(title)}</td>
+      <td>${escapeHtml(subject)}</td>
+      <td>${escapeHtml(keyStage)}</td>
+      <td>${escapeHtml(g.grantedBy||'Studio Desk')}</td>
+      <td>${fmtDate(g.date)}</td>
+      <td class="row-actions">${openBtn}</td>
+    </tr>`;
+  }).join('');
+}
+window.openGrantedTask = (taskType, taskId) => {
+  if(taskType === 'homework'){
+    document.querySelector('.nav-item[data-view="hwmgmt"]').click();
+  } else if(taskType === 'exam'){
+    document.querySelector('.nav-item[data-view="exmgmt"]').click();
+  }
+};
+
+function visibleNotices(){ return DB.notifications.filter(n=>iCanSee(n) || (n.postedById && isMyKeyStage(n.keyStage) && n.postedById === tutor.id)); }
+function visibleTts(){ return DB.timetables.filter(t=>(iCanSee(t) && lmzTutorBoards(tutor).indexOf(lmzBoardOf(t)) !== -1) || (t.postedById && isMyKeyStage(t.keyStage) && t.postedById === tutor.id)); }
+
+function renderTutorTeGrid(){
+  const grid = document.getElementById('tutorTeGrid');
+  if(!grid) return;
+  const list = DB.timetableEntries || [];
+  if(!lmzTutorSubjectKeys(tutor).length){ grid.innerHTML = '<div style="color:var(--muted); padding:1rem 0;">No subjects have been assigned to you yet, so there are no timetable sessions to show. Please contact the Studio Desk.</div>'; return; }
+  if(!list.length){ grid.innerHTML = '<div style="color:var(--muted); padding:1rem 0;">No timetable sessions published for your subjects yet.</div>'; return; }
+  const byDay = groupTimetableEntriesByDay(list);
+  grid.innerHTML = DAYS_OF_WEEK.filter(d=>byDay[d].length).map(day=>`
+    <div class="panel" style="margin-bottom:.9rem; padding:1rem 1.1rem;">
+      <strong style="color:var(--brand-deep); display:block; margin-bottom:.6rem;">${escapeHtml(day)}</strong>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Subject</th><th>Key Stage</th><th>Tutor</th><th>Room</th></tr></thead>
+        <tbody>${byDay[day].map(e=>`<tr style="${e.tutorId===tutor.id?'background:var(--sage);':''}">
+          <td>${escapeHtml(e.startTime||'')}${e.endTime?'–'+escapeHtml(e.endTime):''}</td>
+          <td>${escapeHtml(e.subjectName||'')}<div class="cell-sub">${escapeHtml(lmzBoardLabel(e.board))}</div></td>
+          <td>${escapeHtml((e.keyStage||'').replace(/\s*\(.*/, ''))}</td>
+          <td>${e.tutorName ? escapeHtml(e.tutorName) + (e.tutorId===tutor.id?' (you)':'') : '<span class="cell-sub">Not assigned</span>'}</td>
+          <td>${lmzRoomHtml(e.room)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`).join('');
+}
+
+function renderNotices(){
+  const body = document.getElementById('noticeBody');
+  let list = visibleNotices();
+  if(noticeKSFilter !== 'all') list = list.filter(n=>n.keyStage === noticeKSFilter);
+  list = list.slice().sort((a,b)=>(b.date||0)-(a.date||0));
+  document.getElementById('noticeCount').textContent = list.length + ' record' + (list.length===1?'':'s');
+  if(!list.length){ body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:1.4rem;">No notices visible to you yet.</td></tr>'; return; }
+  body.innerHTML = list.map(n=>`<tr>
+    <td class="cell-name">${escapeHtml(n.title||'—')}</td>
+    <td>${escapeHtml(shortKS(n.keyStage))}</td>
+    <td><span class="badge ${n.priority==='Urgent'?'b-pending':'b-confirmed'}">${escapeHtml(n.priority||'Normal')}</span></td>
+    <td>${fmtDate(n.date)}</td>
+    <td class="row-actions">${n.postedById===tutor.id?`
+      <button class="mini-btn" title="Edit" type="button" onclick="editNotice('${n.id}')"><i class="fas fa-pen"></i></button>
+      <button class="mini-btn danger" title="Delete" type="button" onclick="removeNotice('${n.id}')"><i class="fas fa-trash"></i></button>`
+      :'<span class="cell-sub">'+escapeHtml(n.postedBy||'Studio Desk')+'</span>'}</td>
+  </tr>`).join('');
+}
+function noticeFormHtml(n){
+  n = n || {};
+  return `<div class="form-grid">
+    <div class="form-field full"><label>Title</label><input type="text" id="noTitle" value="${escapeHtml(n.title||'')}" placeholder="Timetable change this Friday" /></div>
+    <div class="form-field"><label>Key Stage</label>
+      <select id="noKeyStage">${myKeyStages.map(k=>`<option value="${escapeHtml(k)}" ${n.keyStage===k?'selected':''}>${escapeHtml(k)}</option>`).join('')}</select>
+    </div>
+    <div class="form-field"><label>Priority</label>
+      <select id="noPriority">
+        <option value="Normal" ${n.priority!=='Urgent'?'selected':''}>Normal</option>
+        <option value="Urgent" ${n.priority==='Urgent'?'selected':''}>Urgent</option>
+      </select>
+    </div>
+    <div class="form-field full"><label>Message</label><textarea id="noBody">${escapeHtml(n.body||'')}</textarea></div>
+  </div>`;
+}
+function noticeFromForm(){
+  return {
+    title: document.getElementById('noTitle').value.trim(),
+    keyStage: document.getElementById('noKeyStage').value,
+    priority: document.getElementById('noPriority').value,
+    body: document.getElementById('noBody').value.trim()
+  };
+}
+document.getElementById('addNoticeBtn').addEventListener('click', ()=>{
+  if(!myKeyStages.length){ alert('No Key Stages are assigned to your account yet.'); return; }
+  openModal('Post notice', noticeFormHtml(), `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="saveNewNotice()" type="button"><i class="fas fa-check"></i> Post notice</button>`);
+});
+window.saveNewNotice = () => {
+  const d = noticeFromForm();
+  if(!d.title){ alert('Please give the notice a title.'); return; }
+  addNotification({ ...d, postedBy: tutor.name, postedById: tutor.id, postedByRole:'tutor' }).then(closeModal).catch(e=>alert(e.message));
+};
+window.editNotice = (id) => {
+  const n = DB.notifications.find(x=>x.id===id); if(!n) return;
+  if(n.postedById !== tutor.id){ alert('You can only edit notices you posted.'); return; }
+  openModal('Edit notice', noticeFormHtml(n), `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="saveEditedNotice('${id}')" type="button"><i class="fas fa-check"></i> Save changes</button>`);
+};
+window.saveEditedNotice = (id) => {
+  const d = noticeFromForm();
+  if(!d.title){ alert('Please give the notice a title.'); return; }
+  updateNotification(id, d).then(closeModal).catch(e=>alert(e.message));
+};
+window.removeNotice = async (id) => {
+  const n = DB.notifications.find(x=>x.id===id); if(!n) return;
+  if(n.postedById !== tutor.id){ alert('You can only delete notices you posted.'); return; }
+  if(await PaisleyUI.confirm('Delete this notice?')) deleteNotification(id).catch(e=>alert(e.message));
+};
+
+let ttSlots = [];
+function renderTts(){
+  const body = document.getElementById('ttBody');
+  let list = visibleTts();
+  if(ttKSFilter !== 'all') list = list.filter(t=>t.keyStage === ttKSFilter);
+  list = list.slice().sort((a,b)=>(b.date||0)-(a.date||0));
+  document.getElementById('ttCount').textContent = list.length + ' record' + (list.length===1?'':'s');
+  if(!list.length){ body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:1.4rem;">No timetables visible to you yet.</td></tr>'; return; }
+  body.innerHTML = list.map(t=>`<tr>
+    <td class="cell-name">${escapeHtml(t.title||'—')}</td>
+    <td>${escapeHtml(shortKS(t.keyStage))}</td>
+    <td>${(t.slots||[]).length}</td>
+    <td>${fmtDate(t.date)}</td>
+    <td class="row-actions">${t.postedById===tutor.id?`
+      <button class="mini-btn" title="Edit" type="button" onclick="editTt('${t.id}')"><i class="fas fa-pen"></i></button>
+      <button class="mini-btn danger" title="Delete" type="button" onclick="removeTt('${t.id}')"><i class="fas fa-trash"></i></button>`
+      :'<span class="cell-sub">'+escapeHtml(t.postedBy||'Studio Desk')+'</span>'}</td>
+  </tr>`).join('');
+}
+function ttFormHtml(t){
+  t = t || {};
+  return `<div class="form-grid">
+    <div class="form-field full"><label>Title</label><input type="text" id="tTitle" value="${escapeHtml(t.title||'')}" placeholder="Autumn Term timetable" /></div>
+    <div class="form-field"><label>Key Stage</label>
+      <select id="tKeyStage">${myKeyStages.map(k=>`<option value="${escapeHtml(k)}" ${t.keyStage===k?'selected':''}>${escapeHtml(k)}</option>`).join('')}</select>
+    </div>
+    <div class="form-field"><label>Exam board</label><select id="tBoard">${lmzBoardOptionsHtml(t.board || lmzTutorBoards(tutor)[0])}</select></div>
+    <div class="form-field full"><label>File URL (optional)</label><input type="text" id="tFile" value="${escapeHtml(t.fileURL||'')}" placeholder="https://…" /></div>
+  </div>
+  <div id="ttSlotList" style="margin-top:1rem;"></div>
+  <button class="btn btn-ghost btn-sm" type="button" onclick="addTtSlot()"><i class="fas fa-plus"></i> Add slot</button>`;
+}
+window.addTtSlot = () => { ttSlots.push({ day:'Monday', time:'', subject:'', tutor: tutor.name||'' }); renderTtSlots(); };
+window.removeTtSlot = (i) => { ttSlots.splice(i,1); renderTtSlots(); };
+function renderTtSlots(){
+  const wrap = document.getElementById('ttSlotList');
+  if(!wrap) return;
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  wrap.innerHTML = ttSlots.map((sl,i)=>`
+    <div class="qbuilder-row">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem;">
+        <strong style="font-size:.8rem; color:var(--brand-deep);">Slot ${i+1}</strong>
+        <button class="mini-btn danger" type="button" onclick="removeTtSlot(${i})"><i class="fas fa-trash"></i></button>
+      </div>
+      <div class="opt-row">
+        <select onchange="ttSlots[${i}].day=this.value" style="font-family:var(--font); padding:.4rem .5rem; border:1.5px solid var(--line); border-radius:8px;">
+          ${days.map(d=>`<option value="${d}" ${sl.day===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+        <input type="text" placeholder="09:00–10:00" value="${escapeHtml(sl.time)}" oninput="ttSlots[${i}].time=this.value" />
+      </div>
+      <div class="opt-row">
+        <input type="text" placeholder="Subject" value="${escapeHtml(sl.subject)}" oninput="ttSlots[${i}].subject=this.value" />
+        <input type="text" placeholder="Tutor" value="${escapeHtml(sl.tutor)}" oninput="ttSlots[${i}].tutor=this.value" />
+      </div>
+    </div>`).join('') || '<div style="color:var(--muted); font-size:.82rem; padding:.6rem 0;">No slots yet — add one, or just attach a file above.</div>';
+}
+function ttFromForm(){
+  return {
+    title: document.getElementById('tTitle').value.trim(),
+    keyStage: document.getElementById('tKeyStage').value,
+    board: lmzBoardId(document.getElementById('tBoard').value),
+    fileURL: document.getElementById('tFile').value.trim(),
+    slots: ttSlots
+  };
+}
+document.getElementById('addTtBtn').addEventListener('click', ()=>{
+  if(!myKeyStages.length){ alert('No Key Stages are assigned to your account yet.'); return; }
+  ttSlots = [];
+  openModal('Post timetable', ttFormHtml(), `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="saveNewTt()" type="button"><i class="fas fa-check"></i> Post timetable</button>`);
+  renderTtSlots();
+});
+window.saveNewTt = () => {
+  const d = ttFromForm();
+  if(!d.title){ alert('Please give the timetable a title.'); return; }
+  addTimetable({ ...d, postedBy: tutor.name, postedById: tutor.id, postedByRole:'tutor' }).then(closeModal).catch(e=>alert(e.message));
+};
+window.editTt = (id) => {
+  const t = DB.timetables.find(x=>x.id===id); if(!t) return;
+  if(t.postedById !== tutor.id){ alert('You can only edit timetables you posted.'); return; }
+  ttSlots = JSON.parse(JSON.stringify(t.slots||[]));
+  openModal('Edit timetable', ttFormHtml(t), `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="saveEditedTt('${id}')" type="button"><i class="fas fa-check"></i> Save changes</button>`);
+  renderTtSlots();
+};
+window.saveEditedTt = (id) => {
+  const d = ttFromForm();
+  if(!d.title){ alert('Please give the timetable a title.'); return; }
+  updateTimetable(id, d).then(closeModal).catch(e=>alert(e.message));
+};
+window.removeTt = async (id) => {
+  const t = DB.timetables.find(x=>x.id===id); if(!t) return;
+  if(t.postedById !== tutor.id){ alert('You can only delete timetables you posted.'); return; }
+  if(await PaisleyUI.confirm('Delete this timetable?')) deleteTimetable(id).catch(e=>alert(e.message));
+};
+
+function renderTickets(){
+  const body = document.getElementById('ticketBody');
+  let list = myTickets();
+  if(ticketFilter !== 'all') list = list.filter(t=>t.status === ticketFilter);
+  list = list.slice().sort((a,b)=>(b.date||0)-(a.date||0));
+  document.getElementById('ticketCount').textContent = list.length + ' record' + (list.length===1?'':'s');
+  if(!list.length){ body.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:1.4rem;">No tickets from your students.</td></tr>'; return; }
+  body.innerHTML = list.map(t=>{
+    // Show which subject and which tutor this ticket is about
+    const subjName = t.subjectName || t.subject || '—';
+    const tutorBit = t.targetTutorName
+      ? `<span class="cell-sub">For: ${escapeHtml(t.targetTutorName)}</span>`
+      : '';
+    return `<tr>
+      <td class="cell-name">${escapeHtml(t.studentName||studentName(t.studentId))}</td>
+      <td><span class="badge b-subject">${escapeHtml(subjName)}</span>${tutorBit}</td>
+      <td>${escapeHtml((t.message||'').slice(0,70))}${(t.message||'').length>70?'…':''}</td>
+      <td><span class="badge ${t.status==='Answered'?'b-confirmed':(t.status==='Closed'?'b-declined':'b-pending')}">${escapeHtml(t.status||'Open')}</span></td>
+      <td>${fmtDate(t.date)}</td>
+      <td class="row-actions"><button class="mini-btn" title="Reply" type="button" onclick="openTicket('${t.id}')"><i class="fas fa-reply"></i></button></td>
+    </tr>`;
+  }).join('');
+}
+window.openTicket = (id) => {
+  const t = DB.tickets.find(x=>x.id===id); if(!t) return;
+  if(!isMyStudent(t.studentId)){ alert('That ticket is not from one of your students.'); return; }
+  const subjectBit = t.subjectName ? t.subjectName : (t.subject || '');
+  openModal('Ticket — ' + subjectBit, `
+    ${row('From', t.studentName || studentName(t.studentId))}
+    ${row('Email', t.studentEmail || studentEmail(t.studentId))}
+    ${row('Subject', t.subjectName || '—')}
+    ${row('Addressed to', t.targetTutorName || 'You')}
+    ${row('Key Stage', t.keyStage || studentKS(t.studentId))}
+    ${row('Reference', t.reference || '—')}
+    ${row('Raised', fmtDate(t.date))}
+    <div class="detail-block"><div class="k">Message</div><div>${nl2br(t.message||'')}</div></div>
+    <div class="form-grid">
+      <div class="form-field full"><label>Your reply</label><textarea id="tReply">${escapeHtml(t.reply||'')}</textarea></div>
+      <div class="form-field full"><label>Status</label>
+        <select id="tStatus">
+          <option value="Open" ${t.status==='Open'?'selected':''}>Open</option>
+          <option value="Answered" ${t.status==='Answered'?'selected':''}>Answered</option>
+          <option value="Closed" ${t.status==='Closed'?'selected':''}>Closed</option>
+        </select>
+      </div>
+    </div>
+  `, `<button class="btn btn-ghost btn-sm" onclick="closeModal()" type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveTicketReply('${id}')" type="button"><i class="fas fa-paper-plane"></i> Send reply</button>`);
+};
+window.saveTicketReply = (id) => {
+  const reply = document.getElementById('tReply').value.trim();
+  const status = document.getElementById('tStatus').value;
+  if(!reply){ alert('Please write a reply.'); return; }
+  db.collection('tickets').doc(id).update({
+    reply: reply,
+    status: status,
+    repliedBy: tutor.name,
+    repliedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(closeModal).catch(e=>alert('Could not save: '+e.message));
+};
+
+/* ===================================================================
+   CBC TUITION — chat + timetable for the tutor's paired tuition students
+=================================================================== */
+(function(){
+  const navBtn = document.querySelector('.nav-item[data-view="tuition"]');
+  if(!navBtn) return;
+  let chatApi = null, activeId = null, sub = 'chat';
+  const host = () => document.getElementById('tuitionTutorHost');
+  const kids = () => (DB.students || []).filter(s => s.studentType === 'tuition' && s.status === 'Active')
+    .sort((a,b) => String(a.name||'').localeCompare(String(b.name||'')));
+
+  function draw(){
+    const list = kids(), h = host();
+    if(chatApi){ chatApi.destroy(); chatApi = null; }
+    if(!list.length){
+      h.innerHTML = '<div class="panel"><div class="empty-row">No CBC tuition students are paired with you yet. When the Studio Desk pairs a student with you, they appear here.</div></div>';
+      return;
+    }
+    if(!activeId || !list.some(s => s.id === activeId)) activeId = list[0].id;
+    const me = list.find(s => s.id === activeId);
+    h.innerHTML =
+      '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem">' +
+        '<button type="button" class="btn btn-sm ' + (sub === 'chat' ? 'btn-primary' : 'btn-ghost') + '" data-sub="chat"><i class="fas fa-comments"></i> Chat</button>' +
+        '<button type="button" class="btn btn-sm ' + (sub === 'tt' ? 'btn-primary' : 'btn-ghost') + '" data-sub="tt"><i class="fas fa-calendar-week"></i> Timetable</button></div>' +
+      (sub === 'chat'
+        ? '<div style="display:grid;grid-template-columns:240px 1fr;gap:1rem" class="tu-split-t"><div class="panel" style="padding:.8rem"><div class="sub" style="margin-bottom:.5rem">My CBC students</div>' +
+          list.map(s => '<button type="button" class="btn btn-sm ' + (s.id === activeId ? 'btn-primary' : 'btn-ghost') + '" data-stu="' + s.id + '" style="display:block;width:100%;text-align:left;margin-bottom:.35rem">' + escapeHtml(s.name || 'Student') + '<br><span style="font-weight:500;font-size:.7rem">' + escapeHtml((s.keyStage||'').replace(/\s*\(.*/, '')) + (s.year ? ' · Grade ' + escapeHtml(s.year) : '') + '</span></button>').join('') +
+          '</div><div id="tuChatHost"></div></div>'
+        : '<div id="tuTtHost"></div>');
+    h.querySelectorAll('[data-sub]').forEach(b => b.addEventListener('click', () => { sub = b.dataset.sub; draw(); }));
+    h.querySelectorAll('[data-stu]').forEach(b => b.addEventListener('click', () => { activeId = b.dataset.stu; draw(); }));
+    if(sub === 'chat'){
+      chatApi = TuitionUI.mountChat(h.querySelector('#tuChatHost'), {
+        studentId: me.id, studentName: me.name, tutorId: tutor.id, tutorName: tutor.name || 'Tutor',
+        me: { uid: auth.currentUser.uid, role: 'tutor', name: tutor.name || 'Tutor' }
+      });
+    } else {
+      TuitionUI.mountTimetable(h.querySelector('#tuTtHost'), {
+        mode: 'tutor', tutor: { id: tutor.id, name: tutor.name || 'Tutor' },
+        students: list.map(s => ({ id: s.id, name: s.name, subjects: lmzSubjectKeys(s.subjects).filter(k => ((s.subjectTutors||{})[k]||{}).tutorId === tutor.id) })),
+        subjectName: lmzSubjectLabel
+      });
+    }
+  }
+  navBtn.addEventListener('click', draw);
+  const st = document.createElement('style');
+  st.textContent = '@media(max-width:760px){.tu-split-t{grid-template-columns:1fr!important}}';
+  document.head.appendChild(st);
+})();
+</script>
+</body>
+</html>
