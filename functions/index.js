@@ -140,6 +140,7 @@ exports.onTechContentWritten          = tech.onTechContentWritten;
 exports.onTechLessonWritten           = tech.onTechLessonWritten;
 exports.submitTechQuiz                = tech.submitTechQuiz;
 exports.onTechLessonWorkWritten       = tech.onTechLessonWorkWritten;
+exports.onTechLessonProgressWritten   = tech.onTechLessonProgressWritten;
 exports.onTechGroupWritten            = tech.onTechGroupWritten;
 exports.onTechGroupTaskWritten        = tech.onTechGroupTaskWritten;
 exports.onTechLiveClassWritten        = tech.onTechLiveClassWritten;

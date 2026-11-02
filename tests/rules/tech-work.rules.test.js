@@ -57,7 +57,8 @@ test("a builder edits and hands in, but cannot mark or change handed-in work", a
   await assertFails(as("kid1").doc("techLessonWork/kid1_live").update({ grade: 10 }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_live").update({ status: "Graded" }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_live").update({ coachId: "coach2" }));
-  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_live").update({ status: "Submitted", submitCount: 1 }));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_live").update({ status: "Submitted", submitCount: 1, snapshotUrl: "https://x/s.jpg", snapshotPath: "techWork/kid1/live/snapshot_1.jpg", snapshotAt: new Date() }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ snapshotUrl: "https://x/other.jpg" }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ codeFiles: [] }));
   await assertSucceeds(as("kid1").doc("techLessonWork/kid1_redo").update({ codeFiles: [] }));
   await assertSucceeds(as("kid1").doc("techLessonWork/kid1_redo").update({ status: "Submitted" }));
@@ -71,6 +72,10 @@ test("their coach and admins mark it; other coaches cannot see it; guardians rea
   await assertSucceeds(as("admin1").doc("techLessonWork/kid1_sent").update({ status: "Corrections" }));
   await assertSucceeds(as("mum").doc("techLessonWork/kid1_sent").get());
   await assertFails(as("kid2").doc("techLessonWork/kid1_sent").get());
+  // the class page lists a builder's hand-ins to open the padlocks
+  await assertSucceeds(as("kid1").collection("techLessonWork").where("studentId", "==", "kid1").get());
+  await assertSucceeds(as("mum").collection("techLessonWork").where("studentId", "==", "kid1").get());
+  await assertFails(as("kid2").collection("techLessonWork").where("studentId", "==", "kid1").get());
   await assertSucceeds(as("coach1").collection("techLessonWork").where("coachId", "==", "coach1").get());
   await assertSucceeds(as("coach1").collection("techLessonWork").where("coachId", "==", "coach1").where("lessonId", "==", "sent").get());
   await assertFails(as("coach2").collection("techLessonWork").where("coachId", "==", "coach1").get());

@@ -69,10 +69,12 @@ const first = (n, fb) => String(n || "").trim().split(/\s+/)[0] || fb || "there"
 
 /* Paisley Tech Studio creator-level ladder — must stay in sync with TechUI.LEVELS */
 const TECH_LEVELS = ["DISCOVER", "MAKE", "BUILD", "SOLVE", "CREATE", "INVENT", "STUDIO"];
-/* Skill levels chosen at sign-up — must stay in sync with TechUI.SKILL_LEVELS / trackOf.
-   Beginners get their own work; intermediate and expert see the same. No level yet counts as advanced. */
+/* Skill levels chosen at sign-up — must stay in sync with TechUI.SKILL_LEVELS / trackOf / tracksFor.
+   Every level has its own classes; "advanced" is the old shared intermediate + expert track, still
+   shown to both. No level yet counts as intermediate. */
 const SKILL_LABEL = { beginner: "Beginner", intermediate: "Intermediate", expert: "Expert" };
-const trackOf = (skill) => (skill === "beginner" ? "beginner" : "advanced");
+const trackOf = (skill) => (SKILL_LABEL[skill] ? skill : "intermediate");
+const tracksFor = (skill) => (trackOf(skill) === "beginner" ? ["beginner"] : [trackOf(skill), "advanced"]);
 /* Paisley Tech Studio disciplines — must stay in sync with TechUI.DISCIPLINES */
 /* AI runs through every discipline, so it is not one of its own. People see "Coding with AI".
    Old records tagged "AI" count towards Coding with AI. */
@@ -102,6 +104,7 @@ async function techNotify(recipientId, recipientRole, type, title, message, extr
     studentId: x.studentId || "", buildId: x.buildId || "", chatId: x.chatId || "",
     missionId: x.missionId || "", classId: x.classId || "", section: x.section || "",
     lessonId: x.lessonId || "", courseId: x.courseId || "",
+    image: /^https:\/\//.test(x.image || "") ? String(x.image).slice(0, 1500) : "",
     link: x.link || LINKS[recipientRole] || "/tech",
     read: false, createdAt: FV().serverTimestamp()
   };
@@ -689,7 +692,7 @@ exports.onTechContentWritten = onDocumentWritten(
 ========================================================= */
 async function trackAudience(track) {
   const snap = await admin.firestore().collection("techStudents").where("status", "==", "Active").get();
-  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter((s) => trackOf(s.skillLevel) === track);
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter((s) => tracksFor(s.skillLevel).indexOf(track) !== -1);
 }
 exports.onTechLessonWritten = onDocumentWritten(
   { document: "techLessons/{lid}", region: LOCATION, secrets: SMTP_SECRETS, timeoutSeconds: 540, memory: "512MiB" },
@@ -732,6 +735,125 @@ function lessonTitle(l) {
   const word = l && l.type === "test" ? "practice test" : "lesson";
   return String((l && l.title) || (l && l.topicTitle ? `${l.topicTitle} ${word}` : `New ${word}`)).slice(0, 160);
 }
+
+/* =========================================================
+   Levels: passing a lesson unlocks the next one
+   -----------------------------------------------------------
+   The lessons of a class, in topic then lesson order, are its levels. What
+   passing one takes is lesson.gate { watch, quiz, pass, work }; no gate means
+   every step the lesson has, with a 50% pass mark. Must match gateOf /
+   gateSteps in js/tech/tech-classes.js. The first time a builder meets it,
+   techLessonProgress.passedAt is set and the builder, their coach, the admins
+   (bell) and their guardians (bell and email) hear which level is next.
+========================================================= */
+const DEFAULT_PASS = 50;
+function lessonGate(l) {
+  const g = (l && l.gate) || { watch: true, quiz: true, work: true, pass: DEFAULT_PASS };
+  const qs = Array.isArray(l && l.questions) ? l.questions : [];
+  const pass = Number(g.pass);
+  return {
+    watch: !!g.watch && l.type !== "test" && !!(l.video && l.video.url),
+    quiz: !!g.quiz && qs.length > 0,
+    marked: qs.some((q) => q && q.type !== "open"),
+    pass: g.pass !== "" && g.pass != null && Number.isFinite(pass) ? Math.max(0, Math.min(100, Math.round(pass))) : DEFAULT_PASS,
+    work: !!g.work && !!l.task
+  };
+}
+const handedIn = (w) => !!w && ((w.submitCount || 0) > 0 || ["Submitted", "Graded", "Corrections"].indexOf(w.status) !== -1);
+function gateMet(l, p, w) {
+  const g = lessonGate(l), pr = p || {};
+  let any = false;
+  if (g.watch) { any = true; if (!pr.watchedAt) return false; }
+  if (g.quiz) {
+    any = true;
+    if (g.marked ? !(pr.bestPercent != null && pr.bestPercent >= g.pass) : !(pr.lastAttemptAt || (pr.attempts || 0) > 0)) return false;
+  }
+  if (g.work) { any = true; if (!handedIn(w)) return false; }
+  return any || !!pr.openedAt;
+}
+/* The class's posted lessons in the order builders meet them. */
+async function classLevels(courseId) {
+  const db = admin.firestore();
+  const [tops, less] = await Promise.all([
+    db.collection("techTopics").where("courseId", "==", courseId).get(),
+    db.collection("techLessons").where("courseId", "==", courseId).where("status", "==", "published").get()
+  ]);
+  const byOrder = (a, b) => (a.order || 0) - (b.order || 0) || String(a.title || "").localeCompare(String(b.title || ""));
+  const topics = tops.docs.map((d) => Object.assign({ id: d.id }, d.data())).sort(byOrder);
+  const lessons = less.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  const out = [];
+  topics.forEach((t) => lessons.filter((l) => l.topicId === t.id).sort(byOrder).forEach((l) => out.push(l)));
+  return out;
+}
+async function checkLessonPass(uid, lessonId) {
+  if (!uid || !lessonId) return;
+  const db = admin.firestore();
+  const lRef = db.collection("techLessons").doc(lessonId), pRef = db.collection("techLessonProgress").doc(uid + "_" + lessonId);
+  const [ld, pd, wd] = await Promise.all([lRef.get(), pRef.get(), db.collection("techLessonWork").doc(uid + "_" + lessonId).get()]);
+  if (!ld.exists || ld.data().status !== "published") return;
+  const l = Object.assign({ id: ld.id }, ld.data());
+  if (pd.exists && pd.data().passedAt) return;
+  if (!gateMet(l, pd.exists ? pd.data() : null, wd.exists ? wd.data() : null)) return;
+  /* Only the first run records the pass and tells people. */
+  const isFirst = await db.runTransaction(async (tx) => {
+    const cur = await tx.get(pRef);
+    if (cur.exists && cur.data().passedAt) return false;
+    tx.set(pRef, {
+      studentId: uid, lessonId, courseId: l.courseId || "", topicId: l.topicId || "", track: l.track || "",
+      passedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp()
+    }, { merge: true });
+    return true;
+  });
+  if (!isFirst) return;
+  await announcePass(uid, l);
+}
+async function announcePass(uid, l) {
+  const s = await techStudent(uid);
+  if (!s) return;
+  const levels = l.courseId ? await classLevels(l.courseId) : [];
+  const i = levels.findIndex((x) => x.id === l.id), n = i + 1, next = i > -1 ? levels[i + 1] : null;
+  const course = l.courseName || "their class", who = first(s.name, "Your child");
+  const nameOf = (x) => (x.title ? `${x.topicTitle ? x.topicTitle + " · " : ""}${x.title}` : lessonTitle(x));
+  const lvl = n > 0 ? `Level ${n}` : "a level";
+  /* The class may also unlock a class that waits for it. */
+  let thenClass = null;
+  if (!next && l.courseId) {
+    const after = await admin.firestore().collection("techCourses").where("afterCourseId", "==", l.courseId).limit(1).get();
+    if (!after.empty) thenClass = after.docs[0].data().name || null;
+  }
+  const done = !next;
+  const idBase = `pass_${uid}_${l.id}`;
+  const studentLine = done ? `You passed every level of ${course}.${thenClass ? ` ${thenClass} is open now.` : ""}` : `You passed ${lvl} (${nameOf(l)}). Level ${n + 1}, ${nameOf(next)}, is open now.`;
+  await techNotify(uid, "student", "tech_unlock", done ? `You finished ${course}!` : `Level ${n + 1} unlocked!`, studentLine,
+    { studentId: uid, id: idBase, section: "classes", courseId: l.courseId || "", lessonId: next ? next.id : "", link: LINKS.student + "#classes" });
+  const staffLine = done ? `${s.name || "A builder"} passed every level of ${course}.` : `${s.name || "A builder"} passed ${lvl} of ${course} (${nameOf(l)}) and moves on to Level ${n + 1}.`;
+  if (s.coachId) await techNotify(s.coachId, "coach", "tech_unlock", done ? "Class finished" : "Level passed", staffLine, { studentId: uid, id: idBase, section: "results", courseId: l.courseId || "" });
+  await notifyAdmins("tech_unlock", done ? "Class finished" : "Level passed", staffLine, { studentId: uid, id: idBase, section: "results", courseId: l.courseId || "" });
+  await logActivity(uid, "level_passed", done ? `Finished ${course}` : `Passed ${lvl} of ${course}`, { studentName: s.name || "", by: "system", origin: "class" });
+  const heading = done ? `${who} finished ${course}!` : `${who} passed ${lvl} and is moving on to Level ${n + 1}!`;
+  const famLine = done ? `${who} passed every level of ${course}.${thenClass ? ` ${thenClass} is now open for them.` : ""}` : `${who} passed ${lvl} of ${course} (${nameOf(l)}) and is moving on to Level ${n + 1}: ${nameOf(next)}.`;
+  for (const g of await guardiansOf(uid)) {
+    const fresh = await techNotify(g.parentUid, "guardian", "tech_unlock", done ? `${who} finished ${course}` : `${who} passed ${lvl}`, famLine,
+      { studentId: uid, id: idBase + "_" + g.parentUid, section: "classes", courseId: l.courseId || "", link: LINKS.guardian + "#classes" });
+    if (fresh) await email(g.email, done ? `${who} finished ${course}` : `${who} passed ${lvl} in ${course}`, {
+      preheader: famLine, heading,
+      intro: `Hi ${esc(first(g.name))}, great news from Paisley Tech Studio.`,
+      body: `<p style="margin:0 0 10px;">${esc(famLine)}</p>` +
+        `<p style="margin:0 0 10px;"><b>${esc(course)}</b>${levels.length ? ` · ${esc(Math.max(n, 0))} of ${esc(levels.length)} levels passed` : ""}</p>` +
+        `<p style="margin:0;">Each level opens only when the one before is passed, so this one was earned. A quick “well done” from you goes a long way. Keep encouraging them!</p>`,
+      cta: { label: "See their progress", url: APP + LINKS.guardian + "#classes" }
+    });
+  }
+}
+/* Watching, a quiz score or opening it can complete a level. */
+exports.onTechLessonProgressWritten = onDocumentWritten(
+  { document: "techLessonProgress/{pid}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    if (!a || a.passedAt || !a.studentId || !a.lessonId) return;
+    await checkLessonPass(a.studentId, a.lessonId);
+  }
+);
 
 /* Marks answers against the private key. questions never hold the answers,
    so this is the only place a builder learns which one was right.
@@ -853,6 +975,11 @@ function workEmailBody(a) {
     (a.feedback ? `<p style="margin:0 0 .6rem;white-space:pre-wrap;"><b>Feedback:</b> ${esc(String(a.feedback).slice(0, 2000))}</p>` : "") +
     (a.gradedFileUrl ? `<p style="margin:0;">The marked copy, with the coach's notes drawn on it, is in the studio.</p>` : "");
 }
+/* The picture taken at hand-in, for the family's email ("" when there is none). */
+function workSnapshotHtml(pic, kid) {
+  if (!/^https:\/\//.test(pic || "")) return "";
+  return `<p style="margin:0 0 14px;"><img src="${esc(pic)}" width="520" alt="What ${esc(kid)} built" style="display:block;width:100%;max-width:520px;height:auto;border:1px solid #dfe9e6;border-radius:12px;"></p>`;
+}
 function workRound(a, ev) { return ev === "submitted" ? String(a.submitCount || 1) : String(tsMs(a.gradedAt) || (a.history || []).length); }
 
 exports.onTechLessonWorkWritten = onDocumentWritten(
@@ -871,17 +998,35 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
     if (ev === "submitted") {
       const coach = s.coachId || a.coachId;
       const line = `${s.name || "A builder"} handed in ${what} (${where}).`;
+      const pic = /^https:\/\//.test(a.snapshotUrl || "") ? a.snapshotUrl : "";
       if (coach) {
-        const fresh = await techNotify(coach, "coach", "tech_work", (a.submitCount || 1) > 1 ? "Corrected work handed in" : "Class work handed in", line, Object.assign({ id: `work_${wid}_s${round}`, section: "results" }, extra));
+        const fresh = await techNotify(coach, "coach", "tech_work", (a.submitCount || 1) > 1 ? "Corrected work handed in" : "Class work handed in", line, Object.assign({ id: `work_${wid}_s${round}`, section: "results", image: pic }, extra));
         if (fresh) await email(await coachEmail(coach), `Work to mark: ${s.name || "builder"} · ${what}`, {
           preheader: line, heading: "Work to mark", intro: esc(line),
           body: `<p style="margin:0;">Open Results, then Class work, to run it and mark it.</p>`,
           cta: { label: "Open coach dashboard", url: APP + LINKS.coach + "#results" }
         });
-      } else {
-        await notifyAdmins("tech_work", "Class work handed in", line + " The builder has no coach yet.", Object.assign({ id: `work_${wid}_s${round}`, section: "results" }, extra));
       }
+      /* Admins see every hand-in on their bell, with the picture; no email. */
+      await notifyAdmins("tech_work", (a.submitCount || 1) > 1 ? "Corrected work handed in" : "Class work handed in", line + (coach ? "" : " The builder has no coach yet."), Object.assign({ id: `work_${wid}_s${round}`, section: "results", image: pic }, extra));
       await logActivity(sid, "work_submitted", `Handed in ${what}`, { studentName: s.name || "", by: "student", origin: "class" });
+      /* The family sees what they built today: bell and email, with the picture. */
+      const kid = first(s.name, "Your child");
+      for (const g of await guardiansOf(sid)) {
+        const gFresh = await techNotify(g.parentUid, "guardian", "tech_work", `See what ${kid} built today`, `${kid} handed in ${what} (${where}).`,
+          { studentId: sid, courseId: a.courseId || "", id: `work_${wid}_s${round}_${g.parentUid}`, section: "classes", image: pic, link: LINKS.guardian + "#classes" });
+        if (gFresh) await email(g.email, `See what ${kid} built today`, {
+          preheader: `${kid} handed in ${what} at Paisley Tech Studio.`,
+          heading: `See what ${kid} built today`,
+          intro: `Hi ${esc(first(g.name))}, ${esc(kid)} just handed in ${esc(what)} (${esc(where)}) for their coach to mark.`,
+          body: workSnapshotHtml(pic, kid) +
+            `<p style="margin:0 0 10px;">Ask ${esc(kid)} to show you how it works. A few words of praise for something they made themselves goes a long way.</p>` +
+            `<p style="margin:0;"><b>Keep encouraging them!</b> We will tell you again when their coach has marked it.</p>`,
+          cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#classes" }
+        });
+      }
+      /* Handing in can be what passes the level. */
+      await checkLessonPass(sid, a.lessonId);
       return;
     }
     const graded = ev === "graded";
@@ -1437,4 +1582,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, workEvent, lessonTitle };
+exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml };

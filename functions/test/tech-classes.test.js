@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const admin = require("firebase-admin");
 if (!admin.apps.length) admin.initializeApp({ projectId: "paisley-test" });
 const { _internals } = require("../tech");
-const { gradeTechQuiz, trackOf, workEvent, lessonTitle } = _internals;
+const { gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, workSnapshotHtml } = _internals;
 
 const QUESTIONS = [
   { id: "a", type: "mcq", text: "Pick b", options: ["a", "b", "c"] },
@@ -52,11 +52,42 @@ test("the percent rounds", () => {
   assert.equal(gradeTechQuiz(QUESTIONS, KEY, { a: 1, b: 0 }).percent, 67);
 });
 
-test("beginners get their own track; intermediate, expert and unset share the other", () => {
+test("every level has its own classes; old 'advanced' classes still reach intermediate and expert", () => {
   assert.equal(trackOf("beginner"), "beginner");
-  assert.equal(trackOf("intermediate"), "advanced");
-  assert.equal(trackOf("expert"), "advanced");
-  assert.equal(trackOf(undefined), "advanced");
+  assert.equal(trackOf("intermediate"), "intermediate");
+  assert.equal(trackOf("expert"), "expert");
+  assert.equal(trackOf(undefined), "intermediate");
+  assert.deepEqual(tracksFor("beginner"), ["beginner"]);
+  assert.deepEqual(tracksFor("intermediate"), ["intermediate", "advanced"]);
+  assert.deepEqual(tracksFor("expert"), ["expert", "advanced"]);
+});
+
+test("a level passes only when every step it asks for is done", () => {
+  const ts = { toMillis: () => 1 };
+  const full = { type: "lesson", video: { url: "https://x/v.mp4" }, questions: QUESTIONS, task: { kind: "code" } };
+  assert.equal(gateMet(full, {}, null), false);
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 67 }, null), false);                        // no hand-in yet
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 40 }, { status: "Submitted" }), false);     // under 50%
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 50 }, { status: "Submitted" }), true);
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 90 }, { status: "Corrections", submitCount: 1 }), true);
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 90 }, { status: "Draft" }), false);
+  // the admin's choice: only the quiz, at 80%
+  const quizOnly = Object.assign({}, full, { gate: { watch: false, quiz: true, work: false, pass: 80 } });
+  assert.equal(gateMet(quizOnly, { bestPercent: 70 }, null), false);
+  assert.equal(gateMet(quizOnly, { bestPercent: 80 }, null), true);
+  // a step the lesson does not have is skipped; nothing to do means opening it is enough
+  assert.equal(gateMet({ type: "lesson", notes: "<p>Hi</p>" }, { openedAt: ts }, null), true);
+  assert.equal(gateMet({ type: "lesson", notes: "<p>Hi</p>" }, {}, null), false);
+  assert.equal(gateMet({ type: "test", video: { url: "https://x" }, questions: [{ id: "o", type: "open", text: "Why?" }] }, { attempts: 1, lastAttemptAt: ts }, null), true);
+  assert.equal(lessonGate({ type: "lesson", gate: { quiz: true, pass: "" }, questions: QUESTIONS }).pass, 50);
+  assert.equal(lessonGate({ type: "lesson", gate: { quiz: true, pass: 140 }, questions: QUESTIONS }).pass, 100);
+});
+
+test("the family's hand-in email shows the picture only from an https link", () => {
+  assert.match(workSnapshotHtml("https://firebasestorage.googleapis.com/x.jpg?alt=media", "Ama"), /<img src="https:\/\/firebasestorage/);
+  assert.equal(workSnapshotHtml("javascript:alert(1)", "Ama"), "");
+  assert.equal(workSnapshotHtml("", "Ama"), "");
+  assert.doesNotMatch(workSnapshotHtml("https://x/a.jpg\"onerror=\"x", "Ama"), /"onerror="/);
 });
 
 test("class work: a hand-in, a mark and a correction are each told once", () => {

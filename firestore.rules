@@ -1140,7 +1140,7 @@ service cloud.firestore {
     }
     match /techCourses/{id} {
       allow read: if canReadTechClasses();
-      allow create: if techAuthorCreate() && request.resource.data.track in ['beginner', 'advanced'];
+      allow create: if techAuthorCreate() && request.resource.data.track in ['beginner', 'intermediate', 'expert', 'advanced'];
       allow update: if techAuthorChange();
       allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
     }
@@ -1153,7 +1153,7 @@ service cloud.firestore {
     match /techLessons/{id} {
       allow read: if isAdmin() || isTechCoach() ||
         (resource.data.status == 'published' && (techStudentActive() || isParentAccount()));
-      allow create: if techAuthorCreate() && request.resource.data.track in ['beginner', 'advanced'];
+      allow create: if techAuthorCreate() && request.resource.data.track in ['beginner', 'intermediate', 'expert', 'advanced'];
       allow update: if techAuthorChange() || techReorderOnly();
       allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
       // The answers. Builders and parents never read this: submitTechQuiz marks on the server.
@@ -1165,7 +1165,8 @@ service cloud.firestore {
           get(/databases/$(database)/documents/techLessons/$(id)).data.createdBy == request.auth.uid);
       }
     }
-    // Opened and watched come from the builder; scores only from submitTechQuiz.
+    // Opened and watched come from the builder; scores only from submitTechQuiz, and
+    // passedAt (the level is passed, the next one unlocks) only from onTechLessonProgressWritten.
     match /techLessonProgress/{id} {
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid) ||
@@ -1178,6 +1179,12 @@ service cloud.firestore {
       allow update: if isSignedIn() && resource.data.studentId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'topicId', 'openedAt', 'watchedAt', 'updatedAt']);
       allow delete: if isAdmin();
+    }
+    // Classes (or levels of one) an admin opened for one builder, whatever their level:
+    // open.{courseId} = 'all' | a lessonId (every level up to that one). Only admins open them.
+    match /techAccess/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || isTechCoachOf(uid) || isTechGuardianOf(uid);
+      allow write: if isAdmin();
     }
     // Marked quizzes and practice tests. Written only by submitTechQuiz, so a score can't be forged.
     match /techAttempts/{id} {
@@ -1195,11 +1202,13 @@ service cloud.firestore {
     // can list their builders' hand-ins, and functions keep it in step.
     function techWorkKeys() {
       return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
-        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind', 'taskAnswers'];
+        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind', 'taskAnswers',
+        'snapshotUrl', 'snapshotPath', 'snapshotAt'];
     }
     function techWorkCreateKeys() {
       return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
         'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind', 'taskAnswers',
+        'snapshotUrl', 'snapshotPath', 'snapshotAt',
         'studentId', 'coachId', 'lessonId', 'courseId', 'courseName', 'topicId', 'topicTitle', 'track', 'createdAt'];
     }
     function techMarkKeys() {

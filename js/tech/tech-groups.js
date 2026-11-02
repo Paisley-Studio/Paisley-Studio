@@ -138,7 +138,7 @@
       var all = Object.keys(known).map(function (k) { return known[k]; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
       var track = (gr && gr.track) || '';
       function rows() {
-        return all.filter(function (s) { return !track || picked[s.id] || T.trackOf(s.skillLevel) === track; }).map(function (s) {
+        return all.filter(function (s) { return !track || picked[s.id] || T.tracksFor(s.skillLevel).indexOf(track) > -1; }).map(function (s) {
           return '<label><input type="checkbox" data-pick="' + esc(s.id) + '"' + (picked[s.id] ? ' checked' : '') + '> ' + esc(s.name || s.email || 'Builder') + '<small>' + esc(T.SKILL_LABEL[s.skillLevel] || 'No level yet') + '</small></label>';
         }).join('') || '<div class="cr-empty">No active builders' + (track ? ' at this level' : '') + '.</div>';
       }

@@ -11,6 +11,8 @@
          topicId, topicTitle, track, kind,
          codeFiles, codeFolders, codeAssets, codeActive | writingHtml,
          taskAnswers: { questionId: text }   (answers to task.questions, marked with the work)
+         snapshotUrl, snapshotPath, snapshotAt   a picture of the work taken at hand-in
+                                                 (takeSnapshot); the family's email shows it
          status: Draft | Submitted | Graded | Corrections, submittedAt, submitCount,
          feedback, grade, maxScore, gradedBy*, gradedAt, gradedFileUrl, inkData, history }
 
@@ -67,6 +69,94 @@
     return (d.codeFiles || []).some(function (f) { return String(f.content || '').trim().length > 0; });
   }
 
+  /* ---------------------------------------------------------
+     Snapshot: a picture of the work at hand-in, for the coach,
+     the admins' bell and the family's "see what they built" email.
+     The page (or the writing) is drawn by html-to-image inside a
+     sandboxed frame, so the builder's code never runs with the
+     studio's origin; the frame only posts the picture back. (It draws
+     through an SVG; html2canvas cannot work there, as it copies the
+     page into a nested frame the sandbox will not let it read.)
+     If that fails, a plain card with the first lines is drawn.
+     --------------------------------------------------------- */
+  var SNAP_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js';
+  var SNAP_W = 1024, SNAP_H = 640;
+  function snapHtml(html) {
+    return new Promise(function (resolve) {
+      var token = 'snap' + Math.random().toString(36).slice(2), done = false;
+      var post = 'function(u){parent.postMessage({paisleySnap:"' + token + '",url:u||""},"*")}';
+      var cap = '<script src="' + SNAP_LIB + '"><\/script><script>(function(){var send=' + post + ';function go(){setTimeout(function(){try{' +
+        /* a browser paints the body's background over the whole window; the copy has to be told */
+        'var de=document.documentElement,hs=getComputedStyle(de),bs=getComputedStyle(document.body),bg=bs.backgroundColor;' +
+        'if(hs.backgroundImage==="none"&&hs.backgroundColor==="rgba(0, 0, 0, 0)"){de.style.background=bs.background;}de.style.minHeight="' + SNAP_H + 'px";' +
+        'htmlToImage.toJpeg(document.documentElement,{width:' + SNAP_W + ',height:' + SNAP_H + ',canvasWidth:' + SNAP_W + ',canvasHeight:' + SNAP_H + ',pixelRatio:1,quality:0.85,skipFonts:true,' +
+        'backgroundColor:bg&&bg!=="rgba(0, 0, 0, 0)"?bg:"#ffffff"}).then(send,function(){send("")})' +
+        '}catch(e){send("")}},900)}if(document.readyState==="complete")go();else addEventListener("load",go)})();<\/script>';
+      var doc = /<\/body>/i.test(html) ? html.replace(/<\/body>(?![\s\S]*<\/body>)/i, function () { return cap + '</body>'; }) : html + cap;
+      var fr = document.createElement('iframe');
+      fr.setAttribute('sandbox', 'allow-scripts');
+      fr.setAttribute('aria-hidden', 'true'); fr.setAttribute('title', 'Snapshot'); fr.tabIndex = -1;
+      fr.style.cssText = 'position:fixed;left:0;top:0;width:' + SNAP_W + 'px;height:' + SNAP_H + 'px;border:0;opacity:0;pointer-events:none;z-index:-1';
+      function finish(url) { if (done) return; done = true; g.removeEventListener('message', onMsg); clearTimeout(timer); fr.remove(); resolve(/^data:image\//.test(url || '') ? url : ''); }
+      function onMsg(e) { if (e.source === fr.contentWindow && e.data && e.data.paisleySnap === token) finish(e.data.url); }
+      g.addEventListener('message', onMsg);
+      var timer = setTimeout(function () { finish(''); }, 12000);
+      fr.srcdoc = doc;
+      document.body.appendChild(fr);
+    });
+  }
+  /* The fallback: the work's first lines on a Paisley card. */
+  function snapCard(title, lines, mono) {
+    var c = document.createElement('canvas'); c.width = SNAP_W; c.height = SNAP_H;
+    var x = c.getContext('2d');
+    x.fillStyle = mono ? '#1E2A28' : '#FFFFFF'; x.fillRect(0, 0, SNAP_W, SNAP_H);
+    x.fillStyle = '#245F5A'; x.fillRect(0, 0, SNAP_W, 64);
+    x.fillStyle = '#FFFFFF'; x.font = 'bold 24px system-ui, sans-serif'; x.fillText(String(title).slice(0, 70), 32, 41);
+    x.fillStyle = mono ? '#D8E8E4' : '#263331'; x.font = (mono ? '17px Consolas, Menlo, monospace' : '19px Georgia, serif');
+    var y = 104, step = mono ? 24 : 30;
+    lines.slice(0, Math.floor((SNAP_H - 110) / step)).forEach(function (ln) { x.fillText(String(ln).replace(/\t/g, '  ').slice(0, mono ? 92 : 84), 32, y); y += step; });
+    return c.toDataURL('image/jpeg', 0.85);
+  }
+  function wrapText(text, width) {
+    var out = [];
+    String(text).split(/\n+/).forEach(function (para) {
+      var line = '';
+      para.split(/\s+/).forEach(function (w) { if ((line + ' ' + w).trim().length > width) { out.push(line); line = w; } else line = (line + ' ' + w).trim(); });
+      if (line) out.push(line); out.push('');
+    });
+    return out;
+  }
+  /* Returns a data: URL (JPEG), never fails. */
+  function takeSnapshot(d, kind, title) {
+    d = d || {};
+    var plain = function () {
+      if (kind === 'writing') {
+        var div = document.createElement('div'); div.innerHTML = T.cleanHtml(d.writingHtml || '');
+        return snapCard(title, wrapText(div.textContent || '', 84), false);
+      }
+      var f = (d.codeFiles || []).filter(function (x) { return /\.html?$/i.test(x.name); })[0] || (d.codeFiles || [])[0] || { name: '', content: '' };
+      return snapCard(title + (f.name ? ' · ' + f.name : ''), String(f.content || '').split('\n'), true);
+    };
+    var html = '';
+    try {
+      if (kind === 'writing') {
+        html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:36px 56px;font-family:Georgia,serif;font-size:19px;line-height:1.7;color:#263331;background:#fff}h1,h2,h3{font-family:system-ui,sans-serif;color:#245F5A;line-height:1.25}img{max-width:100%;height:auto}.hd{font:700 13px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#55BFB3;margin-bottom:18px}</style></head><body><div class="hd">' + esc(title) + '</div>' + T.cleanHtml(d.writingHtml || '') + '</body></html>';
+      } else if (g.CodeLab && g.CodeLab.buildPreview && (d.codeFiles || []).some(function (x) { return /\.html?$/i.test(x.name); })) {
+        html = g.CodeLab.buildPreview(d.codeFiles || [], d.codeActive || '', d.codeAssets || []);
+      }
+    } catch (e) { html = ''; }
+    if (!html) return Promise.resolve(plain());
+    return snapHtml(html).then(function (url) { return url || plain(); }, plain);
+  }
+  /* Uploads the picture beside the builder's other uploads for this lesson. */
+  function uploadSnapshot(dataUrl, studentId, lessonId) {
+    var path = 'techWork/' + studentId + '/' + lessonId + '/snapshot_' + Date.now() + '.jpg';
+    return fetch(dataUrl).then(function (r) { return r.blob(); }).then(function (blob) {
+      var ref = firebase.storage().ref(path);
+      return ref.put(blob, { contentType: 'image/jpeg', cacheControl: 'public,max-age=31536000' }).then(function () { return ref.getDownloadURL(); });
+    }).then(function (url) { return { url: url, path: path }; });
+  }
+
   function style() {
     /* The .tc-* pieces (pills, panels, buttons) come from TechClasses. */
     if (g.TechClasses && g.TechClasses.style) g.TechClasses.style();
@@ -91,6 +181,7 @@
       '.tw-step.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}.tw-step.on b{background:#fff}',
       '.tw-step.done b{background:#2EB872;color:#fff}',
       '.tw-pop{display:grid;grid-template-columns:300px minmax(0,1fr);gap:1rem;align-items:start}',
+      '.tw-shot{display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;padding:.45rem;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;background:#fff;text-decoration:none;color:var(--brand-deep,#245F5A);font-size:.8rem;font-weight:800}.tw-shot img{width:150px;height:94px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line,rgba(38,51,49,.1))}',
       '.tw-ctx{padding:0 0 .85rem;margin:0 0 .85rem;border-bottom:1px solid var(--line,rgba(38,51,49,.1))}',
       '.tw-eyebrow{display:block;font-size:.66rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#C08A00}',
       '.tw-ctx h3{margin:.25rem 0 .5rem;font-size:1.08rem;line-height:1.3;font-weight:800;color:var(--brand-deep,#245F5A)}.tw-ctx h3 span{color:var(--muted,#5A6E6A);font-weight:700}',
@@ -289,6 +380,7 @@
     function head() {
       return '<div class="tw-bar">' + statePill(d.status) + (d.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(d.submittedAt)) + (d.submittedByName ? ' by ' + esc(d.submittedByName) : '') + (d.submitCount > 1 ? ' · round ' + d.submitCount : '') + '</span>' : '') +
         (o.subtitle ? '<span class="tw-note grow" style="text-align:right">' + esc(o.subtitle) + '</span>' : '') + '</div>' +
+        (d.snapshotUrl && T.safeUrl(d.snapshotUrl) ? '<a class="tw-shot" href="' + esc(T.safeUrl(d.snapshotUrl)) + '" target="_blank" rel="noopener noreferrer" title="Open the picture taken at hand-in"><img src="' + esc(T.safeUrl(d.snapshotUrl)) + '" alt="Picture of the work at hand-in" loading="lazy"><span><i class="fas fa-camera"></i> Picture at hand-in</span></a>' : '') +
         (o.brief ? '<div class="tc-panel" style="padding:.8rem 1rem"><b style="color:var(--brand-deep,#245F5A)">What they had to make</b><div class="tc-plain" style="margin-top:.3rem;font-size:.9rem">' + esc(o.brief) + '</div></div>' : '') +
         ((o.questions || []).length ? '<div class="tc-panel" style="padding:.2rem 1rem .4rem">' + answersHtml(o.questions, d.taskAnswers, 'Their answers').replace('class="tw-qs"', 'class="tw-qs" style="border:0;margin-top:0"') + '</div>' : '') +
         feedbackHtml(d);
@@ -431,9 +523,19 @@
         if (!hasWork(cur, kind) && !answered(cur)) { msg.textContent = kind === 'writing' ? 'Write something first.' : 'Write some code first.'; msg.style.color = '#b8362a'; busy = false; btn.disabled = false; return; }
         var left = qs.length - qs.filter(function (q) { return String(((cur && cur.taskAnswers) || {})[q.id] || '').trim(); }).length;
         if (!confirm((left ? 'You have not answered ' + left + ' of the ' + qs.length + ' questions. ' : '') + 'Hand this in for marking? You cannot change it until your coach has looked at it.')) { busy = false; btn.disabled = false; return; }
-        await ref.update({ status: 'Submitted', submittedAt: FV().serverTimestamp(), submitCount: FV().increment(1), updatedAt: FV().serverTimestamp() });
+        /* A picture of the work goes with it, for the coach, the admins and the family. */
+        msg.textContent = 'Taking a picture of your work…'; msg.style.color = 'var(--brand-deep,#245F5A)';
+        var shot = null;
+        try {
+          var pic = await takeSnapshot(cur, kind, (l.topicTitle ? l.topicTitle + ' · ' : '') + label);
+          shot = await uploadSnapshot(pic, student.id, l.id);
+        } catch (e) { console.warn('work snapshot:', e); }
+        msg.textContent = 'Handing it in…';
+        var up = { status: 'Submitted', submittedAt: FV().serverTimestamp(), submitCount: FV().increment(1), updatedAt: FV().serverTimestamp() };
+        if (shot) Object.assign(up, { snapshotUrl: shot.url, snapshotPath: shot.path, snapshotAt: FV().serverTimestamp() });
+        await ref.update(up);
         T.logActivity(me, 'project_saved', 'Handed in ' + label, { origin: 'class' });
-        msg.textContent = 'Handed in. Your coach is told.'; msg.style.color = 'var(--brand-deep,#245F5A)';
+        msg.textContent = 'Handed in. Your coach and your family are told.'; msg.style.color = 'var(--brand-deep,#245F5A)';
       } catch (e) { msg.textContent = 'Could not hand it in: ' + T.errMsg(e); msg.style.color = '#b8362a'; btn.disabled = false; }
       busy = false;
     }
@@ -515,6 +617,6 @@
 
   g.TechWork = {
     kindOf: kindOf, workId: workId, taskQs: taskQs, answersHtml: answersHtml, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
-    mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
+    takeSnapshot: takeSnapshot, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
   };
 })(window);

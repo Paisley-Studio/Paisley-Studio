@@ -46,7 +46,9 @@ test("admins and active coaches create classes; nobody else does", async () => {
   await assertFails(as("paused").collection("techCourses").add(course("paused")));
   await assertFails(as("tutor1").collection("techCourses").add(course("tutor1")));
   await assertFails(as("kid1").collection("techCourses").add(course("kid1")));
-  await assertFails(as("admin1").collection("techCourses").add(Object.assign(course("admin1"), { track: "expert" })));
+  await assertSucceeds(as("admin1").collection("techCourses").add(Object.assign(course("admin1"), { track: "expert" })));
+  await assertSucceeds(as("coach1").collection("techCourses").add(Object.assign(course("coach1"), { track: "intermediate", afterCourseId: "c1" })));
+  await assertFails(as("admin1").collection("techCourses").add(Object.assign(course("admin1"), { track: "wizard" })));
 });
 
 test("a coach changes only their own work, but may reorder any of it", async () => {
@@ -121,4 +123,23 @@ test("a level is chosen at sign-up and once by older builders, then only the des
   await assertFails(as("kid1").doc("techStudents/kid1").update({ skillLevel: "expert" }));
   await assertSucceeds(as("admin1").doc("techStudents/kid1").update({ skillLevel: "intermediate" }));
   await assertFails(as("coach1").doc("techStudents/kid1").update({ skillLevel: "expert" }));
+});
+
+test("only admins open classes for a builder; the builder, their coach and family can read it", async () => {
+  await assertSucceeds(as("admin1").doc("techAccess/kid1").set({ studentId: "kid1", open: { c1: "all" }, updatedBy: "admin1" }));
+  await assertFails(as("coach1").doc("techAccess/kid1").set({ open: { c1: "all" } }));
+  await assertFails(as("kid1").doc("techAccess/kid1").set({ open: { c2: "all" } }));
+  await assertFails(as("kid1").doc("techAccess/kid1").update({ "open.c9": "all" }));
+  await assertSucceeds(as("kid1").doc("techAccess/kid1").get());
+  await assertSucceeds(as("coach1").doc("techAccess/kid1").get());
+  await assertSucceeds(as("mum").doc("techAccess/kid1").get());
+  await assertFails(as("kid2").doc("techAccess/kid1").get());
+  await assertFails(as("coach2").doc("techAccess/kid1").get());
+  await assertSucceeds(as("admin1").collection("techAccess").get());
+});
+
+test("a builder cannot mark their own level as passed", async () => {
+  await assertFails(as("kid1").doc("techLessonProgress/kid1_live").update({ passedAt: new Date() }));
+  await assertFails(as("kid1").doc("techLessonProgress/kid1_draft").set({ studentId: "kid1", lessonId: "draft", passedAt: new Date() }));
+  await assertSucceeds(as("kid1").doc("techLessonProgress/kid1_live").update({ watchedAt: new Date(), updatedAt: new Date() }));
 });

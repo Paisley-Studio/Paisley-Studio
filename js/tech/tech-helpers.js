@@ -53,15 +53,19 @@
   var LEGACY_LEVELS = ['AI Aware', 'AI User', 'AI Thinker', 'AI Creator', 'AI Problem Solver', 'AI Builder', 'AI Guru'];
 
   /* ---- Skill levels, chosen at sign-up (must stay in sync with functions/tech.js).
-     Classes are posted to a track: beginners get their own work; intermediate and
-     expert builders see the same. A builder with no level yet counts as advanced until
-     they choose. These are separate from the mastery ladder above. ---- */
+     Classes are posted to a track, one per level (beginner, intermediate, expert). A
+     builder with no level yet counts as intermediate until they choose. These are
+     separate from the mastery ladder above. ---- */
   var SKILL_LEVELS = ['beginner', 'intermediate', 'expert'];
   var SKILL_LABEL = { beginner: 'Beginner', intermediate: 'Intermediate', expert: 'Expert' };
   var SKILL_BLURB = { beginner: 'Just getting started with tech and coding.', intermediate: 'Has built a few things and knows the basics.', expert: 'Confident, and ready for harder work.' };
-  var TRACKS = ['beginner', 'advanced'];
-  var TRACK_LABEL = { beginner: 'Beginner', advanced: 'Intermediate & Expert' };
-  function trackOf(skill) { return skill === 'beginner' ? 'beginner' : 'advanced'; }
+  /* Every level has its own classes. 'advanced' is the old shared intermediate + expert
+     track: classes still tagged with it show to both until an admin moves them. */
+  var TRACKS = ['beginner', 'intermediate', 'expert'];
+  var TRACK_LABEL = { beginner: 'Beginner', intermediate: 'Intermediate', expert: 'Expert', advanced: 'Intermediate & Expert' };
+  function trackOf(skill) { return SKILL_LEVELS.indexOf(skill) > -1 ? skill : 'intermediate'; }
+  /* The class tracks a builder at this level sees. */
+  function tracksFor(skill) { var t = trackOf(skill); return t === 'beginner' ? ['beginner'] : [t, 'advanced']; }
 
   /* ---- Disciplines (must stay in sync with functions/tech.js TECH_DISCIPLINES) ---- */
   /* AI runs through every discipline, so it is not a discipline of its own. The stored id stays
@@ -1483,6 +1487,7 @@
       '.tk-bell-item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line,rgba(38,51,49,.06));background:none;padding:.7rem 1rem;font:inherit;color:var(--ink,#263331);cursor:pointer}',
       '.tk-bell-item:hover{background:var(--paper,#F1F9F7)}',
       '.tk-bell-item.unread{background:rgba(85,191,179,.08)}',
+      '.tk-bell-item .tk-bell-pic{display:block;width:100%;max-height:140px;object-fit:cover;object-position:top;border-radius:10px;border:1px solid var(--line,rgba(38,51,49,.1));margin:0 0 .45rem;background:#fff}',
       '.tk-bell-item b{display:block;font-size:.84rem;color:var(--brand-deep,#245F5A)}',
       '.tk-bell-item span{display:block;font-size:.8rem;color:var(--muted,#5A6E6A);margin-top:2px;line-height:1.35}',
       '.tk-bell-item small{display:block;font-size:.68rem;color:var(--muted,#5A6E6A);margin-top:3px;opacity:.8}',
@@ -1511,7 +1516,8 @@
       if (!open) return;
       pop.innerHTML = '<div class="tk-bell-head"><span>Notifications</span>' + (u ? '<button type="button" data-all>Mark all read</button>' : '') + '</div>' +
         (list.length ? list.map(function (n) {
-          return '<button type="button" class="tk-bell-item' + (n.read ? '' : ' unread') + '" data-n="' + esc(n.id) + '"><b>' + esc(n.title) + '</b><span>' + esc(n.message) + '</span><small>' + esc(fmt(n.createdAt)) + '</small></button>';
+          var pic = n.image && /^https:\/\//.test(n.image) ? '<img class="tk-bell-pic" src="' + esc(n.image) + '" alt="" loading="lazy">' : '';
+          return '<button type="button" class="tk-bell-item' + (n.read ? '' : ' unread') + (pic ? ' has-pic' : '') + '" data-n="' + esc(n.id) + '">' + pic + '<b>' + esc(n.title) + '</b><span>' + esc(n.message) + '</span><small>' + esc(fmt(n.createdAt)) + '</small></button>';
         }).join('') : '<div class="tk-empty">You’re all caught up.</div>');
     }
     function markRead(ids) {
@@ -1547,10 +1553,10 @@
      A tab already showing its own count keeps that one (see the CSS).
      ========================================================= */
   var BUBBLE_SECTIONS = {
-    student: { tech_lesson: 'classes', tech_work_marked: 'classes', tech_work_corrections: 'classes', tech_group: 'groups', tech_group_task: 'groups', tech_mission: 'missions', tech_live: 'live', tech_feedback: 'feedback', tech_mastery: 'feedback', tech_showcase: 'showcase', tech_level: 'progress', tech_message: 'coach', tech_coach: 'coach' },
-    guardian: { tech_lesson: 'classes', tech_result: 'classes', tech_work_marked: 'classes', tech_work_corrections: 'classes', tech_mission: 'home', tech_build_started: 'projects', tech_submitted: 'projects', tech_feedback: 'projects', tech_mastery: 'projects', tech_showcase: 'projects', tech_level: 'progress', tech_live: 'live', tech_guardian_message: 'coach', tech_coach: 'coach' },
-    coach: { tech_result: 'results', tech_work: 'results', tech_review_request: 'reviews', tech_build_started: 'work', tech_feedback: 'work', tech_new_builder: 'builders', tech_level: 'builders', tech_message: 'messages', tech_guardian_message: 'families', tech_live: 'live' },
-    admin: { tech_application: 'applications', tech_work: 'results', tech_beginner: 'builders', tech_review_request: 'builds', tech_feedback: 'builds', tech_live: 'live', tech_message: 'messages', tech_guardian_message: 'messages', tech_desk_message: 'desk' }
+    student: { tech_lesson: 'classes', tech_unlock: 'classes', tech_work_marked: 'classes', tech_work_corrections: 'classes', tech_group: 'groups', tech_group_task: 'groups', tech_mission: 'missions', tech_live: 'live', tech_feedback: 'feedback', tech_mastery: 'feedback', tech_showcase: 'showcase', tech_level: 'progress', tech_message: 'coach', tech_coach: 'coach' },
+    guardian: { tech_lesson: 'classes', tech_unlock: 'classes', tech_work: 'classes', tech_result: 'classes', tech_work_marked: 'classes', tech_work_corrections: 'classes', tech_mission: 'home', tech_build_started: 'projects', tech_submitted: 'projects', tech_feedback: 'projects', tech_mastery: 'projects', tech_showcase: 'projects', tech_level: 'progress', tech_live: 'live', tech_guardian_message: 'coach', tech_coach: 'coach' },
+    coach: { tech_result: 'results', tech_work: 'results', tech_unlock: 'results', tech_review_request: 'reviews', tech_build_started: 'work', tech_feedback: 'work', tech_new_builder: 'builders', tech_level: 'builders', tech_message: 'messages', tech_guardian_message: 'families', tech_live: 'live' },
+    admin: { tech_application: 'applications', tech_work: 'results', tech_unlock: 'results', tech_beginner: 'builders', tech_review_request: 'builds', tech_feedback: 'builds', tech_live: 'live', tech_message: 'messages', tech_guardian_message: 'messages', tech_desk_message: 'desk' }
   };
   function mountBubbles(o) {
     bellStyle();
@@ -1646,7 +1652,7 @@
     STATUSES: STATUSES, STATUS_LABEL: STATUS_LABEL,
     CATEGORIES: CATEGORIES, LEGACY_CATEGORIES: LEGACY_CATEGORIES,
     LEVELS: LEVELS, LEVEL_BLURB: LEVEL_BLURB, LEGACY_LEVELS: LEGACY_LEVELS,
-    SKILL_LEVELS: SKILL_LEVELS, SKILL_LABEL: SKILL_LABEL, SKILL_BLURB: SKILL_BLURB, TRACKS: TRACKS, TRACK_LABEL: TRACK_LABEL, trackOf: trackOf,
+    SKILL_LEVELS: SKILL_LEVELS, SKILL_LABEL: SKILL_LABEL, SKILL_BLURB: SKILL_BLURB, TRACKS: TRACKS, TRACK_LABEL: TRACK_LABEL, trackOf: trackOf, tracksFor: tracksFor,
     DISCIPLINES: DISCIPLINES, CREATION_TYPES: CREATION_TYPES, CREATION_LABEL: CREATION_LABEL,
     VISIBILITIES: VISIBILITIES, VISIBILITY_LABEL: VISIBILITY_LABEL,
     EMPTY_REFLECTION: EMPTY_REFLECTION,
