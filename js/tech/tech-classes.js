@@ -12,13 +12,19 @@
                                     submitTechQuiz marks on the server.
      techLessonProgress/{uid}_{lessonId}   opened / watched, plus best score (server)
      techAttempts/{id}  one marked quiz or test (written only by submitTechQuiz)
+     techLessonWork/{uid}_{lessonId}   what a builder made for the lesson's task (TechWork)
+
+   A lesson needs no title of its own: class > topic names it, and it shows
+   as "Lesson 1", "Lesson 2" in its topic (labelsFor). A lesson with a task
+   opens in steps: Learn (video, notes, files) > Make it (Code IDE or writing
+   pad, handed in and marked with ink) > Quiz.
 
    A class belongs to one level track: beginner, or advanced (intermediate
    and expert see the same work). See TechUI.trackOf.
 
      TechClasses.mountManager(host, { me })         admin and coach: build and post
      TechClasses.mountResults(host, { me, students, studentId, lessonId })
-     TechClasses.mountLearner(host, { me, student, onStartProject, lessonId })
+     TechClasses.mountLearner(host, { me, student, lessonId })
          me.role 'student' takes the class; 'guardian' sees it read-only.
 
    Needs TechUI, FastVideo and the global db. The manager and results also
@@ -33,14 +39,23 @@
   var LESSONS = function () { return db.collection('techLessons'); };
   var MAX_QUESTIONS = 100;
   var ICON = { Coding: 'fa-code', Writing: 'fa-pen-nib', Research: 'fa-microscope', Design: 'fa-palette', Media: 'fa-film', Music: 'fa-music', Entrepreneurship: 'fa-lightbulb' };
-  var PROJECT_TYPES = [['CODE', 'Code'], ['WRITING', 'Writing'], ['RESEARCH', 'Research'], ['DESIGN', 'Design'], ['MEDIA', 'Media'], ['MUSIC', 'Music'], ['BUILD', 'Build']];
-  var QTYPES = [['mcq', 'Multiple choice'], ['truefalse', 'True or false'], ['short', 'Short answer']];
+  /* 'open' has no options and no answer: the builder writes, a coach reads it in Results. */
+  var QTYPES = [['open', 'Written answer (no options)'], ['mcq', 'Multiple choice'], ['truefalse', 'True or false'], ['short', 'Short answer (marked)']];
 
   var byOrder = function (a, b) { return (a.order || 0) - (b.order || 0) || String(a.title).localeCompare(String(b.title)); };
   var docs = function (s) { return s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); };
   var shortId = function () { return Math.random().toString(36).slice(2, 10); };
   var trackName = function (t) { return T.TRACK_LABEL[t] || ''; };
   var wordOf = function (l) { return l.type === 'test' ? 'practice test' : 'lesson'; };
+  /* What each lesson in one topic is called: its own title, or "Lesson 2" / "Practice test 1". */
+  function labelsFor(items) {
+    var n = { lesson: 0, test: 0 }, out = {};
+    items.slice().sort(byOrder).forEach(function (l) {
+      var k = l.type === 'test' ? 'test' : 'lesson'; n[k]++;
+      out[l.id] = l.title || (k === 'test' ? 'Practice test ' : 'Lesson ') + n[k];
+    });
+    return out;
+  }
   function scoreClass(p) { return p >= 70 ? 'good' : p >= 40 ? 'mid' : 'low'; }
   function fmtDay(ts) { var d = T.toDate(ts); return d ? d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : ''; }
   function isPdf(f) { return f.contentType === 'application/pdf' || /\.pdf(\?|$)/i.test(f.path || f.url || ''); }
@@ -100,7 +115,7 @@
       '.tc-ask label{display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .65rem;border:1.5px solid var(--line,rgba(38,51,49,.1));border-radius:10px;margin-bottom:.35rem;cursor:pointer;font-weight:600;font-size:.9rem}',
       '.tc-ask label:has(input:checked){border-color:var(--brand-deep,#245F5A);background:var(--sage,#E5F2EF)}',
       '.tc-ask input[type=text]{width:100%;padding:.6rem .8rem;border:1.5px solid var(--line,rgba(38,51,49,.15));border-radius:10px;font:inherit}',
-      '.tc-review{padding:.65rem .8rem;border-radius:10px;margin-top:.45rem;font-size:.86rem;line-height:1.5;font-weight:600}.tc-review.ok{background:rgba(46,184,114,.12);color:#1f6b48}.tc-review.no{background:rgba(231,76,60,.09);color:#a63024}',
+      '.tc-review{padding:.65rem .8rem;border-radius:10px;margin-top:.45rem;font-size:.86rem;line-height:1.5;font-weight:600}.tc-review.ok{background:rgba(46,184,114,.12);color:#1f6b48}.tc-review.no{background:rgba(231,76,60,.09);color:#a63024}.tc-review.open{background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}.tc-review.open .tc-plain{white-space:pre-wrap}.tc-ask textarea{width:100%;box-sizing:border-box;font:inherit;padding:.6rem .7rem;border:1.5px solid var(--line,#D5E3DF);border-radius:10px;resize:vertical}',
       '.tc-score{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:1rem;border-radius:12px;background:var(--sage,#E5F2EF);margin-bottom:.8rem}.tc-score b{font-size:1.6rem;color:var(--brand-deep,#245F5A);font-weight:800}',
       '.tc-empty{padding:2rem 1rem;text-align:center;color:var(--muted,#5A6E6A);font-weight:600;background:#fff;border:2px dashed var(--line,rgba(38,51,49,.12));border-radius:16px}',
       '.tc-msg{font-size:.84rem;font-weight:700;color:#b8362a;min-height:1.1rem;margin-top:.5rem}'
@@ -163,7 +178,7 @@
         } else if (q.type === 'truefalse') {
           var tf = row.querySelector('input[type=radio]:checked');
           q.correct = tf ? Number(tf.value) : 0;
-        } else {
+        } else if (q.type === 'short') {
           q.accepted = row.querySelector('[data-qf="accepted"]').value;
         }
       });
@@ -177,14 +192,16 @@
           }).join('') + '<div class="cr-note" style="margin:.2rem 0 .4rem">Tick the correct answer.</div><button type="button" class="cr-btn sm" data-qadd-opt="' + i + '"><i class="fas fa-plus"></i> Add option</button>';
         } else if (q.type === 'truefalse') {
           body = ['True', 'False'].map(function (w, n) { return '<label style="display:inline-flex;gap:.35rem;align-items:center;margin-right:1rem;font-weight:700;text-transform:none;letter-spacing:0"><input type="radio" name="tcc' + q.id + '" value="' + n + '"' + (Number(q.correct) === n ? ' checked' : '') + '> ' + w + ' is correct</label>'; }).join('');
+        } else if (q.type === 'short') {
+          body = '<input type="text" data-qf="accepted" maxlength="600" placeholder="Accepted answers, separated by commas (optional)" value="' + esc(q.accepted) + '"><div class="cr-note" style="margin-top:.3rem">Leave it empty and it becomes a written answer you read yourself.</div>';
         } else {
-          body = '<input type="text" data-qf="accepted" maxlength="600" placeholder="Accepted answers, separated by commas" value="' + esc(q.accepted) + '">';
+          body = '<div class="cr-note">Builders type their own answer. Nothing to set up here: it is not marked automatically, and you read the answers in Results.</div>';
         }
         return '<div class="tc-q" data-q="' + i + '"><div class="tc-q-head">Question ' + (i + 1) +
           '<select data-qtype="' + i + '" aria-label="Question type">' + QTYPES.map(function (t) { return '<option value="' + t[0] + '"' + (q.type === t[0] ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select>' +
           '<button type="button" class="cr-btn sm danger" data-qdel="' + i + '" aria-label="Remove question"><i class="fas fa-trash"></i></button></div>' +
           '<div class="cr-field"><textarea data-qf="text" rows="2" maxlength="1500" placeholder="Type the question" aria-label="Question">' + esc(q.text) + '</textarea></div>' + body +
-          '<div class="cr-field" style="margin:.5rem 0 0"><input type="text" data-qf="explanation" maxlength="600" placeholder="Why this is the answer (shown after they submit, optional)" aria-label="Explanation" value="' + esc(q.explanation) + '"></div></div>';
+          '<div class="cr-field" style="margin:.5rem 0 0"><input type="text" data-qf="explanation" maxlength="600" placeholder="' + (q.type === 'open' ? 'A model answer or tip (shown after they submit, optional)' : 'Why this is the answer (shown after they submit, optional)') + '" aria-label="Explanation" value="' + esc(q.explanation) + '"></div></div>';
       }).join('') + '<button type="button" class="cr-btn sm primary" data-qadd><i class="fas fa-plus"></i> Add question</button>';
     }
     host.addEventListener('click', function (e) {
@@ -192,7 +209,7 @@
       read();
       if (t.hasAttribute('data-qadd')) {
         if (list.length >= MAX_QUESTIONS) { alert('A lesson or test can hold up to ' + MAX_QUESTIONS + ' questions.'); return; }
-        list.push({ id: shortId(), type: 'mcq', text: '', options: ['', '', '', ''], correct: 0, accepted: '', explanation: '' });
+        list.push({ id: shortId(), type: 'open', text: '', options: [], correct: 0, accepted: '', explanation: '' });
       } else if (t.dataset.qdel) list.splice(Number(t.dataset.qdel), 1);
       else if (t.dataset.qaddOpt) { var q = list[Number(t.dataset.qaddOpt)]; if (q.options.length < 8) q.options.push(''); }
       else if (t.dataset.qdelOpt) {
@@ -228,10 +245,12 @@
             row.options = kept; ans.correct = newCorrect;
           } else if (q.type === 'truefalse') {
             row.options = ['True', 'False']; ans.correct = Number(q.correct) ? 1 : 0;
-          } else {
+          } else if (q.type === 'short') {
             var acc = String(q.accepted).split(',').map(function (x) { return x.trim().slice(0, 200); }).filter(Boolean);
-            if (!acc.length) throw new Error(where + 'add at least one accepted answer.');
-            ans.accepted = acc.slice(0, 20);
+            if (acc.length) ans.accepted = acc.slice(0, 20);
+            else row.type = 'open'; /* no accepted answers: nothing to mark against */
+          } else {
+            row.type = 'open';
           }
           questions.push(row); answers[q.id] = ans;
         });
@@ -261,21 +280,22 @@
     } });
     var topicId0 = item ? item.topicId : o.topicId;
     m.body.innerHTML =
-      '<div class="cr-row2"><div class="cr-field"><label for="tcT">' + (isTest ? 'Test title' : 'Lesson title') + '</label><input type="text" id="tcT" maxlength="160" placeholder="' + (isTest ? 'e.g. Flow: practice test 1' : 'e.g. Lesson 1: What is flow?') + '" value="' + esc(item ? item.title : '') + '"></div>' +
+      '<div class="cr-row2"><div class="cr-field"><label for="tcT">Title (optional)</label><input type="text" id="tcT" maxlength="160" placeholder="Leave empty to call it ' + (isTest ? 'Practice test' : 'Lesson') + ' 1, 2, 3…" value="' + esc(item ? item.title : '') + '"></div>' +
       '<div class="cr-field"><label for="tcTop">Topic</label><select id="tcTop">' + topics.map(function (t) { return '<option value="' + esc(t.id) + '"' + (t.id === topicId0 ? ' selected' : '') + '>' + esc(t.title) + '</option>'; }).join('') + '</select></div></div>' +
       (isTest ? '' :
-        '<div class="cr-field"><label for="tcVid">Video</label><div class="cr-actions" style="flex-wrap:wrap"><input id="tcVid" type="url" maxlength="1200" placeholder="Paste an AWS, YouTube or Vimeo link" value="' + esc(video.url || '') + '" style="flex:1;min-width:220px">' +
+        '<div class="cr-field"><label for="tcVid">Video</label><div class="cr-actions" style="flex-wrap:wrap"><input id="tcVid" type="url" maxlength="1200" placeholder="Paste an AWS, YouTube, Vimeo or Google Drive link" value="' + esc(video.url || '') + '" style="flex:1;min-width:220px">' +
           '<button type="button" class="cr-btn sm" id="tcVidTest"><i class="fas fa-gauge-high"></i> Test link</button>' +
           '<label class="cr-btn sm" style="margin:0;cursor:pointer"><i class="fas fa-upload"></i> Upload<input type="file" id="tcVidFile" accept="video/*" hidden></label></div>' +
-          '<div class="cr-note" id="tcVidNote" style="margin-top:.35rem">' + (video.path ? 'Uploaded: ' + esc(video.name || 'video') : 'Builders watch it here on the page, with no download button.') + '</div></div>' +
+          '<div class="cr-note" id="tcVidNote" style="margin-top:.35rem">' + (video.path ? 'Uploaded: ' + esc(video.name || 'video') : 'Builders watch it here on the page. For Google Drive, share the video as “Anyone with the link”.') + '</div></div>' +
         '<div class="cr-field"><label>Notes</label><div id="tcNotes"></div></div>') +
       '<div class="cr-field"><label for="tcIns">Instructions (optional)</label><textarea id="tcIns" rows="2" maxlength="3000" placeholder="' + (isTest ? 'What builders should know before they start' : 'What to do after watching') + '">' + esc((item && item.instructions) || '') + '</textarea></div>' +
       (isTest ? '' :
         '<div class="cr-field"><label>PDFs and files (optional)</label><div id="tcFiles"></div><div class="cr-actions" style="margin-top:.4rem"><label class="cr-btn sm" style="margin:0;cursor:pointer"><i class="fas fa-upload"></i> Upload file<input type="file" id="tcFileIn" multiple hidden accept="application/pdf,image/*,audio/*,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip"></label></div><div class="cr-note" id="tcFileNote" style="margin-top:.35rem">PDFs open on the page. Files up to 50 MB.</div></div>') +
-      '<div class="tc-section"><i class="fas fa-circle-question"></i> ' + (isTest ? 'Questions' : 'Quiz to test understanding (optional)') + '</div><div class="cr-note" style="margin-bottom:.5rem">Marked automatically. Builders see their score and the right answers after they submit, and can try again.</div><div id="tcQs"></div>' +
-      (isTest ? '' :
-        '<details style="margin-top:1rem"' + (item && item.task ? ' open' : '') + '><summary style="cursor:pointer;font-weight:800;color:var(--brand-deep)">Give a project to build (optional)</summary><div class="cr-field" style="margin-top:.6rem"><label for="tcTask">What should they build?</label><textarea id="tcTask" rows="2" maxlength="2000">' + esc((item && item.task && item.task.brief) || '') + '</textarea></div>' +
-        '<div class="cr-field"><label for="tcTaskT">Opens in</label><select id="tcTaskT">' + PROJECT_TYPES.map(function (p) { return '<option value="' + p[0] + '"' + (item && item.task && item.task.category === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select><div class="cr-note" style="margin-top:.3rem">They submit it to their coach for review like any project.</div></div></details>');
+      '<div class="tc-section"><i class="fas fa-circle-question"></i> ' + (isTest ? 'Questions' : 'Quiz to test understanding (optional)') + '</div><div class="cr-note" style="margin-bottom:.5rem">Options are up to you. A written answer needs no options or answer: builders type it and you read it in Results. Multiple choice, true or false, and short answers with accepted answers are marked automatically. Builders can try again.</div><div id="tcQs"></div>' +
+      '<div class="tc-section"><i class="fas fa-code"></i> Something to make (optional)</div>' +
+      '<div class="cr-note" style="margin-bottom:.5rem">Builders get a “Make it” step after the ' + (isTest ? 'instructions' : 'video') + ': your requirements beside a Code IDE (with autocomplete, Emmet, folders and picture uploads) or a writing pad. They hand it in, and you mark it with ink in Results > Class work. Their family sees your feedback.</div>' +
+      '<div class="cr-field"><label for="tcTask">Requirements</label><textarea id="tcTask" rows="4" maxlength="3000" placeholder="e.g. Make a page with a heading, a picture of your favourite animal and a button that changes the colour.">' + esc((item && item.task && item.task.brief) || '') + '</textarea></div>' +
+      '<div class="cr-field"><label for="tcTaskT">They work in</label><select id="tcTaskT">' + [['code', 'Code IDE (HTML, CSS, JavaScript)'], ['writing', 'Writing pad']].map(function (p) { var cur = g.TechWork ? g.TechWork.kindOf(item && item.task) : ''; return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></div>';
     var $ = function (s) { return m.body.querySelector(s); };
     var notes = isTest ? null : notesEditor($('#tcNotes'), item && item.notes);
     var qs = questionBuilder($('#tcQs'), item && item.questions, key);
@@ -325,7 +345,6 @@
       err('');
       if (busy) return err('Please wait for the upload to finish.');
       var title = $('#tcT').value.trim();
-      if (!title) return err('Give it a title.');
       var videoUrl = isTest ? '' : T.safeUrl($('#tcVid').value.trim());
       if (!isTest && $('#tcVid').value.trim() && !videoUrl) return err('The video link must start with https://');
       if (videoUrl && !video.path) { var bad = g.FastVideo.problem(videoUrl); if (bad) return err(bad); }
@@ -333,19 +352,19 @@
       try { built = qs.collect(); } catch (e) { return err(e.message); }
       var notesHtml = notes ? notes.html() : '';
       if (status === 'published') {
-        if (isTest && !built.questions.length) return err('A practice test needs at least one question.');
+        if (isTest && !built.questions.length && !$('#tcIns').value.trim() && !$('#tcTask').value.trim()) return err('Add instructions, a task or a question before posting.');
         var plainNotes = notesHtml.replace(/<[^>]+>/g, '').trim();
-        if (!isTest && !videoUrl && !plainNotes && !files.length && !built.questions.length) return err('Add a video, notes, a file or a quiz before posting.');
+        if (!isTest && !videoUrl && !plainNotes && !files.length && !built.questions.length && !$('#tcTask').value.trim()) return err('Add a video, notes, a file, a task or a quiz before posting.');
       }
       var topicId = $('#tcTop').value, topic = topics.filter(function (t) { return t.id === topicId; })[0] || {};
-      var brief = isTest ? '' : $('#tcTask').value.trim();
+      var brief = $('#tcTask').value.trim(), taskKind = $('#tcTaskT').value === 'writing' ? 'writing' : 'code';
       var d = {
         type: isTest ? 'test' : 'lesson', title: title.slice(0, 160), courseId: cls.id, courseName: cls.name, topicId: topicId, topicTitle: topic.title || '',
         track: cls.track, discipline: cls.discipline, status: status,
         video: videoUrl ? { url: videoUrl, path: video.path || '', name: video.name || '' } : null,
         notes: notesHtml, instructions: $('#tcIns').value.trim().slice(0, 3000), files: files.slice(0, 20),
         questions: built.questions, questionCount: built.questions.length,
-        task: brief ? { brief: brief.slice(0, 2000), category: $('#tcTaskT').value } : null,
+        task: brief ? { brief: brief.slice(0, 3000), kind: taskKind, category: taskKind === 'writing' ? 'WRITING' : 'CODE' } : null,
         updatedAt: FV().serverTimestamp()
       };
       if (status === 'published' && !(item && item.publishedAt)) d.publishedAt = FV().serverTimestamp();
@@ -410,7 +429,7 @@
       if (l.notes) bits.push('Notes');
       if ((l.files || []).length) bits.push(l.files.length + ' file' + (l.files.length === 1 ? '' : 's'));
       if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
-      if (l.task) bits.push('Project');
+      if (l.task) bits.push(l.task.kind === 'writing' || (g.TechWork && g.TechWork.kindOf(l.task) === 'writing') ? 'Writing task' : 'Coding task');
       if (l.createdByName) bits.push(l.createdByName);
       return bits.join(' · ');
     }
@@ -432,11 +451,13 @@
           '</div></div>';
         if (open) {
           if (!ls.length) h += '<div class="cr-empty">No lessons in this topic yet.</div>';
+          var names = labelsFor(ls);
           ls.forEach(function (l, li) {
-            h += '<div class="cr-lesson"><span class="n"><i class="fas ' + (l.type === 'test' ? 'fa-clipboard-question' : 'fa-circle-play') + '"></i></span><span class="tt">' + esc(l.title) + '<small>' + esc((l.type === 'test' ? 'Practice test' : 'Lesson') + (itemMeta(l) ? ' · ' + itemMeta(l) : '')) + '</small></span>' + statusBadge(l) + '<div class="cr-actions">' +
+            h += '<div class="cr-lesson"><span class="n"><i class="fas ' + (l.type === 'test' ? 'fa-clipboard-question' : 'fa-circle-play') + '"></i></span><span class="tt">' + esc(names[l.id]) + '<small>' + esc((l.type === 'test' ? 'Practice test' : 'Lesson') + (itemMeta(l) ? ' · ' + itemMeta(l) : '')) + '</small></span>' + statusBadge(l) + '<div class="cr-actions">' +
               '<button type="button" class="cr-btn sm" aria-label="Move up" title="Move up" data-a="item-up" data-id="' + esc(l.id) + '"' + (li === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>' +
               '<button type="button" class="cr-btn sm" aria-label="Move down" title="Move down" data-a="item-down" data-id="' + esc(l.id) + '"' + (li === ls.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>' +
               (l.questionCount ? '<button type="button" class="cr-btn sm" data-a="item-results" data-id="' + esc(l.id) + '"><i class="fas fa-square-poll-vertical"></i> Results</button>' : '') +
+              (l.task && g.TechWork ? '<button type="button" class="cr-btn sm" data-a="item-work" data-id="' + esc(l.id) + '"><i class="fas fa-inbox"></i> Hand-ins</button>' : '') +
               (canEdit(l) ? '<button type="button" class="cr-btn sm" data-a="edit-item" data-id="' + esc(l.id) + '"><i class="fas fa-pen"></i> Edit</button>' +
                 (l.status === 'published' ? '' : '<button type="button" class="cr-btn sm primary" data-a="post-item" data-id="' + esc(l.id) + '"><i class="fas fa-paper-plane"></i> Post</button>') +
                 '<button type="button" class="cr-btn sm danger" aria-label="Delete" title="Delete" data-a="del-item" data-id="' + esc(l.id) + '"><i class="fas fa-trash"></i></button>' : '') +
@@ -552,15 +573,23 @@
       else if (a === 'edit-item') { var ed = it(); if (ed) openEditor({ me: me, course: S.course, topics: S.topics, item: ed, onSaved: function () { note('Saved.'); } }); }
       else if (a === 'post-item') {
         var po = it(); if (!po) return;
-        if (po.type === 'test' && !po.questionCount) { note('A practice test needs at least one question.', true); return; }
-        if (!po.video && !po.notes && !(po.files || []).length && !po.questionCount) { note('Add a video, notes, a file or a quiz before posting.', true); return; }
-        if (!confirm('Post “' + po.title + '” to every ' + trackName(po.track) + ' builder and their parents? They get a bell and an email.')) return;
+        if (po.type === 'test' && !po.questionCount && !po.instructions && !po.task) { note('A practice test needs instructions, a task or a question.', true); return; }
+        if (!po.video && !po.notes && !(po.files || []).length && !po.questionCount && !po.task) { note('Add a video, notes, a file, a task or a quiz before posting.', true); return; }
+        if (!confirm('Post “' + (labelsFor(inTopic(po))[po.id] || po.title) + '” to every ' + trackName(po.track) + ' builder and their parents? They get a bell and an email.')) return;
         var up = { status: 'published', updatedAt: FV().serverTimestamp() };
         if (!po.publishedAt) up.publishedAt = FV().serverTimestamp();
         LESSONS().doc(id).update(up).then(function () { note('Posted.'); }).catch(fail);
       }
-      else if (a === 'del-item') { var de = it(); if (de && confirm('Delete “' + de.title + '”? Results already recorded stay, but builders can no longer open it.')) deleteItem(de).catch(fail); }
+      else if (a === 'del-item') { var de = it(); if (de && confirm('Delete “' + (labelsFor(inTopic(de))[de.id] || de.title) + '”? Results already recorded stay, but builders can no longer open it.')) deleteItem(de).catch(fail); }
       else if (a === 'item-results') { var ir = it(); if (ir) openItemResults(ir); }
+      else if (a === 'item-work') {
+        var iw = it(); if (!iw) return;
+        var wm = CU.openModal({ title: 'Hand-ins · ' + (labelsFor(inTopic(iw))[iw.id] || iw.title), wide: true, onClose: function () { if (S.work) { S.work.destroy(); S.work = null; } } });
+        wm.body.innerHTML = '<div id="tcWork"></div>';
+        wm.foot.innerHTML = '<button type="button" class="cr-btn" data-x2>Close</button>';
+        wm.foot.querySelector('[data-x2]').onclick = function () { wm.close(); };
+        S.work = g.TechWork.mountHandIns(wm.body.querySelector('#tcWork'), { me: me, students: o.students || [], lessonId: iw.id });
+      }
     });
     paint();
     return { destroy: function () { unsub(); S.itemUnsubs.forEach(function (u) { u(); }); if (S.res) S.res.destroy(); } };
@@ -571,15 +600,27 @@
      ========================================================= */
   function reviewHtml(rows) {
     return (rows || []).map(function (r, i) {
-      return '<div class="tc-ask"><div class="q">' + (i + 1) + '. ' + esc(r.text) + '</div><div class="tc-review ' + (r.correct ? 'ok' : 'no') + '"><i class="fas ' + (r.correct ? 'fa-check' : 'fa-xmark') + '"></i> ' + (r.given === '' || r.given == null ? 'No answer' : esc(r.given)) +
+      var given = r.given === '' || r.given == null ? 'No answer' : esc(r.given);
+      if (r.open) return '<div class="tc-ask"><div class="q">' + (i + 1) + '. ' + esc(r.text) + '</div><div class="tc-review open"><i class="fas fa-pen"></i> <span class="tc-plain">' + given + '</span>' + (r.explanation ? '<br><b>Tip:</b> ' + esc(r.explanation) : '') + '<br><small>Written answer, read by the coach.</small></div></div>';
+      return '<div class="tc-ask"><div class="q">' + (i + 1) + '. ' + esc(r.text) + '</div><div class="tc-review ' + (r.correct ? 'ok' : 'no') + '"><i class="fas ' + (r.correct ? 'fa-check' : 'fa-xmark') + '"></i> ' + given +
         (r.correct ? '' : '<br><b>Correct answer:</b> ' + esc(r.answer)) + (r.explanation ? '<br>' + esc(r.explanation) : '') + '</div></div>';
     }).join('');
+  }
+  /* An attempt made only of written answers has no score (total 0, percent null). */
+  function isMarked(x) { return !!x && x.total > 0 && x.percent != null; }
+  function openNote(x) { var n = (x && x.openCount) || 0; return n ? ' · ' + n + ' written answer' + (n === 1 ? '' : 's') : ''; }
+  function scorePill(x) { return isMarked(x) ? '<span class="tc-pill ' + scoreClass(x.percent) + '">' + x.score + '/' + x.total + ' · ' + x.percent + '%</span>' : '<span class="tc-pill good"><i class="fas fa-check"></i> Handed in</span>'; }
+  function scoreBox(x, extra) {
+    return isMarked(x) ? '<div class="tc-score"><b>' + x.percent + '%</b><span>' + x.score + ' of ' + x.total + ' correct' + openNote(x) + (extra || '') + '</span></div>'
+      : '<div class="tc-score"><b><i class="fas fa-check"></i></b><span>Answers handed in' + (extra || '') + '</span></div>';
   }
   function mountResults(host, o) {
     var CU = g.ClassroomUI.util;
     CU.injectStyle(); style();
     host.classList.add('cr-root');
-    var S = { rows: null, track: 'all', course: 'all', q: '' }, dead = false, me = o.me;
+    var S = { rows: null, track: 'all', course: 'all', q: '', view: o.view || 'quiz' }, dead = false, me = o.me, work = null;
+    /* Results has two views: marked quizzes and tests, and class work hand-ins (TechWork). */
+    var showViews = !o.lessonId && !o.studentId && !!g.TechWork;
     var students = o.students || [];
     function student(id) { return students.filter(function (s) { return s.id === id; })[0]; }
     function load() {
@@ -598,14 +639,26 @@
     function grouped(rows) {
       var map = {};
       rows.forEach(function (x) {
-        var k = x.studentId + '|' + x.lessonId, g2 = map[k] || (map[k] = { studentId: x.studentId, studentName: x.studentName, lessonId: x.lessonId, title: x.title, kind: x.kind, courseName: x.courseName, courseId: x.courseId, topicTitle: x.topicTitle, track: x.track, tries: 0, best: 0, latest: null });
-        g2.tries++; g2.best = Math.max(g2.best, x.percent || 0);
+        var k = x.studentId + '|' + x.lessonId, g2 = map[k] || (map[k] = { studentId: x.studentId, studentName: x.studentName, lessonId: x.lessonId, title: x.title, kind: x.kind, courseName: x.courseName, courseId: x.courseId, topicTitle: x.topicTitle, track: x.track, tries: 0, best: null, latest: null });
+        g2.tries++; if (isMarked(x)) g2.best = Math.max(g2.best == null ? 0 : g2.best, x.percent);
         if (!g2.latest || (T.toDate(x.at) || 0) > (T.toDate(g2.latest.at) || 0)) g2.latest = x;
       });
       return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return (T.toDate(b.latest.at) || 0) - (T.toDate(a.latest.at) || 0); });
     }
+    function viewTabs() {
+      return showViews ? '<div class="tc-tabs" role="group" aria-label="Results">' + [['quiz', 'Quizzes and tests'], ['work', 'Class work hand-ins']].map(function (v) {
+        return '<button type="button" class="tc-tab' + (S.view === v[0] ? ' on' : '') + '" aria-pressed="' + (S.view === v[0]) + '" data-ra="view" data-v="' + v[0] + '">' + v[1] + '</button>';
+      }).join('') + '</div>' : '';
+    }
     function paint() {
-      if (S.rows === null) { host.innerHTML = '<div class="cr-empty">Loading results…</div>'; return; }
+      if (S.view === 'work' && showViews) {
+        if (work) return;
+        host.innerHTML = viewTabs() + '<div id="tcWorkHost"></div>';
+        work = g.TechWork.mountHandIns(host.querySelector('#tcWorkHost'), { me: me, students: students });
+        return;
+      }
+      if (work) { work.destroy(); work = null; }
+      if (S.rows === null) { host.innerHTML = viewTabs() + '<div class="cr-empty">Loading results…</div>'; return; }
       var q = S.q.trim().toLowerCase();
       var all = grouped(S.rows), courses = {};
       all.forEach(function (r) { if (r.courseId) courses[r.courseId] = r.courseName; });
@@ -613,23 +666,26 @@
         return (S.track === 'all' || r.track === S.track) && (S.course === 'all' || r.courseId === S.course) &&
           (!q || (String(r.studentName) + ' ' + String(r.title)).toLowerCase().indexOf(q) > -1);
       });
-      var avg = list.length ? Math.round(list.reduce(function (s, r) { return s + (r.latest.percent || 0); }, 0) / list.length) : 0;
+      var scored = list.filter(function (r) { return isMarked(r.latest); });
+      var avg = scored.length ? Math.round(scored.reduce(function (s, r) { return s + r.latest.percent; }, 0) / scored.length) : null;
       var scoped = o.lessonId || o.studentId;
-      host.innerHTML = (scoped ? '' : trackTabs(S.track, true)) +
+      host.innerHTML = viewTabs() + (scoped ? '' : trackTabs(S.track, true)) +
         '<div class="cr-filters">' + (o.lessonId ? '' : '<select data-rf="course" aria-label="Class"><option value="all">All classes</option>' + Object.keys(courses).map(function (id) { return '<option value="' + esc(id) + '"' + (S.course === id ? ' selected' : '') + '>' + esc(courses[id]) + '</option>'; }).join('') + '</select>') +
         (o.studentId ? '' : '<input type="search" data-rf="q" placeholder="Search builder or test…" aria-label="Search" value="' + esc(S.q) + '">') + '<button type="button" class="cr-btn sm" data-ra="reload"><i class="fas fa-rotate"></i> Refresh</button></div>' +
-        (list.length ? '<div class="cr-note" style="margin-bottom:.5rem">' + list.length + ' result' + (list.length === 1 ? '' : 's') + ' · average latest score ' + avg + '%</div><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Builder</th><th>Quiz or test</th><th>Class</th><th>Latest</th><th>Best</th><th>Tries</th><th>When</th><th></th></tr></thead><tbody>' + list.map(function (r) {
-          var s = student(r.studentId), name = (s && s.name) || r.studentName || 'Builder', lp = r.latest.percent || 0;
-          return '<tr><td><b>' + esc(name) + '</b></td><td>' + esc(r.title) + '<div class="cr-note">' + (r.kind === 'test' ? 'Practice test' : 'Lesson quiz') + '</div></td><td class="cr-note">' + esc(r.courseName || '') + (r.topicTitle ? ' · ' + esc(r.topicTitle) : '') + '</td><td><span class="tc-pill ' + scoreClass(lp) + '">' + r.latest.score + '/' + r.latest.total + ' · ' + lp + '%</span></td><td>' + r.best + '%</td><td>' + r.tries + '</td><td class="cr-note">' + esc(fmtDay(r.latest.at)) + '</td><td><button type="button" class="cr-btn sm" data-ra="open" data-id="' + esc(r.latest.id) + '"><i class="fas fa-eye"></i> Answers</button></td></tr>';
+        (list.length ? '<div class="cr-note" style="margin-bottom:.5rem">' + list.length + ' result' + (list.length === 1 ? '' : 's') + (avg == null ? '' : ' · average latest score ' + avg + '%') + '</div><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Builder</th><th>Quiz or test</th><th>Class</th><th>Latest</th><th>Best</th><th>Tries</th><th>When</th><th></th></tr></thead><tbody>' + list.map(function (r) {
+          var s = student(r.studentId), name = (s && s.name) || r.studentName || 'Builder';
+          return '<tr><td><b>' + esc(name) + '</b></td><td>' + esc(r.title) + '<div class="cr-note">' + (r.kind === 'test' ? 'Practice test' : 'Lesson quiz') + '</div></td><td class="cr-note">' + esc(r.courseName || '') + (r.topicTitle ? ' · ' + esc(r.topicTitle) : '') + '</td><td>' + scorePill(r.latest) + (r.latest.openCount ? '<div class="cr-note">' + r.latest.openCount + ' written to read</div>' : '') + '</td><td>' + (r.best == null ? '–' : r.best + '%') + '</td><td>' + r.tries + '</td><td class="cr-note">' + esc(fmtDay(r.latest.at)) + '</td><td><button type="button" class="cr-btn sm" data-ra="open" data-id="' + esc(r.latest.id) + '"><i class="fas fa-eye"></i> Answers</button></td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="cr-panel"><div class="cr-empty">No results here yet. They appear when builders finish a quiz or practice test.</div></div>');
     }
     host.addEventListener('click', function (e) {
       var t = e.target.closest('[data-a="track"],[data-ra]'); if (!t) return;
+      if (t.dataset.ra === 'view') { if (S.view !== t.dataset.v) { S.view = t.dataset.v; if (work) { work.destroy(); work = null; } paint(); } return; }
+      if (S.view === 'work') return;
       if (t.dataset.a === 'track') { S.track = t.dataset.v; paint(); return; }
       if (t.dataset.ra === 'reload') { S.rows = null; paint(); load(); return; }
       var x = (S.rows || []).filter(function (r) { return r.id === t.dataset.id; })[0]; if (!x) return;
       var m = CU.openModal({ title: (x.studentName || 'Builder') + ' · ' + x.title, wide: true });
-      m.body.innerHTML = '<div class="tc-score"><b>' + x.percent + '%</b><span>' + x.score + ' of ' + x.total + ' correct · ' + esc(fmtDay(x.at)) + '</span></div>' + reviewHtml(x.review);
+      m.body.innerHTML = scoreBox(x, ' · ' + esc(fmtDay(x.at))) + reviewHtml(x.review);
       m.foot.innerHTML = '<button type="button" class="cr-btn" data-x2>Close</button>';
       m.foot.querySelector('[data-x2]').onclick = function () { m.close(); };
     });
@@ -640,7 +696,7 @@
       var i = host.querySelector('[data-rf="q"]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (x) { } }
     });
     paint(); load();
-    return { destroy: function () { dead = true; } };
+    return { destroy: function () { dead = true; if (work) work.destroy(); } };
   }
 
   /* =========================================================
@@ -685,7 +741,7 @@
       S.topics.forEach(function (t) { S.items.filter(function (l) { return l.topicId === t.id; }).forEach(function (l) { out.push(l); }); });
       return out;
     }
-    function goHome() { clearCourse(); releaseVideos(); S.screen = 'home'; S.course = null; S.lesson = null; paint(); }
+    function goHome() { clearCourse(); releaseVideos(); if (S.work) { S.work.destroy(); S.work = null; } S.screen = 'home'; S.course = null; S.lesson = null; paint(); }
     function releaseVideos() { host.querySelectorAll('video').forEach(function (v) { try { g.FastVideo.release(v); } catch (e) { /* already gone */ } }); }
 
     function unreadFor(field, id) { return S.unread.filter(function (n) { return n[field] === id; }).length; }
@@ -719,7 +775,7 @@
       }).join('') + '</div>' : '<div class="tc-empty">No classes have been posted for this level yet. New lessons appear here, with a bell and an email.</div>';
       if ((S.attempts || []).length) {
         h += '<div class="tc-panel" style="margin-top:1.2rem"><h3>' + (isBuilder ? 'My latest results' : 'Latest results') + '</h3>' + S.attempts.map(function (a) {
-          return '<div class="tc-file"><i class="fas ' + (a.kind === 'test' ? 'fa-clipboard-question' : 'fa-circle-question') + '"></i><span class="nm">' + esc(a.title) + ' <small style="color:var(--muted,#5A6E6A);font-weight:600">· ' + esc(a.courseName || '') + ' · ' + esc(fmtDay(a.at)) + '</small></span><span class="tc-pill ' + scoreClass(a.percent) + '">' + a.score + '/' + a.total + ' · ' + a.percent + '%</span></div>';
+          return '<div class="tc-file"><i class="fas ' + (a.kind === 'test' ? 'fa-clipboard-question' : 'fa-circle-question') + '"></i><span class="nm">' + esc(a.title) + ' <small style="color:var(--muted,#5A6E6A);font-weight:600">· ' + esc(a.courseName || '') + ' · ' + esc(fmtDay(a.at)) + '</small></span>' + scorePill(a) + '</div>';
         }).join('') + '</div>';
       }
       host.innerHTML = h;
@@ -728,10 +784,16 @@
       var p = S.progress[l.id], out = '';
       if (unreadFor('lessonId', l.id)) out += '<span class="tc-pill new">New</span>';
       if (p && p.bestPercent != null) out += '<span class="tc-pill ' + scoreClass(p.bestPercent) + '">Best ' + p.bestPercent + '%</span>';
+      else if (p && p.lastAttemptAt) out += '<span class="tc-pill good"><i class="fas fa-check"></i> Handed in</span>';
       else if (l.type === 'lesson' && p && p.watchedAt) out += '<span class="tc-pill good"><i class="fas fa-check"></i> Watched</span>';
       return out;
     }
-    function isDone(l) { var p = S.progress[l.id]; return !!p && (p.bestPercent != null || (l.type === 'lesson' && !!p.watchedAt)); }
+    function nameOf(l) { return labelsFor(S.items.filter(function (x) { return x.topicId === l.topicId; }))[l.id] || l.title || 'Lesson'; }
+    function isDone(l) {
+      var p = S.progress[l.id]; if (!p) return false;
+      if (p.bestPercent != null || p.lastAttemptAt) return true;
+      return l.type === 'lesson' ? !!p.watchedAt : !(l.questions || []).length && !!p.openedAt;
+    }
     function crumb(extra) { return '<div class="tc-crumb"><button type="button" data-tc="home">Classes</button>' + extra + '</div>'; }
     function paintCourse() {
       var c = S.course;
@@ -745,9 +807,10 @@
         var ls = S.items.filter(function (l) { return l.topicId === t.id; });
         if (!ls.length) return;
         shown++;
+        var names = labelsFor(ls);
         h += '<div class="tc-topic"><div class="tc-topic-head">' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</div>' + ls.map(function (l) {
-          var bits = []; if (l.video) bits.push('Video'); if (l.notes) bits.push('Notes'); if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's')); if (l.task) bits.push('Project');
-          return '<button type="button" class="tc-row" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="ic"><i class="fas ' + (l.type === 'test' ? 'fa-clipboard-question' : 'fa-circle-play') + '"></i></span><span class="t"><b>' + esc(l.title) + '</b><small>' + esc((l.type === 'test' ? 'Practice test' : 'Lesson') + (bits.length ? ' · ' + bits.join(' · ') : '')) + '</small></span>' + itemState(l) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
+          var bits = []; if (l.video) bits.push('Video'); if (l.notes) bits.push('Notes'); if (l.task) bits.push(g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Write it' : 'Code it'); if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
+          return '<button type="button" class="tc-row" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="ic"><i class="fas ' + (l.type === 'test' ? 'fa-clipboard-question' : 'fa-circle-play') + '"></i></span><span class="t"><b>' + esc(names[l.id]) + '</b>' + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span>' + itemState(l) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
         }).join('') + '</div>';
       });
       if (!shown) h += '<div class="tc-empty">Nothing has been posted in this class yet.</div>';
@@ -759,35 +822,81 @@
         g.FastVideo.videoHtml(url, { attrs: 'controls playsinline controlsList="nodownload noremoteplayback" disablePictureInPicture data-tc-video' });
       return '<div class="tc-stage" data-tc-stage>' + inner + '</div>';
     }
+    /* Steps of a lesson: learn, make it (when it has a task), quiz (when it has questions). */
+    function stepsOf(l) {
+      var out = [];
+      if (l.video || l.notes || l.instructions || (l.files || []).length) out.push(['learn', l.type === 'test' ? 'Read' : 'Watch and learn']);
+      if (l.task && g.TechWork) out.push(['make', g.TechWork.kindOf(l.task) === 'writing' ? 'Write it' : 'Code it']);
+      if ((l.questions || []).length) out.push(['quiz', l.type === 'test' ? 'Questions' : 'Quiz']);
+      return out;
+    }
+    function showStep(k) {
+      var steps = stepsOf(S.lesson); if (!steps.length) return;
+      S.step = k;
+      host.querySelectorAll('[data-step-pane]').forEach(function (p) { p.hidden = p.dataset.stepPane !== k; });
+      host.querySelectorAll('[data-tc="step"]').forEach(function (b) { var on = b.dataset.v === k; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+      if (k !== 'learn') host.querySelectorAll('[data-step-pane="learn"] video').forEach(function (v) { try { v.pause(); } catch (e) { } });
+      if (k === 'make' && !S.work && g.TechWork) {
+        S.work = g.TechWork.mountLessonWork(host.querySelector('#tcMake'), { me: me, student: student, lesson: S.lesson, label: nameOf(S.lesson) });
+      } else if (k === 'make' && S.work && S.work.refresh) setTimeout(S.work.refresh, 30);
+      if (k === 'quiz' && isBuilder) T.logActivity(me, 'material_opened', 'Opened the quiz for ' + nameOf(S.lesson), { origin: 'class' });
+    }
+    function stepNav(l, k) {
+      var steps = stepsOf(l), i = steps.map(function (x) { return x[0]; }).indexOf(k);
+      var all = orderedItems(), li = all.findIndex(function (x) { return x.id === l.id; }), prev = all[li - 1], next = all[li + 1];
+      var back = i > 0 ? '<button type="button" class="tc-btn light" data-tc="step" data-v="' + steps[i - 1][0] + '"><i class="fas fa-arrow-left"></i> ' + esc(steps[i - 1][1]) + '</button>'
+        : (prev ? '<button type="button" class="tc-btn light" data-tc="lesson" data-id="' + esc(prev.id) + '"><i class="fas fa-arrow-left"></i> Previous</button>' : '<span></span>');
+      var fwd = i < steps.length - 1 ? '<button type="button" class="tc-btn" data-tc="step" data-v="' + steps[i + 1][0] + '">Next: ' + esc(steps[i + 1][1]) + ' <i class="fas fa-arrow-right"></i></button>'
+        : (next ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Next ' + (next.type === 'test' ? 'practice test' : 'lesson') + ' <i class="fas fa-arrow-right"></i></button>' : '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>');
+      return '<div class="tc-nav">' + back + fwd + '</div>';
+    }
     function openLesson(l) {
       releaseVideos();
+      if (S.work) { S.work.destroy(); S.work = null; }
       S.screen = 'lesson'; S.lesson = l;
       var all = orderedItems(), i = all.findIndex(function (x) { return x.id === l.id; }), prev = all[i - 1], next = all[i + 1];
       var files = (l.files || []).filter(function (f) { return T.safeUrl(f.url); });
-      var word = l.type === 'test' ? 'Practice test' : 'Lesson';
-      host.innerHTML = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <button type="button" data-tc="back">' + esc(S.course.name) + '</button> <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(l.title) + '</span>') +
-        '<h2 class="tc-title">' + esc(l.title) + '</h2><p style="margin:0 0 1rem;color:var(--muted,#5A6E6A);font-weight:600;font-size:.86rem">' + word + ' · ' + esc(l.topicTitle || '') + '</p>' +
-        stageHtml(l) +
+      var word = l.type === 'test' ? 'Practice test' : 'Lesson', label = nameOf(l), steps = stepsOf(l), stepped = steps.length > 1;
+      var learn = stageHtml(l) +
         (l.instructions ? '<div class="tc-panel"><h3><i class="fas fa-list-check"></i> Instructions</h3><div class="tc-prose tc-plain">' + esc(l.instructions) + '</div></div>' : '') +
         (l.notes ? '<div class="tc-panel"><h3><i class="fas fa-book-open"></i> Notes</h3><div class="tc-prose">' + T.cleanHtml(l.notes) + '</div></div>' : '') +
         (files.length ? '<div class="tc-panel"><h3><i class="fas fa-paperclip"></i> Files</h3>' + files.map(function (f, n) {
           return '<div class="tc-file"><i class="fas ' + (isPdf(f) ? 'fa-file-pdf' : 'fa-file') + '"></i><span class="nm">' + esc(f.name) + '</span>' + (isPdf(f) ? '<button type="button" class="tc-btn light sm" data-tc="pdf" data-n="' + n + '">Read here</button>' : '<a class="tc-btn light sm" href="' + esc(T.safeUrl(f.url)) + '" target="_blank" rel="noopener noreferrer">Open</a>') + '</div><div data-pdf="' + n + '"></div>';
-        }).join('') + '</div>' : '') +
-        ((l.questions || []).length ? '<div class="tc-panel" id="tcQuiz"></div>' : '') +
-        (l.task ? '<div class="tc-panel"><h3><i class="fas fa-hammer"></i> Your project</h3><div class="tc-prose tc-plain" style="margin-bottom:.8rem">' + esc(l.task.brief) + '</div>' + (isBuilder && o.onStartProject ? '<button type="button" class="tc-btn" data-tc="project"><i class="fas fa-rocket"></i> Start this project</button>' : '') + '</div>' : '') +
-        '<div class="tc-nav">' + (prev ? '<button type="button" class="tc-btn light" data-tc="lesson" data-id="' + esc(prev.id) + '"><i class="fas fa-arrow-left"></i> Previous</button>' : '<span></span>') + (next ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Next <i class="fas fa-arrow-right"></i></button>' : '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>') + '</div>';
+        }).join('') + '</div>' : '');
+      var quiz = (l.questions || []).length ? '<div class="tc-panel" id="tcQuiz"></div>' : '';
+      var make = l.task && g.TechWork ? '<div id="tcMake"></div>' : '';
+      /* Class > topic is the heading; the lesson only adds its number or its own title. */
+      var h = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <button type="button" data-tc="back">' + esc(S.course.name) + '</button> <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(l.topicTitle || '') + '</span>') +
+        '<h2 class="tc-title">' + esc(l.topicTitle || S.course.name) + ' <span style="font-weight:700;color:var(--muted,#5A6E6A);font-size:1rem">· ' + esc(label) + '</span></h2>';
+      if (stepped) {
+        h += '<div class="tw-steps" role="group" aria-label="Steps" style="margin-top:.6rem">' + steps.map(function (st, n) {
+          return '<button type="button" class="tw-step" data-tc="step" data-v="' + st[0] + '" aria-pressed="false"><b>' + (n + 1) + '</b> ' + esc(st[1]) + '</button>';
+        }).join('') + '</div>';
+        steps.forEach(function (st) {
+          var body = st[0] === 'learn' ? learn : st[0] === 'make' ? make : quiz;
+          h += '<div data-step-pane="' + st[0] + '" hidden>' + body + stepNav(l, st[0]) + '</div>';
+        });
+      } else {
+        h += '<div style="height:.6rem"></div>' + learn + make + quiz +
+          '<div class="tc-nav">' + (prev ? '<button type="button" class="tc-btn light" data-tc="lesson" data-id="' + esc(prev.id) + '"><i class="fas fa-arrow-left"></i> Previous</button>' : '<span></span>') + (next ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Next <i class="fas fa-arrow-right"></i></button>' : '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>') + '</div>';
+      }
+      host.innerHTML = h;
+      if (g.TechWork) g.TechWork.style();
       markSeen(l.id);
       touch(l, { openedAt: FV().serverTimestamp() });
-      if (isBuilder) T.logActivity(me, 'material_opened', 'Opened the ' + word.toLowerCase() + ' “' + l.title + '”', { missionId: '', origin: 'class' });
+      if (isBuilder) T.logActivity(me, 'material_opened', 'Opened the ' + word.toLowerCase() + ' “' + label + '”', { missionId: '', origin: 'class' });
       if ((l.questions || []).length) paintQuiz(l);
+      if (stepped) showStep(o.step && steps.some(function (x) { return x[0] === o.step; }) ? o.step : steps[0][0]);
+      else if (make) { S.work = g.TechWork.mountLessonWork(host.querySelector('#tcMake'), { me: me, student: student, lesson: l, label: label }); }
+      o.step = null;
       window.scrollTo(0, 0);
     }
     /* The form, or the last result. Lives in its own box so the video keeps playing. */
     function paintQuiz(l, result) {
       var box = host.querySelector('#tcQuiz'); if (!box) return;
-      var title = l.type === 'test' ? 'Practice test' : 'Test your understanding', p = S.progress[l.id];
+      var title = l.type === 'test' ? 'Questions' : 'Test your understanding', p = S.progress[l.id];
       if (result) {
-        box.innerHTML = '<h3><i class="fas fa-circle-question"></i> ' + title + '</h3><div class="tc-score"><b>' + result.percent + '%</b><span>' + result.score + ' of ' + result.total + ' correct</span></div>' + reviewHtml(result.review) + '<button type="button" class="tc-btn light" data-tc="retry" style="margin-top:.8rem"><i class="fas fa-rotate"></i> Try again</button>';
+        box.innerHTML = '<h3><i class="fas fa-circle-question"></i> ' + title + '</h3>' + scoreBox(result) + reviewHtml(result.review) + '<button type="button" class="tc-btn light" data-tc="retry" style="margin-top:.8rem"><i class="fas fa-rotate"></i> Try again</button>';
         return;
       }
       if (!isBuilder) {
@@ -795,13 +904,14 @@
         db.collection('techAttempts').where('studentId', '==', student.id).where('lessonId', '==', l.id).get().then(function (s) {
           var el = box.querySelector('#tcKid'); if (!el) return;
           var rows = docs(s).sort(function (a, b) { return (T.toDate(b.at) || 0) - (T.toDate(a.at) || 0); });
-          el.innerHTML = rows.length ? '<div class="tc-score"><b>' + rows[0].percent + '%</b><span>Latest: ' + rows[0].score + ' of ' + rows[0].total + ' · ' + esc(fmtDay(rows[0].at)) + ' · ' + rows.length + ' tr' + (rows.length === 1 ? 'y' : 'ies') + '</span></div>' + reviewHtml(rows[0].review) : esc(first) + ' has not taken this yet.';
+          el.innerHTML = rows.length ? scoreBox(rows[0], ' · ' + esc(fmtDay(rows[0].at)) + ' · ' + rows.length + ' tr' + (rows.length === 1 ? 'y' : 'ies')) + reviewHtml(rows[0].review) : esc(first) + ' has not taken this yet.';
         }).catch(function (e) { var el = box.querySelector('#tcKid'); if (el) el.textContent = T.errMsg(e); });
         return;
       }
       box.innerHTML = '<h3><i class="fas fa-circle-question"></i> ' + title + '</h3>' + (p && p.bestPercent != null ? '<p style="margin:0 0 .5rem;font-weight:700;color:var(--muted,#5A6E6A)">Your best so far: ' + p.bestPercent + '%</p>' : '') +
         l.questions.map(function (q, i) {
-          var input = q.type === 'short' ? '<input type="text" data-qa="' + esc(q.id) + '" maxlength="300" placeholder="Your answer" aria-label="Your answer">' :
+          var input = q.type === 'open' ? '<textarea data-qa="' + esc(q.id) + '" rows="4" maxlength="3000" placeholder="Write your answer" aria-label="Your answer"></textarea>' :
+            q.type === 'short' ? '<input type="text" data-qa="' + esc(q.id) + '" maxlength="300" placeholder="Your answer" aria-label="Your answer">' :
             (q.options || []).map(function (op, n) { return '<label><input type="radio" name="tq' + esc(q.id) + '" data-qa="' + esc(q.id) + '" value="' + n + '"> <span>' + esc(op) + '</span></label>'; }).join('');
           return '<div class="tc-ask"><div class="q">' + (i + 1) + '. ' + esc(q.text) + '</div>' + input + '</div>';
         }).join('') + '<button type="button" class="tc-btn" data-tc="submit" style="margin-top:.8rem"><i class="fas fa-paper-plane"></i> Submit answers</button><div class="tc-msg" id="tcQMsg" role="status"></div>';
@@ -809,7 +919,7 @@
     function submitQuiz(l, btn) {
       var answers = {}, missing = 0;
       l.questions.forEach(function (q) {
-        if (q.type === 'short') { var v = (host.querySelector('[data-qa="' + q.id + '"]') || {}).value || ''; if (!v.trim()) missing++; answers[q.id] = v.trim().slice(0, 300); }
+        if (q.type === 'short' || q.type === 'open') { var v = (host.querySelector('[data-qa="' + q.id + '"]') || {}).value || ''; if (!v.trim()) missing++; answers[q.id] = v.trim().slice(0, q.type === 'open' ? 3000 : 300); }
         else { var c = host.querySelector('input[name="tq' + q.id + '"]:checked'); if (!c) missing++; else answers[q.id] = Number(c.value); }
       });
       var msg = host.querySelector('#tcQMsg');
@@ -828,7 +938,8 @@
       var a = t.dataset.tc, id = t.dataset.id;
       if (a === 'home') goHome();
       else if (a === 'course') { var c = (S.courses || []).filter(function (x) { return x.id === id; })[0]; if (c) openCourse(c); }
-      else if (a === 'back') { releaseVideos(); S.screen = 'course'; S.lesson = null; paint(); window.scrollTo(0, 0); }
+      else if (a === 'back') { releaseVideos(); if (S.work) { S.work.destroy(); S.work = null; } S.screen = 'course'; S.lesson = null; paint(); window.scrollTo(0, 0); }
+      else if (a === 'step') { showStep(t.dataset.v); window.scrollTo(0, host.getBoundingClientRect().top + window.scrollY - 90); }
       else if (a === 'lesson') { var l = S.items.filter(function (x) { return x.id === id; })[0]; if (l) openLesson(l); }
       else if (a === 'submit') submitQuiz(S.lesson, t);
       else if (a === 'retry') paintQuiz(S.lesson);
@@ -837,7 +948,6 @@
         if (!f || !slot) return;
         slot.innerHTML = slot.innerHTML ? '' : '<iframe class="tc-pdf" src="' + esc(T.safeUrl(f.url)) + '#toolbar=0" title="' + esc(f.name) + '"></iframe>';
       }
-      else if (a === 'project') { t.disabled = true; Promise.resolve(o.onStartProject(S.lesson)).catch(function (er) { t.disabled = false; alert(T.errMsg(er)); }); }
     });
     host.addEventListener('contextmenu', function (e) { if (e.target.closest('[data-tc-stage]')) e.preventDefault(); });
     /* timeupdate does not bubble, so listen on the way down. Four fifths in counts as watched. */
@@ -847,7 +957,7 @@
       if (S.watched !== S.lesson.id && v.duration && v.currentTime / v.duration >= 0.8) {
         S.watched = S.lesson.id;
         touch(S.lesson, { watchedAt: FV().serverTimestamp() });
-        T.logActivity(me, 'video_watched', 'Watched “' + S.lesson.title + '”', { origin: 'class' });
+        T.logActivity(me, 'video_watched', 'Watched “' + nameOf(S.lesson) + '”', { origin: 'class' });
       }
     }, true);
     if (o.lessonId) {
@@ -857,8 +967,8 @@
       }).catch(fail);
     }
     paint();
-    return { destroy: function () { dead = true; releaseVideos(); unsubs.forEach(function (u) { u(); }); clearCourse(); } };
+    return { destroy: function () { dead = true; releaseVideos(); if (S.work) S.work.destroy(); unsubs.forEach(function (u) { u(); }); clearCourse(); } };
   }
 
-  g.TechClasses = { mountManager: mountManager, mountResults: mountResults, mountLearner: mountLearner };
+  g.TechClasses = { mountManager: mountManager, mountResults: mountResults, mountLearner: mountLearner, style: style, labelsFor: labelsFor };
 })(window);

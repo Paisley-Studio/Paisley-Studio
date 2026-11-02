@@ -107,13 +107,13 @@
     if (sub && sub.status === 'Corrections') return { k: 'corrections', cls: 'b-declined', icon: 'fa-rotate-left', text: 'Corrections sent \u2013 with student' };
     if (sub && sub.status === 'Suspended') return { k: 'suspended', cls: 'b-declined', icon: 'fa-ban', text: 'Suspended' };
     if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
-    if (sub && sub.handIn === 'physical' && sub.status === 'Submitted') return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-school', text: 'Paper copy received \u2013 awaiting grading' };
+    if (sub && sub.handIn === 'physical' && sub.status === 'Submitted') return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-school', text: 'Physical hand-in received \u2013 awaiting grading' };
     if (sub) {
       var ri = subRound(sub);
       if (ri.resub) return { k: 'submitted', resub: true, round: ri.round, cls: 'b-resub', icon: 'fa-rotate', text: 'Resubmitted \u2013 Attempt ' + ri.round + ' \u2013 awaiting grading' };
       return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-inbox', text: 'New hand-in \u2013 awaiting grading' };
     }
-    if (hardCopy === undefined ? item && item._hardCopy : hardCopy) return { k: 'paper', cls: 'b-plain', icon: 'fa-school', text: 'Paper hand-in at school' };
+    if (hardCopy === undefined ? item && item._hardCopy : hardCopy) return { k: 'paper', cls: 'b-plain', icon: 'fa-school', text: 'Physical hand-in' };
     var due = dueOf(item, kind);
     if (due && due.getTime() < now) return { k: 'overdue', cls: 'b-declined', icon: 'fa-triangle-exclamation', text: 'Overdue' };
     return { k: 'pending', cls: 'b-plain', icon: 'fa-circle', text: 'Not submitted' };
@@ -887,7 +887,7 @@
       var submitted = 0, graded = 0, toGrade = 0, corr = 0, resub = 0, paper = 0;
       aud.forEach(function (s) {
         var x = subs[s.id];
-        if (!x) { if (global.PaperHandIns.isFlagged(s)) paper++; return; }
+        if (!x) { if (global.PaperHandIns.isFlagged(s, subjectOf(it))) paper++; return; }
         if (x.status !== 'In progress' && x.status !== 'Suspended') submitted++;
         if (x.status === 'Graded') graded++;
         if (x.status === 'Submitted') { toGrade++; if (subRound(x).resub) resub++; }
@@ -1119,7 +1119,7 @@
           2: 'Sent back for corrections \u2013 waiting on the student', 3: 'Graded', 4: 'Not handed in'
         };
         var ordered = aud.map(function (s) {
-          var sub = subs[s.id] || null, st = workState(it, sub, kind, global.PaperHandIns.isFlagged(s));
+          var sub = subs[s.id] || null, st = workState(it, sub, kind, global.PaperHandIns.isFlagged(s, subjectOf(it)));
           return { s: s, sub: sub, st: st, rank: rankOf(sub, st) };
         }).sort(function (a, b) {
           if (a.rank !== b.rank) return a.rank - b.rank;
@@ -1143,13 +1143,13 @@
           else if (sub && st.k === 'submitted') whenCell = '<b>First hand-in</b><br>' + when;
           var upLabel = st.k === 'submitted' && st.resub ? 'Attempt ' + st.round + ' upload' : 'Student\u2019s upload';
           return grp + '<tr>' + global.PaperHandIns.checkCell(s) +
-            '<td><b>' + esc(s.name || s.email || s.id) + '</b>' + global.PaperHandIns.chip(s) + '</td>' +
+            '<td><b>' + esc(s.name || s.email || s.id) + '</b>' + global.PaperHandIns.chip(s, subjectOf(it)) + '</td>' +
             '<td>' + pill(st.cls, st.text, st.icon) + (prevN && st.k !== 'graded' ? '<div class="cr-note" style="margin-top:.25rem">' + prevN + ' earlier attempt' + (prevN === 1 ? '' : 's') + ' sent back</div>' : '') + '</td>' +
             '<td>' + whenCell + '</td>' +
             '<td>' +
               (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> ' + esc(upLabel) + '</a>' : '') +
               (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-circle-check"></i> ' + (st.k === 'submitted' && st.resub ? 'Last marked copy' : 'Graded copy') + '</a>' : '') +
-              global.PaperHandIns.rowButtons(s, sub) +
+              global.PaperHandIns.rowButtons(s, sub, subjectOf(it)) +
               (prevN ? '<button type="button" class="cr-btn sm" data-a="hist" data-s="' + esc(s.id) + '"><i class="fas fa-clock-rotate-left"></i> Previous attempts (' + prevN + ')</button>' : '') +
               (canGrade
                 ? (kind === 'exam'
@@ -1168,7 +1168,7 @@
 
         global.PaperHandIns.wire(m.body, {
           col: kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.isClasswork ? 'lesson' : 'assignment').doc(it.id).collection('submissions'),
-          students: aud, subs: subs, user: user,
+          students: aud, subs: subs, user: user, subjectId: subjectOf(it),
           onDone: async function () { await refresh(); paint(); }
         });
 
@@ -1711,7 +1711,7 @@
     }));
 
     var out = { assignments: [], lessons: [], exams: [] };
-    var hardCopy = !!(profile && profile.physicalStudent === true);
+    var hardCopy = lmzHandsInOnPaper(profile, cls.subjectId);
     // An account that became active after the work was posted starts fresh. Anything already
     // handed in stays, so a student never loses their own record.
     function keep(it) { return !!it.sub || !lmzWorkPredatesStudent(profile, it, uid); }
@@ -1962,7 +1962,7 @@
       var status = sub ? sub.status : '';
       var isGraded = status === 'Graded';
       var isCorr = status === 'Corrections';
-      var hardCopy = !!(meDoc && meDoc.exists && meDoc.data().physicalStudent === true);
+      var hardCopy = !!(meDoc && meDoc.exists) && lmzHandsInOnPaper(meDoc.data(), it.subjectId || String((String(cid).match(/^(.*?)_y\d+/) || [])[1] || ''));
       var canUpload = !isGraded && !(hardCopy && !isCorr);
 
       var head = '<div class="cr-panel"><h3>' + esc(it.title) + '</h3>' +
@@ -1976,8 +1976,8 @@
       else zones = mineSectionHtml(sub, 'Your uploaded work') + gradedSectionHtml(sub);
 
       var paperNote = hardCopy && !isCorr && !isGraded
-        ? '<div class="wk-sec mine"><h4><i class="fas fa-school"></i> Hand this in on paper</h4><div class="cr-note">' + (sub ? 'Your tutor has received your paper copy.' : 'You hand in your work on paper at school. Your tutor records it here, so there is nothing to upload.') + '</div></div>'
-        : (sub && sub.handIn === 'physical' && !isGraded ? '<div class="wk-sec mine"><h4><i class="fas fa-school"></i> Paper copy received</h4><div class="cr-note">Your tutor has received your paper copy.</div></div>' : '');
+        ? '<div class="wk-sec mine"><h4><i class="fas fa-school"></i> Physical hand-in</h4><div class="cr-note">' + (sub ? 'Your tutor has received your paper copy.' : 'You hand in your work on paper at school. Your tutor records it here, so there is nothing to upload.') + '</div></div>'
+        : (sub && sub.handIn === 'physical' && !isGraded ? '<div class="wk-sec mine"><h4><i class="fas fa-school"></i> Physical hand-in received</h4><div class="cr-note">Your tutor has received your paper copy.</div></div>' : '');
       zones = paperNote + zones;
 
       var form = '';

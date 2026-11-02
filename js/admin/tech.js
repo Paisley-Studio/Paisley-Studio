@@ -60,7 +60,7 @@
         if (after) after();
         if (key === 'students') S.loaded = true;
         /* Open modals and the live Activity / Practice panels keep their state; only the tab badges refresh. */
-        var busy = document.querySelector('.cr-overlay') || (S.panel && (S.tab === 'activity' || S.tab === 'practice' || S.tab === 'classes' || S.tab === 'results'));
+        var busy = document.querySelector('.cr-overlay') || (S.panel && (S.tab === 'activity' || S.tab === 'practice' || S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups'));
         if (S.loaded && !busy) render(); else if (S.loaded) renderTabsOnly();
       }, function (e) { console.warn('tech ' + key + ':', e); if (key === 'students') { root.innerHTML = '<div class="cr-panel"><div class="cr-empty">Could not load Tech Studio students: ' + esc(errMsg(e)) + '</div></div>'; } }));
     }
@@ -89,6 +89,7 @@
         ['builds', 'fa-hammer', 'Projects & reviews', rv],
         ['classes', 'fa-chalkboard', 'Classes', 0],
         ['results', 'fa-square-poll-vertical', 'Results', 0],
+        ['groups', 'fa-users-rectangle', 'Groups', 0],
         ['missions', 'fa-bullseye', 'Older missions', 0],
         ['content', 'fa-toolbox', 'Resources', 0],
         ['aitools', 'fa-robot', 'AI Toolbox', 0],
@@ -113,7 +114,7 @@
       mountAdminBell();
       var b = root.querySelector('#txBody');
       if (!S.loaded) { b.innerHTML = '<div class="cr-empty">Loading Tech Studio…</div>'; return; }
-      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, classes: classesTab, results: resultsTab, missions: missionsTab, content: content, aitools: aiTools, live: liveTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall, navvideo: navVideoTab }[S.tab] || applications);
+      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, classes: classesTab, results: resultsTab, groups: groupsTab, missions: missionsTab, content: content, aitools: aiTools, live: liveTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall, navvideo: navVideoTab }[S.tab] || applications);
       view(b);
       if (S.bubbles) S.bubbles.sync();
     }
@@ -358,8 +359,9 @@
 
     /* ---------------- Classes and results (shared with the coach portal) ---------------- */
     function classesTab(b) { b.innerHTML = '<div id="txPanel"></div>'; S.panel = g.TechClasses.mountManager(b.querySelector('#txPanel'), { me: me(), students: S.students }); }
+    function groupsTab(b) { b.innerHTML = '<div id="txPanel"></div>'; S.panel = g.TechGroups.mountManager(b.querySelector('#txPanel'), { me: me(), students: S.students }); }
     function resultsTab(b) {
-      b.innerHTML = '<div class="cr-bar"><div><h3>Results</h3><div class="cr-sub">Every quiz and practice test. Marked automatically when a builder submits.</div></div></div><div id="txPanel"></div>';
+      b.innerHTML = '<div class="cr-bar"><div><h3>Results</h3><div class="cr-sub">Quizzes and tests are marked automatically. Class work is handed in for you to run and mark with ink.</div></div></div><div id="txPanel"></div>';
       S.panel = g.TechClasses.mountResults(b.querySelector('#txPanel'), { me: me(), students: S.students });
     }
 
@@ -664,7 +666,7 @@
     function fail(e) { toast(errMsg(e), true); }
     root.addEventListener('click', function (e) {
       var t = e.target.closest('[data-a]'); if (!t) return; var a = t.dataset.a, id = t.dataset.id;
-      if ((S.tab === 'classes' || S.tab === 'results') && t.closest('#txPanel')) return;   // the classes module handles its own clicks
+      if ((S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups') && t.closest('#txPanel')) return;   // the classes module handles its own clicks
       var stu = function () { return S.students.filter(function (x) { return x.id === id; })[0]; };
       if (a === 'tab') { S.tab = t.dataset.v; render(); }
       else if (a === 'navvid-pick') { var nf = root.querySelector('#txNavFile'); if (nf) nf.click(); }

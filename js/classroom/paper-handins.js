@@ -1,13 +1,16 @@
 /* =========================================================
-   PAPER HAND-INS — Paisley Studio (tutor + admin work screens)
+   PHYSICAL HAND-INS — Paisley Studio (tutor + admin work screens)
    -----------------------------------------------------------
-   Some students attend at school and hand in on paper. They have no
-   upload, so without this they look overdue forever and get reminders.
+   Some students attend at school and hand in on paper, in some subjects
+   and online in others. Without this they look overdue forever.
 
-     students/{uid}.physicalStudent = true
-       set here or in the admin student window. Stops upload reminders and
-       overdue notices (functions/deadlines.js) and replaces "Overdue" with
-       "Paper hand-in at school".
+     students/{uid}.handInBySubject = { <subjectKey>: 'physical' | 'online' }
+       per subject; missing means Online hand-in (the default). Set in the
+       admin student window, or here for the item's subject. The older
+       all-subjects students.physicalStudent still counts where a subject has
+       no entry (lmzHandInStyle in lms-helpers.js). A physical subject stops
+       upload reminders and overdue notices (functions/deadlines.js) and
+       replaces "Overdue" with "Physical hand-in".
 
      submissions/{uid} with handIn: 'physical'
        written by staff when the paper arrives or is marked, so every count,
@@ -24,7 +27,10 @@
   function esc(s) { return util().esc(s); }
   function FV() { return firebase.firestore.FieldValue; }
 
-  function isFlagged(s) { return !!(s && s.physicalStudent === true); }
+  function isFlagged(s, subjectId) {
+    if (typeof global.lmzHandsInOnPaper === 'function') return global.lmzHandsInOnPaper(s, subjectId);
+    return !!(s && s.physicalStudent === true);
+  }
   function isPaperSub(sub) { return !!(sub && sub.handIn === 'physical'); }
   // Staff can record against a student with no hand-in, or adjust an earlier paper record.
   function canRecord(sub) { return !sub || isPaperSub(sub); }
@@ -46,28 +52,28 @@
 
   function panelHtml() {
     injectStyle();
-    return '<div class="pp-bar"><h4><i class="fas fa-school"></i> Paper hand-ins</h4>' +
-      '<div class="cr-note">For students who hand in on paper at school. Tick them, then record what happened. A student set as paper stops getting upload reminders and overdue notices.</div>' +
+    return '<div class="pp-bar"><h4><i class="fas fa-school"></i> Physical hand-ins</h4>' +
+      '<div class="cr-note">For students who hand in on paper at school in this subject. Tick them, then record what happened. A student on Physical hand-in for this subject gets no upload reminders or overdue notices for it. Everyone else is on Online hand-in.</div>' +
       '<div class="cr-actions" style="flex-wrap:wrap">' +
         '<label class="cr-note" style="margin:0;display:inline-flex;gap:.35rem;align-items:center;cursor:pointer"><input type="checkbox" data-pp="all"> All</label>' +
         '<button type="button" class="cr-btn sm" data-pp="received"><i class="fas fa-inbox"></i> Mark received</button>' +
         '<button type="button" class="cr-btn sm" data-pp="graded"><i class="fas fa-circle-check"></i> Mark graded</button>' +
-        '<button type="button" class="cr-btn sm" data-pp="flag"><i class="fas fa-school"></i> Set as paper student</button>' +
-        '<button type="button" class="cr-btn sm" data-pp="unflag"><i class="fas fa-laptop"></i> Set as uploading student</button>' +
+        '<button type="button" class="cr-btn sm" data-pp="flag"><i class="fas fa-school"></i> Physical hand-in for this subject</button>' +
+        '<button type="button" class="cr-btn sm" data-pp="unflag"><i class="fas fa-laptop"></i> Online hand-in for this subject</button>' +
       '</div><div class="cr-err" data-pp-err style="margin-top:.4rem"></div></div>';
   }
   function checkCell(s) {
     return '<td style="width:1.6rem"><input type="checkbox" data-pp-s="' + esc(s.id) + '" aria-label="Select ' + esc(s.name || 'student') + '"></td>';
   }
-  function chip(s) {
-    return isFlagged(s) ? '<span class="pp-chip"><i class="fas fa-school"></i> Paper</span>' : '';
+  function chip(s, subjectId) {
+    return isFlagged(s, subjectId) ? '<span class="pp-chip"><i class="fas fa-school"></i> Physical hand-in</span>' : '';
   }
-  function rowButtons(s, sub) {
+  function rowButtons(s, sub, subjectId) {
     var id = esc(s.id), h = '';
     if (isPaperSub(sub)) {
       h += '<button type="button" class="cr-btn sm primary" data-pp-one="graded" data-s="' + id + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Edit grade' : 'Grade') + '</button>';
       h += '<button type="button" class="cr-btn sm" data-pp-one="undo" data-s="' + id + '"><i class="fas fa-rotate-left"></i> Undo</button>';
-    } else if (!sub && isFlagged(s)) {
+    } else if (!sub && isFlagged(s, subjectId)) {
       h += '<button type="button" class="cr-btn sm" data-pp-one="received" data-s="' + id + '"><i class="fas fa-inbox"></i> Received</button>';
       h += '<button type="button" class="cr-btn sm primary" data-pp-one="graded" data-s="' + id + '"><i class="fas fa-circle-check"></i> Graded</button>';
     }
@@ -155,9 +161,14 @@
       if (ok.length < list.length) { if (errEl) errEl.textContent = 'Students who uploaded their work are graded from their upload, so they were left out.'; }
       if (ok.length) openGradeModal(ok, ctx, ctx.onDone);
     }
+    /* Only the item's subject changes; the student's other subjects keep their style. */
     async function setFlag(list, on) {
+      var key = global.lmzSubjectKey ? global.lmzSubjectKey(ctx.subjectId || '') : String(ctx.subjectId || '');
+      if (!key) throw new Error('This work has no subject, so the hand-in style cannot be set here. Use the admin student window.');
       await commit(list.map(function (r) { return function (b) {
-        b.update(db.collection('students').doc(r.s.id), { physicalStudent: on, physicalSetBy: ctx.user.uid, physicalSetAt: FV().serverTimestamp() });
+        var p = { physicalSetBy: ctx.user.uid, physicalSetAt: FV().serverTimestamp() };
+        p['handInBySubject.' + key] = on ? 'physical' : 'online';
+        b.update(db.collection('students').doc(r.s.id), p);
       }; }));
       await ctx.onDone();
     }

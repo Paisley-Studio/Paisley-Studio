@@ -286,6 +286,37 @@ service firebase.storage {
       allow delete: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches'));
     }
 
+    // Tech Studio class work: pictures, video, sound and fonts a builder uploads into their
+    // Code IDE for one lesson. Builders and families open them through the saved link.
+    function techMediaUpload(maxMb) {
+      return (request.resource.contentType.matches('(image|video|audio|font)/.*') ||
+          request.resource.contentType.matches('application/(font-woff|x-font-.*|octet-stream)')) &&
+        !request.resource.contentType.matches('image/svg.*') &&
+        request.resource.size < maxMb * 1024 * 1024;
+    }
+    match /techWork/{studentId}/{workId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == studentId || isAdmin() || techActiveIn('techCoaches'));
+      allow create, update: if isSignedIn() && request.auth.uid == studentId && techActiveIn('techStudents') && techMediaUpload(50);
+      allow delete: if isSignedIn() && (request.auth.uid == studentId || isAdmin());
+    }
+    // A group's shared Code IDE uploads. Only members upload (one Firestore doc: the group).
+    match /techGroupWork/{groupId}/{taskId}/{fileName} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid in firestore.get(/databases/(default)/documents/techGroups/$(groupId)).data.get('memberIds', []) || isAdmin());
+      allow create, update: if isSignedIn() &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/techGroups/$(groupId)).data.get('memberIds', []) &&
+        techMediaUpload(50);
+      allow delete: if isSignedIn() &&
+        (request.auth.uid in firestore.get(/databases/(default)/documents/techGroups/$(groupId)).data.get('memberIds', []) || isAdmin());
+    }
+    // Marked copies (PDF with the coach's ink) of class work and group tasks.
+    match /techGraded/{folder}/{workId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == folder || isAdmin() || techActiveIn('techCoaches'));
+      allow create, update: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches')) &&
+        request.resource.contentType == 'application/pdf' && request.resource.size < 30 * 1024 * 1024;
+      allow delete: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches'));
+    }
+
     // Tech Studio navigation video. Only the Studio Desk uploads it; only active
     // builders can get a link to it (builders first: a request may touch only 2 Firestore docs).
     match /techSettings/{folder}/{fileName} {

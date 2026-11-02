@@ -57,28 +57,30 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../firestore-helpers.js"></script>
-<script src="../lms-helpers.js?v=boards4"></script>
+<script src="../lms-helpers.js?v=hand1"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards5"></script>
-<script src="../js/classroom/paper-handins.js?v=boards3"></script>
+<script src="../js/classroom/paper-handins.js?v=hand1"></script>
 <script src="../js/classroom/resources-folder.js?v=boards3"></script>
-<script src="../js/classroom/work-helpers.js?v=boards4"></script>
-<script src="../js/classroom/publish-helpers.js?v=boards3"></script>
+<script src="../js/classroom/work-helpers.js?v=hand1"></script>
+<script src="../js/classroom/publish-helpers.js?v=hand1"></script>
 <script src="../js/classroom/publish-ui.js?v=restore2"></script>
-<script src="../js/classroom/ink-grader.js?v=boards2"></script>
+<script src="../js/classroom/ink-grader.js?v=tech1"></script>
 <script src="../js/admin/remote-students.js"></script>
 <script src="../js/tuition/tuition-helpers.js"></script>
 <script src="../js/admin/tuition.js"></script>
-<script src="../js/ui/fast-video.js?v=2"></script>
+<script src="../js/ui/fast-video.js?v=3"></script>
 <script src="../js/parent/parent-ads.js?v=4"></script>
 <script src="../js/admin/parent-ads.js?v=5"></script>
-<script src="../js/tech/tech-helpers.js?v=tech11"></script>
+<script src="../js/tech/tech-helpers.js?v=tech12"></script>
 <script src="../js/tech/tech-manage.js?v=tech8"></script>
-<script src="../js/tech/tech-classes.js?v=1"></script>
-<script src="../js/tech/writing-studio.js?v=tech7"></script>
-<script src="../js/tech/code-lab.js?v=tech7"></script>
+<script src="../js/tech/tech-work.js?v=1"></script>
+<script src="../js/tech/tech-groups.js?v=1"></script>
+<script src="../js/tech/tech-classes.js?v=3"></script>
+<script src="../js/tech/writing-studio.js?v=tech12"></script>
+<script src="../js/tech/code-lab.js?v=tech12"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
-<script src="../js/admin/tech.js?v=tech11"></script>
+<script src="../js/admin/tech.js?v=tech12"></script>
 <link rel="stylesheet" href="../js/parent/parent-ads.css?v=4" />
 
 <style>
@@ -1921,12 +1923,10 @@ function viewStudent(id){
       </div>
     </div>
     <div class="detail-block">
-      <div class="k">Hands in on paper</div>
+      <div class="k">Hand-in style per subject</div>
       <div class="v">
-        <label style="display:flex; gap:.5rem; align-items:flex-start; font-size:.84rem; cursor:pointer;">
-          <input type="checkbox" id="editPhysical" ${s.physicalStudent===true?'checked':''} style="margin-top:.2rem;" />
-          <span>This student attends at school and hands in paper copies. They get no upload reminders or overdue notices. You or their tutor record each hand-in and grade from the work's student list.</span>
-        </label>
+        <div style="font-size:.78rem; color:var(--muted); margin-bottom:.6rem;"><b>Online hand-in</b> (the default): the student uploads their work. <b>Physical hand-in</b>: they hand in paper at school in that subject, get no upload reminders or overdue notices for it, and you or their tutor record each hand-in from the work's student list.</div>
+        <div id="editHandIn"></div>
       </div>
     </div>
         <div class="detail-block">
@@ -2193,7 +2193,12 @@ async function saveStudentEdit(id){
     tutorId: legacyTutorId,
     tutorName: legacyTutorName,
     tutorSlug: legacyTutorSlug,
-    physicalStudent: !!(document.getElementById('editPhysical')||{}).checked,
+    ...(()=>{
+      // One choice per subject; the older all-subjects flag is retired once this is saved.
+      const map = {};
+      document.querySelectorAll('#editHandIn [data-handin]').forEach(sel=>{ if(keys.indexOf(sel.dataset.handin)!==-1) map[sel.dataset.handin] = sel.value==='physical'?'physical':'online'; });
+      return { handInBySubject: map, physicalStudent: false };
+    })(),
     ...(()=>{
       const bh = document.getElementById('editBoards');
       if(!bh || !window.ClassroomUI) return {};
@@ -2231,8 +2236,27 @@ function renderEditBoards(s){
   host.innerHTML = CUt.boardAssignHtml(cur, editSubjectKeys, 'eb');
 }
 
+/* Online hand-in by default; Physical hand-in per subject (lmzHandInStyle in lms-helpers.js). */
+function renderEditHandIn(s){
+  const host = document.getElementById('editHandIn');
+  if(!host) return;
+  const cur = {};
+  host.querySelectorAll('[data-handin]').forEach(sel=>{ cur[sel.dataset.handin] = sel.value; });
+  if(!editSubjectKeys.length){ host.innerHTML = '<div style="color:var(--muted); font-size:.82rem;">Add subjects above to choose how the student hands in each one.</div>'; return; }
+  host.innerHTML = editSubjectKeys.map(k=>{
+    const v = cur[k] || lmzHandInStyle(s, k);
+    return `<div style="display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.35rem 0; border-bottom:1px solid var(--line);">
+      <span style="font-weight:700; font-size:.86rem;">${escapeHtml(lmzSubjectLabel(k))}</span>
+      <select data-handin="${escapeHtml(k)}" aria-label="Hand-in style for ${escapeHtml(lmzSubjectLabel(k))}" style="padding:.45rem .6rem; border:1.5px solid var(--line); border-radius:9px; font-family:var(--font);">
+        <option value="online" ${v!=='physical'?'selected':''}>${LMZ_HAND_IN.online}</option>
+        <option value="physical" ${v==='physical'?'selected':''}>${LMZ_HAND_IN.physical}</option>
+      </select></div>`;
+  }).join('');
+}
+
 function renderSubjectTutors(s){
   renderEditBoards(s);
+  renderEditHandIn(s);
   const host = document.getElementById('editSubjectTutors');
   if(!host) return;
   const ks = (document.getElementById('editKS')||{value:''}).value;

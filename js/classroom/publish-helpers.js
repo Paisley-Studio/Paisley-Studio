@@ -83,9 +83,9 @@
     if (sub && sub.status === 'Corrections') return { k: 'corrections', cls: 'b-declined', icon: 'fa-rotate-left', text: 'Corrections requested' };
     if (sub && sub.status === 'Suspended') return { k: 'suspended', cls: 'b-declined', icon: 'fa-ban', text: 'Suspended' };
     if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
-    if (sub && sub.handIn === 'physical' && sub.status === 'Submitted') return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-school', text: 'Paper copy received \u2013 awaiting grading' };
+    if (sub && sub.handIn === 'physical' && sub.status === 'Submitted') return { k: 'submitted', resub: false, round: 1, cls: 'b-new', icon: 'fa-school', text: 'Physical hand-in received \u2013 awaiting grading' };
     if (sub) return { k: 'submitted', cls: 'b-pending', icon: 'fa-inbox', text: 'Submitted \u2013 awaiting grading' };
-    if (hardCopy) return { k: 'paper', cls: 'b-plain', icon: 'fa-school', text: 'Paper hand-in at school' };
+    if (hardCopy) return { k: 'paper', cls: 'b-plain', icon: 'fa-school', text: 'Physical hand-in' };
     var due = dueOf(item, kind);
     if (due && due.getTime() < now) return { k: 'overdue', cls: 'b-declined', icon: 'fa-triangle-exclamation', text: 'Overdue' };
     return { k: 'pending', cls: 'b-plain', icon: 'fa-circle', text: 'Not submitted' };
@@ -849,7 +849,7 @@
       var submitted = 0, graded = 0, paper = 0;
       aud.forEach(function (s) {
         var x = subs[s.id];
-        if (!x) { if (global.PaperHandIns.isFlagged(s)) paper++; return; }
+        if (!x) { if (global.PaperHandIns.isFlagged(s, subjectOf(it))) paper++; return; }
         if (x.status !== 'In progress' && x.status !== 'Suspended') submitted++;
         if (x.status === 'Graded') graded++;
       });
@@ -1038,16 +1038,16 @@
 
         var rows = aud.map(function (s) {
           var sub = subs[s.id] || null;
-          var st = workState(it, sub, kind, global.PaperHandIns.isFlagged(s));
+          var st = workState(it, sub, kind, global.PaperHandIns.isFlagged(s, subjectOf(it)));
           var canGrade = sub && sub.status !== 'In progress' && !global.PaperHandIns.isPaperSub(sub);
           return '<tr>' + global.PaperHandIns.checkCell(s) +
-            '<td><b>' + esc(s.name || s.email || s.id) + '</b>' + global.PaperHandIns.chip(s) + '</td>' +
+            '<td><b>' + esc(s.name || s.email || s.id) + '</b>' + global.PaperHandIns.chip(s, subjectOf(it)) + '</td>' +
             '<td>' + pill(st.cls, st.text, st.icon) + '</td>' +
             '<td>' + (sub && (sub.submittedAt || sub.updatedAt) ? esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '—') + '</td>' +
             '<td>' +
               (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> File</a>' : '') +
               (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Graded</a>' : '') +
-              global.PaperHandIns.rowButtons(s, sub) +
+              global.PaperHandIns.rowButtons(s, sub, subjectOf(it)) +
               (canGrade
                 ? (kind === 'exam'
                     ? '<button type="button" class="cr-btn sm primary" data-a="grade-flat" data-s="' + esc(s.id) + '"><i class="fas fa-pen-nib"></i> ' + (sub.status === 'Graded' ? 'Review' : 'Grade') + '</button>'
@@ -1065,7 +1065,7 @@
 
         global.PaperHandIns.wire(m.body, {
           col: kind === 'exam' ? flatExamSubmissionsRef(it.cid, it.id) : coll(it.cid, it.tid, it.isClasswork ? 'lesson' : 'assignment').doc(it.id).collection('submissions'),
-          students: aud, subs: subs, user: user,
+          students: aud, subs: subs, user: user, subjectId: subjectOf(it),
           onDone: async function () { await refresh(); paint(); }
         });
 

@@ -104,7 +104,7 @@ async function runHomeworkDeadlineReminder() {
     const dueAt = W.toDate(a.dueAt);
 
     for (const student of students) {
-      if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
+      if (W.isPaperStudent(student, a.subjectId || (classroom && classroom.subjectId)) || await hasSubmitted(doc.ref, student.id)) continue;
       const parents = await W.parentsOfStudent(student.id);
       const msg = `${a.title} (${a.subjectName || ""}${a.topicTitle ? ", " + a.topicTitle : ""}) is due ${fmtShort(dueAt)}.`;
       await tellFamily({
@@ -152,7 +152,7 @@ async function runHomeworkOverdueGraceNotice() {
     const graceUntil = new Date(dueAt.getTime() + GRACE_HOURS * HOUR);
 
     for (const student of students) {
-      if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
+      if (W.isPaperStudent(student, a.subjectId || (classroom && classroom.subjectId)) || await hasSubmitted(doc.ref, student.id)) continue;
       const parents = await W.parentsOfStudent(student.id);
       const msg = `Homework ${a.title} for ${a.subjectName || "your subject"} is overdue. You have a 48-hour extension until ${fmtShort(graceUntil)}.`;
       await tellFamily({
@@ -316,7 +316,7 @@ async function runGenerateUnattendedWorkReport() {
     const students = await W.resolveStudents(classroom, a.recipients, a);
     const dueAt = W.toDate(a.dueAt);
     for (const student of students) {
-      if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
+      if (W.isPaperStudent(student, a.subjectId || (classroom && classroom.subjectId)) || await hasSubmitted(doc.ref, student.id)) continue;
       if (!perStudent.has(student.id)) perStudent.set(student.id, { student, items: [] });
       perStudent.get(student.id).items.push({
         subjectName: a.subjectName || (classroom && classroom.subjectName) || "",
@@ -418,7 +418,7 @@ async function collectOverdueWork(now) {
       const students = await W.resolveStudents(classroom, a.recipients, a);
       const dueAt = W.toDate(a[src.field]);
       for (const student of students) {
-        if (W.isPaperStudent(student) || await hasSubmitted(doc.ref, student.id)) continue;
+        if (W.isPaperStudent(student, a.subjectId || (classroom && classroom.subjectId)) || await hasSubmitted(doc.ref, student.id)) continue;
         if (!perStudent.has(student.id)) perStudent.set(student.id, { student, items: [] });
         perStudent.get(student.id).items.push({
           subjectName: a.subjectName || a.subject || (classroom && classroom.subjectName) || "",

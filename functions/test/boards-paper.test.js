@@ -146,6 +146,11 @@ test("only the explicit flag makes a paper student", () => {
   assert.equal(W.isPaperStudent({ physicalStudent: true }), true);
   assert.equal(W.isPaperStudent({ physicalStudent: false }), false);
   assert.equal(W.isPaperStudent({}), false);
+  // Hand-in style is per subject; the old all-subjects flag counts only where a subject has no choice.
+  assert.equal(W.isPaperStudent({ handInBySubject: { mathematics: "physical" } }, "Mathematics"), true);
+  assert.equal(W.isPaperStudent({ handInBySubject: { mathematics: "physical" } }, "english"), false);
+  assert.equal(W.isPaperStudent({ physicalStudent: true, handInBySubject: { english: "online" } }, "english"), false);
+  assert.equal(W.isPaperStudent({ physicalStudent: true, handInBySubject: { english: "online" } }, "maths"), true);
 });
 
 /* ---------- overdue report ---------- */

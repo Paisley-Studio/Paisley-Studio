@@ -1,7 +1,9 @@
 /* =========================================================
    FastVideo: the one way Paisley plays a posted video.
    Works with an AWS link (S3 or CloudFront, .mp4 / .webm / .mov / .m3u8),
-   a YouTube or Vimeo link, or a file uploaded to Firebase Storage.
+   a YouTube, Vimeo or Google Drive link, or a file uploaded to Firebase Storage.
+   A Drive video plays in Google's own player (drive.google.com/file/d/ID/preview),
+   so the file must be shared as "Anyone with the link" (Viewer is enough).
 
    Why videos start quickly here:
    - The connection to the video host is opened before anyone presses play.
@@ -39,10 +41,19 @@
 
   function ytId(u) { var m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/i.exec(clean(u)); return m ? m[1] : ''; }
   function vimeoId(u) { var m = /vimeo\.com\/(?:video\/)?(\d+)/i.exec(clean(u)); return m ? m[1] : ''; }
-  /* The player page for a YouTube or Vimeo link, otherwise ''. */
+  /* drive.google.com/file/d/ID/view, /open?id=ID, /uc?id=ID, docs.google.com/file/d/ID */
+  function driveId(u) {
+    u = clean(u);
+    if (!/^https:\/\/(drive|docs)\.google\.com\//i.test(u) || /\/folders\//i.test(u)) return '';
+    var m = /\/file\/(?:u\/\d+\/)?d\/([\w-]{10,})/i.exec(u) || /[?&]id=([\w-]{10,})/i.exec(u);
+    return m ? m[1] : '';
+  }
+  function isDrive(u) { return !!driveId(u); }
+  /* The player page for a YouTube, Vimeo or Google Drive link, otherwise ''. */
   function embed(u) {
     var y = ytId(u); if (y) return 'https://www.youtube-nocookie.com/embed/' + y;
     var v = vimeoId(u); if (v) return 'https://player.vimeo.com/video/' + v;
+    var d = driveId(u); if (d) return 'https://drive.google.com/file/d/' + d + '/preview';
     return '';
   }
   /* True when the link is plainly a video, whatever type the form says. */
@@ -56,6 +67,7 @@
     if (/console\.aws\.amazon\.com/i.test(u)) return 'That is a link to the AWS console page. Copy the file’s Object URL or your CloudFront link instead.';
     if (/^http:\/\//i.test(u)) return 'This link starts with http://. Browsers block those on a secure site, so use the https:// address.';
     if (!/^https:\/\//i.test(u)) return 'A video link must start with https://.';
+    if (/^https:\/\/(drive|docs)\.google\.com\//i.test(u) && !driveId(u)) return 'That is a Google Drive folder or page, not a video. In Drive, open the video, press Share, set it to “Anyone with the link” and copy that link.';
     return '';
   }
 
@@ -118,7 +130,7 @@
   /* A YouTube or Vimeo player that only loads when pressed. */
   function embedHtml(u, o) {
     o = o || {};
-    var y = ytId(u), poster = o.poster || (y ? 'https://i.ytimg.com/vi/' + y + '/hqdefault.jpg' : '');
+    var y = ytId(u), d = driveId(u), poster = o.poster || (y ? 'https://i.ytimg.com/vi/' + y + '/hqdefault.jpg' : (d ? 'https://drive.google.com/thumbnail?id=' + d + '&sz=w1280' : ''));
     preconnect(embed(u));
     return '<button type="button" class="fv-face" data-fv-embed="' + esc(embed(u)) + '" data-fv-title="' + esc(o.title || 'Video') + '" aria-label="Play ' + esc(o.title || 'video') + '"' +
       (poster ? ' style="background-image:url(&quot;' + esc(poster) + '&quot;)"' : '') + '><b aria-hidden="true">&#9654;</b></button>';
@@ -218,6 +230,7 @@
     var why = problem(u);
     if (!u) return Promise.resolve({ ok: false, message: 'Paste a link first.' });
     if (why) return Promise.resolve({ ok: false, message: why });
+    if (isDrive(u)) return Promise.resolve({ ok: true, embed: true, message: 'Google Drive link. It plays in Google’s player on the page. In Drive, set Share > General access to “Anyone with the link” (Viewer is enough), or students see a sign-in or “no access” screen.' });
     if (embed(u)) return Promise.resolve({ ok: true, embed: true, message: 'YouTube/Vimeo link. It plays in their player when pressed.' });
     return new Promise(function (res) {
       var v = document.createElement('video'), t0 = Date.now(), done = false, hls = null;
@@ -288,7 +301,7 @@
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-fv-embed]'); if (!b) return;
       var f = document.createElement('iframe'), src = b.getAttribute('data-fv-embed');
-      f.src = src + (src.indexOf('?') === -1 ? '?' : '&') + 'autoplay=1&rel=0';
+      f.src = /^https:\/\/drive\.google\.com\//.test(src) ? src : src + (src.indexOf('?') === -1 ? '?' : '&') + 'autoplay=1&rel=0';
       f.title = b.getAttribute('data-fv-title') || 'Video';
       f.allow = 'accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen';
       f.setAttribute('allowfullscreen', '');
@@ -300,7 +313,7 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch); else watch();
 
   g.FastVideo = {
-    esc: esc, embed: embed, isVideoLink: isVideoLink, isHls: isHls, isFile: isFile, problem: problem, isCheap: isCheap,
+    esc: esc, embed: embed, isDrive: isDrive, driveId: driveId, isVideoLink: isVideoLink, isHls: isHls, isFile: isFile, problem: problem, isCheap: isCheap,
     preconnect: preconnect, prewarm: prewarm, html: html, videoHtml: videoHtml, embedHtml: embedHtml,
     enhance: enhance, release: release, test: test, testMessage: testMessage
   };

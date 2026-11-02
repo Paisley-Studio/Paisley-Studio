@@ -394,6 +394,7 @@ ul.crit{margin:.2rem 0 0 1.2rem;line-height:1.7}
       <button class="nav on" data-v="home" type="button"><i class="fas fa-house"></i> Home</button>
       <div class="nav-sep">Learn</div>
       <button class="nav" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
+      <button class="nav" data-v="groups" type="button"><i class="fas fa-people-group"></i> My group</button>
       <button class="nav" data-v="missions" id="navMissions" type="button" hidden><i class="fas fa-bullseye"></i> Missions</button>
       <button class="nav" data-v="learn" id="navLearn" type="button" hidden><i class="fas fa-book-open"></i> Resources</button>
       <button class="nav" data-v="practice" type="button"><i class="fas fa-flask"></i> Practice</button>
@@ -432,12 +433,14 @@ ul.crit{margin:.2rem 0 0 1.2rem;line-height:1.7}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../js/tech/writing-studio.js?v=tech7"></script>
-<script src="../js/tech/code-lab.js?v=tech7"></script>
+<script src="../js/tech/writing-studio.js?v=tech12"></script>
+<script src="../js/tech/code-lab.js?v=tech12"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
-<script src="../js/ui/fast-video.js?v=2"></script>
-<script src="../js/tech/tech-helpers.js?v=tech11"></script>
-<script src="../js/tech/tech-classes.js?v=1"></script>
+<script src="../js/ui/fast-video.js?v=3"></script>
+<script src="../js/tech/tech-helpers.js?v=tech12"></script>
+<script src="../js/tech/tech-work.js?v=1"></script>
+<script src="../js/tech/tech-groups.js?v=1"></script>
+<script src="../js/tech/tech-classes.js?v=3"></script>
 <script>
 (function(){
 'use strict';
@@ -447,7 +450,7 @@ T.injectStyle();
 
 const S={uid:null,p:null,classLesson:null,recent:[],navVideo:null,bubbles:null,content:{},builds:[],wall:[],progress:null,live:{},practice:[],activity:[],v:'home',ws:null,chat:null,openId:null,openTab:null,pr:null,projFilter:'all',mtab:'missions',unsubs:[]};
 const KINDS=['path','topic','mission','challenge','tool','resource','template','aiTool'];
-const TITLES={home:'Home',classes:'Classes',missions:'Missions',learn:'Resources',practice:'Practice',projects:'My projects',feedback:'Coach feedback',live:'Live classes',showcase:'My showcase',progress:'Learning path',toolbox:'AI Toolbox',coach:'Coach',profile:'Profile'};
+const TITLES={home:'Home',classes:'Classes',groups:'My group',missions:'Missions',learn:'Resources',practice:'Practice',projects:'My projects',feedback:'Coach feedback',live:'Live classes',showcase:'My showcase',progress:'Learning path',toolbox:'AI Toolbox',coach:'Coach',profile:'Profile'};
 const ALIAS={studio:'home',messages:'coach',portfolio:'showcase',challenges:'missions'};
 const DISCIPLINES=T.DISCIPLINES;
 const CREATION_ICON={CODE:'fa-code',DESIGN:'fa-palette',WRITING:'fa-pen-nib',RESEARCH:'fa-microscope',MEDIA:'fa-film',MUSIC:'fa-music',AI:'fa-robot',BUILD:'fa-rocket',Other:'fa-star'};
@@ -571,6 +574,7 @@ function subFor(v){
   return ({
     home:S.builds.length?'Hi '+n+'. Here is your next step.':'Hi '+n+'. Start with a mission or an idea of your own.',
     classes:'Your video lessons, notes, quizzes and practice tests.',
+    groups:'Your group, your teammates and the tasks you build together.',
     missions:'Missions from your coaches. Learn, practise, then build.',
     learn:'Extra resources from your coaches.',
     practice:'Try things out. Practice is never graded.',
@@ -669,6 +673,7 @@ function render(silent){
   if(v==='projects'&&S.openId) return mountProject();
   if(v==='coach') return renderCoach();
   if(v==='classes') return mountClasses();
+  if(v==='groups') return mountGroups();
   if(v==='practice'&&S.openId) return openPractice(S.openId);
   el.innerHTML=(VIEWS[v]||VIEWS.home)();
   /* A mission page is a mounted player, so live updates never restart its video. */
@@ -686,6 +691,11 @@ function mountClasses(){
   const lid=S.classLesson; S.classLesson=null;
   $('view').innerHTML='<div id="classHost"></div>';
   S.ws=TechClasses.mountLearner($('classHost'),{me:me(),student:Object.assign({id:S.uid},S.p),lessonId:lid,onStartProject:startClassProject});
+}
+/* Groups: teammates and shared tasks, coded together live. */
+function mountGroups(){
+  $('view').innerHTML='<div id="groupHost"></div>';
+  S.ws=TechGroups.mountMine($('groupHost'),{me:me(),student:Object.assign({id:S.uid},S.p)});
 }
 /* The project a lesson asks for. One per lesson: pressing it again reopens the same one. */
 async function startClassProject(l){

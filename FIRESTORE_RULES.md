@@ -171,6 +171,10 @@ TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH
 | `techLessons/{id}/private/key` (the answers) | admin, the lesson's coach | admin, active coach. Never builders or parents | admin, the lesson's coach |
 | `techLessonProgress/{uid}_{lessonId}` | active builder, own, no score fields | builder, their coach, linked guardian, admin | builder: only opened / watched fields. Scores come from `submitTechQuiz` |
 | `techAttempts` | `submitTechQuiz` only | builder, their coach, linked guardian, admin | nobody |
+| `techLessonWork/{uid}_{lessonId}` | active builder, own, routed to their coach, status Draft or Submitted, no mark fields | builder (also before it exists), their coach, linked guardian, admin | builder: work fields only, while Draft or Corrections, may hand in. Coach of the builder: mark fields only (`techMarkKeys()`). Admin: anything |
+| `techGroups/{gid}` | admin, active coach (own `createdBy`), up to 30 members | admin, active coach, members | admin, or the coach who made it |
+| `techGroups/{gid}/tasks/{tid}` | admin, active coach, status Draft | admin, active coach, members | admin and active coaches (marking); members: shared work fields only (`techGroupWorkKeys()`), while Draft or Corrections, may hand in |
+| `techGroups/{gid}/tasks/{tid}/presence/{uid}` | the member themselves | admin, active coach, members | the member themselves |
 | `techNotifications` | Cloud Functions only | recipient, admin | recipient may only flip `read` |
 | `techBuilds` (+ `feedback`) | active builder; `coachId` must equal their current coach | builder, their coach, linked guardians, admin | builder (cannot change coach / approve themselves / write grade or review fields, `techReviewKeys()`), coach (review, grading and publication fields only), admin |
 | `techBuilds/{id}/submissions` | the active builder, `status: 'submitted'`, no review fields | builder, their coach, linked guardians, admin | coach: review fields and `status` only; admin. Never the submitted work |
@@ -193,6 +197,6 @@ Guardians sign in with their `parentAccounts` identity, so a parent who already 
 - `classTutorMay` requires the classroom's board in `tutorAccounts.boardScope` (no `boardScope` = Cambridge only). `classStudentMay` requires it to match the student's board for that subject. CBC classrooms skip the tutor check.
 - Assignment and lesson **reads** are not separated by board or audience here: the collection-group rules at the top of the file allow any signed-in user. Exams, hand-ins and all writes are enforced.
 - `submissions/{sid}`: admins and the classroom's tutors may create or delete a record with `handIn == 'physical'`. Students cannot.
-- `students/{uid}`: a tutor who teaches the student may change only `physicalStudent`, `physicalSetBy` and `physicalSetAt`. Students cannot change `board`, `subjectBoards`, `activatedAt` or `physicalStudent`.
+- `students/{uid}`: a tutor who teaches the student may change only `physicalStudent`, `handInBySubject` (per subject: `physical` or `online`), `physicalSetBy` and `physicalSetAt`. Students cannot change `board`, `subjectBoards`, `activatedAt`, `physicalStudent` or `handInBySubject`, and cannot set the last two at sign-up.
 - `techStudents/{uid}` create requires a non-empty `email`; the owner may update it.
 - `overdueWorkState/{uid}` is written by Cloud Functions only (no client access).

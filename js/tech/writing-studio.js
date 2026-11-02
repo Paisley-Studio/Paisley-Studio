@@ -18,7 +18,7 @@
      - Preview (sanitized)
 
    Exports:
-     WritingStudio.mount(hostEl, { build, me, canEdit, onSave, files })
+     WritingStudio.mount(hostEl, { build, me, canEdit, onSave, files, imagePath(fileName) })
 
    No external dependencies. No library. ContentEditable + execCommand,
    sanitized on the way in AND out (onSave gives the parent the
@@ -283,7 +283,8 @@
           if (f.size > 25 * 1024 * 1024) { setStatus2('Image must be under 25 MB.', 'err'); return; }
           btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading…';
           try {
-            var path = 'techBuilds/' + build.studentId + '/' + build.id + '/' + Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
+            var clean = Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
+            var path = typeof opts.imagePath === 'function' ? opts.imagePath(clean) : 'techBuilds/' + build.studentId + '/' + build.id + '/' + clean;
             var r = firebase.storage().ref(path);
             await r.put(f, { contentType: f.type });
             var url = await r.getDownloadURL();
@@ -377,6 +378,13 @@
 
     /* ---------- Public API ---------- */
     return {
+      /* Saves now and resolves when done (used before a hand-in). */
+      flush: function () {
+        if (saveTimer) clearTimeout(saveTimer);
+        flushSave();
+        return new Promise(function (res) { (function wait() { if (saving) return setTimeout(wait, 150); res(); })(); });
+      },
+      html: function () { return sanitizeHtml(editor.innerHTML); },
       destroy: function () {
         if (saveTimer) clearTimeout(saveTimer);
         if (statusTimer) clearTimeout(statusTimer);

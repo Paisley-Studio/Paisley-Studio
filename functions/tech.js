@@ -386,6 +386,9 @@ exports.onTechEnrolmentUpdated = onDocumentUpdated(
       builds.docs.forEach((d) => { if ((d.data().coachId || "") !== cid) batch.update(d.ref, { coachId: cid, coachName: cname }); });
       const gchats = await db.collection("techGuardianChats").where("studentId", "==", sid).get();
       gchats.docs.forEach((d) => { if ((d.data().coachId || "") !== cid) batch.update(d.ref, { coachId: cid, coachName: cname }); });
+      /* Class work follows too, so hand-ins reach the new coach's Results. */
+      const works = await db.collection("techLessonWork").where("studentId", "==", sid).get();
+      works.docs.forEach((d) => { if ((d.data().coachId || "") !== cid) batch.update(d.ref, { coachId: cid }); });
       await batch.commit();
     }
     if (coachChanged || approvedWithCoach) {
@@ -666,7 +669,7 @@ exports.onTechContentWritten = onDocumentWritten(
       for (const g of await guardiansOf(s.id)) {
         const gFresh = await techNotify(g.parentUid, "guardian", "tech_mission", `New ${word} for ${first(s.name)}`, msg, { studentId: s.id, missionId: cid, id: `mission_${cid}_${s.id}` });
         if (gFresh) {
-          await email(g.email, `New ${word} for ${first(s.name)}: ${a.title || ""}`, {
+          await email(g.email, `New ${word} for ${first(s.name)}: ${title}`, {
             preheader: msg, heading: `A new ${word} for ${first(s.name)}.`,
             intro: `Hi ${esc(first(g.name))}, ${esc(a.createdByName || "their coach")} posted “${esc(a.title || "")}” for ${esc(first(s.name))}.`,
             body: `<p style="margin:0 0 8px;">${esc(String(a.summary || ""))}</p>` + (a.deadline ? `<p style="margin:0;"><strong>Due:</strong> ${esc(a.deadline)}</p>` : ""),
@@ -695,24 +698,26 @@ exports.onTechLessonWritten = onDocumentWritten(
     const a = event.data.after.exists ? event.data.after.data() : null;
     if (!a || a.status !== "published" || (b && b.status === "published")) return;
     const lid = event.params.lid, word = a.type === "test" ? "practice test" : "lesson", course = a.courseName || "your class";
-    const msg = `${a.title || "A new " + word} · ${course}${a.topicTitle ? " · " + a.topicTitle : ""}`;
+    /* A lesson may have no title of its own: class > topic names it. */
+    const title = lessonTitle(a);
+    const msg = `${course}${a.topicTitle ? " · " + a.topicTitle : ""}${a.title ? " · " + a.title : ""}`;
     const extra = { lessonId: lid, courseId: a.courseId || "", section: "classes" };
     const url = APP + LINKS.student + "#classes";
     for (const s of await trackAudience(a.track)) {
       const fresh = await techNotify(s.id, "student", "tech_lesson", `New ${word} in ${course}`, msg, Object.assign({ studentId: s.id, id: `lesson_${lid}`, link: LINKS.student + "#classes" }, extra));
       if (!fresh) continue;
-      await email(s.email, `New ${word} in ${course}: ${a.title || ""}`, {
+      await email(s.email, `New ${word} in ${course}: ${title}`, {
         preheader: msg, heading: `A new ${word} is ready.`,
-        intro: `Hi ${esc(first(s.name))}, ${esc(a.createdByName || "your coach")} posted “${esc(a.title || "")}” in ${esc(course)}.`,
+        intro: `Hi ${esc(first(s.name))}, ${esc(a.createdByName || "your coach")} posted “${esc(title)}” in ${esc(course)}.`,
         body: `<p style="margin:0;">Open your studio to ${a.type === "test" ? "take the test" : "watch the lesson"}.</p>`,
         cta: { label: `Open the ${word}`, url }
       });
       for (const g of await guardiansOf(s.id)) {
         const gFresh = await techNotify(g.parentUid, "guardian", "tech_lesson", `New ${word} for ${first(s.name)}`, msg, Object.assign({ studentId: s.id, id: `lesson_${lid}_${s.id}`, link: LINKS.guardian + "#classes" }, extra));
         if (gFresh) {
-          await email(g.email, `New ${word} for ${first(s.name)}: ${a.title || ""}`, {
+          await email(g.email, `New ${word} for ${first(s.name)}: ${title}`, {
             preheader: msg, heading: `A new ${word} for ${first(s.name)}.`,
-            intro: `Hi ${esc(first(g.name))}, ${esc(a.createdByName || "their coach")} posted “${esc(a.title || "")}” in ${esc(course)} for ${esc(first(s.name))}.`,
+            intro: `Hi ${esc(first(g.name))}, ${esc(a.createdByName || "their coach")} posted “${esc(title)}” in ${esc(course)} for ${esc(first(s.name))}.`,
             body: `<p style="margin:0;">You can watch it and see their results in the guardian portal.</p>`,
             cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#classes" }
           });
@@ -722,14 +727,27 @@ exports.onTechLessonWritten = onDocumentWritten(
   }
 );
 
+/* What people call a lesson: its own title, or its topic ("Flow lesson"). */
+function lessonTitle(l) {
+  const word = l && l.type === "test" ? "practice test" : "lesson";
+  return String((l && l.title) || (l && l.topicTitle ? `${l.topicTitle} ${word}` : `New ${word}`)).slice(0, 160);
+}
+
 /* Marks answers against the private key. questions never hold the answers,
-   so this is the only place a builder learns which one was right. */
+   so this is the only place a builder learns which one was right.
+   "open" questions (a written answer, no options) are kept for the coach to
+   read and left out of the score; only open questions gives total 0, percent null. */
 function gradeTechQuiz(questions, key, answers) {
   const given = answers || {}, k = key || {};
   const norm = (x) => String(x == null ? "" : x).trim().toLowerCase().replace(/\s+/g, " ");
-  let score = 0;
+  let score = 0, total = 0, openCount = 0;
   const review = (questions || []).map((q) => {
     const a = k[q.id] || {}, raw = given[q.id];
+    if (q.type === "open") {
+      openCount++;
+      return { id: q.id, text: String(q.text || ""), given: String(raw == null ? "" : raw).slice(0, 3000), open: true, correct: null, answer: "", explanation: String(a.explanation || "") };
+    }
+    total++;
     let correct = false, shown = "", answer = "";
     if (q.type === "short") {
       const accepted = Array.isArray(a.accepted) ? a.accepted : [];
@@ -746,8 +764,7 @@ function gradeTechQuiz(questions, key, answers) {
     if (correct) score++;
     return { id: q.id, text: String(q.text || ""), given: shown, correct, answer, explanation: String(a.explanation || "") };
   });
-  const total = review.length;
-  return { score, total, percent: total ? Math.round((score / total) * 100) : 0, review };
+  return { score, total, percent: total ? Math.round((score / total) * 100) : null, openCount, review };
 }
 
 exports.submitTechQuiz = onCall({ region: LOCATION }, async (req) => {
@@ -771,30 +788,203 @@ exports.submitTechQuiz = onCall({ region: LOCATION }, async (req) => {
   const kind = l.type === "test" ? "test" : "quiz";
   try {
     await attemptRef.create({
-      studentId: uid, studentName: s.name || "", coachId: s.coachId || "", lessonId, kind, title: l.title || "",
+      studentId: uid, studentName: s.name || "", coachId: s.coachId || "", lessonId, kind, title: lessonTitle(l),
       courseId: l.courseId || "", courseName: l.courseName || "", topicId: l.topicId || "", topicTitle: l.topicTitle || "", track: l.track || "",
-      score: res.score, total: res.total, percent: res.percent, review: res.review, at: FV().serverTimestamp()
+      score: res.score, total: res.total, percent: res.percent, openCount: res.openCount, review: res.review, at: FV().serverTimestamp()
     });
   } catch (e) {
     if (e && (e.code === 6 || /already exists/i.test(e.message || ""))) return res;
     throw e;
   }
   const pRef = db.collection("techLessonProgress").doc(uid + "_" + lessonId), was = await pRef.get();
-  const best = Math.max(was.exists && was.data().bestPercent != null ? was.data().bestPercent : -1, res.percent);
-  await pRef.set({
-    studentId: uid, lessonId, courseId: l.courseId || "", topicId: l.topicId || "", track: l.track || "", title: l.title || "",
-    attempts: FV().increment(1), lastPercent: res.percent, bestPercent: best, lastAttemptAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp()
-  }, { merge: true });
+  const prog = {
+    studentId: uid, lessonId, courseId: l.courseId || "", topicId: l.topicId || "", track: l.track || "", title: lessonTitle(l),
+    attempts: FV().increment(1), lastAttemptAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp()
+  };
+  if (res.percent != null) {
+    prog.lastPercent = res.percent;
+    prog.bestPercent = Math.max(was.exists && was.data().bestPercent != null ? was.data().bestPercent : -1, res.percent);
+  }
+  await pRef.set(prog, { merge: true });
 
   const word = kind === "test" ? "practice test" : "quiz";
-  await logActivity(uid, "quiz_done", `Scored ${res.percent}% on the ${word} “${l.title || ""}”`, { studentName: s.name || "", by: "student" });
-  if (kind === "test") {
-    const line = `${s.name || "A builder"} scored ${res.score}/${res.total} (${res.percent}%) on “${l.title || ""}”.`;
-    if (s.coachId) await techNotify(s.coachId, "coach", "tech_result", "Practice test finished", line, { studentId: uid, section: "results" });
-    await notifyGuardians(uid, "tech_result", `Practice test result for ${first(s.name)}`, line, { section: "classes" });
+  const marked = res.percent != null;
+  const written = res.openCount ? ` and wrote ${res.openCount} answer${res.openCount === 1 ? "" : "s"} to read` : "";
+  await logActivity(uid, "quiz_done", marked ? `Scored ${res.percent}% on the ${word} “${lessonTitle(l)}”` : `Handed in answers to the ${word} “${lessonTitle(l)}”`, { studentName: s.name || "", by: "student" });
+  /* The coach hears about every practice test, and about any written answers waiting to be read. */
+  if (kind === "test" || res.openCount) {
+    const who = s.name || "A builder";
+    const line = marked ? `${who} scored ${res.score}/${res.total} (${res.percent}%) on “${lessonTitle(l)}”${written}.` : `${who} handed in written answers to “${lessonTitle(l)}”.`;
+    if (s.coachId) await techNotify(s.coachId, "coach", "tech_result", kind === "test" ? "Practice test finished" : "Quiz answers to read", line, { studentId: uid, section: "results" });
+    if (kind === "test") await notifyGuardians(uid, "tech_result", `Practice test ${marked ? "result" : "handed in"} for ${first(s.name)}`, line, { section: "classes" });
   }
   return res;
 });
+
+/* =========================================================
+   Class work and group tasks: hand-in and marking
+   -----------------------------------------------------------
+   techLessonWork/{uid}_{lessonId}   one builder's code or writing for a lesson
+   techGroups/{gid}/tasks/{tid}      one group's shared work, coded together
+   Both carry status: Draft | Submitted | Graded | Corrections, and the fields
+   InkGrader writes when a coach marks (feedback, grade, maxScore,
+   gradedFileUrl, history). A hand-in tells the coach; a mark tells the
+   builder(s) and their guardians, by bell and email. Notification ids include
+   the round (submitCount, or the marking time), so a retry never repeats one.
+========================================================= */
+const WORK_STATES = ["Draft", "Submitted", "Graded", "Corrections"];
+const tsMs = (t) => (t && t.toMillis ? t.toMillis() : (t ? new Date(t).getTime() || 0 : 0));
+/* What changed between two versions of a work doc: "submitted", "graded", "corrections" or "". */
+function workEvent(before, after) {
+  const b = before || {}, a = after || {};
+  if (WORK_STATES.indexOf(a.status) === -1) return "";
+  if (a.status === "Submitted" && (b.status !== "Submitted" || (a.submitCount || 0) > (b.submitCount || 0))) return "submitted";
+  const gradedNow = !!a.gradedAt && tsMs(a.gradedAt) !== tsMs(b.gradedAt);
+  if (a.status === "Graded" && (b.status !== "Graded" || gradedNow)) return "graded";
+  if (a.status === "Corrections" && (b.status !== "Corrections" || gradedNow)) return "corrections";
+  return "";
+}
+function markLine(a) {
+  const score = a.grade != null && a.maxScore ? `Score: ${a.grade}/${a.maxScore}.` : "";
+  return `${score}${a.feedback ? " " + String(a.feedback).slice(0, 220) : ""}`.trim();
+}
+function workEmailBody(a) {
+  return (a.grade != null && a.maxScore ? `<p style="margin:0 0 .6rem;"><b>Score:</b> ${esc(a.grade)} / ${esc(a.maxScore)}</p>` : "") +
+    (a.feedback ? `<p style="margin:0 0 .6rem;white-space:pre-wrap;"><b>Feedback:</b> ${esc(String(a.feedback).slice(0, 2000))}</p>` : "") +
+    (a.gradedFileUrl ? `<p style="margin:0;">The marked copy, with the coach's notes drawn on it, is in the studio.</p>` : "");
+}
+function workRound(a, ev) { return ev === "submitted" ? String(a.submitCount || 1) : String(tsMs(a.gradedAt) || (a.history || []).length); }
+
+exports.onTechLessonWorkWritten = onDocumentWritten(
+  { document: "techLessonWork/{wid}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    if (!a) return;
+    const ev = workEvent(b, a);
+    if (!ev) return;
+    const wid = event.params.wid, sid = a.studentId, s = await techStudent(sid);
+    if (!s) return;
+    const what = a.lessonTitle || "class work", where = `${a.courseName || "Class"}${a.topicTitle ? " · " + a.topicTitle : ""}`;
+    const round = workRound(a, ev);
+    const extra = { studentId: sid, lessonId: a.lessonId || "", courseId: a.courseId || "" };
+    if (ev === "submitted") {
+      const coach = s.coachId || a.coachId;
+      const line = `${s.name || "A builder"} handed in ${what} (${where}).`;
+      if (coach) {
+        const fresh = await techNotify(coach, "coach", "tech_work", (a.submitCount || 1) > 1 ? "Corrected work handed in" : "Class work handed in", line, Object.assign({ id: `work_${wid}_s${round}`, section: "results" }, extra));
+        if (fresh) await email(await coachEmail(coach), `Work to mark: ${s.name || "builder"} · ${what}`, {
+          preheader: line, heading: "Work to mark", intro: esc(line),
+          body: `<p style="margin:0;">Open Results, then Class work, to run it and mark it.</p>`,
+          cta: { label: "Open coach dashboard", url: APP + LINKS.coach + "#results" }
+        });
+      } else {
+        await notifyAdmins("tech_work", "Class work handed in", line + " The builder has no coach yet.", Object.assign({ id: `work_${wid}_s${round}`, section: "results" }, extra));
+      }
+      await logActivity(sid, "work_submitted", `Handed in ${what}`, { studentName: s.name || "", by: "student", origin: "class" });
+      return;
+    }
+    const graded = ev === "graded";
+    const title = graded ? `Your work was marked: ${what}` : `Corrections asked: ${what}`;
+    const line = (graded ? `${a.gradedByName || "Your coach"} marked ${what}.` : `${a.gradedByName || "Your coach"} asked for corrections on ${what}.`) + " " + markLine(a);
+    const fresh = await techNotify(sid, "student", graded ? "tech_work_marked" : "tech_work_corrections", title, line, Object.assign({ id: `work_${wid}_m${round}`, section: "classes", link: LINKS.student + "#classes" }, extra));
+    if (fresh) {
+      await email(s.email, title, {
+        preheader: line, heading: graded ? "Your work is marked." : "Your coach asked for corrections.",
+        intro: `Hi ${esc(first(s.name))}, ${esc(a.gradedByName || "your coach")} ${graded ? "marked" : "looked at"} ${esc(what)} (${esc(where)}).`,
+        body: workEmailBody(a) + (graded ? "" : `<p style="margin:.6rem 0 0;">Fix it in the same lesson, then hand it in again.</p>`),
+        cta: { label: "Open your studio", url: APP + LINKS.student + "#classes" }
+      });
+      await logActivity(sid, graded ? "work_marked" : "work_corrections", (graded ? "Work marked: " : "Corrections asked: ") + what, { studentName: s.name || "", by: "coach", origin: "class" });
+    }
+    for (const g of await guardiansOf(sid)) {
+      const gt = graded ? `${first(s.name)}'s work was marked` : `Corrections asked for ${first(s.name)}`;
+      const gFresh = await techNotify(g.parentUid, "guardian", graded ? "tech_work_marked" : "tech_work_corrections", gt, `${what} · ${where}. ${markLine(a)}`.trim(), Object.assign({ id: `work_${wid}_m${round}_${sid}`, section: "classes", link: LINKS.guardian + "#classes" }, extra));
+      if (gFresh) await email(g.email, `${gt}: ${what}`, {
+        preheader: line, heading: gt + ".",
+        intro: `Hi ${esc(first(g.name))}, ${esc(a.gradedByName || "the coach")} ${graded ? "marked" : "asked for corrections on"} ${esc(first(s.name))}'s ${esc(what)} (${esc(where)}).`,
+        body: workEmailBody(a) + `<p style="margin:.6rem 0 0;">You can see the work and the feedback in Classes in the guardian portal.</p>`,
+        cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#classes" }
+      });
+    }
+  }
+);
+
+/* Builders added to a group hear who they are working with. */
+exports.onTechGroupWritten = onDocumentWritten(
+  { document: "techGroups/{gid}", region: LOCATION },
+  async (event) => {
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    if (!a) return;
+    const gid = event.params.gid, was = new Set((b && b.memberIds) || []);
+    for (const uid of (a.memberIds || []).filter((x) => !was.has(x))) {
+      const others = (a.members || []).filter((m) => m.id !== uid).map((m) => first(m.name));
+      await techNotify(uid, "student", "tech_group", `You're in the group ${a.name || ""}`,
+        others.length ? `You'll work with ${others.join(", ")}.` : "Your coach will add your teammates.",
+        { studentId: uid, id: `group_${gid}_joined`, section: "groups", link: LINKS.student + "#groups" });
+    }
+  }
+);
+
+exports.onTechGroupTaskWritten = onDocumentWritten(
+  { document: "techGroups/{gid}/tasks/{tid}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    if (!a) return;
+    const { gid, tid } = event.params, db = admin.firestore();
+    const gs = await db.collection("techGroups").doc(gid).get();
+    if (!gs.exists) return;
+    const grp = gs.data(), members = grp.members || [], gname = grp.name || "your group";
+    const extra = { section: "groups", link: LINKS.student + "#groups" };
+    if (!b) {
+      for (const m of members) {
+        const s = await techStudent(m.id); if (!s) continue;
+        const fresh = await techNotify(m.id, "student", "tech_group_task", `New group task: ${a.title || "task"}`, `For ${gname}. Open it to work on it together.`, Object.assign({ studentId: m.id, id: `gtask_${gid}_${tid}` }, extra));
+        if (fresh) await email(s.email, `New group task for ${gname}: ${a.title || ""}`, {
+          preheader: `Work on it together with ${gname}.`, heading: "A new group task.",
+          intro: `Hi ${esc(first(s.name))}, ${esc(a.createdByName || "your coach")} gave ${esc(gname)} a task: “${esc(a.title || "")}”.`,
+          body: `<p style="margin:0;">Open My group in your studio. Everyone in the group works in the same place and sees each other's changes live.</p>`,
+          cta: { label: "Open my group", url: APP + LINKS.student + "#groups" }
+        });
+      }
+      return;
+    }
+    const ev = workEvent(b, a);
+    if (!ev) return;
+    const round = workRound(a, ev);
+    if (ev === "submitted") {
+      const coach = grp.coachId || a.createdBy;
+      const line = `${gname} handed in “${a.title || "a task"}”${a.submittedByName ? " (sent by " + a.submittedByName + ")" : ""}.`;
+      const isCoach = !!coach && (await db.collection("techCoaches").doc(coach).get()).exists;
+      if (isCoach) await techNotify(coach, "coach", "tech_work", "Group work handed in", line, { id: `gwork_${gid}_${tid}_s${round}`, section: "groups", link: LINKS.coach + "#groups" });
+      else await notifyAdmins("tech_work", "Group work handed in", line, { id: `gwork_${gid}_${tid}_s${round}`, section: "groups" });
+      return;
+    }
+    const graded = ev === "graded", what = a.title || "your group task";
+    const title = graded ? `Group work marked: ${what}` : `Corrections asked: ${what}`;
+    const line = `${gname}: ${graded ? "marked" : "corrections asked"}. ${markLine(a)}`.trim();
+    for (const m of members) {
+      const s = await techStudent(m.id); if (!s) continue;
+      const fresh = await techNotify(m.id, "student", graded ? "tech_work_marked" : "tech_work_corrections", title, line, Object.assign({ studentId: m.id, id: `gwork_${gid}_${tid}_m${round}` }, extra));
+      if (fresh) await email(s.email, title, {
+        preheader: line, heading: graded ? "Your group's work is marked." : "Your coach asked for corrections.",
+        intro: `Hi ${esc(first(s.name))}, ${esc(a.gradedByName || "your coach")} ${graded ? "marked" : "looked at"} “${esc(what)}” for ${esc(gname)}.`,
+        body: workEmailBody(a), cta: { label: "Open my group", url: APP + LINKS.student + "#groups" }
+      });
+      for (const g of await guardiansOf(m.id)) {
+        const gt = graded ? `${first(s.name)}'s group work was marked` : `Corrections asked for ${first(s.name)}'s group`;
+        const gFresh = await techNotify(g.parentUid, "guardian", graded ? "tech_work_marked" : "tech_work_corrections", gt, `${gname} · ${what}. ${markLine(a)}`.trim(), { studentId: m.id, id: `gwork_${gid}_${tid}_m${round}_${m.id}`, section: "classes", link: LINKS.guardian + "#classes" });
+        if (gFresh) await email(g.email, `${gt}: ${what}`, {
+          preheader: line, heading: gt + ".",
+          intro: `Hi ${esc(first(g.name))}, ${esc(first(s.name))} worked on “${esc(what)}” with their group ${esc(gname)}, and ${esc(a.gradedByName || "the coach")} ${graded ? "marked it" : "asked for corrections"}.`,
+          body: workEmailBody(a), cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#classes" }
+        });
+      }
+    }
+  }
+);
 
 /* =========================================================
    Live classes (Google Meet) — techLiveClasses/{id}
@@ -1247,4 +1437,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf };
+exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, workEvent, lessonTitle };

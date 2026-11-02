@@ -80,3 +80,27 @@ test("navigation video: only admins upload; only active builders and admins get 
   await assertFails(st("coach1").ref("techSettings/navVideo/c.mp4").put(file(), { contentType: "video/mp4" }));
   await assertFails(st("kid1").ref(path).delete());
 });
+
+test("class work uploads: the builder into their own folder, pictures, video and sound only", async () => {
+  await assertSucceeds(st("kid1").ref("techWork/kid1/lesson1/cat.png").put(file(), meta));
+  await assertSucceeds(st("kid1").ref("techWork/kid1/lesson1/song.mp3").put(file(), { contentType: "audio/mpeg" }));
+  await assertFails(st("kid1").ref("techWork/kid1/lesson1/page.html").put(file(), { contentType: "text/html" }));
+  await assertFails(st("kid1").ref("techWork/kid1/lesson1/x.svg").put(file(), { contentType: "image/svg+xml" }));
+  await assertFails(st("kid1").ref("techWork/pend/lesson1/cat.png").put(file(), meta));
+  await assertFails(st("pend").ref("techWork/pend/lesson1/cat.png").put(file(), meta));
+  await assertSucceeds(st("coach1").ref("techWork/kid1/lesson1/cat.png").getMetadata());
+});
+
+test("group uploads are for members; marked copies come from coaches and admins", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc("techGroups/g1").set({ name: "Team", memberIds: ["kid1"], createdBy: "coach1" });
+  });
+  await assertSucceeds(st("kid1").ref("techGroupWork/g1/t1/logo.png").put(file(), meta));
+  await assertFails(st("stranger").ref("techGroupWork/g1/t1/logo.png").put(file(), meta));
+  const pdf = { contentType: "application/pdf" };
+  await assertSucceeds(st("coach1").ref("techGraded/kid1/lesson1/graded.pdf").put(file(), pdf));
+  await assertSucceeds(st("admin1").ref("techGraded/group_g1/t1/graded.pdf").put(file(), pdf));
+  await assertFails(st("kid1").ref("techGraded/kid1/lesson1/fake.pdf").put(file(), pdf));
+  await assertFails(st("coach1").ref("techGraded/kid1/lesson1/x.png").put(file(), meta));
+  await assertSucceeds(st("kid1").ref("techGraded/kid1/lesson1/graded.pdf").getMetadata());
+});

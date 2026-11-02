@@ -29,6 +29,7 @@
       <button class="nav" data-v="work" type="button"><i class="fas fa-hammer"></i> Student work</button>
       <button class="nav" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
       <button class="nav" data-v="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results</button>
+      <button class="nav" data-v="groups" type="button"><i class="fas fa-users-rectangle"></i> Groups</button>
       <button class="nav" data-v="content" type="button"><i class="fas fa-toolbox"></i> Resources &amp; AI tools</button>
       <button class="nav" data-v="live" type="button"><i class="fas fa-video"></i> Live classes</button>
       <button class="nav" data-v="activity" type="button"><i class="fas fa-wave-square"></i> Activity</button>
@@ -59,13 +60,17 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="/firebase-config.js"></script>
-<script src="/js/tech/writing-studio.js?v=tech7"></script>
-<script src="/js/tech/code-lab.js?v=tech7"></script>
+<script src="/js/ui/paisley-ui.js?v=1"></script>
+<script src="/js/tech/writing-studio.js?v=tech12"></script>
+<script src="/js/tech/code-lab.js?v=tech12"></script>
 <script src="/js/tech/upload-pad.js?v=tech7"></script>
-<script src="/js/ui/fast-video.js?v=2"></script>
+<script src="/js/ui/fast-video.js?v=3"></script>
 <script src="/js/classroom/classroom-helpers.js?v=boards5"></script>
-<script src="/js/tech/tech-helpers.js?v=tech11"></script>
-<script src="/js/tech/tech-classes.js?v=1"></script>
+<script src="/js/classroom/ink-grader.js?v=tech1"></script>
+<script src="/js/tech/tech-helpers.js?v=tech12"></script>
+<script src="/js/tech/tech-work.js?v=1"></script>
+<script src="/js/tech/tech-groups.js?v=1"></script>
+<script src="/js/tech/tech-classes.js?v=3"></script>
 <script src="/js/tech/tech-manage.js?v=tech8"></script>
 <script src="/js/tech/coach-access.js?v=tech7"></script>
 <script>
@@ -80,7 +85,7 @@ T.injectStyle();
 
 const S={uid:null,me:null,v:'home',students:[],builds:[],chats:[],gchats:[],content:[],allContent:[],classes:[],help:[],progress:{},
   builder:null,live:null,back:null,rf:'all',wf:'all',unsubs:[]};
-const TITLES={home:'Overview',builders:'Builders',reviews:'Reviews',work:'Student work',classes:'Classes',results:'Results',content:'Resources & AI tools',live:'Live classes',activity:'Activity',practice:'Practice',messages:'Builder messages',families:'Families',profile:'Profile'};
+const TITLES={home:'Overview',builders:'Builders',reviews:'Reviews',work:'Student work',classes:'Classes',results:'Results',groups:'Groups',content:'Resources & AI tools',live:'Live classes',activity:'Activity',practice:'Practice',messages:'Builder messages',families:'Families',profile:'Profile'};
 const KINDS=[['resource','Resource'],['aiTool','AI tool']];
 
 const ms=x=>{ const d=T.toDate(x); return d?d.getTime():0; };
@@ -181,7 +186,7 @@ function head(title,sub){ $('pageTitle').textContent=title; $('pageSub').textCon
 function subFor(v){
   return ({home:'Hi '+T.firstName(S.me.name)+'. Here is what needs you.',builders:active().length+' active builder'+(active().length===1?'':'s'),
     reviews:'Submissions, resubmissions and publish requests from your builders.',work:'Every mission and self-led project your builders are working on.',
-    messages:'Talk to your builders.',families:'Parents and guardians of your builders.',classes:'Build classes and post lessons and practice tests by level.',results:'Quiz and practice test scores from your builders.',content:'Short resources and approved AI tools for builders.',
+    messages:'Talk to your builders.',families:'Parents and guardians of your builders.',classes:'Build classes and post lessons and practice tests by level.',results:'Quiz and test scores, and class work to mark with ink.',groups:'Builders working together on shared tasks, live.',content:'Short resources and approved AI tools for builders.',
     live:'Schedule Google Meet classes for your builders.',activity:'What your builders are doing, and when they were last seen.',practice:'Practice work. Never graded; answer help requests here.',profile:S.me.email||''})[v]||'';
 }
 
@@ -315,6 +320,7 @@ function render(silent){
   if(S.live) return;
   head(TITLES[S.v]||'Overview', S.v==='builders'&&S.builder&&stu(S.builder)?'Builder':subFor(S.v));
   if(S.v==='classes'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechClasses.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
+  if(S.v==='groups'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechGroups.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
   if(S.v==='results'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.resN=active().length; S.live=TechClasses.mountResults($('liveHost'),{me:mine(),students:S.students}); return; }
   if(S.v==='activity'||S.v==='practice'){
     const fn=S.v==='activity'?TechManage.mountActivity:TechManage.mountPractice;

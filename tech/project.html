@@ -65,8 +65,8 @@ details{margin-top:.6rem}summary{cursor:pointer;font-weight:800;color:var(--bran
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="/firebase-config.js"></script>
-<script src="/js/tech/writing-studio.js?v=tech7"></script>
-<script src="/js/tech/code-lab.js?v=tech7"></script>
+<script src="/js/tech/writing-studio.js?v=tech12"></script>
+<script src="/js/tech/code-lab.js?v=tech12"></script>
 <script>
 /* Public page for a published Tech Studio project: /tech/p/{buildId} (or ?id=).
    Reads techShowcase/{buildId} only, the public copy a coach or the Studio Desk makes when
@@ -115,7 +115,7 @@ function render(p){
     section('The maker’s notes','<div class="ai">'+ai+'</div>')+
     '<p class="foot">Made at <a href="/tech">Paisley Tech Studio</a>, reviewed and approved by a Paisley coach. Only the maker’s first name is shown.</p>';
   const run=document.getElementById('run');
-  if(run) run.srcdoc=CodeLab.buildPreview(code,p.codeActive);
+  if(run) run.srcdoc=CodeLab.buildPreview(code,p.codeActive,p.codeAssets||[]);
   const cb=document.getElementById('copy'); cb.hidden=false;
   cb.onclick=()=>{ (navigator.clipboard?navigator.clipboard.writeText(location.href):Promise.reject()).then(()=>{ cb.innerHTML='<i class="fas fa-check"></i> Copied'; },()=>prompt('Copy this link',location.href)); };
 }

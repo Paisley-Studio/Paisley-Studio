@@ -602,8 +602,11 @@
       if (markable) {
         var bytes = await buildGradedPdf();
         gradedFileName = (status === 'Corrections' ? 'corrections_' : 'graded_') + (round > 1 ? 'attempt' + round + '_' : '') + safeName(data.studentName) + '_' + safeName(item.title) + '.pdf';
-        var gradedSubject = String((opts.cid.match(/^(.*?)_y\d+/) || [])[1] || (item && item.subjectId) || opts.cid.split('_')[0]);
-        gradedStoragePath = 'graded-submissions/' + gradedSubject + '/' + opts.cid + '/' + opts.itemId + '/' + (data.studentId || opts.docRef.id) + '/' + gradedFileName;
+        if (typeof opts.gradedPath === 'function') gradedStoragePath = opts.gradedPath(gradedFileName);
+        else {
+          var gradedSubject = String((opts.cid.match(/^(.*?)_y\d+/) || [])[1] || (item && item.subjectId) || opts.cid.split('_')[0]);
+          gradedStoragePath = 'graded-submissions/' + gradedSubject + '/' + opts.cid + '/' + opts.itemId + '/' + (data.studentId || opts.docRef.id) + '/' + gradedFileName;
+        }
         var ref = firebase.storage().ref(gradedStoragePath);
         await ref.put(new Blob([bytes], { type: 'application/pdf' }), { contentType: 'application/pdf' });
         gradedFileUrl = await ref.getDownloadURL();
@@ -734,9 +737,13 @@
       else if (server) S.ink = JSON.parse(JSON.stringify(server));
       if (!S.ink.pages) S.ink = { version: 1, pages: [] };
 
-      var url = data.fileUrl || '';
-      var type = String(data.fileType || '').toLowerCase();
-      var name = String(data.fileName || '').toLowerCase();
+      // opts.source: work made on the page (Tech Studio code or writing turned into a PDF),
+      // marked without a download. { bytes: Uint8Array | ArrayBuffer, type, name }.
+      var src = opts.source && opts.source.bytes ? opts.source : null;
+      var url = src ? 'local:' + (src.name || 'work.pdf') : (data.fileUrl || '');
+      var type = String(src ? (src.type || 'application/pdf') : (data.fileType || '')).toLowerCase();
+      var name = String(src ? (src.name || 'work.pdf') : (data.fileName || '')).toLowerCase();
+      var getBytes = !src ? fetchBytes : function () { return Promise.resolve(src.bytes instanceof Uint8Array ? src.bytes.buffer.slice(src.bytes.byteOffset, src.bytes.byteOffset + src.bytes.byteLength) : src.bytes); };
       var isPdf = /pdf/.test(type) || /\.pdf$/.test(name);
       var isImg = /^image\//.test(type) || /\.(jpe?g|png|webp)$/.test(name);
 
@@ -758,13 +765,13 @@
       try {
         await ensureLibs();
         if (isImg) {
-          var buf = await fetchBytes(url);
+          var buf = await getBytes(url);
           S.isImage = true;
           S.imageBlob = new Blob([buf], { type: /png/.test(type + name) ? 'image/png' : 'image/jpeg' });
           var im = await new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = URL.createObjectURL(S.imageBlob); });
           S.pageCount = 1; S.dims = [{ w: im.naturalWidth, h: im.naturalHeight }];
         } else {
-          S.sourceBytes = new Uint8Array(await fetchBytes(url));
+          S.sourceBytes = new Uint8Array(await getBytes(url));
           S.pdf = await global.pdfjsLib.getDocument({ data: S.sourceBytes.slice() }).promise;
           S.pageCount = S.pdf.numPages;
           for (var i = 1; i <= S.pageCount; i++) {

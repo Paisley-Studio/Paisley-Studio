@@ -138,7 +138,16 @@ function workPredatesStudent(student, item) {
 
 /* Students who hand in on paper at school. The Studio Desk or their tutor records
    hand-ins for them, so upload reminders and overdue notices never go to them. */
-function isPaperStudent(student) { return !!(student && student.physicalStudent === true); }
+/* Hand-in style is per subject: students.handInBySubject[subjectKey] is 'physical' or
+   'online'. Without an entry, the older all-subjects students.physicalStudent decides.
+   Same logic as lmzHandInStyle in lms-helpers.js. */
+function isPaperStudent(student, subjectId) {
+  if (!student) return false;
+  const map = student.handInBySubject || {}, key = subjectId ? subjectKey(subjectId) : "";
+  if (key && map[key] === "physical") return true;
+  if (key && map[key] === "online") return false;
+  return student.physicalStudent === true;
+}
 
 /* ---------------------------------------------------------
    EXAM BOARDS

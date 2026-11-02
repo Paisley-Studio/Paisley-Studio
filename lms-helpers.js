@@ -1148,6 +1148,23 @@ function lmzStudentBoard(student, subjectId) {
   var sb = student && student.subjectBoards && student.subjectBoards[subjectId];
   return lmzBoardId(sb || (student && student.board));
 }
+// =========================================================
+// HAND-IN STYLE, PER SUBJECT
+// students.handInBySubject = { <subjectKey>: 'physical' }. Missing means 'online'
+// (the student uploads). The older students.physicalStudent === true still means
+// physical in every subject until an admin saves the per-subject choice.
+// Same logic as isPaperStudent in functions/work-shared.js.
+// =========================================================
+var LMZ_HAND_IN = { online: 'Online hand-in', physical: 'Physical hand-in' };
+function lmzHandInStyle(student, subjectId) {
+  if (!student) return 'online';
+  var map = student.handInBySubject || {}, key = subjectId ? lmzSubjectKey(subjectId) : '';
+  if (key && map[key] === 'physical') return 'physical';
+  if (key && map[key] === 'online') return 'online';
+  return student.physicalStudent === true ? 'physical' : 'online';
+}
+function lmzHandsInOnPaper(student, subjectId) { return lmzHandInStyle(student, subjectId) === 'physical'; }
+
 // Every board this student follows across their subjects.
 function lmzStudentBoards(student) {
   var keys = lmzSubjectKeys(student && student.subjects), out = [];

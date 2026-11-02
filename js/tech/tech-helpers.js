@@ -853,7 +853,7 @@
       origin: isSelfLed(b) ? 'self' : 'mission',
       writingHtml: cleanHtml(b.writingHtml || '').slice(0, 300000),
       workText: String(b.workText || '').slice(0, 4000),
-      codeFiles: code, codeActive: b.codeActive || '',
+      codeFiles: code, codeActive: b.codeActive || '', codeAssets: (b.codeAssets || []).slice(0, 60).map(function (a) { return { name: a.name || '', url: a.url || '', type: a.type || '' }; }),
       images: images, media: media,
       toolsUsed: (r.tools || []).slice(0, 12),
       contribution: String(r.contribution || r.kept || '').slice(0, 800),
@@ -1008,7 +1008,15 @@
       if (!lib || !lib.mount) { hostEl.innerHTML = '<div class="tk-empty">' + label + ' is not loaded on this page.</div>'; return; }
       if (mounted[kind]) { try { mounted[kind].destroy(); } catch (e) { } mounted[kind] = null; }
       try {
-        mounted[kind] = lib.mount(hostEl, { build: b, me: me, canEdit: canEdit, files: b.files || [], onSave: moduleSave(kind === 'code' ? 'Code saved ✓' : 'Saved ✓') });
+        mounted[kind] = lib.mount(hostEl, {
+          build: b, me: me, canEdit: canEdit, files: b.files || [], title: b.title, onSave: moduleSave(kind === 'code' ? 'Code saved ✓' : 'Saved ✓'),
+          /* Pictures, video and sound for the Code IDE's folders (same Storage folder as other project files). */
+          uploadAsset: kind === 'code' && canEdit && firebase.storage ? function (f) {
+            var path = 'techBuilds/' + b.studentId + '/' + b.id + '/code_' + Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
+            var r = firebase.storage().ref(path);
+            return r.put(f, { contentType: f.type || undefined, cacheControl: 'public,max-age=31536000' }).then(function () { return r.getDownloadURL(); }).then(function (url) { return { url: url, storagePath: path }; });
+          } : null
+        });
       } catch (e) { hostEl.innerHTML = '<div class="tk-empty">' + label + ' could not start: ' + esc(errMsg(e)) + '</div>'; }
     }
     function practiced(i) { return (b.practiceIds || []).some(function (x) { return String(x).indexOf('m' + i + '_') === 0 || x === ('m' + i); }); }
@@ -1310,6 +1318,7 @@
         studentId: b.studentId, studentName: b.studentName || '', title: b.title || '', version: n, status: 'submitted',
         writingHtml: String(b.writingHtml || '').slice(0, 200000),
         codeFiles: (b.codeFiles || []).filter(function (f) { codeSize += String(f.content || '').length; return codeSize < 300000; }).map(function (f) { return { name: f.name, lang: f.lang || '', content: String(f.content || '') }; }),
+        codeAssets: (b.codeAssets || []).slice(0, 60).map(function (a) { return { name: a.name || '', url: a.url || '', type: a.type || '' }; }), codeActive: b.codeActive || '',
         files: (b.files || []).slice(0, 40).map(function (f) { return { name: f.name || '', url: f.url || '', type: f.type || '' }; }),
         workText: String(b.workText || '').slice(0, 3000), workUrl: safeUrl(b.workUrl) || '',
         reflection: r, submittedAt: FV().serverTimestamp()
@@ -1377,7 +1386,7 @@
       host.querySelectorAll('[data-preview]').forEach(function (x) { x.addEventListener('click', function () {
         var s = subs[Number(x.dataset.preview)]; var h = host.querySelector('[data-prevhost="' + x.dataset.preview + '"]'); if (!s || !h) return;
         var fr = document.createElement('iframe'); fr.className = 'tk-run'; fr.setAttribute('sandbox', 'allow-scripts'); fr.setAttribute('referrerpolicy', 'no-referrer'); fr.title = 'Preview';
-        fr.srcdoc = g.CodeLab.buildPreview(s.codeFiles || []); h.innerHTML = ''; h.appendChild(fr);
+        fr.srcdoc = g.CodeLab.buildPreview(s.codeFiles || [], s.codeActive, s.codeAssets || []); h.innerHTML = ''; h.appendChild(fr);
       }); });
 
       var set = host.querySelector('.ws-settings'); if (set) set.addEventListener('toggle', function () { settingsOpen = set.open; });
@@ -1538,10 +1547,10 @@
      A tab already showing its own count keeps that one (see the CSS).
      ========================================================= */
   var BUBBLE_SECTIONS = {
-    student: { tech_lesson: 'classes', tech_mission: 'missions', tech_live: 'live', tech_feedback: 'feedback', tech_mastery: 'feedback', tech_showcase: 'showcase', tech_level: 'progress', tech_message: 'coach', tech_coach: 'coach' },
-    guardian: { tech_lesson: 'classes', tech_result: 'classes', tech_mission: 'home', tech_build_started: 'projects', tech_submitted: 'projects', tech_feedback: 'projects', tech_mastery: 'projects', tech_showcase: 'projects', tech_level: 'progress', tech_live: 'live', tech_guardian_message: 'coach', tech_coach: 'coach' },
-    coach: { tech_result: 'results', tech_review_request: 'reviews', tech_build_started: 'work', tech_feedback: 'work', tech_new_builder: 'builders', tech_level: 'builders', tech_message: 'messages', tech_guardian_message: 'families', tech_live: 'live' },
-    admin: { tech_application: 'applications', tech_beginner: 'builders', tech_review_request: 'builds', tech_feedback: 'builds', tech_live: 'live', tech_message: 'messages', tech_guardian_message: 'messages', tech_desk_message: 'desk' }
+    student: { tech_lesson: 'classes', tech_work_marked: 'classes', tech_work_corrections: 'classes', tech_group: 'groups', tech_group_task: 'groups', tech_mission: 'missions', tech_live: 'live', tech_feedback: 'feedback', tech_mastery: 'feedback', tech_showcase: 'showcase', tech_level: 'progress', tech_message: 'coach', tech_coach: 'coach' },
+    guardian: { tech_lesson: 'classes', tech_result: 'classes', tech_work_marked: 'classes', tech_work_corrections: 'classes', tech_mission: 'home', tech_build_started: 'projects', tech_submitted: 'projects', tech_feedback: 'projects', tech_mastery: 'projects', tech_showcase: 'projects', tech_level: 'progress', tech_live: 'live', tech_guardian_message: 'coach', tech_coach: 'coach' },
+    coach: { tech_result: 'results', tech_work: 'results', tech_review_request: 'reviews', tech_build_started: 'work', tech_feedback: 'work', tech_new_builder: 'builders', tech_level: 'builders', tech_message: 'messages', tech_guardian_message: 'families', tech_live: 'live' },
+    admin: { tech_application: 'applications', tech_work: 'results', tech_beginner: 'builders', tech_review_request: 'builds', tech_feedback: 'builds', tech_live: 'live', tech_message: 'messages', tech_guardian_message: 'messages', tech_desk_message: 'desk' }
   };
   function mountBubbles(o) {
     bellStyle();

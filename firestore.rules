@@ -421,6 +421,8 @@ service cloud.firestore {
         !('admittedBy' in request.resource.data) &&
         !('tutorId' in request.resource.data) &&
         !('tutorIds' in request.resource.data) &&
+        !('handInBySubject' in request.resource.data) &&
+        !('physicalStudent' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
       allow create: if isOwner(uid) &&
         request.resource.data.status == 'Pending' &&
@@ -429,6 +431,8 @@ service cloud.firestore {
         !('admittedBy' in request.resource.data) &&
         !('tutorId' in request.resource.data) &&
         !('tutorIds' in request.resource.data) &&
+        !('handInBySubject' in request.resource.data) &&
+        !('physicalStudent' in request.resource.data) &&
         !('subjectTutors' in request.resource.data);
 
       // TECH no longer creates students docs: TECH applications live in techStudents.
@@ -438,9 +442,10 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin() || isParentOf(uid) || isTutor();
 
       allow update: if isAdmin() ||
-        // A tutor may mark their own student as handing in on paper at school, nothing else.
+        // A tutor may set their own student's hand-in style (physical or online, per subject), nothing else.
         (tutorTeachesStudent(uid) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['physicalStudent', 'physicalSetBy', 'physicalSetAt'])) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['physicalStudent', 'handInBySubject', 'physicalSetBy', 'physicalSetAt']) &&
+          (!('handInBySubject' in request.resource.data) || request.resource.data.handInBySubject is map)) ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'remote' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt', 'lastLoginAt'])) ||
         (isOwner(uid) && ('studentType' in resource.data) && resource.data.studentType == 'tuition' &&
@@ -465,6 +470,7 @@ service cloud.firestore {
         !('subjectBoards' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('activatedAt' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('physicalStudent' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('handInBySubject' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('subjectTutors' in request.resource.data.diff(resource.data).affectedKeys()));
       allow delete: if false;
     }
@@ -1180,6 +1186,91 @@ service cloud.firestore {
         isTechCoachOf(resource.data.studentId) ||
         isTechGuardianOf(resource.data.studentId);
       allow write: if false;
+    }
+
+    // Class work: a builder's code or writing for one lesson, handed in and marked like
+    // classroom homework (status Draft -> Submitted -> Graded | Corrections). The builder
+    // writes only the work and the hand-in; marks come from their coach or an admin
+    // (InkGrader writes the mark fields). coachId is copied from techStudents so a coach
+    // can list their builders' hand-ins, and functions keep it in step.
+    function techWorkKeys() {
+      return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
+        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind'];
+    }
+    function techWorkCreateKeys() {
+      return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
+        'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind',
+        'studentId', 'coachId', 'lessonId', 'courseId', 'courseName', 'topicId', 'topicTitle', 'track', 'createdAt'];
+    }
+    function techMarkKeys() {
+      return ['status', 'feedback', 'grade', 'maxScore', 'gradedBy', 'gradedByName', 'gradedAt', 'released', 'releasedAt',
+        'inkData', 'inkUpdatedAt', 'gradedFileUrl', 'gradedFileName', 'gradedStoragePath', 'history', 'updatedAt'];
+    }
+    match /techLessonWork/{id} {
+      // The id is {uid}_{lessonId}, so a builder can also open their own work before it exists.
+      allow read: if (isSignedIn() && id.matches(request.auth.uid + '_.+')) ||
+        isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        id == request.auth.uid + '_' + request.resource.data.lessonId &&
+        request.resource.data.get('coachId', '') == techCoachIdOf(request.auth.uid) &&
+        request.resource.data.status in ['Draft', 'Submitted'] &&
+        exists(/databases/$(database)/documents/techLessons/$(request.resource.data.lessonId)) &&
+        request.resource.data.keys().hasOnly(techWorkCreateKeys());
+      allow update: if isAdmin() ||
+        (techStudentActive() && resource.data.studentId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(techWorkKeys()) &&
+          resource.data.status in ['Draft', 'Corrections'] &&
+          (request.resource.data.status == resource.data.status || request.resource.data.status == 'Submitted')) ||
+        (isTechCoachOf(resource.data.studentId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(techMarkKeys()) &&
+          request.resource.data.status in ['Draft', 'Submitted', 'Graded', 'Corrections']);
+      allow delete: if isAdmin();
+    }
+
+    // Groups: a coach or admin puts builders together. Members see the group and its
+    // tasks, and edit a task's shared work together (the Code IDE merges their edits).
+    // presence/{uid} holds where each member's cursor is, for the others to see.
+    function techGroupMember(gid) {
+      return isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/techGroups/$(gid)).data.get('memberIds', []);
+    }
+    function techGroupWorkKeys() {
+      return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'codeBy', 'codeByName',
+        'status', 'submittedAt', 'submittedBy', 'submittedByName', 'submitCount', 'updatedAt'];
+    }
+    match /techGroups/{gid} {
+      allow read: if isAdmin() || isTechCoach() ||
+        (isSignedIn() && request.auth.uid in resource.data.get('memberIds', []));
+      allow create: if (isAdmin() || isTechCoach()) &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.name is string && request.resource.data.name.size() > 0 &&
+        request.resource.data.memberIds is list && request.resource.data.memberIds.size() <= 30;
+      allow update: if (isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid)) &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.memberIds is list && request.resource.data.memberIds.size() <= 30;
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
+
+      match /tasks/{tid} {
+        allow read: if isAdmin() || isTechCoach() || techGroupMember(gid);
+        allow create: if (isAdmin() || isTechCoach()) &&
+          request.resource.data.createdBy == request.auth.uid && request.resource.data.status == 'Draft';
+        allow update: if isAdmin() || isTechCoach() ||
+          (techGroupMember(gid) && techStudentActive() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(techGroupWorkKeys()) &&
+            resource.data.status in ['Draft', 'Corrections'] &&
+            (request.resource.data.status == resource.data.status || request.resource.data.status == 'Submitted'));
+        allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
+
+        match /presence/{uid} {
+          allow read: if isAdmin() || isTechCoach() || techGroupMember(gid);
+          allow write: if isOwner(uid) && techGroupMember(gid);
+        }
+      }
     }
 
     match /techBuilds/{id} {
