@@ -77,7 +77,14 @@
       '.tw-step{display:inline-flex;align-items:center;gap:.45rem;padding:.5rem 1rem;border-radius:99px;border:1.5px solid var(--line,rgba(38,51,49,.12));background:#fff;font:inherit;font-weight:800;font-size:.84rem;color:var(--muted,#5A6E6A);cursor:pointer}',
       '.tw-step b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);font-size:.72rem}',
       '.tw-step.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}.tw-step.on b{background:#fff}',
-      '.tw-step.done b{background:#2EB872;color:#fff}'
+      '.tw-step.done b{background:#2EB872;color:#fff}',
+      '.tw-pop{display:grid;grid-template-columns:270px minmax(0,1fr);gap:1rem;align-items:start}',
+      '.tw-side{background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;padding:1rem;max-height:calc(100vh - 120px);overflow:auto}',
+      '.tw-side h4{margin:0 0 .5rem;font-size:.92rem;font-weight:800;color:var(--brand-deep,#245F5A)}',
+      '.tw-side .tw-bar{flex-direction:column;align-items:stretch;margin:.9rem 0 .4rem}.tw-side .tw-bar .grow{display:none}.tw-side .tw-bar .tc-btn{width:100%}',
+      '.tw-side .tw-fb{padding:.8rem .9rem}.tw-side .tw-fb .score{font-size:1.2rem}',
+      '.tw-main{min-width:0}.tw-pop .cl-body{height:calc(100vh - 225px);min-height:380px}.tw-pop .tw-article{max-height:calc(100vh - 170px)}',
+      '@media(max-width:860px){.tw-pop{grid-template-columns:minmax(0,1fr)}.tw-side{max-height:none}.tw-pop .cl-body{height:auto}}'
     ].join('\n');
     document.head.appendChild(s);
   }
@@ -301,8 +308,12 @@
         .catch(function (e) { creating = null; throw e; });
       return creating;
     }
-    host.innerHTML = '<div class="tc-panel" style="margin-bottom:.8rem"><h3><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (kind === 'writing' ? 'What to write' : 'What to build') + '</h3>' +
-      '<div class="tc-prose tc-plain">' + esc(l.task.brief || '') + '</div></div>' +
+    var briefText = l.task.brief || (kind === 'writing' ? 'Write about what you learnt in this lesson.' : 'Try out what you learnt in this lesson.');
+    /* layout 'pop': requirements and hand-in on the left, the IDE or writing pad filling the rest. */
+    if (o.layout === 'pop') host.innerHTML = '<div class="tw-pop"><aside class="tw-side"><h4><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-list-check') + '"></i> ' + (kind === 'writing' ? 'What to write' : 'What to build') + '</h4>' +
+      '<div class="tc-prose tc-plain" style="font-size:.9rem">' + esc(briefText) + '</div><div id="twHead"></div></aside><div class="tw-main" id="twEd"></div></div>';
+    else host.innerHTML = '<div class="tc-panel" style="margin-bottom:.8rem"><h3><i class="fas ' + (kind === 'writing' ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (kind === 'writing' ? 'What to write' : 'What to build') + '</h3>' +
+      '<div class="tc-prose tc-plain">' + esc(briefText) + '</div></div>' +
       '<div id="twHead"></div><div id="twEd"></div>';
     var headEl = host.querySelector('#twHead'), edEl = host.querySelector('#twEd');
     function paintHead() {

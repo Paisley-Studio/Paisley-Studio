@@ -268,6 +268,7 @@
           '<div class="cl-people" aria-label="Who is here"></div>' +
           '<div class="cl-actions">' +
             (docMode ? '' : '<button type="button" class="cl-btn" data-clcmd="layout" title="Side by side / stacked" aria-label="Change layout"><i class="fas fa-table-columns"></i></button>') +
+            '<button type="button" class="cl-btn cl-fullbtn" data-clcmd="full" title="Full screen (Esc to leave)" aria-label="Full screen" aria-pressed="false"><i class="fas fa-expand"></i></button>' +
             (canEdit && !collab ? '<button type="button" class="cl-btn cl-save" data-clcmd="save"><i class="fas fa-floppy-disk"></i> Save</button>' : '') +
             '<button type="button" class="cl-btn cl-run" data-clcmd="run" title="Run" aria-label="Run"><i class="fas fa-play"></i> Run</button>' +
           '</div>' +
@@ -354,6 +355,8 @@
       else { fallback.value = f.content; fallback.scrollTop = 0; }
       renderTree(); renderCrumb(); paintRemoteCursors(); schedulePreview();
     }
+    /* Suggestions must sit inside the IDE while it is full screen, or the browser hides them. */
+    function hintBox() { var sh = hostEl.querySelector('.cl-shell'); return sh && sh.classList.contains('cl-full') ? sh : document.body; }
     function smartHint(ed, o) {
       var CMg = g.CodeMirror, cur = ed.getCursor(), tok = ed.getTokenAt(cur);
       var inner = CMg.innerMode(ed.getMode(), tok.state).mode.name, r = null;
@@ -380,7 +383,7 @@
       hostDiv.innerHTML = '';
       var f = activeFile();
       var keys = {
-        'Ctrl-Space': function (ed) { ed.showHint({ hint: smartHint, completeSingle: false }); },
+        'Ctrl-Space': function (ed) { ed.showHint({ hint: smartHint, container: hintBox(), completeSingle: false }); },
         'Ctrl-S': function () { flushSave(); }, 'Cmd-S': function () { flushSave(); },
         'Ctrl-/': 'toggleComment', 'Cmd-/': 'toggleComment',
         /* Tab: expand the Emmet abbreviation being typed (ul>li*3, .box, m10), else indent. */
@@ -435,7 +438,7 @@
       if (inner === 'xml') go = typed === '<' || (typed === ' ' && /^<\w/.test(ed.getLine(ed.getCursor().line).slice(0, ed.getCursor().ch).split('>').pop() || '')) || (/\w/.test(typed) && /tag|attribute/.test(tok.type || ''));
       else if (inner === 'css') go = /[\w-]/.test(typed) && !/comment/.test(tok.type || '');
       else if (inner === 'javascript' || lang === 'js') go = /[\w.$]/.test(typed) && !/comment|string/.test(tok.type || '');
-      if (go) ed.showHint({ hint: smartHint, completeSingle: false, closeCharacters: /[\s()\[\]{};:>,"']/ });
+      if (go) ed.showHint({ hint: smartHint, container: hintBox(), completeSingle: false, closeCharacters: /[\s()\[\]{};:>,"']/ });
     }
     fallback.addEventListener('input', function () {
       if (!canEdit || cm) return;
@@ -748,6 +751,7 @@
         if (cmd === 'save') flushSave();
         else if (cmd === 'run') { previewPage = null; renderPreview(); setStatus('Running', 'ok'); }
         else if (cmd === 'layout') bodyEl.classList.toggle('cl-stacked');
+        else if (cmd === 'full') toggleFull();
         else if (cmd === 'tree') hostEl.querySelector('.cl-shell').classList.toggle('cl-tree-open');
         else if (!canEdit) return;
         else if (cmd === 'add') addFile(curFolder);
@@ -779,6 +783,29 @@
       }
     });
 
+    /* Full screen: the whole IDE fills the screen. Uses the browser's full screen where it
+       exists (Esc leaves it); otherwise (iPhone) it covers the page until pressed again. */
+    var shellEl = hostEl.querySelector('.cl-shell');
+    function isFull() { return shellEl.classList.contains('cl-full'); }
+    function setFull(on) {
+      shellEl.classList.toggle('cl-full', on);
+      document.documentElement.classList.toggle('cl-noscroll', on);
+      var b = hostEl.querySelector('.cl-fullbtn');
+      if (b) { b.setAttribute('aria-pressed', on); b.title = on ? 'Leave full screen (Esc)' : 'Full screen (Esc to leave)'; b.innerHTML = '<i class="fas fa-' + (on ? 'compress' : 'expand') + '"></i>'; }
+      setTimeout(function () { if (cm) cm.refresh(); }, 60);
+    }
+    function toggleFull() {
+      var want = !isFull();
+      setFull(want);
+      try {
+        if (want && shellEl.requestFullscreen && !document.fullscreenElement) shellEl.requestFullscreen().catch(function () { });
+        else if (!want && document.fullscreenElement === shellEl && document.exitFullscreen) document.exitFullscreen().catch(function () { });
+      } catch (e) { }
+    }
+    /* Leaving the browser's full screen with Esc also leaves ours. */
+    function onFsChange() { if (!document.fullscreenElement && isFull() && shellEl._wasFs) setFull(false); shellEl._wasFs = document.fullscreenElement === shellEl; }
+    document.addEventListener('fullscreenchange', onFsChange);
+
     function onLeave(e) { if (dirty && canEdit) { flushSave(); e.preventDefault(); e.returnValue = ''; } }
     window.addEventListener('beforeunload', onLeave);
 
@@ -803,6 +830,8 @@
         if (collab && collab.presence && canEdit && me.uid) collab.presence.doc(me.uid).delete().catch(function () { });
         window.removeEventListener('message', onMessage);
         window.removeEventListener('beforeunload', onLeave);
+        document.removeEventListener('fullscreenchange', onFsChange);
+        if (isFull()) { document.documentElement.classList.remove('cl-noscroll'); try { if (document.fullscreenElement === shellEl) document.exitFullscreen(); } catch (e) { } }
         try { frame.srcdoc = ''; } catch (e) { }
         hostEl.innerHTML = '';
       }
@@ -824,6 +853,11 @@
       '.cl-btn.cl-save{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}',
       '.cl-btn.cl-run{background:var(--brand,#55BFB3);border-color:var(--brand,#55BFB3);color:#04231f}',
       '.cl-treebtn{display:none}',
+      '.cl-shell.cl-full{position:fixed;inset:0;z-index:2000;border-radius:0;border:0}',
+      '.cl-shell.cl-full .cl-body,.cl-shell.cl-full .cl-body.cl-stacked{height:auto;flex:1;min-height:0}',
+      '.cl-shell:fullscreen{width:100vw;height:100vh;background:#fff}',
+      'html.cl-noscroll,html.cl-noscroll body{overflow:hidden}',
+      '@media(max-width:860px){.cl-shell.cl-full .cl-body{grid-template-rows:minmax(0,1fr) 40vh}}',
       '.cl-body{display:grid;grid-template-columns:200px minmax(0,1fr) minmax(0,1fr);height:min(72vh,620px);min-height:380px}',
       '.cl-docmode .cl-body{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}',
       '.cl-body.cl-stacked{grid-template-columns:200px minmax(0,1fr);grid-template-rows:1fr 1fr}.cl-body.cl-stacked .cl-tree{grid-row:1 / span 2}',
