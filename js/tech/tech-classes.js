@@ -81,31 +81,35 @@
       '.tc-ed-area{min-height:150px;max-height:340px;overflow:auto;padding:.7rem .85rem;border:1.5px solid var(--line,rgba(38,51,49,.12));border-radius:0 0 10px 10px;background:#fff;font-size:.92rem;line-height:1.6}',
       '.tc-ed-area:focus{outline:none;border-color:var(--brand,#55BFB3)}',
       '.tc-section{margin:1.1rem 0 .4rem;padding-top:.9rem;border-top:1px solid var(--line,rgba(38,51,49,.1));font-size:.95rem;font-weight:800;color:var(--brand-deep,#245F5A)}',
-      '.tc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1rem}',
-      '.tc-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:.3rem;width:100%;padding:1.2rem;text-align:left;font:inherit;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;cursor:pointer;box-shadow:0 4px 14px rgba(36,95,90,.04);transition:border-color .2s,transform .2s}',
+      /* Class cards, topics and rows copy the IGCSE / CBC classroom (.cr-* in classroom-helpers.js). */
+      '.tc-hbar{margin:0 0 1rem}.tc-hbar h3{margin:0 0 .15rem;font-size:1.05rem;font-weight:700;color:var(--brand-deep,#245F5A)}.tc-hbar .sub{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;font-size:.8rem;color:var(--muted,#5A6E6A)}',
+      '.tc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.9rem}',
+      '.tc-card{position:relative;display:block;width:100%;padding:1.1rem 1.2rem;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;cursor:pointer;transition:border-color .15s,transform .15s}',
       '.tc-card:hover{border-color:var(--brand,#55BFB3);transform:translateY(-2px)}',
-      '.tc-card .ic{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);font-size:1.15rem;margin-bottom:.4rem}',
-      '.tc-card b{font-size:1.05rem;font-weight:800;color:var(--brand-deep,#245F5A);line-height:1.25}.tc-card small{color:var(--muted,#5A6E6A);font-size:.8rem;font-weight:600}',
-      '.tc-bub{position:absolute;top:.8rem;right:.8rem;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#E74C3C;color:#fff;font-size:.72rem;font-weight:800;line-height:22px;text-align:center}',
-      '.tc-crumb{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem;font-size:.84rem;font-weight:700;color:var(--muted,#5A6E6A)}',
-      '.tc-crumb button{border:0;background:none;padding:0;font:inherit;font-weight:800;color:var(--brand-deep,#245F5A);cursor:pointer;text-decoration:underline;text-underline-offset:3px}',
+      '.tc-card .ic{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(85,191,179,.14);color:var(--brand-deep,#245F5A);font-size:.95rem;margin-bottom:.7rem}',
+      '.tc-card b{display:block;margin:0 0 .15rem;font-size:.95rem;font-weight:700;color:var(--brand-deep,#245F5A);line-height:1.3}.tc-card small{display:block;color:var(--muted,#5A6E6A);font-size:.76rem;font-weight:500}',
+      '.tc-bub{position:absolute;top:-8px;right:-8px;min-width:24px;height:24px;padding:0 4px;border-radius:12px;border:2px solid #fff;background:#E74C3C;color:#fff;font-size:.72rem;font-weight:800;line-height:20px;text-align:center;box-shadow:0 2px 6px rgba(231,76,60,.35)}',
+      '.tc-crumb{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem;font-size:.8rem;color:var(--muted,#5A6E6A)}',
+      '.tc-crumb button{border:0;background:none;padding:0;font:inherit;font-weight:700;color:var(--brand-deep,#245F5A);cursor:pointer}.tc-crumb button:hover{text-decoration:underline}',
+      '.tc-prog{display:inline-flex;align-items:center;gap:.4rem;font-size:.74rem;font-weight:700;color:var(--muted,#5A6E6A)}',
+      '.tc-prog .bar{width:56px;height:4px;border-radius:99px;background:var(--sage,#E5F2EF);overflow:hidden}.tc-prog .bar i{display:block;height:100%;background:var(--brand,#55BFB3)}',
       '.tc-panel{background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:1.2rem;margin-bottom:1rem;box-shadow:0 4px 14px rgba(36,95,90,.04)}',
       '.tc-panel h3{margin:0 0 .6rem;font-size:1rem;font-weight:800;color:var(--brand-deep,#245F5A)}',
       '.tc-title{margin:0 0 .3rem;font-size:1.35rem;font-weight:800;color:var(--brand-deep,#245F5A);line-height:1.25}',
       '.tc-bar{height:8px;border-radius:99px;background:var(--sage,#E5F2EF);overflow:hidden;margin:.6rem 0 .2rem}.tc-bar i{display:block;height:100%;background:var(--brand,#55BFB3);border-radius:99px}',
       '.tc-topic{margin-bottom:.8rem;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;overflow:hidden}',
-      '.tc-topic-head{padding:.8rem 1rem;background:var(--sage,#E5F2EF);font-weight:800;color:var(--brand-deep,#245F5A)}.tc-topic-head small{display:block;font-weight:600;color:var(--muted,#5A6E6A);font-size:.78rem;margin-top:.1rem}',
-      '.tc-row{display:flex;align-items:center;gap:.8rem;width:100%;padding:.75rem 1rem;border:0;border-top:1px solid var(--line,rgba(38,51,49,.06));background:none;text-align:left;font:inherit;cursor:pointer}',
-      '.tc-row:first-child{border-top:0}.tc-row:hover{background:var(--paper,#F1F9F7)}',
-      '.tc-row .ic{width:36px;height:36px;flex:none;border-radius:10px;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}',
-      '.tc-row .t{flex:1;min-width:0}.tc-row .t b{display:block;font-weight:800;font-size:.92rem;color:var(--ink,#263331)}.tc-row .t small{display:block;font-size:.76rem;color:var(--muted,#5A6E6A);font-weight:600;margin-top:.1rem}',
+      '.tc-topic-head{padding:.8rem 1rem;background:var(--sage,#E5F2EF);font-weight:800;font-size:.9rem;color:var(--brand-deep,#245F5A)}.tc-topic-head small{display:block;font-weight:500;color:var(--muted,#5A6E6A);font-size:.74rem}',
+      '.tc-row{display:flex;align-items:center;gap:.7rem;width:100%;padding:.65rem 1rem;border:0;border-top:1px solid var(--line-soft,rgba(38,51,49,.06));background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}',
+      '.tc-row:hover{background:var(--paper,#F1F9F7)}',
+      '.tc-row .n{width:2rem;flex:none;font-weight:800;font-size:.82rem;color:var(--brand-deep,#245F5A)}',
+      '.tc-row .t{flex:1;min-width:0;font-size:.88rem;font-weight:600}.tc-row .t b{display:block;font-weight:600;font-size:.88rem;color:var(--ink,#263331)}.tc-row .t small{display:block;font-size:.72rem;color:var(--muted,#5A6E6A);font-weight:500}',
       '.tc-pill{display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:800;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);white-space:nowrap}',
       '.tc-pill.new{background:#E74C3C;color:#fff}.tc-pill.good{background:rgba(46,184,114,.14);color:#1f8557}.tc-pill.mid{background:rgba(243,156,18,.15);color:#9a6607}.tc-pill.low{background:rgba(231,76,60,.12);color:#b8362a}',
       '.tc-stage{background:#0F1A14;border-radius:16px;overflow:hidden;margin:0 auto 1rem;aspect-ratio:16/9;position:relative;width:min(100%,calc(60vh * 16 / 9));box-shadow:0 10px 30px rgba(36,95,90,.12)}',
       /* lesson page: video and work on the left, the topic's lessons on the right */
       '.tc-learn{max-width:1180px}',
       '.tc-lhead{margin:.1rem 0 1rem}.tc-eyebrow{font-size:.7rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--brand,#55BFB3)}',
-      '.tc-lhead h2{margin:.15rem 0 .5rem;font-size:1.35rem;font-weight:800;color:var(--brand-deep,#245F5A);line-height:1.25}.tc-lhead h2 span{font-size:.95rem;font-weight:700;color:var(--muted,#5A6E6A)}',
+      '.tc-lhead h2{margin:.1rem 0 .45rem;font-size:1.1rem;font-weight:700;color:var(--brand-deep,#245F5A);line-height:1.3}.tc-lhead h2 span{font-size:.85rem;font-weight:600;color:var(--muted,#5A6E6A)}',
       '.tc-meta{display:flex;gap:.35rem;flex-wrap:wrap}',
       '.tc-lgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:1.25rem;align-items:start}',
       '.tc-lside{position:sticky;top:1rem;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:.8rem;box-shadow:0 4px 14px rgba(36,95,90,.04)}',
@@ -822,7 +826,7 @@
     function paintHome() {
       if (S.courses === null) { host.innerHTML = '<div class="tc-empty">Loading classes…</div>'; return; }
       var intro = isBuilder ? 'Your classes at ' + trackName(track) + ' level.' : first + '’s classes at ' + trackName(track) + ' level. You can watch and read everything; only ' + first + ' can take the quizzes.';
-      var h = '<p style="margin:0 0 1rem;color:var(--muted,#5A6E6A);font-weight:600">' + levelBadge(track) + ' &nbsp;' + esc(intro) + '</p>';
+      var h = '<div class="tc-hbar"><h3>' + (isBuilder ? 'My classes' : esc(first) + '\u2019s classes') + '</h3><div class="sub">' + levelBadge(track) + '<span>' + esc(intro) + '</span></div></div>';
       h += S.courses.length ? '<div class="tc-grid">' + S.courses.map(function (c) {
         var n = unreadFor('courseId', c.id);
         return '<button type="button" class="tc-card" data-tc="course" data-id="' + esc(c.id) + '">' + (n ? '<span class="tc-bub" aria-label="' + n + ' new">' + n + '</span>' : '') + '<span class="ic"><i class="fas ' + (ICON[c.discipline] || 'fa-chalkboard') + '"></i></span><b>' + esc(c.name) + '</b><small>' + esc(T.disciplineLabel(c.discipline)) + '</small></button>';
@@ -854,17 +858,18 @@
       if (S.loading) { host.innerHTML = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(c.name) + '</span>') + '<div class="tc-empty">Loading…</div>'; return; }
       var all = orderedItems(), done = all.filter(isDone).length, pct = all.length ? Math.round(done / all.length * 100) : 0;
       var h = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(c.name) + '</span>') +
-        '<div class="tc-panel"><h2 class="tc-title">' + esc(c.name) + '</h2>' + levelBadge(c.track) + ' <span class="tc-pill">' + esc(T.disciplineLabel(c.discipline)) + '</span>' +
-        (all.length ? '<div class="tc-bar" aria-hidden="true"><i style="width:' + pct + '%"></i></div><small style="color:var(--muted,#5A6E6A);font-weight:700">' + done + ' of ' + all.length + ' done</small>' : '') + '</div>';
+        '<div class="tc-hbar"><h3>' + esc(c.name) + '</h3><div class="sub">' + levelBadge(c.track) + '<span>' + esc(T.disciplineLabel(c.discipline)) + '</span>' +
+        (all.length ? '<span class="tc-prog" title="' + done + ' of ' + all.length + ' done"><span class="bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>' + done + '/' + all.length + ' done</span>' : '') + '</div></div>';
       var shown = 0;
       S.topics.forEach(function (t) {
         var ls = S.items.filter(function (l) { return l.topicId === t.id; });
         if (!ls.length) return;
         shown++;
         var names = labelsFor(ls);
+        var nums = {}; all.forEach(function (x, k) { nums[x.id] = k < 9 ? '0' + (k + 1) : String(k + 1); });
         h += '<div class="tc-topic"><div class="tc-topic-head">' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</div>' + ls.map(function (l) {
           var bits = []; if (l.video) bits.push('Video'); if (l.notes) bits.push('Notes'); if (l.task) bits.push(g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Write it' : 'Code it'); if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
-          return '<button type="button" class="tc-row" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="ic"><i class="fas ' + (l.type === 'test' ? 'fa-clipboard-question' : 'fa-circle-play') + '"></i></span><span class="t"><b>' + esc(names[l.id]) + '</b>' + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span>' + itemState(l) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
+          return '<button type="button" class="tc-row" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="n">' + (l.type === 'test' ? '<i class="fas fa-clipboard-question" title="Practice test"></i>' : nums[l.id]) + '</span><span class="t"><b>' + esc(names[l.id]) + '</b>' + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span>' + itemState(l) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
         }).join('') + '</div>';
       });
       if (!shown) h += '<div class="tc-empty">Nothing has been posted in this class yet.</div>';

@@ -33,13 +33,14 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
 .sidebar{width:var(--sidebar-w);background:var(--brand-deep);position:fixed;inset:0 auto 0 0;z-index:20;display:flex;flex-direction:column;transition:transform .25s}
 .sidebar-brand{display:flex;align-items:center;gap:.75rem;padding:1.5rem 1.4rem;border-bottom:1px solid rgba(255,255,255,.06)}
 .sidebar-brand img{width:38px;height:38px;border-radius:10px}
-.sidebar-brand .name{color:#fff;font-weight:800;font-size:1.05rem;line-height:1.2}
+.sidebar-brand .name{color:#fff;font-weight:800;font-size:.95rem;line-height:1.2}
 .sidebar-brand .name span{display:block;font-size:.72rem;font-weight:700;color:var(--brand-soft);letter-spacing:.05em;text-transform:uppercase;margin-top:2px}
-.sidebar-nav{flex:1;min-height:0;overflow-y:auto;padding:1.2rem 1rem;display:flex;flex-direction:column;gap:.25rem}
-.nav{display:flex;align-items:center;gap:.8rem;width:100%;padding:.75rem .9rem;border:0;border-radius:12px;background:none;color:rgba(255,255,255,.72);font-weight:700;font-size:.9rem;text-align:left;transition:all .2s}
-.nav i{width:18px;text-align:center}
-.nav:hover{background:rgba(255,255,255,.06);color:#fff}
-.nav.on{background:var(--brand);color:#04231f}
+.sidebar-nav{flex:1;min-height:0;overflow-y:auto;padding:1rem .8rem;display:flex;flex-direction:column;gap:.2rem}
+.nav{display:flex;align-items:center;gap:.7rem;width:100%;padding:.62rem .8rem;border:0;border-radius:10px;background:none;color:rgba(255,255,255,.72);font-weight:700;font-size:.84rem;text-align:left;transition:background .15s,color .15s}
+.nav i{width:16px;text-align:center;font-size:.88rem}
+.nav:hover{background:rgba(255,255,255,.05);color:#fff}
+.nav.on{background:rgba(85,191,179,.16);color:#fff}
+.nav.on i{color:var(--brand)}
 .nav .badge{margin-left:auto;background:var(--gold);color:#3b2f00;font-size:.7rem;font-weight:800;padding:.1rem .5rem;border-radius:99px}
 .nav-sep{margin:.8rem .9rem .3rem;font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.45)}
 .sidebar-foot{padding:1.2rem;border-top:1px solid rgba(255,255,255,.06)}
