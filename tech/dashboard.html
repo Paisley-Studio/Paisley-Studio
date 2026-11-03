@@ -396,6 +396,7 @@ body.no-create [data-newbuild]{display:none!important}
       <button class="nav on" data-v="home" type="button"><i class="fas fa-house"></i> Home</button>
       <div class="nav-sep">Learn</div>
       <button class="nav" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
+      <button class="nav" data-v="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results</button>
       <button class="nav" data-v="groups" type="button"><i class="fas fa-people-group"></i> My group</button>
       <button class="nav" data-v="missions" id="navMissions" type="button" hidden><i class="fas fa-bullseye"></i> Missions</button>
       <button class="nav" data-v="learn" id="navLearn" type="button" hidden><i class="fas fa-book-open"></i> Resources</button>
@@ -439,20 +440,20 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="../js/tech/code-lab.js?v=tech14"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=3"></script>
-<script src="../js/tech/tech-helpers.js?v=tech15"></script>
-<script src="../js/tech/tech-work.js?v=5"></script>
+<script src="../js/tech/tech-helpers.js?v=tech16"></script>
+<script src="../js/tech/tech-work.js?v=6"></script>
 <script src="../js/tech/tech-groups.js?v=2"></script>
-<script src="../js/tech/tech-classes.js?v=10"></script>
+<script src="../js/tech/tech-classes.js?v=11"></script>
 <script>
 (function(){
 'use strict';
 const auth=firebase.auth(), T=TechUI, esc=T.esc, FV=()=>firebase.firestore.FieldValue;
 const $=id=>document.getElementById(id);
-T.injectStyle();
+T.injectStyle(); TechWork.style();
 
-const S={uid:null,p:null,classLesson:null,recent:[],navVideo:null,bubbles:null,content:{},builds:[],wall:[],progress:null,live:{},practice:[],activity:[],v:'home',ws:null,chat:null,openId:null,openTab:null,pr:null,projFilter:'all',mtab:'missions',unsubs:[]};
+const S={uid:null,p:null,classLesson:null,classPractise:false,work:[],recent:[],navVideo:null,bubbles:null,content:{},builds:[],wall:[],progress:null,live:{},practice:[],activity:[],v:'home',ws:null,chat:null,openId:null,openTab:null,pr:null,projFilter:'all',mtab:'missions',unsubs:[]};
 const KINDS=['path','topic','mission','challenge','tool','resource','template','aiTool'];
-const TITLES={home:'Home',classes:'Classes',groups:'My group',missions:'Missions',learn:'Resources',practice:'Practice',projects:'My projects',feedback:'Coach feedback',live:'Live classes',showcase:'My showcase',progress:'Learning path',toolbox:'AI Toolbox',coach:'Coach',profile:'Profile'};
+const TITLES={home:'Home',classes:'Classes',results:'Results',groups:'My group',missions:'Missions',learn:'Resources',practice:'Practice',projects:'My projects',feedback:'Coach feedback',live:'Live classes',showcase:'My showcase',progress:'Learning path',toolbox:'AI Toolbox',coach:'Coach',profile:'Profile'};
 const ALIAS={studio:'home',messages:'coach',portfolio:'showcase',challenges:'missions'};
 const DISCIPLINES=T.DISCIPLINES;
 const CREATION_ICON={CODE:'fa-code',DESIGN:'fa-palette',WRITING:'fa-pen-nib',RESEARCH:'fa-microscope',MEDIA:'fa-film',MUSIC:'fa-music',AI:'fa-robot',BUILD:'fa-rocket',Other:'fa-star'};
@@ -517,6 +518,7 @@ function boot(){
   log('session','Opened Tech Studio');
   setInterval(()=>{ if(document.visibilityState==='visible') T.touchActive(me()); },3*60000);
   S.bell=T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
+    if(n.section==='results'||n.section==='projects'){ go(n.section); return true; }
     if(n.lessonId){ S.classLesson=n.lessonId; go('classes'); return true; }
     if(n.buildId&&S.builds.some(b=>b.id===n.buildId)){ openBuild(n.buildId,n.type==='tech_feedback'?'submit':null); return true; }
     if(n.classId){ go('live'); return true; }
@@ -543,6 +545,8 @@ function boot(){
     S.builds=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>(T.toDate(b.updatedAt)||0)-(T.toDate(a.updatedAt)||0));
     softRender();
   },e=>console.warn('builds',e)));
+  /* Class work: published pieces show in My projects and My showcase with their link. */
+  S.unsubs.push(db.collection('techLessonWork').where('studentId','==',S.uid).onSnapshot(s=>{ S.work=s.docs.map(d=>Object.assign({id:d.id},d.data())); softRender(); },e=>console.warn('class work',e)));
   S.unsubs.push(db.collection('techProgress').doc(S.uid).onSnapshot(s=>{ S.progress=s.exists?s.data():null; softRender(); },()=>{}));
   const liveIn=key=>s=>{ Object.keys(S.live).forEach(id=>{ if(S.live[id]._src===key) delete S.live[id]; }); s.docs.forEach(d=>{ S.live[d.id]=Object.assign({id:d.id,_src:key},d.data()); }); softRender(); };
   S.unsubs.push(db.collection('techLiveClasses').where('audience','==','all').onSnapshot(liveIn('all'),e=>console.warn('live',e)));
@@ -580,6 +584,7 @@ function subFor(v){
   return ({
     home:S.builds.length?'Hi '+n+'. Here is your next step.':'Hi '+n+'. Start with a mission or an idea of your own.',
     classes:'Your video lessons, notes, quizzes and practice tests.',
+    results:'Your marked class work, the feedback and the marked copies.',
     groups:'Your group, your teammates and the tasks you build together.',
     missions:'Missions from your coaches. Learn, practise, then build.',
     learn:'Extra resources from your coaches.',
@@ -679,6 +684,7 @@ function render(silent){
   if(v==='projects'&&S.openId) return mountProject();
   if(v==='coach') return renderCoach();
   if(v==='classes') return mountClasses();
+  if(v==='results') return mountResults();
   if(v==='groups') return mountGroups();
   if(v==='practice'&&S.openId) return openPractice(S.openId);
   el.innerHTML=(VIEWS[v]||VIEWS.home)();
@@ -694,10 +700,17 @@ function mountProject(){
     onDeleted:()=>{ S.openId=null; go('projects'); }});
 }
 function mountClasses(){
-  const lid=S.classLesson; S.classLesson=null;
+  const lid=S.classLesson, fix=S.classPractise; S.classLesson=null; S.classPractise=false;
   $('view').innerHTML='<div id="classHost"></div>';
-  S.ws=TechClasses.mountLearner($('classHost'),{me:me(),student:Object.assign({id:S.uid},S.p),lessonId:lid,onStartProject:startClassProject});
+  S.ws=TechClasses.mountLearner($('classHost'),{me:me(),student:Object.assign({id:S.uid},S.p),lessonId:lid,practise:fix,onStartProject:startClassProject});
 }
+function mountResults(){
+  $('view').innerHTML='<div id="resHost"></div>';
+  S.ws=TechWork.mountResults($('resHost'),{me:me(),studentId:S.uid,who:S.p.name,onLesson:(lid,fix)=>{ S.classLesson=lid; S.classPractise=!!fix; go('classes'); }});
+}
+/* Class work that was approved for publishing, as share rows. */
+const pubWork=()=>S.work.filter(d=>TechWork.shareLink(d)).sort((a,b)=>(T.toDate(b.publishedAt||b.publishDecidedAt)||0)-(T.toDate(a.publishedAt||a.publishDecidedAt)||0));
+const workShare=d=>({title:d.lessonTitle||'Class work',sub:['Class work',d.courseName,d.topicTitle].filter(Boolean).join(' · '),url:TechWork.shareLink(d)});
 /* Groups: teammates and shared tasks, coded together live. */
 function mountGroups(){
   $('view').innerHTML='<div id="groupHost"></div>';
@@ -851,9 +864,10 @@ projects(){
   const F={all:()=>true,mission:b=>!T.isSelfLed(b),self:b=>T.isSelfLed(b),progress:b=>st(b)==='in_progress',review:b=>['submitted','under_review'].includes(st(b)),revision:b=>st(b)==='revision',approved:b=>['approved','mastered'].includes(st(b)),published:b=>b.showcase==='approved'};
   const LAB={all:'All',mission:'Missions',self:'Self-led',progress:'In progress',review:'Submitted',revision:'Revision',approved:'Approved',published:'Published'};
   const f=F[S.projFilter]?S.projFilter:'all';
-  if(!S.builds.length) return emptyBox('No projects yet','Start a mission, or create something of your own.','<button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> Create something</button>');
+  const pw=pubWork(), pwHtml=pw.length?'<section class="panel" style="margin-bottom:1.2rem"><div class="panel-head"><h2>Published class work</h2></div>'+TechWork.shareRowsHtml(pw.map(workShare))+'<p class="note-line" style="margin:.6rem 0 0">Approved by your coach. Share the link with friends and family; only your first name is shown.</p></section>':'';
+  if(!S.builds.length) return pwHtml||emptyBox('No projects yet','Your class work appears here once your coach approves it for publishing.','<button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> Create something</button>');
   const list=S.builds.filter(F[f]);
-  return '<div class="chips" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="chip'+(f===k?' on':'')+'" type="button" aria-pressed="'+(f===k)+'" data-projfilter="'+k+'">'+LAB[k]+'<em>'+S.builds.filter(F[k]).length+'</em></button>').join('')+'</div>'+
+  return pwHtml+'<div class="chips" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="chip'+(f===k?' on':'')+'" type="button" aria-pressed="'+(f===k)+'" data-projfilter="'+k+'">'+LAB[k]+'<em>'+S.builds.filter(F[k]).length+'</em></button>').join('')+'</div>'+
     (f==='self'?'<p class="note-line">Self-led projects are real projects: submit them for review like a mission, and publish them once approved.</p>':'')+
     (list.length?'<div class="cards">'+list.map(buildCard).join('')+'</div>':emptyBox('Nothing here yet','Projects will show up here as they move along.'));
 },
@@ -877,10 +891,11 @@ live(){
 },
 
 showcase(){
-  const pub=S.builds.filter(b=>b.showcase==='approved'), ready=S.builds.filter(b=>b.showcase!=='approved'&&['approved','mastered'].includes(st(b)));
-  if(!pub.length&&!ready.length) return emptyBox('Nothing to share yet','When your coach approves a project you can ask for it to be published, with a link you can share.','<button class="btn" type="button" data-go="projects">My projects</button>');
+  const pub=S.builds.filter(b=>b.showcase==='approved'), ready=S.builds.filter(b=>b.showcase!=='approved'&&['approved','mastered'].includes(st(b))), pw=pubWork();
+  if(!pub.length&&!ready.length&&!pw.length) return emptyBox('Nothing to share yet','Hand in class work, then press Ask to publish. When your coach approves it you get a link to share.','<button class="btn" type="button" data-go="projects">My projects</button>');
   return '<div class="stack">'+
     (pub.length?'<section class="panel"><div class="panel-head"><h2>Published</h2></div>'+pub.map(b=>{ const u=T.shareUrl(b.id); return '<div class="share-row"><div class="t"><b>'+esc(b.title)+'</b> '+origin(b)+'</div><div class="share-link"><input readonly value="'+esc(u)+'" onclick="this.select()" aria-label="Share link"><button class="btn light sm" type="button" data-copy="'+esc(u)+'"><i class="fas fa-copy"></i> Copy</button><a class="btn light sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open</a></div></div>'; }).join('')+'</section>':'')+
+    (pw.length?'<section class="panel"><div class="panel-head"><h2>Published class work</h2></div>'+TechWork.shareRowsHtml(pw.map(workShare))+'</section>':'')+
     (ready.length?panelList('Approved, not yet published',ready.map(b=>projectRow(b,'submit')).join('')):'')+
     '<p class="note-line" style="margin:0">Published pages show your first name and the work, nothing else. You can take a project down at any time.</p></div>';
 },

@@ -993,14 +993,14 @@ function markLine(a) {
   return `${score}${a.feedback ? " " + String(a.feedback).slice(0, 220) : ""}`.trim();
 }
 function workEmailBody(a) {
-  return (a.grade != null && a.maxScore ? `<p style="margin:0 0 .6rem;"><b>Score:</b> ${esc(a.grade)} / ${esc(a.maxScore)}</p>` : "") +
-    (a.feedback ? `<p style="margin:0 0 .6rem;white-space:pre-wrap;"><b>Feedback:</b> ${esc(String(a.feedback).slice(0, 2000))}</p>` : "") +
-    (a.gradedFileUrl ? `<p style="margin:0;">The marked copy, with the coach's notes drawn on it, is in the studio.</p>` : "");
+  return (a.grade != null && a.maxScore ? `<p style="margin:0 0 8px;"><span style="color:#5A6E6A;">Score</span>&nbsp; <b>${esc(a.grade)} / ${esc(a.maxScore)}</b></p>` : "") +
+    (a.feedback ? `<p style="margin:0 0 8px;padding:10px 12px;background:#F4F8F7;border-radius:8px;white-space:pre-wrap;">${esc(String(a.feedback).slice(0, 2000))}</p>` : "") +
+    (a.gradedFileUrl ? `<p style="margin:0;color:#5A6E6A;">The marked copy, with the coach's notes drawn on it, can be opened and downloaded there.</p>` : "");
 }
 /* The picture taken at hand-in, for the family's email ("" when there is none). */
 function workSnapshotHtml(pic, kid) {
   if (!/^https:\/\//.test(pic || "")) return "";
-  return `<p style="margin:0 0 14px;"><img src="${esc(pic)}" width="520" alt="What ${esc(kid)} built" style="display:block;width:100%;max-width:520px;height:auto;border:1px solid #dfe9e6;border-radius:12px;"></p>`;
+  return `<p style="margin:0 0 14px;"><img src="${esc(pic)}" width="496" alt="What ${esc(kid)} built" style="display:block;width:100%;max-width:496px;height:auto;max-height:300px;object-fit:cover;object-position:top;border:1px solid #E3ECEA;border-radius:8px;"></p>`;
 }
 function workRound(a, ev) { return ev === "submitted" ? String(a.submitCount || 1) : String(tsMs(a.gradedAt) || (a.history || []).length); }
 
@@ -1038,7 +1038,7 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
       const kid = first(s.name, "Your child");
       for (const g of await guardiansOf(sid)) {
         const gFresh = await techNotify(g.parentUid, "guardian", "tech_work", `See what ${kid} built today`, `${kid} handed in ${what} (${where}).`,
-          { studentId: sid, courseId: a.courseId || "", id: `work_${wid}_s${round}_${g.parentUid}`, section: "classes", image: pic, link: LINKS.guardian + "#classes" });
+          { studentId: sid, courseId: a.courseId || "", id: `work_${wid}_s${round}_${g.parentUid}`, section: "results", image: pic, link: LINKS.guardian + "#results" });
         if (gFresh) await email(g.email, `See what ${kid} built today`, {
           preheader: `${kid} handed in ${what} at Paisley Tech Studio.`,
           heading: `See what ${kid} built today`,
@@ -1046,7 +1046,7 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
           body: workSnapshotHtml(pic, kid) +
             `<p style="margin:0 0 10px;">Ask ${esc(kid)} to show you how it works. A few words of praise for something they made themselves goes a long way.</p>` +
             `<p style="margin:0;"><b>Keep encouraging them!</b> We will tell you again when their coach has marked it.</p>`,
-          cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#classes" }
+          cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#results" }
         });
       }
       /* Handing in can be what passes the level. */
@@ -1056,24 +1056,25 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
     const graded = ev === "graded";
     const title = graded ? `Your work was marked: ${what}` : `Corrections asked: ${what}`;
     const line = (graded ? `${a.gradedByName || "Your coach"} marked ${what}.` : `${a.gradedByName || "Your coach"} asked for corrections on ${what}.`) + " " + markLine(a);
-    const fresh = await techNotify(sid, "student", graded ? "tech_work_marked" : "tech_work_corrections", title, line, Object.assign({ id: `work_${wid}_m${round}`, section: "classes", link: LINKS.student + "#classes" }, extra));
+    const toResults = Object.assign({}, extra, { lessonId: "" });   // opening Results reads them, unlike posted lessons
+    const fresh = await techNotify(sid, "student", graded ? "tech_work_marked" : "tech_work_corrections", title, line, Object.assign({ id: `work_${wid}_m${round}`, section: "results", link: LINKS.student + "#results" }, toResults));
     if (fresh) {
       await email(s.email, title, {
         preheader: line, heading: graded ? "Your work is marked." : "Your coach asked for corrections.",
         intro: `Hi ${esc(first(s.name))}, ${esc(a.gradedByName || "your coach")} ${graded ? "marked" : "looked at"} ${esc(what)} (${esc(where)}).`,
-        body: workEmailBody(a) + (graded ? "" : `<p style="margin:.6rem 0 0;">Fix it in the same lesson, then hand it in again.</p>`),
-        cta: { label: "Open your studio", url: APP + LINKS.student + "#classes" }
+        body: workEmailBody(a) + (graded ? `<p style="margin:12px 0 0;">It is in Results in your studio, with the marked copy.</p>` : `<p style="margin:12px 0 0;">Open Results in your studio and press Make corrections, then hand it in again.</p>`),
+        cta: { label: "Open Results", url: APP + LINKS.student + "#results" }
       });
       await logActivity(sid, graded ? "work_marked" : "work_corrections", (graded ? "Work marked: " : "Corrections asked: ") + what, { studentName: s.name || "", by: "coach", origin: "class" });
     }
     for (const g of await guardiansOf(sid)) {
       const gt = graded ? `${first(s.name)}'s work was marked` : `Corrections asked for ${first(s.name)}`;
-      const gFresh = await techNotify(g.parentUid, "guardian", graded ? "tech_work_marked" : "tech_work_corrections", gt, `${what} · ${where}. ${markLine(a)}`.trim(), Object.assign({ id: `work_${wid}_m${round}_${sid}`, section: "classes", link: LINKS.guardian + "#classes" }, extra));
+      const gFresh = await techNotify(g.parentUid, "guardian", graded ? "tech_work_marked" : "tech_work_corrections", gt, `${what} · ${where}. ${markLine(a)}`.trim(), Object.assign({ id: `work_${wid}_m${round}_${sid}`, section: "results", link: LINKS.guardian + "#results" }, toResults));
       if (gFresh) await email(g.email, `${gt}: ${what}`, {
         preheader: line, heading: gt + ".",
         intro: `Hi ${esc(first(g.name))}, ${esc(a.gradedByName || "the coach")} ${graded ? "marked" : "asked for corrections on"} ${esc(first(s.name))}'s ${esc(what)} (${esc(where)}).`,
-        body: workEmailBody(a) + `<p style="margin:.6rem 0 0;">You can see the work and the feedback in Classes in the guardian portal.</p>`,
-        cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#classes" }
+        body: workEmailBody(a) + `<p style="margin:12px 0 0;">The work, the feedback and the marked copy to download are in Results in the guardian portal.</p>`,
+        cta: { label: "See the results", url: APP + LINKS.guardian + "#results" }
       });
     }
   }
@@ -1107,12 +1108,12 @@ async function publishEvent(wid, b, a) {
   const what = a.lessonTitle || "class work", where = `${a.courseName || "Class"}${a.topicTitle ? " · " + a.topicTitle : ""}`;
   const scId = showcaseIdOf(wid), round = tsMs(a.publishRequestedAt) || tsMs(a.publishDecidedAt) || Date.now();
   const pic = /^https:\/\//.test(a.snapshotUrl || "") ? a.snapshotUrl : "";
-  const extra = { studentId: sid, courseId: a.courseId || "", image: pic };
+  const extra = { studentId: sid, courseId: a.courseId || "", image: pic, workId: wid };
   if (st === "requested") {
     const line = `${who} asks to publish ${what} (${where}).`;
     const coach = s.coachId || a.coachId;
     if (coach) await techNotify(coach, "coach", "tech_publish", "Publish request", line, Object.assign({ id: `pub_${wid}_${round}`, section: "results" }, extra));
-    await notifyAdmins("tech_publish", "Publish request", line, Object.assign({ id: `pub_${wid}_${round}`, section: "results" }, extra));
+    await notifyAdmins("tech_publish", "Publish request", line, Object.assign({ id: `pub_${wid}_${round}`, section: "wall" }, extra));
     return;
   }
   if (st === "approved") {
@@ -1120,19 +1121,19 @@ async function publishEvent(wid, b, a) {
     const url = APP + "/tech/p/" + encodeURIComponent(scId);
     await db.collection("techLessonWork").doc(wid).update({ shareId: scId, shareUrl: url, publishedAt: FV().serverTimestamp() });
     const by = a.publishDecidedByName || "Your coach";
-    const fresh = await techNotify(sid, "student", "tech_publish", "Your work is published!", `${by} approved ${what}. Share your link with friends and family.`, Object.assign({ id: `pubok_${wid}_${round}`, section: "classes", link: LINKS.student + "#classes" }, extra));
+    const fresh = await techNotify(sid, "student", "tech_publish", "Your work is published!", `${by} approved ${what}. Share your link with friends and family.`, Object.assign({ id: `pubok_${wid}_${round}`, section: "projects", link: LINKS.student + "#projects" }, extra));
     if (fresh) await email(s.email, `Your work is published: ${what}`, {
       preheader: "Share your link with friends and family.", heading: "Your work is published!",
       intro: `Hi ${esc(first(s.name))}, ${esc(by)} approved ${esc(what)} (${esc(where)}).`,
-      body: workSnapshotHtml(pic, first(s.name)) + `<p style="margin:0 0 8px;">Anyone with this link can see it:</p><p style="margin:0;"><a href="${esc(url)}">${esc(url)}</a></p>`,
+      body: workSnapshotHtml(pic, first(s.name)) + `<p style="margin:0 0 8px;">Anyone with this link can see it. It is also in My projects, ready to copy.</p><p style="margin:0;word-break:break-all;"><a href="${esc(url)}" style="color:#245F5A;font-weight:700;">${esc(url)}</a></p>`,
       cta: { label: "Open your published work", url }
     });
     for (const g of await guardiansOf(sid)) {
-      const gFresh = await techNotify(g.parentUid, "guardian", "tech_publish", `${kid}'s work is published`, `${what} (${where}) is public now. Share the link with family and friends.`, Object.assign({ id: `pubok_${wid}_${round}_${g.parentUid}`, section: "classes", link: LINKS.guardian + "#classes" }, extra));
+      const gFresh = await techNotify(g.parentUid, "guardian", "tech_publish", `${kid}'s work is published`, `${what} (${where}) is public now. Share the link with family and friends.`, Object.assign({ id: `pubok_${wid}_${round}_${g.parentUid}`, section: "projects", link: LINKS.guardian + "#projects" }, extra));
       if (gFresh) await email(g.email, `${kid}'s work is published: share it!`, {
         preheader: `See what ${kid} made, and share it with family and friends.`, heading: `${kid}'s work is published!`,
         intro: `Hi ${esc(first(g.name))}, ${esc(by)} approved ${esc(kid)}'s ${esc(what)} (${esc(where)}) for publishing.`,
-        body: workSnapshotHtml(pic, kid) + `<p style="margin:0 0 8px;">Share this link with family and friends. Only ${esc(kid)}'s first name is shown:</p><p style="margin:0 0 10px;"><a href="${esc(url)}">${esc(url)}</a></p><p style="margin:0;"><b>Keep encouraging them!</b></p>`,
+        body: workSnapshotHtml(pic, kid) + `<p style="margin:0 0 8px;">Share this link with family and friends. Only ${esc(kid)}'s first name is shown:</p><p style="margin:0 0 10px;word-break:break-all;"><a href="${esc(url)}" style="color:#245F5A;font-weight:700;">${esc(url)}</a></p><p style="margin:0;"><b>Keep encouraging them!</b> You can find this link again in Projects in the guardian portal.</p>`,
         cta: { label: `See ${kid}'s work`, url }
       });
     }
@@ -1144,7 +1145,7 @@ async function publishEvent(wid, b, a) {
   if (b && b.shareUrl) await db.collection("techLessonWork").doc(wid).update({ shareUrl: "", shareId: "" }).catch(() => {});
   if (st === "declined") {
     const by = a.publishDecidedByName || "Your coach";
-    await techNotify(sid, "student", "tech_publish", "Not published yet", `${by} looked at ${what}.${a.publishNote ? " " + String(a.publishNote).slice(0, 300) : ""} Fix it, then ask again.`, Object.assign({ id: `pubno_${wid}_${round}`, section: "classes", link: LINKS.student + "#classes" }, extra));
+    await techNotify(sid, "student", "tech_publish", "Not published yet", `${by} looked at ${what}.${a.publishNote ? " " + String(a.publishNote).slice(0, 300) : ""} Fix it, then ask again.`, Object.assign({ id: `pubno_${wid}_${round}`, section: "results", link: LINKS.student + "#results" }, extra));
   }
 }
 

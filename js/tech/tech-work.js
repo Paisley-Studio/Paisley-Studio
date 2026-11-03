@@ -33,6 +33,10 @@
      TechWork.openWorkView({ me, ref, data, title, subtitle, who, kind, brief, folder, key, live, presence })
      TechWork.openMarking({ me, ref, data, title, subtitle, who, folder, key, kind, onDone })
      TechWork.workPdf({ title, who, kind, files, writingHtml, assets }) -> Uint8Array
+     TechWork.mountResults(host, { me, studentId, who })   the builder's Results (guardians read-only)
+     TechWork.openHandIn({ me, row, who })                 staff viewer for one techLessonWork row
+     TechWork.decidePublish(ref, data, 'approve' | 'decline' | 'unpublish', me, who) -> Promise(update | null)
+     TechWork.shareRowsHtml([{ title, sub, url }])         published work with Copy / Open
 ========================================================= */
 (function (g) {
   'use strict';
@@ -87,6 +91,21 @@
       (isBuilder ? '<button type="button" class="tc-btn sm" data-tw="pubreq" style="margin-top:.5rem"><i class="fas fa-paper-plane"></i> I fixed it, ask again</button>' : '');
     else h += isBuilder ? '<p>Proud of it? Ask to publish it. Your coach or the Studio Desk checks it first, then you get a link to share.</p><button type="button" class="tc-btn sm" data-tw="pubreq"><i class="fas fa-paper-plane"></i> Ask to publish</button>' : '<p>' + esc(who) + ' has not asked to publish this.</p>';
     return h + '</div>';
+  }
+  /* The coach's or admin's publishing decision (viewer, admin Showcase). Resolves null when cancelled. */
+  function decidePublish(ref, d, k, me, who) {
+    var up = { publishDecidedBy: me.uid, publishDecidedByName: me.name || '', publishDecidedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
+    if (k === 'approve') { if (!confirm('Publish this for anyone with the link to see? Only ' + (who ? T.firstName(who) + '\u2019s' : 'the builder\u2019s') + ' first name is shown.')) return Promise.resolve(null); up.publishState = 'approved'; up.publishNote = ''; }
+    else if (k === 'decline') { var why = prompt('Why not yet? The builder sees this note (for example: add your name to the page, fix the broken picture).', ''); if (why === null) return Promise.resolve(null); up.publishState = 'declined'; up.publishNote = String(why).trim().slice(0, 600); }
+    else if (k === 'unpublish') { if (!confirm('Take it down? The share link stops working.')) return Promise.resolve(null); up.publishState = 'unpublished'; }
+    else return Promise.resolve(null);
+    return ref.update(up).then(function () { return up; });
+  }
+  /* Published work, one row each, with the link to copy or open. */
+  function shareRowsHtml(items) {
+    return (items || []).map(function (x) {
+      return '<div class="tw-srow"><div class="t"><b>' + esc(x.title || 'Untitled') + '</b>' + (x.sub ? '<span>' + esc(x.sub) + '</span>' : '') + '</div>' + linkBox(x.url) + '</div>';
+    }).join('');
   }
   function copyText(t, btn) {
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { if (btn) btn.innerHTML = '<i class="fas fa-check"></i> Copied'; }, function () { prompt('Copy this link', t); });
@@ -228,6 +247,26 @@
       '.tw-side .tw-bar{flex-direction:column;align-items:stretch;margin:.9rem 0 .4rem}.tw-side .tw-bar .grow{display:none}.tw-side .tw-bar .tc-btn{width:100%}',
       '.tw-side .tw-fb{padding:.8rem .9rem}.tw-side .tw-fb .score{font-size:1.2rem}',
       '.tw-main{min-width:0}.tw-pop .cl-body{height:calc(100vh - 225px);min-height:380px}.tw-pop .tw-article{max-height:calc(100vh - 170px)}',
+      '.tw-srow{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;padding:.75rem 0;border-top:1px solid var(--line,rgba(38,51,49,.08))}.tw-srow:first-child{border-top:0;padding-top:.2rem}',
+      '.tw-srow .t{display:flex;flex-direction:column;min-width:0}.tw-srow .t b{color:var(--brand-deep,#245F5A);font-size:.9rem}.tw-srow .t span{font-size:.76rem;color:var(--muted,#5A6E6A);font-weight:600}.tw-srow .tw-share{flex:1 1 320px;max-width:520px}',
+      '.tw-res-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin:0 0 .9rem}.tw-res-stats>div{background:#fff;border:1px solid var(--line,rgba(38,51,49,.08));border-radius:12px;padding:.7rem .9rem}',
+      '.tw-res-stats b{display:block;font-size:1.25rem;color:var(--brand-deep,#245F5A);line-height:1.1}.tw-res-stats span{font-size:.74rem;font-weight:700;color:var(--muted,#5A6E6A)}',
+      '.tw-res-chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 .9rem}.tw-res-chips button{border:1px solid var(--line,rgba(38,51,49,.12));background:#fff;border-radius:99px;padding:.35rem .8rem;font:inherit;font-size:.8rem;font-weight:700;color:var(--muted,#5A6E6A);cursor:pointer}',
+      '.tw-res-chips button em{font-style:normal;margin-left:.2rem;opacity:.7}.tw-res-chips button.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}',
+      '.tw-res-list{display:grid;gap:.75rem}',
+      '.tw-res{background:#fff;border:1px solid var(--line,rgba(38,51,49,.08));border-radius:14px;padding:1rem 1.1rem}.tw-res.redo{border-left:3px solid #F39C12}',
+      '.tw-res-top{display:flex;gap:1rem;align-items:flex-start;justify-content:space-between}.tw-res-t{min-width:0}',
+      '.tw-res h4{margin:.15rem 0 .2rem;font-size:.98rem;font-weight:800;color:var(--brand-deep,#245F5A);line-height:1.3}',
+      '.tw-res-r{display:flex;flex-direction:column;align-items:flex-end;gap:.3rem;flex:none}.tw-res-sc{font-size:1.15rem;color:var(--brand-deep,#245F5A)}',
+      '.tw-res-pic{display:block;width:180px;max-width:100%;height:112px;object-fit:cover;object-position:top;border-radius:10px;border:1px solid var(--line,rgba(38,51,49,.1));margin:.7rem 0 0}',
+      '.tw-res-fb{margin:.7rem 0 0;padding:.6rem .75rem;background:var(--paper,#F4F8F7);border-radius:10px;font-size:.87rem;line-height:1.55;white-space:pre-wrap}',
+      '.tw-res-redo{margin:.6rem 0 0;font-size:.84rem;font-weight:700;color:#8a5a00}',
+      '.tw-res-act{display:flex;gap:.4rem;flex-wrap:wrap;margin:.8rem 0 0}',
+      '.tw-res-share{margin:.8rem 0 0;padding-top:.7rem;border-top:1px solid var(--line,rgba(38,51,49,.08));display:grid;gap:.4rem}',
+      '.tw-res-hist{margin:.7rem 0 0;font-size:.8rem;color:var(--muted,#5A6E6A)}.tw-res-hist summary{cursor:pointer;font-weight:700}.tw-res-hist p{margin:.35rem 0;white-space:pre-wrap}',
+      '.tw-res-alert{display:flex;align-items:center;gap:.5rem;margin:0 0 .9rem;padding:.6rem .85rem;border-radius:10px;background:rgba(243,156,18,.1);color:#7a5200;font-size:.86rem;font-weight:700}',
+      '.tw-res-empty{display:flex;flex-direction:column;align-items:center;gap:.3rem;text-align:center;padding:2.2rem 1rem;background:#fff;border:1px dashed var(--line,rgba(38,51,49,.15));border-radius:14px;color:var(--muted,#5A6E6A);font-size:.86rem}.tw-res-empty i{font-size:1.4rem;color:var(--brand,#55BFB3)}.tw-res-empty b{color:var(--brand-deep,#245F5A);font-size:.95rem}',
+      '@media(max-width:560px){.tw-res-top{flex-direction:column;gap:.4rem}.tw-res-r{flex-direction:row;align-items:center}}',
       '@media(max-width:860px){.tw-pop{grid-template-columns:minmax(0,1fr)}.tw-side{max-height:none}.tw-pop .cl-body{height:auto}}'
     ].join('\n');
     document.head.appendChild(s);
@@ -423,14 +462,11 @@
     else if (!g.CodeLab) hostW.innerHTML = '<div class="tc-empty">Paisley VS Code is not loaded on this page.</div>';
     else lab = g.CodeLab.mount(hostW, { build: d, canEdit: false, mode: o.kind === 'doc' ? 'doc' : 'code', title: o.who, collab: o.live ? { ref: o.ref, presence: o.presence, me: { uid: o.me.uid, name: o.me.name } } : null });
     if (o.live) unsub = o.ref.onSnapshot(function (s) { if (s.exists) { d = s.data(); var h = m.body.querySelector('#twHead'); if (h) h.innerHTML = head(); paintFoot(); } }, function () { });
-    function decidePublish(k, btn) {
+    function decide(k, btn) {
       if (k === 'copy') { copyText(shareLink(d), btn); return; }
-      var up = { publishDecidedBy: o.me.uid, publishDecidedByName: o.me.name || '', publishDecidedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
-      if (k === 'approve') { if (!confirm('Publish this for anyone with the link to see? Only ' + (o.who ? T.firstName(o.who) + '\u2019s' : 'the builder\u2019s') + ' first name is shown.')) return; up.publishState = 'approved'; up.publishNote = ''; }
-      else if (k === 'decline') { var why = prompt('Why not yet? The builder sees this note (for example: add your name to the page, fix the broken picture).', ''); if (why === null) return; up.publishState = 'declined'; up.publishNote = String(why).trim().slice(0, 600); }
-      else if (k === 'unpublish') { if (!confirm('Take it down? The share link stops working.')) return; up.publishState = 'unpublished'; }
       btn.disabled = true;
-      o.ref.update(up).then(function () { d = Object.assign({}, d, up, { publishDecidedAt: new Date() }); paintFoot(); }).catch(function (e) { btn.disabled = false; alert('Could not save: ' + T.errMsg(e)); });
+      decidePublish(o.ref, d, k, o.me, o.who).then(function (up) { btn.disabled = false; if (up) { d = Object.assign({}, d, up, { publishDecidedAt: new Date() }); paintFoot(); } })
+        .catch(function (e) { btn.disabled = false; alert('Could not save: ' + T.errMsg(e)); });
     }
     function paintFoot() {
       var canMark = d.status && d.status !== 'Draft';
@@ -439,7 +475,7 @@
         (d.publishState === 'requested' ? '<button type="button" class="cr-btn" data-pub="decline"><i class="fas fa-rotate-left"></i> Decline publishing</button><button type="button" class="cr-btn primary" data-pub="approve"><i class="fas fa-globe"></i> Approve publishing</button>' : '') +
         (d.publishState === 'approved' ? (shareLink(d) ? '<button type="button" class="cr-btn" data-pub="copy"><i class="fas fa-copy"></i> Copy share link</button>' : '') + '<button type="button" class="cr-btn" data-pub="unpublish"><i class="fas fa-eye-slash"></i> Unpublish</button>' : '') +
         (canMark ? '<button type="button" class="cr-btn primary" data-mark><i class="fas fa-pen-nib"></i> ' + (d.status === 'Graded' ? 'Review the marks' : 'Mark with ink') + '</button>' : '');
-      [].forEach.call(m.foot.querySelectorAll('[data-pub]'), function (pb) { pb.onclick = function () { decidePublish(pb.dataset.pub, pb); }; });
+      [].forEach.call(m.foot.querySelectorAll('[data-pub]'), function (pb) { pb.onclick = function () { decide(pb.dataset.pub, pb); }; });
       m.foot.querySelector('[data-x]').onclick = function () { m.close(); };
       var mk = m.foot.querySelector('[data-mark]');
       var pubInfo = m.body.querySelector('#twPubInfo');
@@ -617,6 +653,94 @@
     };
   }
 
+  /* Staff viewer for one hand-in row ({ id, ref?, ...techLessonWork }), with its lesson's brief and questions. */
+  function openHandIn(o) {
+    var r = o.row, ref = r.ref || WORK().doc(r.id), who = o.who || r.studentName;
+    var base = { me: o.me, ref: ref, data: r, title: r.lessonTitle, subtitle: (r.courseName || '') + (r.topicTitle ? ' · ' + r.topicTitle : ''), who: who, folder: r.studentId, key: r.lessonId, onDone: o.onDone };
+    return db.collection('techLessons').doc(r.lessonId).get().then(function (ls) {
+      var lesson = ls.exists ? ls.data() : {};
+      return openWorkView(Object.assign(base, { kind: r.kind || kindOf(lesson.task), brief: lesson.task && lesson.task.brief, questions: taskQs(lesson.task) }));
+    }).catch(function () { return openWorkView(Object.assign(base, { kind: r.kind })); });
+  }
+
+  /* ---------------------------------------------------------
+     Results: the builder's handed-in class work with its marks, in one
+     place, so nobody scrolls back through the classes to find it.
+     Guardians see the same list read-only, and can download the
+     marked copy. "Fix it" opens the lesson's practice tool.
+     --------------------------------------------------------- */
+  function pdfName(d) {
+    var base = String(d.lessonTitle || 'class-work').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'class-work';
+    return base + '-marked.pdf';
+  }
+  function download(url, name, btn) {
+    var was = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Downloading'; }
+    var done = function () { if (btn) { btn.disabled = false; btn.innerHTML = was; } };
+    fetch(url).then(function (res) { if (!res.ok) throw new Error(res.status); return res.blob(); }).then(function (b) {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000); done();
+    }).catch(function () { done(); g.open(url, '_blank', 'noopener'); });   // no CORS on the bucket: open it, the browser can save it from there
+  }
+  var RES_F = [['all', 'All'], ['Corrections', 'To fix'], ['Graded', 'Marked'], ['Submitted', 'Waiting for marks']];
+  function resultCard(d, isBuilder, who) {
+    var redo = d.status === 'Corrections', marked = d.status === 'Graded' || redo, sc = scoreText(d), url = T.safeUrl(d.gradedFileUrl);
+    var where = [d.courseName, d.topicTitle].filter(Boolean).join(' · '), share = shareLink(d);
+    var hist = (d.history || []).filter(function (h) { return h && (h.feedback || h.markedFileUrl); });
+    var when = marked ? (d.gradedByName ? 'Marked by ' + d.gradedByName : 'Marked') + (d.gradedAt ? ' · ' + fmt(d.gradedAt) : '') : 'Handed in ' + fmt(d.submittedAt) + ' · waiting for the coach';
+    return '<article class="tw-res' + (redo ? ' redo' : '') + '">' +
+      '<div class="tw-res-top"><div class="tw-res-t">' + (where ? '<span class="tw-eyebrow">' + esc(where) + '</span>' : '') + '<h4>' + esc(d.lessonTitle || 'Class work') + '</h4><span class="tw-note">' + esc(when) + '</span></div>' +
+        '<div class="tw-res-r">' + (sc ? '<b class="tw-res-sc">' + esc(sc) + '</b>' : '') + statePill(d.status) + '</div></div>' +
+      (T.safeUrl(d.snapshotUrl) ? '<img class="tw-res-pic" src="' + esc(T.safeUrl(d.snapshotUrl)) + '" alt="" loading="lazy">' : '') +
+      (d.feedback ? '<div class="tw-res-fb">' + esc(d.feedback) + '</div>' : '') +
+      (redo ? '<p class="tw-res-redo"><i class="fas fa-rotate-left"></i> ' + (isBuilder ? 'Your coach asked for corrections. Fix it, then hand it in again.' : 'The coach asked ' + esc(who) + ' for corrections.') + '</p>' : '') +
+      '<div class="tw-res-act">' +
+        (redo && isBuilder ? '<button type="button" class="tc-btn sm" data-twfix="' + esc(d.lessonId) + '"><i class="fas fa-pen"></i> Make corrections</button>' : '') +
+        (url ? '<a class="tc-btn light sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> Marked copy</a><button type="button" class="tc-btn light sm" data-twdl="' + esc(url) + '" data-name="' + esc(pdfName(d)) + '"><i class="fas fa-download"></i> Download</button>' : '') +
+        '<button type="button" class="tc-btn light sm" data-twlesson="' + esc(d.lessonId) + '"><i class="fas fa-eye"></i> ' + (isBuilder ? 'Open the lesson' : 'See the work') + '</button>' +
+      '</div>' +
+      (share ? '<div class="tw-res-share"><span class="tw-note"><i class="fas fa-globe"></i> Published' + (isBuilder ? ', in My projects' : '') + '</span>' + linkBox(share) + '</div>' : '') +
+      (hist.length ? '<details class="tw-res-hist"><summary>Earlier rounds (' + hist.length + ')</summary>' + hist.map(function (h) {
+        var hu = T.safeUrl(h.markedFileUrl);
+        return '<p><b>Round ' + esc(h.round || '') + '</b>' + (h.gradedByName ? ' · ' + esc(h.gradedByName) : '') + (h.feedback ? ': ' + esc(h.feedback) : '') +
+          (hu ? ' <a href="' + esc(hu) + '" target="_blank" rel="noopener noreferrer">marked copy</a>' : '') + '</p>';
+      }).join('') + '</details>' : '') +
+      '</article>';
+  }
+  function mountResults(host, o) {
+    style();
+    var isBuilder = o.me.role === 'student', who = T.firstName(o.who) || 'Your child', S = { rows: null, f: 'all' }, dead = false;
+    var unsub = WORK().where('studentId', '==', o.studentId).onSnapshot(function (s) {
+      if (dead) return;
+      S.rows = s.docs.map(function (x) { return Object.assign({ id: x.id }, x.data()); })
+        .filter(function (d) { return ['Submitted', 'Graded', 'Corrections'].indexOf(d.status) > -1; })
+        .sort(function (a, b) { return (T.toDate(b.gradedAt || b.submittedAt) || 0) - (T.toDate(a.gradedAt || a.submittedAt) || 0); });
+      paint();
+    }, function (e) { if (!dead) host.innerHTML = '<div class="tc-empty">Could not load results: ' + esc(T.errMsg(e)) + '</div>'; });
+    function paint() {
+      if (S.rows === null) { host.innerHTML = '<div class="tc-empty">Loading results…</div>'; return; }
+      var n = function (st) { return S.rows.filter(function (d) { return st === 'all' || d.status === st; }).length; };
+      if (!S.rows.length) { host.innerHTML = '<div class="tw-res-empty"><i class="fas fa-square-poll-vertical"></i><b>No results yet</b><span>' + (isBuilder ? 'Hand in your class work from a lesson. When your coach marks it, it lands here with the marked copy.' : 'When ' + esc(who) + ' hands in class work and the coach marks it, it appears here.') + '</span></div>'; return; }
+      var list = S.rows.filter(function (d) { return S.f === 'all' || d.status === S.f; });
+      var fix = n('Corrections');
+      host.innerHTML = (fix && isBuilder ? '<div class="tw-res-alert"><i class="fas fa-rotate-left"></i> ' + fix + (fix === 1 ? ' piece of work needs' : ' pieces of work need') + ' corrections.</div>' : '') +
+        '<div class="tw-res-stats"><div><b>' + n('Graded') + '</b><span>Marked</span></div><div><b>' + fix + '</b><span>To fix</span></div><div><b>' + n('Submitted') + '</b><span>Waiting</span></div></div>' +
+        '<div class="tw-res-chips" role="group" aria-label="Filter results">' + RES_F.map(function (f) { return '<button type="button" class="' + (S.f === f[0] ? 'on' : '') + '" aria-pressed="' + (S.f === f[0]) + '" data-twf="' + f[0] + '">' + esc(f[1]) + ' <em>' + n(f[0]) + '</em></button>'; }).join('') + '</div>' +
+        (list.length ? '<div class="tw-res-list">' + list.map(function (d) { return resultCard(d, isBuilder, who); }).join('') + '</div>' : '<div class="tc-empty">Nothing here.</div>') +
+        (isBuilder ? '' : '<p class="tw-note" style="margin-top:.8rem"><i class="fas fa-eye"></i> Read-only. Only ' + esc(who) + ' can change the work.</p>');
+    }
+    host.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-twf],[data-twdl],[data-twfix],[data-twlesson],[data-tw="copy"]'); if (!t) return;
+      if (t.dataset.twf) { S.f = t.dataset.twf; paint(); }
+      else if (t.dataset.twdl) download(t.dataset.twdl, t.dataset.name || 'marked.pdf', t);
+      else if (t.dataset.twfix) { if (o.onLesson) o.onLesson(t.dataset.twfix, true); }
+      else if (t.dataset.twlesson) { if (o.onLesson) o.onLesson(t.dataset.twlesson, false); }
+      else copyText(t.dataset.url, t);
+    });
+    paint();
+    return { destroy: function () { dead = true; unsub(); } };
+  }
+
   /* ---------------------------------------------------------
      Staff: every hand-in, newest first (per lesson or all)
      --------------------------------------------------------- */
@@ -658,13 +782,7 @@
       var b = e.target.closest('[data-open]'); if (!b) return;
       var r = (S.rows || []).filter(function (x) { return x.id === b.dataset.open; })[0]; if (!r) return;
       var s = byId[r.studentId];
-      db.collection('techLessons').doc(r.lessonId).get().then(function (ls) {
-        var lesson = ls.exists ? ls.data() : {};
-        openWorkView({ me: me, ref: r.ref, data: r, title: r.lessonTitle, subtitle: (r.courseName || '') + (r.topicTitle ? ' · ' + r.topicTitle : ''), who: (s && s.name) || r.studentName,
-          kind: r.kind || kindOf(lesson.task), brief: lesson.task && lesson.task.brief, questions: taskQs(lesson.task), folder: r.studentId, key: r.lessonId });
-      }).catch(function () {
-        openWorkView({ me: me, ref: r.ref, data: r, title: r.lessonTitle, who: r.studentName, kind: r.kind, folder: r.studentId, key: r.lessonId });
-      });
+      openHandIn({ me: me, row: r, who: (s && s.name) || r.studentName });
     });
     host.addEventListener('input', function (e) {
       if (!e.target.hasAttribute('data-hq')) return;
@@ -677,6 +795,6 @@
 
   g.TechWork = {
     kindOf: kindOf, workId: workId, taskQs: taskQs, answersHtml: answersHtml, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
-    takeSnapshot: takeSnapshot, publishHtml: publishHtml, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
+    takeSnapshot: takeSnapshot, publishHtml: publishHtml, shareLink: shareLink, shareRowsHtml: shareRowsHtml, decidePublish: decidePublish, openHandIn: openHandIn, mountResults: mountResults, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
   };
 })(window);

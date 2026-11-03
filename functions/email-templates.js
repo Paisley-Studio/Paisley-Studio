@@ -109,24 +109,23 @@ function firstName(full) {
    The one shell every email is wrapped in.
    --------------------------------------------------------- */
 function render({ preheader, heading, intro, body, cta, footer, programme, flat }) {
-  /* flat: { bg, ink, ctaBg, ctaInk } gives one solid header colour (newsletters). */
-  const headerBg = flat ? flat.bg : BRAND.deep;
-  const headerStyle = flat ? `background:${flat.bg};` : `background:${BRAND.deep};background-image:linear-gradient(135deg,#1c4f4a 0%,${BRAND.deep} 55%,#2f7d74 100%);`;
-  const headerInk = flat ? flat.ink : '#ffffff';
-  const ctaBg = flat ? flat.ctaBg : BRAND.teal;
-  const ctaInk = flat ? flat.ctaInk : '#04231f';
+  /* One light, plain look for every email, like the site: a white card on the
+     pale page colour, thin lines, no gradients or colour bands. (flat is
+     still accepted from older callers; it no longer changes the look.) */
+  void flat;
   const prog = PROGRAMMES[programme] || PROGRAMMES.staff;
   const FONT = 'Quicksand,Arial,Helvetica,sans-serif';
+  const LINE = '#E3ECEA';
   const ctaHtml = cta && cta.url
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 10px;">
-         <tr><td align="center" bgcolor="${ctaBg}" style="border-radius:12px;background:${ctaBg};">
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 6px;">
+         <tr><td align="center" bgcolor="${BRAND.deep}" style="border-radius:10px;background:${BRAND.deep};">
            <a href="${esc(cta.url)}" target="_blank"
-              style="display:inline-block;padding:15px 30px;font-family:${FONT};font-size:15px;font-weight:800;color:${ctaInk};text-decoration:none;border-radius:12px;">
-             ${esc(cta.label || 'Open ' + prog.name)} &rarr;
+              style="display:inline-block;padding:11px 20px;font-family:${FONT};font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">
+             ${esc(cta.label || 'Open ' + prog.name)}
            </a>
          </td></tr>
        </table>
-       <p style="font-family:${FONT};font-size:12px;color:${BRAND.muted};margin:6px 0 0;word-break:break-all;">
+       <p style="font-family:${FONT};font-size:11px;color:${BRAND.muted};margin:8px 0 0;word-break:break-all;">
          Or paste this into your browser: ${esc(cta.url)}
        </p>`
     : '';
@@ -149,50 +148,54 @@ function render({ preheader, heading, intro, body, cta, footer, programme, flat 
 <style>
   @media (max-width:600px) {
     .wrap { width:100% !important; }
-    .px   { padding-left:22px !important; padding-right:22px !important; }
-    .h1   { font-size:23px !important; }
+    .px   { padding-left:20px !important; padding-right:20px !important; }
+    .h1   { font-size:19px !important; }
   }
 </style>
 </head>
-<body style="margin:0;padding:0;background:${BRAND.paper};color:${BRAND.ink};">
+<body style="margin:0;padding:0;background:#F4F8F7;color:${BRAND.ink};">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
     ${esc(preheader || '')}
   </div>
 
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND.paper}" style="background:${BRAND.paper};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F4F8F7" style="background:#F4F8F7;">
     <tr>
       <td align="center" style="padding:28px 12px;">
-        <table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;">
+        <table role="presentation" class="wrap" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;">
 
           <tr>
-            <td class="px" bgcolor="${headerBg}" style="${headerStyle}border-radius:18px 18px 0 0;padding:26px 36px 28px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <td bgcolor="#ffffff" style="background:#ffffff;border:1px solid ${LINE};border-radius:14px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td valign="middle" style="width:48px;">
-                    <img src="${BRAND.logo}" width="48" height="48" alt="" style="display:block;border-radius:12px;border:0;outline:none;text-decoration:none;background:#ffffff;" />
+                  <td class="px" style="padding:18px 32px;border-bottom:1px solid ${LINE};">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td valign="middle" style="width:30px;">
+                          <img src="${BRAND.logo}" width="30" height="30" alt="" style="display:block;border-radius:8px;border:0;outline:none;text-decoration:none;" />
+                        </td>
+                        <td valign="middle" style="padding-left:10px;font-family:${FONT};">
+                          <div style="font-size:14px;font-weight:700;color:${BRAND.deep};line-height:1.2;">${esc(prog.name)}</div>
+                          ${prog.tagline ? `<div style="font-size:11px;font-weight:600;color:${BRAND.muted};margin-top:2px;">${esc(prog.tagline)}</div>` : ''}
+                        </td>
+                      </tr>
+                    </table>
                   </td>
-                  <td valign="middle" style="padding-left:12px;font-family:${FONT};">
-                    <div style="font-size:17px;font-weight:800;color:${headerInk};line-height:1.2;">${esc(prog.name)}</div>
-                    ${prog.tagline ? `<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#BFE6DF;margin-top:3px;">${esc(prog.tagline)}</div>` : ''}
+                </tr>
+                <tr>
+                  <td class="px" style="padding:26px 32px 28px;font-family:${FONT};font-size:14px;line-height:1.65;color:${BRAND.ink};">
+                    ${heading ? `<div class="h1" style="font-family:${FONT};font-size:21px;font-weight:700;line-height:1.3;color:${BRAND.deep};margin:0 0 12px;">${esc(heading)}</div>` : ''}
+                    ${intro ? `<p style="margin:0 0 14px;font-size:15px;font-weight:600;color:${BRAND.ink};">${intro}</p>` : ''}
+                    ${body || ''}
+                    ${ctaHtml}
                   </td>
                 </tr>
               </table>
-              ${heading ? `<div class="h1" style="font-family:${FONT};font-size:27px;font-weight:800;line-height:1.2;color:${headerInk};margin-top:22px;">${esc(heading)}</div>` : ''}
-            </td>
-          </tr>
-          <tr><td height="5" bgcolor="${BRAND.gold}" style="background:${BRAND.gold};height:5px;line-height:5px;font-size:0;">&nbsp;</td></tr>
-
-          <tr>
-            <td class="px" bgcolor="#ffffff" style="background:#ffffff;border-radius:0 0 18px 18px;padding:30px 36px 32px;font-family:${FONT};font-size:15px;line-height:1.65;color:${BRAND.ink};">
-              ${intro ? `<p style="margin:0 0 14px;font-size:16px;font-weight:700;color:${BRAND.deep};">${intro}</p>` : ''}
-              ${body || ''}
-              ${ctaHtml}
             </td>
           </tr>
 
           <tr>
-            <td class="px" style="padding:18px 36px 0;font-family:${FONT};font-size:12px;color:${BRAND.muted};line-height:1.6;" align="center">
-              <div style="font-weight:800;color:${BRAND.deep};">${esc(prog.name)}</div>
+            <td class="px" style="padding:16px 32px 0;font-family:${FONT};font-size:11px;color:${BRAND.muted};line-height:1.6;" align="center">
+              <div style="font-weight:700;color:${BRAND.deep};">${esc(prog.name)}</div>
               <div>You're receiving this because you have a ${esc(prog.name)} account.</div>
               ${footerHtml}
             </td>
@@ -232,10 +235,10 @@ function fmtDateShort(d) {
   return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 function detailList(rows) {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 16px;background:${BRAND.sage};border-radius:12px;">` +
-    rows.filter(Boolean).map(r =>
-      `<tr><td style="padding:9px 14px;font-size:13px;color:${BRAND.muted};width:34%;vertical-align:top;">${fa(r[0])}${esc(r[1])}</td>` +
-      `<td style="padding:9px 14px;font-size:14px;font-weight:700;color:${BRAND.ink};">${esc(r[2])}</td></tr>`).join('') +
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 16px;border:1px solid #E3ECEA;border-radius:10px;">` +
+    rows.filter(Boolean).map((r, i) =>
+      `<tr><td style="padding:8px 12px;font-size:12px;color:${BRAND.muted};width:34%;vertical-align:top;${i ? 'border-top:1px solid #EEF3F2;' : ''}">${fa(r[0])}${esc(r[1])}</td>` +
+      `<td style="padding:8px 12px;font-size:13px;font-weight:600;color:${BRAND.ink};${i ? 'border-top:1px solid #EEF3F2;' : ''}">${esc(r[2])}</td></tr>`).join('') +
     `</table>`;
 }
 function audienceIntro(audience, student, parentName) {
@@ -285,17 +288,17 @@ function adminNewStudentSignup({ student }) {
 /* A card holding someone's sign-in details. Passwords are never stored in readable
    form, so a self-registered student is reminded which password to use. */
 function credentialsCard(rows) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND.sage}" style="background:${BRAND.sage};border-radius:14px;margin:0 0 16px;">
-    <tr><td style="padding:18px 20px;">
-      <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${BRAND.deep};margin-bottom:10px;">Your sign-in details</div>
-      ${rows.map((r) => `<div style="font-size:14px;line-height:1.5;margin-bottom:8px;"><span style="color:${BRAND.muted};">${esc(r[0])}</span><br /><strong style="word-break:break-word;">${r[1]}</strong></div>`).join('')}
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #E3ECEA;border-radius:10px;margin:0 0 16px;">
+    <tr><td style="padding:14px 16px;">
+      <div style="font-size:12px;font-weight:700;color:${BRAND.deep};margin-bottom:8px;">Your sign-in details</div>
+      ${rows.map((r) => `<div style="font-size:13px;line-height:1.5;margin-bottom:6px;"><span style="color:${BRAND.muted};">${esc(r[0])}</span><br /><strong style="font-weight:600;word-break:break-word;">${r[1]}</strong></div>`).join('')}
     </td></tr>
   </table>`;
 }
 function stepsList(steps) {
-  return `<div style="font-weight:800;color:${BRAND.deep};margin:18px 0 8px;">Your first steps</div>
+  return `<div style="font-weight:700;color:${BRAND.deep};margin:18px 0 8px;">Your first steps</div>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 6px;">${steps.map((t, i) =>
-      `<tr><td valign="top" style="padding:0 10px 9px 0;"><div style="width:24px;height:24px;line-height:24px;border-radius:12px;background:${BRAND.deep};color:#ffffff;font-size:12px;font-weight:800;text-align:center;">${i + 1}</div></td><td valign="top" style="padding:2px 0 9px;font-size:14px;">${t}</td></tr>`).join('')}</table>`;
+      `<tr><td valign="top" style="padding:0 10px 8px 0;"><div style="width:20px;height:20px;line-height:20px;border-radius:10px;background:${BRAND.sage};color:${BRAND.deep};font-size:11px;font-weight:700;text-align:center;">${i + 1}</div></td><td valign="top" style="padding:1px 0 8px;font-size:14px;">${t}</td></tr>`).join('')}</table>`;
 }
 
 /* 2. Student — account approved (online and CBC; Tech Studio has its own below) */
@@ -343,8 +346,8 @@ function techStudentApproved({ student, coachName }) {
         ])}
         ${stepsList([
           'Sign in and watch the navigation video on your home page.',
-          'Open <strong>Missions</strong> to see what your coaches have posted, or start a project of your own.',
-          'Build it, submit it, and your coach will send back feedback.'
+          'Open <strong>Classes</strong> and start Level 1: watch the videos, try the practice and hand in your work.',
+          'Your coach marks it, and the marks and feedback appear in <strong>Results</strong>.'
         ])}
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">Forgotten your password? Use \u201cForgot your password?\u201d on the sign-in page and we'll email you a reset link.</p>
       `,

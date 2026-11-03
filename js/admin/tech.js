@@ -56,7 +56,7 @@
     root.classList.add('cr-root');
     var S = {
       tab: 'applications',
-      students: [], builds: [], wall: [], content: [], chats: [], gchats: [], classes: [], desk: [],
+      students: [], builds: [], wall: [], pubWork: [], content: [], chats: [], gchats: [], classes: [], desk: [],
       bf: 'all', panel: null,
       coaches: [], legacy: 0, loaded: false,
       q: '', status: 'all', skill: 'all',
@@ -67,6 +67,8 @@
     function status(s) { return s.status || 'Pending'; }
     function pending() { return S.students.filter(function (s) { return status(s) === 'Pending'; }); }
     function reviewNeeded() { return S.builds.filter(function (b) { return b.reviewState === 'requested' || b.showcase === 'requested' || b.mastery === 'requested'; }); }
+    function publishAsks() { return S.pubWork.filter(function (x) { return x.publishState === 'requested'; }).length + S.builds.filter(function (x) { return x.showcase === 'requested'; }).length; }
+    function cwId(wid) { return 'cw_' + String(wid).replace(/[^\w-]/g, '_').slice(0, 200); }
     function coachName(id) { var t = S.coaches.filter(function (x) { return x.id === id; })[0]; return t ? t.name : ''; }
     function activeCoaches() { return S.coaches.filter(function (c) { return c.status === 'Active'; }); }
     function call(name, data) { return firebase.functions().httpsCallable(name)(data || {}).then(function (r) { return r.data; }); }
@@ -89,6 +91,8 @@
     listen(db.collection('techStudents'), 'students');
     listen(db.collection('techBuilds'), 'builds', function () { S.builds.sort(function (a, b) { return ts(b.updatedAt) - ts(a.updatedAt); }); });
     listen(db.collection('techShowcase'), 'wall');
+    /* Class work waiting to be published, or published (its Wall copy is techShowcase/cw_{workId}). */
+    listen(db.collection('techLessonWork').where('publishState', 'in', ['requested', 'approved']), 'pubWork', function () { S.pubWork.sort(function (a, b) { return ts(b.publishRequestedAt || b.updatedAt) - ts(a.publishRequestedAt || a.updatedAt); }); });
     listen(db.collection('techContent'), 'content', function () { S.content.sort(function (a, b) { return ts(b.createdAt) - ts(a.createdAt); }); });
     listen(db.collection('techChats'), 'chats', function () { S.chats.sort(function (a, b) { return ts(b.lastAt) - ts(a.lastAt); }); });
     listen(db.collection('techGuardianChats'), 'gchats', function () { S.gchats.sort(function (a, b) { return ts(b.lastAt) - ts(a.lastAt); }); });
@@ -121,7 +125,7 @@
         ['reports', 'fa-chart-column', 'Performance', 0],
         ['messages', 'fa-comments', 'Messages', 0],
         ['desk', 'fa-headset', 'Family desk', S.desk.filter(function (c) { return c.unreadForAdmin; }).length],
-        ['wall', 'fa-trophy', 'Showcase', 0],
+        ['wall', 'fa-trophy', 'Showcase', publishAsks()],
         ['navvideo', 'fa-circle-play', 'Navigation video', 0]
       ].filter(function (t) { return t[0] !== 'missions' || S.tab === 'missions' || S.content.some(function (c) { return c.kind === 'mission' || c.kind === 'challenge'; }); });
       var GROUP = { applications: 'People', builds: 'Learning', content: 'Resources', live: 'Running the studio', messages: 'Messages' };
@@ -149,6 +153,12 @@
     function mountAdminBell() {
       var row = root.querySelector('#txBellRow'); if (!row) return;
       if (!bellEl) { bellEl = document.createElement('div'); S.bell = T.mountBell(bellEl, { uid: o.uid, onOpen: function (n) {
+        if (n.type === 'tech_publish') {
+          S.tab = 'wall'; render();
+          var pw = n.workId && S.pubWork.filter(function (x) { return x.id === n.workId; })[0];
+          if (pw) g.TechWork.openHandIn({ me: me(), row: pw, who: pw.studentName });
+          return true;
+        }
         if (n.buildId && S.builds.some(function (x) { return x.id === n.buildId; })) { openBuild(n.buildId); return true; }
         if (n.type === 'tech_application') { S.tab = 'applications'; render(); return true; }
         if (n.type === 'tech_beginner') { S.tab = 'builders'; S.skill = 'beginner'; render(); return true; }
@@ -682,11 +692,22 @@
     /* ---------------- Tech Studio Wall ---------------- */
     function wall(b) {
       var req = S.builds.filter(function (x) { return x.showcase === 'requested'; });
-      var h = '<div class="cr-bar"><div><h3>Tech Studio Wall</h3><div class="cr-sub">Only builds you approve appear publicly, with a first name only.</div></div></div><h4 style="margin:.2rem 0 .6rem;color:var(--brand-deep)">Waiting for approval</h4>';
-      h += req.length ? '<div class="cr-table-wrap"><table class="cr-table"><tbody>' + req.map(function (x) { return '<tr><td><b>' + esc(x.title) + '</b><div class="cr-note">by ' + esc(T.firstName(x.studentName)) + '</div></td><td style="text-align:right"><button type="button" class="cr-btn sm primary" data-a="open" data-id="' + esc(x.id) + '"><i class="fas fa-eye"></i> Review &amp; publish</button></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="cr-panel"><div class="cr-empty">No requests.</div></div>';
-      h += '<h4 style="margin:1.4rem 0 .6rem;color:var(--brand-deep)">On the Wall (' + S.wall.length + ')</h4>';
+      var reqW = S.pubWork.filter(function (x) { return x.publishState === 'requested'; });
+      var pic = function (u) { u = T.safeUrl(u); return u ? '<img src="' + esc(u) + '" alt="" loading="lazy" style="display:block;width:92px;height:58px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line,rgba(38,51,49,.1))">' : '<div style="width:92px;height:58px;border-radius:8px;background:var(--paper,#F4F8F7);display:grid;place-items:center;color:var(--muted)"><i class="fas fa-image"></i></div>'; };
+      var h = '<div class="cr-bar"><div><h3>Showcase</h3><div class="cr-sub">Builders ask to publish their work here. Review it, then approve it for a public link that shows their first name only, or decline it with a note. The builder gets a notification either way, and their family is emailed the link when it is published.</div></div></div>';
+      h += '<h4 style="margin:.2rem 0 .6rem;color:var(--brand-deep)">Publish requests' + (reqW.length + req.length ? ' (' + (reqW.length + req.length) + ')' : '') + '</h4>';
+      h += reqW.length + req.length ? '<div class="cr-table-wrap"><table class="cr-table"><tbody>' +
+        reqW.map(function (x) {
+          return '<tr><td style="width:104px">' + pic(x.snapshotUrl) + '</td><td><b>' + esc(x.lessonTitle || 'Class work') + '</b><div class="cr-note">by ' + esc(x.studentName || 'Builder') + ' · Class work' + (x.courseName ? ' · ' + esc(x.courseName) : '') + (x.topicTitle ? ' · ' + esc(x.topicTitle) : '') + '</div>' +
+            '<div class="cr-note">Asked ' + fmtDate(x.publishRequestedAt || x.updatedAt) + ' · ' + esc(x.status === 'Graded' ? 'Marked' + (x.grade != null && x.grade !== '' && x.maxScore ? ' ' + x.grade + '/' + x.maxScore : '') : x.status === 'Corrections' ? 'Corrections asked' : 'Not marked yet') + '</div></td>' +
+            '<td style="text-align:right"><div class="cr-actions" style="justify-content:flex-end"><button type="button" class="cr-btn sm" data-a="cw-open" data-id="' + esc(x.id) + '"><i class="fas fa-eye"></i> Review</button><button type="button" class="cr-btn sm" data-a="cw-decline" data-id="' + esc(x.id) + '"><i class="fas fa-rotate-left"></i> Decline</button><button type="button" class="cr-btn sm primary" data-a="cw-approve" data-id="' + esc(x.id) + '"><i class="fas fa-globe"></i> Approve</button></div></td></tr>';
+        }).join('') +
+        req.map(function (x) { return '<tr><td style="width:104px">' + pic('') + '</td><td><b>' + esc(x.title) + '</b><div class="cr-note">by ' + esc(x.studentName || T.firstName(x.studentName)) + ' · Project</div></td><td style="text-align:right"><button type="button" class="cr-btn sm primary" data-a="open" data-id="' + esc(x.id) + '"><i class="fas fa-eye"></i> Review &amp; publish</button></td></tr>'; }).join('') +
+        '</tbody></table></div>' : '<div class="cr-panel"><div class="cr-empty">No publish requests right now. When a builder presses Ask to publish, it appears here and on your bell.</div></div>';
+      h += '<h4 style="margin:1.4rem 0 .6rem;color:var(--brand-deep)">Published (' + S.wall.length + ')</h4>';
       h += S.wall.length ? '<div class="cr-table-wrap"><table class="cr-table"><tbody>' + S.wall.map(function (w) {
-        return '<tr><td><b>' + esc(w.title) + '</b><div class="cr-note">by ' + esc(w.displayName) + ' · ' + esc(w.category || '') + '</div></td><td style="text-align:right"><div class="cr-actions" style="justify-content:flex-end"><button type="button" class="cr-btn sm ' + (w.featured ? 'primary' : '') + '" data-a="feat" data-id="' + esc(w.id) + '"><i class="fas fa-star"></i> ' + (w.featured ? 'Featured' : 'Feature') + '</button><button type="button" class="cr-btn sm danger" data-a="unpub" data-id="' + esc(w.id) + '"><i class="fas fa-xmark"></i> Remove</button></div></td></tr>';
+        var url = T.shareUrl(w.id);
+        return '<tr><td><b>' + esc(w.title) + '</b><div class="cr-note">by ' + esc(w.displayName) + ' · ' + (w.origin === 'class' ? 'Class work' : esc(w.category || 'Project')) + ' · <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open</a></div></td><td style="text-align:right"><div class="cr-actions" style="justify-content:flex-end"><button type="button" class="cr-btn sm ' + (w.featured ? 'primary' : '') + '" data-a="feat" data-id="' + esc(w.id) + '"><i class="fas fa-star"></i> ' + (w.featured ? 'Featured' : 'Feature') + '</button><button type="button" class="cr-btn sm danger" data-a="unpub" data-id="' + esc(w.id) + '"><i class="fas fa-xmark"></i> Remove</button></div></td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="cr-panel"><div class="cr-empty">Nothing published yet.</div></div>';
       b.innerHTML = h;
     }
@@ -783,7 +804,20 @@
       else if (a === 'del') { if (confirm('Delete this item? This cannot be undone.')) db.collection('techContent').doc(id).delete().catch(fail); }
       else if (a === 'chat') openChat(id);
       else if (a === 'feat') { var w = S.wall.filter(function (x) { return x.id === id; })[0]; if (w) db.collection('techShowcase').doc(id).update({ featured: !w.featured }).catch(fail); }
-      else if (a === 'unpub') { if (confirm('Remove this build from the public Tech Studio Wall?')) T.removeShowcase({ id: id }).then(function () { toast('Removed from the Wall.'); }).catch(fail); }
+      else if (a === 'unpub') {
+        var cw = S.pubWork.filter(function (x) { return cwId(x.id) === id; })[0];
+        if (cw) g.TechWork.decidePublish(db.collection('techLessonWork').doc(cw.id), cw, 'unpublish', me(), cw.studentName).then(function (up) { if (up) toast('Taken down. The link no longer works.'); }).catch(fail);
+        else if (confirm('Remove this from the public showcase? The link stops working.')) T.removeShowcase({ id: id }).then(function () { toast('Removed from the showcase.'); }).catch(fail);
+      }
+      else if (a === 'cw-open' || a === 'cw-approve' || a === 'cw-decline') {
+        var pw = S.pubWork.filter(function (x) { return x.id === id; })[0]; if (!pw) return;
+        if (a === 'cw-open') { g.TechWork.openHandIn({ me: me(), row: pw, who: pw.studentName }); return; }
+        t.disabled = true;
+        g.TechWork.decidePublish(db.collection('techLessonWork').doc(id), pw, a === 'cw-approve' ? 'approve' : 'decline', me(), pw.studentName).then(function (up) {
+          t.disabled = false;
+          if (up) toast(a === 'cw-approve' ? 'Published. ' + T.firstName(pw.studentName) + ' gets a notification, and their family gets the link.' : 'Declined. ' + T.firstName(pw.studentName) + ' sees your note.');
+        }).catch(function (e) { t.disabled = false; fail(e); });
+      }
     });
     /* Live-class cards render their own edit buttons (TechUI.liveCardHtml). */
     root.addEventListener('click', function (e) {

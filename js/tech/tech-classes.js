@@ -1257,7 +1257,12 @@
         if (thenLesson) {
           var want = thenLesson; thenLesson = null;
           var l = S.items.filter(function (x) { return x.id === want; })[0];
-          if (l) return openLesson(l);
+          if (l) {
+            openLesson(l);
+            /* "Make corrections" from Results goes straight to the practice tool. */
+            if (o.practise && isBuilder && l.task) openPractice(l);
+            return;
+          }
         }
         if (S.screen === 'course') paint();
       };

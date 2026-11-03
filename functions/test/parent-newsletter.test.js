@@ -68,7 +68,7 @@ test("newsletter email: Paisley colours, escaped text, unsubscribe link, video a
   assert.equal(subject, "Half term offer");
   assert.ok(!/linear-gradient|radial-gradient/.test(html), "no colour blends");
   assert.ok(html.includes("#245F5A"), "Paisley deep green");
-  assert.ok(html.includes("#55BFB3"), "Paisley teal button");
+  assert.ok(/bgcolor="#245F5A"/.test(html), "Paisley button");
   assert.ok(!/#D7263D|#0B0B0B|#0E7C47/i.test(html), "only Paisley colours");
   assert.ok(html.includes("Line &lt;b&gt;one&lt;/b&gt;"));
   assert.ok(html.includes("Hi Asha"));
@@ -89,9 +89,11 @@ test("newsletter email: unsafe links are dropped", () => {
   assert.ok(!html.includes("evil.example"));
 });
 
-test("other emails keep their usual branded header", () => {
+test("emails use the light Paisley look: no gradients or colour bands", () => {
   const { render } = require("../email-templates");
-  assert.ok(render({ heading: "x" }).includes("linear-gradient"));
+  const html = render({ heading: "x", programme: "tech" });
+  assert.doesNotMatch(html, /gradient/);
+  assert.ok(html.includes("#F4F8F7") && html.includes("Paisley Tech Studio"));
 });
 
 test("Tech: AI is not a discipline of its own", () => {

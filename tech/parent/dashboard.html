@@ -175,6 +175,7 @@
       <button class="nav-item active" data-v="home" type="button"><i class="fas fa-house"></i> Overview</button>
       <button class="nav-item" data-v="progress" type="button"><i class="fas fa-chart-line"></i> Growth</button>
       <button class="nav-item" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
+      <button class="nav-item" data-v="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results</button>
       <button class="nav-item" data-v="projects" type="button"><i class="fas fa-book-open"></i> Projects <span class="nav-dot" id="bProj" hidden>0</span></button>
       <button class="nav-item" data-v="live" type="button"><i class="fas fa-calendar-days"></i> Live classes</button>
       <button class="nav-item" data-v="activity" type="button"><i class="fas fa-gamepad"></i> Activity</button>
@@ -212,9 +213,9 @@
 <script src="/js/tech/code-lab.js?v=tech14"></script>
 <script src="/js/tech/upload-pad.js?v=tech7"></script>
 <script src="/js/ui/fast-video.js?v=3"></script>
-<script src="/js/tech/tech-helpers.js?v=tech15"></script>
-<script src="/js/tech/tech-work.js?v=5"></script>
-<script src="/js/tech/tech-classes.js?v=10"></script>
+<script src="/js/tech/tech-helpers.js?v=tech16"></script>
+<script src="/js/tech/tech-work.js?v=6"></script>
+<script src="/js/tech/tech-classes.js?v=11"></script>
 <script>
 /* Paisley Tech Studio guardian portal, in the main Parent Portal's design.
    A guardian is a parentAccounts identity with techGuardianLinks/{uid}_{studentUid}.
@@ -225,10 +226,10 @@
 'use strict';
 const auth=firebase.auth(), T=TechUI, esc=T.esc;
 const $=id=>document.getElementById(id);
-T.injectStyle();
+T.injectStyle(); TechWork.style();
 
-const S={uid:null,me:{},links:[],kids:{},cid:null,builds:[],progress:null,classes:[],activity:[],desk:{},v:'home',openId:null,live:null,classLesson:null,pf:'all',unsubs:[],kidUnsubs:[],buildUnsubs:[]};
-const TITLES={home:'Overview',progress:'Growth',classes:'Classes',projects:'Projects',live:'Live classes',activity:'Activity',coach:'Coach',desk:'Messages',account:'Account'};
+const S={uid:null,me:{},links:[],kids:{},cid:null,builds:[],work:[],progress:null,classes:[],activity:[],desk:{},v:'home',openId:null,live:null,classLesson:null,pf:'all',unsubs:[],kidUnsubs:[],buildUnsubs:[]};
+const TITLES={home:'Overview',progress:'Growth',classes:'Classes',results:'Results',projects:'Projects',live:'Live classes',activity:'Activity',coach:'Coach',desk:'Messages',account:'Account'};
 
 const ms=x=>{ const d=T.toDate(x); return d?d.getTime():0; };
 const cap=s=>{ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase(); };
@@ -266,6 +267,7 @@ function boot(){
   S.bubbles=T.mountBubbles({root:$('nav'),selector:'.nav-item[data-v]',uid:S.uid,role:'guardian',current:()=>S.v});
   T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
     if(n.studentId&&S.kids[n.studentId]&&n.studentId!==S.cid) selectChild(n.studentId);
+    if(n.section==='results'||n.section==='projects'){ go(n.section); return true; }
     if(n.lessonId){ S.classLesson=n.lessonId; go('classes'); return true; }
     if(n.section==='classes'){ go('classes'); return true; }
     if(n.classId){ go('live'); return true; }
@@ -299,12 +301,13 @@ $('childSel').addEventListener('change',e=>selectChild(e.target.value));
 
 function selectChild(id){
   if(!S.kids[id]) return;
-  S.cid=id; S.builds=[]; S.progress=null; S.openId=null;
+  S.cid=id; S.builds=[]; S.work=[]; S.progress=null; S.openId=null;
   S.buildUnsubs.forEach(u=>u()); S.buildUnsubs=[];
   paintChildbar();
   S.buildUnsubs.push(db.collection('techBuilds').where('studentId','==',id).onSnapshot(s=>{
     S.builds=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>ms(b.updatedAt)-ms(a.updatedAt)); refresh();
   },e=>console.warn('builds',e)));
+  S.buildUnsubs.push(db.collection('techLessonWork').where('studentId','==',id).onSnapshot(s=>{ S.work=s.docs.map(d=>Object.assign({id:d.id},d.data())); refresh(); },e=>console.warn('class work',e)));
   S.buildUnsubs.push(db.collection('techProgress').doc(id).onSnapshot(s=>{ S.progress=s.exists?s.data():null; refresh(); },()=>{}));
   S.buildUnsubs.push(db.collection('techActivity').where('studentId','==',id).orderBy('at','desc').limit(40).onSnapshot(s=>{ S.activity=s.docs.map(d=>d.data()); if(S.v==='activity') refresh(); },e=>console.warn('activity',e)));
   const h=(location.hash||'').slice(1);
@@ -312,6 +315,7 @@ function selectChild(id){
 }
 function refresh(){
   const n=S.builds.filter(needsChanges).length, b=$('bProj'); b.hidden=!n; b.textContent=n;
+  if(S.v==='results') return;   // the Results list keeps itself live
   if(!S.live) render(true);
 }
 
@@ -343,6 +347,12 @@ function projectRow(b){
   return '<button class="item-row" type="button" data-open="'+esc(b.id)+'"><span><span class="title">'+esc(b.title)+'</span><br><span class="meta">'+esc(originWord(b))+(d?' · updated '+esc(d):'')+'</span></span><span class="tags">'+flags(b)+'</span></button>';
 }
 function panel(title,html){ return '<div class="panel"><h3>'+esc(title)+'</h3>'+html+'</div>'; }
+/* Everything of the child's that is public: published projects and published class work. */
+function shareItems(){
+  const builds=S.builds.filter(b=>b.showcase==='approved').map(b=>({title:b.title,sub:originWord(b),url:T.shareUrl(b.id),at:ms(b.showcaseAt||b.updatedAt)}));
+  const work=S.work.filter(d=>TechWork.shareLink(d)).map(d=>({title:d.lessonTitle||'Class work',sub:['Class work',d.courseName,d.topicTitle].filter(Boolean).join(' · '),url:TechWork.shareLink(d),at:ms(d.publishedAt||d.publishDecidedAt)}));
+  return builds.concat(work).sort((a,b)=>b.at-a.at);
+}
 
 /* ---------- views ---------- */
 const VIEWS={
@@ -357,6 +367,8 @@ home(){
     (up.length?'<div style="display:grid;gap:.7rem;margin-bottom:1.2rem">'+up.map(c=>T.liveCardHtml(c,{banner:true})).join('')+'</div>':'')+
     '<div class="statgrid">'+stat(esc(T.SKILL_LABEL[k.skillLevel]||'Not set'),'Level')+stat(S.builds.length,'Projects')+stat(mastered,'Mastered')+stat(pub,'Published')+'</div>'+
     '<div class="panel"><div class="ticket-head"><h3 style="margin:0">Classes</h3><button class="btn" type="button" data-go="classes"><i class="fas fa-chalkboard"></i> See posted work</button></div><p style="margin:.4rem 0 0;color:var(--muted);font-size:.85rem">Lessons, quizzes and practice tests posted for '+esc(first())+', with their scores.</p></div>'+
+    (()=>{ const marked=S.work.filter(d=>d.status==='Graded').length, fix=S.work.filter(d=>d.status==='Corrections').length;
+      return '<div class="panel"><div class="ticket-head"><h3 style="margin:0">Results</h3><button class="btn" type="button" data-go="results"><i class="fas fa-square-poll-vertical"></i> See results</button></div><p style="margin:.4rem 0 0;color:var(--muted);font-size:.85rem">'+(marked||fix?marked+' marked'+(fix?', '+fix+' with corrections asked':'')+'. Download the marked copies there.':'Marked class work and the coach\'s feedback appear here.')+'</p></div>'; })()+
     (changes.length?panel('The coach asked for changes',changes.map(projectRow).join('')):'')+
     (graded.length?panel('Latest reviews and grades',graded.map(projectRow).join('')):'')+
     panel(first()+'\'s coach',k.coachId
@@ -368,9 +380,10 @@ projects(){
   if(S.openId) return '';
   const F={all:()=>true,lesson:b=>!T.isSelfLed(b),self:b=>T.isSelfLed(b),active:b=>T.projectState(b)==='in_progress',review:inReview,changes:needsChanges,approved:b=>['approved','mastered'].includes(T.projectState(b)),published:b=>b.showcase==='approved'};
   const LAB={all:'All',lesson:'Assigned',self:'Self-led',active:'Being built',review:'Submitted',changes:'Revision required',approved:'Approved',published:'Published'};
-  if(!S.builds.length) return head('Projects')+'<div class="panel">'+emptyLine(esc(first())+' has not started a project.')+'</div>';
+  const sh=shareItems(), shHtml=sh.length?panel('Published, with share links',TechWork.shareRowsHtml(sh)+'<div class="readonly-note">Only '+esc(first())+'\'s first name is shown. Share these with family and friends.</div>'):'';
+  if(!S.builds.length) return head('Projects')+shHtml+'<div class="panel">'+emptyLine(esc(first())+' has not started a project of their own yet.')+'</div>';
   const list=S.builds.filter(F[S.pf]||F.all);
-  return head('Projects')+'<div class="chipbar" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="'+(S.pf===k?'active':'')+'" type="button" aria-pressed="'+(S.pf===k)+'" data-pf="'+k+'">'+LAB[k]+' <span class="count">'+S.builds.filter(F[k]).length+'</span></button>').join('')+'</div>'+
+  return head('Projects')+shHtml+'<div class="chipbar" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="'+(S.pf===k?'active':'')+'" type="button" aria-pressed="'+(S.pf===k)+'" data-pf="'+k+'">'+LAB[k]+' <span class="count">'+S.builds.filter(F[k]).length+'</span></button>').join('')+'</div>'+
     '<div class="panel">'+(list.length?list.map(projectRow).join(''):emptyLine('No projects match this filter.'))+'</div>';
 },
 progress(){
@@ -403,6 +416,7 @@ function render(silent){
   const k=kid();
   if(!k){ $('view').innerHTML=''; return; }
   if(S.v==='classes') return openClasses();
+  if(S.v==='results') return openResults();
   if(S.v==='coach') return openCoach();
   if(S.v==='desk') return openDesk();
   if(S.v==='projects'&&S.openId) return openBuild(S.openId);
@@ -417,6 +431,12 @@ function openClasses(){
   const lid=S.classLesson; S.classLesson=null;
   $('view').innerHTML=head('Classes')+'<div id="liveHost"></div>';
   S.live=TechClasses.mountLearner($('liveHost'),{me:{uid:S.uid,role:'guardian',name:S.me.name||'Guardian'},student:k,lessonId:lid});
+}
+function openResults(){
+  const k=kid(); if(!k) return;
+  kill();
+  $('view').innerHTML=head('Results')+'<p class="sub-note">'+esc(first())+'\'s marked class work, with the coach\'s feedback. Download any marked copy.</p><div id="liveHost"></div>';
+  S.live=TechWork.mountResults($('liveHost'),{me:{uid:S.uid,role:'guardian',name:S.me.name||'Guardian'},studentId:k.id,who:k.name,onLesson:lid=>{ S.classLesson=lid; go('classes'); }});
 }
 function openCoach(){
   const k=kid(); if(!k) return;
