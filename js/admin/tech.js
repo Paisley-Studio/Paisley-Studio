@@ -34,6 +34,16 @@
     var st = document.createElement('style'); st.id = 'tx-shell-style';
     st.textContent = [
       '.tx-shell{display:grid;grid-template-columns:220px minmax(0,1fr);gap:1.25rem;align-items:start}',
+      '.tx-shell.folded{grid-template-columns:minmax(0,1fr)}.tx-shell.folded>.tx-side{display:none}',
+      '.tx-top{display:flex;align-items:center;gap:.7rem;margin:-.2rem 0 1rem;padding-bottom:.8rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08))}',
+      '.tx-menu{display:inline-flex;align-items:center;gap:.5rem;height:40px;padding:0 .85rem;border:1px solid var(--line,rgba(38,51,49,.12));border-radius:12px;background:#fff;font:inherit;font-size:.82rem;font-weight:700;color:var(--brand-deep,#245F5A);cursor:pointer}',
+      '.tx-menu:hover{border-color:var(--brand,#55BFB3)}',
+      '.tx-crumb{min-width:0;flex:1;font-size:.95rem;font-weight:800;color:var(--ink,#263331);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.tx-crumb small{font-weight:600;color:var(--muted,#5A6E6A);font-size:.78rem}',
+      '#txBellRow{margin-left:auto;flex:none}',
+      /* While a section is open the admin menu folds away too, for the widest view; Sections brings both back. */
+      '@media(min-width:901px){body.tx-wide:has(#view-tech.active) .sidebar{transform:translateX(-100%)}body.tx-wide:has(#view-tech.active) .main{margin-left:0}}',
+      '.sidebar,.main{transition:transform .2s ease,margin-left .2s ease}',
       '.tx-side{position:sticky;top:.75rem;max-height:calc(100vh - 1.5rem);overflow:auto;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:.7rem .55rem}',
       '.tx-side-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.1rem .45rem .55rem;margin-bottom:.3rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08))}',
       '.tx-side-head b{font-size:.9rem;color:var(--brand-deep,#245F5A)}',
@@ -61,8 +71,10 @@
       coaches: [], legacy: 0, loaded: false,
       q: '', status: 'all', skill: 'all',
       kind: 'all', discipline: 'all', level: 'all',
-      unsubs: [], ws: null, chat: null
+      unsubs: [], ws: null, chat: null,
+      folded: false
     };
+    var TAB_NAMES = {};
 
     function status(s) { return s.status || 'Pending'; }
     function pending() { return S.students.filter(function (s) { return status(s) === 'Pending'; }); }
@@ -127,9 +139,11 @@
         ['desk', 'fa-headset', 'Family desk', S.desk.filter(function (c) { return c.unreadForAdmin; }).length],
         ['wall', 'fa-trophy', 'Showcase', publishAsks()],
         ['navvideo', 'fa-circle-play', 'Navigation video', 0]
-      ].filter(function (t) { return t[0] !== 'missions' || S.tab === 'missions' || S.content.some(function (c) { return c.kind === 'mission' || c.kind === 'challenge'; }); });
+      ];
+      tabs.forEach(function (t) { TAB_NAMES[t[0]] = t[2]; });
+      tabs = tabs.filter(function (t) { return t[0] !== 'missions' || S.tab === 'missions' || S.content.some(function (c) { return c.kind === 'mission' || c.kind === 'challenge'; }); });
       var GROUP = { applications: 'People', builds: 'Learning', content: 'Resources', live: 'Running the studio', messages: 'Messages' };
-      return '<nav class="tx-side" role="tablist" aria-label="Tech Studio" aria-orientation="vertical" id="txTabs"><div class="tx-side-head"><b>Tech Studio</b><span id="txBellRow"></span></div>' + tabs.map(function (t) {
+      return '<nav class="tx-side" role="tablist" aria-label="Tech Studio" aria-orientation="vertical" id="txTabs"><div class="tx-side-head"><b>Tech Studio</b></div>' + tabs.map(function (t) {
         return (GROUP[t[0]] ? '<div class="tx-group">' + GROUP[t[0]] + '</div>' : '') +
           '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="tx-tab' + (S.tab === t[0] ? ' on' : '') + '" data-a="tab" data-v="' + t[0] + '"><i class="fas ' + t[1] + '" aria-hidden="true"></i><span>' + t[2] + '</span>' +
           (t[3] ? '<span class="cr-badge-red" style="position:static;display:inline-flex">' + t[3] + '</span>' : '') + '</button>';
@@ -139,7 +153,8 @@
     function render() {
       cleanLive();
       var sideScroll = (root.querySelector('#txTabs') || {}).scrollTop || 0;
-      root.innerHTML = legacyBanner() + '<div class="tx-shell">' + tabsHtml() + '<main class="tx-main" id="txMain"><div id="txBody"></div><div class="cr-note" id="txMsg" role="status" style="margin-top:.6rem"></div></main></div>';
+      fold(S.folded);
+      root.innerHTML = legacyBanner() + '<div class="tx-shell' + (S.folded ? ' folded' : '') + '">' + tabsHtml() + '<main class="tx-main" id="txMain">' + topHtml() + '<div id="txBody"></div><div class="cr-note" id="txMsg" role="status" style="margin-top:.6rem"></div></main></div>';
       var side = root.querySelector('#txTabs'); if (side) side.scrollTop = sideScroll;
       mountAdminBell();
       var b = root.querySelector('#txBody');
@@ -147,6 +162,19 @@
       var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, classes: classesTab, results: resultsTab, groups: groupsTab, missions: missionsTab, content: content, aitools: aiTools, live: liveTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall, navvideo: navVideoTab }[S.tab] || applications);
       view(b);
       if (S.bubbles) S.bubbles.sync();
+    }
+    /* The bar above each section: the Sections button (shows or hides the section list) and the bell. */
+    function topHtml() {
+      return '<div class="tx-top"><button type="button" class="tx-menu" data-a="fold" aria-expanded="' + !S.folded + '" aria-controls="txTabs" title="' + (S.folded ? 'Show the sections' : 'Hide the sections for a wider view') + '"><i class="fas ' + (S.folded ? 'fa-bars' : 'fa-angles-left') + '" aria-hidden="true"></i><span>' + (S.folded ? 'Sections' : 'Hide') + '</span></button>' +
+        '<div class="tx-crumb"><small>Tech Studio · </small>' + esc(TAB_NAMES[S.tab] || 'Applications') + '</div><span id="txBellRow"></span></div>';
+    }
+    /* Folded: the section list and the admin menu hide so the open section fills the page. */
+    function fold(on) {
+      S.folded = !!on;
+      document.body.classList.toggle('tx-wide', S.folded);
+      var sh = root.querySelector('.tx-shell'); if (sh) sh.classList.toggle('folded', S.folded);
+      var mb = root.querySelector('.tx-menu');
+      if (mb) { mb.setAttribute('aria-expanded', String(!S.folded)); mb.title = S.folded ? 'Show the sections' : 'Hide the sections for a wider view'; mb.innerHTML = '<i class="fas ' + (S.folded ? 'fa-bars' : 'fa-angles-left') + '" aria-hidden="true"></i><span>' + (S.folded ? 'Sections' : 'Hide') + '</span>'; }
     }
     /* The Tech Studio bell survives re-renders: its element is moved into each new header row. */
     var bellEl = null;
@@ -718,8 +746,9 @@
       var t = e.target.closest('[data-a]'); if (!t) return; var a = t.dataset.a, id = t.dataset.id;
       if ((S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups') && t.closest('#txPanel')) return;   // the classes module handles its own clicks
       var stu = function () { return S.students.filter(function (x) { return x.id === id; })[0]; };
+      if (a === 'fold') { fold(!S.folded); return; }
       if (a === 'tab') {
-        S.tab = t.dataset.v; render();
+        S.tab = t.dataset.v; S.folded = true; render();
         var top = root.querySelector('.tx-shell'); if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({ block: 'start' });
       }
       else if (a === 'navvid-pick') { var nf = root.querySelector('#txNavFile'); if (nf) nf.click(); }
@@ -833,7 +862,7 @@
       }
     });
 
-    return { destroy: function () { S.unsubs.forEach(function (u) { u(); }); cleanLive(); if (S.bell) S.bell.destroy(); if (S.bubbles) S.bubbles.destroy(); } };
+    return { destroy: function () { document.body.classList.remove('tx-wide'); S.unsubs.forEach(function (u) { u(); }); cleanLive(); if (S.bell) S.bell.destroy(); if (S.bubbles) S.bubbles.destroy(); } };
   }
   g.TechAdmin = { mount: mount };
 })(window);

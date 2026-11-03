@@ -441,7 +441,7 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=3"></script>
 <script src="../js/tech/tech-helpers.js?v=tech16"></script>
-<script src="../js/tech/tech-work.js?v=6"></script>
+<script src="../js/tech/tech-work.js?v=7"></script>
 <script src="../js/tech/tech-groups.js?v=2"></script>
 <script src="../js/tech/tech-classes.js?v=11"></script>
 <script>
@@ -1164,7 +1164,7 @@ document.addEventListener('click',async e=>{
     if(a) startPractice({type:a.type,title:a.title,instructions:a.instructions,starter:a.starter,missionId:m.id,missionTitle:m.title,buildId:b.id,activity:Number(i)});
   }
   else if(t.dataset.practice){ kill(); S.openId=t.dataset.practice; render(); window.scrollTo(0,0); }
-  else if(t.dataset.copy){ const v=t.dataset.copy; (navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>{ t.innerHTML='<i class="fas fa-check"></i> Copied'; },()=>prompt('Copy this link',v)); }
+  else if(t.dataset.copy) TechWork.copyText(t.dataset.copy,t);
   else if(t.id==='pSave'){
     const tp={identity:$('pId').value,interests:[...document.querySelectorAll('#pInts input:checked')].map(x=>x.value)};
     const msg=$('pMsg'); msg.style.color='';

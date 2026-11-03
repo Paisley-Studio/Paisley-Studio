@@ -108,7 +108,31 @@
     }).join('');
   }
   function copyText(t, btn) {
-    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { if (btn) btn.innerHTML = '<i class="fas fa-check"></i> Copied'; }, function () { prompt('Copy this link', t); });
+    if (!t) return;
+    function done() {
+      if (!btn) return;
+      if (!btn.dataset.label) btn.dataset.label = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+      clearTimeout(btn._twT); btn._twT = setTimeout(function () { btn.innerHTML = btn.dataset.label; }, 1800);
+    }
+    function legacy() {
+      var ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta); return ok;
+    }
+    function fallback() { if (legacy()) done(); else prompt('Copy this link', t); }
+    if (navigator.clipboard && g.isSecureContext !== false) navigator.clipboard.writeText(t).then(done, fallback);
+    else fallback();
+  }
+  /* Every "Copy link" box (linkBox) works on any page, wherever it is drawn. */
+  if (!g.__twCopyBound && typeof document !== 'undefined') {
+    g.__twCopyBound = true;
+    document.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest && e.target.closest('.tw-share [data-tw="copy"]'); if (!b) return;
+      e.preventDefault(); copyText(b.dataset.url, b);
+    });
   }
   function hasWork(d, kind) {
     if (!d) return false;
@@ -627,7 +651,7 @@
       var b = e.target.closest('[data-tw]'); if (!b) return;
       var k = b.dataset.tw;
       if (k === 'submit') submit(b);
-      else if (k === 'copy') copyText(b.dataset.url, b);
+      else if (k === 'copy') return;   // the page-wide copy handler does it
       else if ((k === 'pubreq' || k === 'unpub') && isBuilder && data) {
         if (k === 'unpub' && data.publishState === 'approved' && !confirm('Take your work down? The link will stop working.')) return;
         b.disabled = true;
@@ -730,12 +754,11 @@
         (isBuilder ? '' : '<p class="tw-note" style="margin-top:.8rem"><i class="fas fa-eye"></i> Read-only. Only ' + esc(who) + ' can change the work.</p>');
     }
     host.addEventListener('click', function (e) {
-      var t = e.target.closest('[data-twf],[data-twdl],[data-twfix],[data-twlesson],[data-tw="copy"]'); if (!t) return;
+      var t = e.target.closest('[data-twf],[data-twdl],[data-twfix],[data-twlesson]'); if (!t) return;
       if (t.dataset.twf) { S.f = t.dataset.twf; paint(); }
       else if (t.dataset.twdl) download(t.dataset.twdl, t.dataset.name || 'marked.pdf', t);
       else if (t.dataset.twfix) { if (o.onLesson) o.onLesson(t.dataset.twfix, true); }
       else if (t.dataset.twlesson) { if (o.onLesson) o.onLesson(t.dataset.twlesson, false); }
-      else copyText(t.dataset.url, t);
     });
     paint();
     return { destroy: function () { dead = true; unsub(); } };
@@ -795,6 +818,6 @@
 
   g.TechWork = {
     kindOf: kindOf, workId: workId, taskQs: taskQs, answersHtml: answersHtml, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
-    takeSnapshot: takeSnapshot, publishHtml: publishHtml, shareLink: shareLink, shareRowsHtml: shareRowsHtml, decidePublish: decidePublish, openHandIn: openHandIn, mountResults: mountResults, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
+    takeSnapshot: takeSnapshot, publishHtml: publishHtml, shareLink: shareLink, copyText: copyText, shareRowsHtml: shareRowsHtml, decidePublish: decidePublish, openHandIn: openHandIn, mountResults: mountResults, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
   };
 })(window);
