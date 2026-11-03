@@ -379,6 +379,8 @@ ul.crit{margin:.2rem 0 0 1.2rem;line-height:1.7}
 }
 @media(max-width:520px){ .topbar .btn span{display:none} }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}.view-in{animation:none!important}}
+/* Own projects are off until the Studio Desk turns them on (for everyone, or for this builder). */
+body.no-create [data-newbuild]{display:none!important}
 </style>
 </head>
 <body>
@@ -437,10 +439,10 @@ ul.crit{margin:.2rem 0 0 1.2rem;line-height:1.7}
 <script src="../js/tech/code-lab.js?v=tech14"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=3"></script>
-<script src="../js/tech/tech-helpers.js?v=tech14"></script>
-<script src="../js/tech/tech-work.js?v=4"></script>
+<script src="../js/tech/tech-helpers.js?v=tech15"></script>
+<script src="../js/tech/tech-work.js?v=5"></script>
 <script src="../js/tech/tech-groups.js?v=2"></script>
-<script src="../js/tech/tech-classes.js?v=8"></script>
+<script src="../js/tech/tech-classes.js?v=10"></script>
 <script>
 (function(){
 'use strict';
@@ -499,7 +501,7 @@ auth.onAuthStateChanged(async user=>{
     if(links&&!links.empty){ location.href='/tech/parent/dashboard.html'; return; }
     location.href='/tech/index.html?tab=signup'; return;   // signed in but not in Tech Studio yet: apply with this account
   }
-  const p=snap.data(); S.p=Object.assign({id:snap.id},p);
+  const p=snap.data(); S.p=Object.assign({id:snap.id},p); syncCreate();
   if(p.status!=='Active'){
     const msg=p.status==='Pending'?'Your account is waiting for approval from the Studio Desk. This usually takes up to a day.':'This account is not active ('+esc(p.status||'unknown')+'). Please contact the Studio Desk.';
     return showGate(gateCard('Welcome to Tech Studio, '+esc(T.firstName(p.name))+'.',msg,'<button class="btn" id="gSign" type="button">Sign out</button>'));
@@ -524,7 +526,7 @@ function boot(){
     return true;
   }});
   S.bubbles=T.mountBubbles({root:$('nav'),selector:'.nav[data-v]',uid:S.uid,role:'student',current:()=>S.v});
-  S.unsubs.push(db.collection('techSettings').doc('portal').onSnapshot(s=>{ S.navVideo=s.exists?(s.data().navVideo||null):null; if(S.navVideo&&S.navVideo.url) FastVideo.preconnect(S.navVideo.url); softRender(); },e=>console.warn('settings',e)));
+  S.unsubs.push(db.collection('techSettings').doc('portal').onSnapshot(s=>{ S.navVideo=s.exists?(s.data().navVideo||null):null; S.selfAll=s.exists&&s.data().selfProjects===true; syncCreate(); if(S.navVideo&&S.navVideo.url) FastVideo.preconnect(S.navVideo.url); softRender(); },e=>console.warn('settings',e)));
   /* Coach changes and guardian links arrive live. */
   S.unsubs.push(db.collection('techStudents').doc(S.uid).onSnapshot(s=>{
     if(!s.exists) return; const was=S.p.coachId; S.p=Object.assign({id:s.id},s.data());
@@ -555,8 +557,12 @@ function boot(){
   h=ALIAS[h]||h;
   go(TITLES[h]?h:'home');
 }
+/* Can this builder start a project of their own? Only when an admin allowed it. */
+function canCreate(){ return S.selfAll===true||!!(S.p&&S.p.selfProjects===true); }
+function syncCreate(){ document.body.classList.toggle('no-create',!canCreate()); }
 function softRender(){
   if(!S.p) return;
+  syncCreate();
   updateBadges();
   if(!S.ws&&!S.pr&&!S.openId) render(true);
   else if(S.openId&&!S.ws&&!S.pr) render(true);
@@ -1133,7 +1139,7 @@ document.addEventListener('click',async e=>{
     catch(er){ t.disabled=false; alert('Could not start: '+T.errMsg(er)); }
   }
   else if(t.dataset.back!==undefined){ const v=S.v; S.openId=null; S.openTab=null; go(v); }
-  else if(t.dataset.newbuild!==undefined){ newBuildModal(); }
+  else if(t.dataset.newbuild!==undefined){ if(canCreate()) newBuildModal(); }
   else if(t.dataset.go){ go(t.dataset.go); }
   else if(t.dataset.projfilter){ S.projFilter=t.dataset.projfilter; render(true); }
   else if(t.dataset.mtab){ S.mtab=t.dataset.mtab; render(true); }

@@ -13,6 +13,10 @@
          taskAnswers: { questionId: text }   (answers to task.questions, marked with the work)
          snapshotUrl, snapshotPath, snapshotAt   a picture of the work taken at hand-in
                                                  (takeSnapshot); the family's email shows it
+         publishState: '' | requested | approved | declined | unpublished
+                   the builder asks to publish handed-in work; their coach or an admin
+                   approves (functions make techShowcase/cw_{workId}, a public /tech/p/ link,
+                   saved as shareUrl) or declines with publishNote.
          status: Draft | Submitted | Graded | Corrections, submittedAt, submitCount,
          feedback, grade, maxScore, gradedBy*, gradedAt, gradedFileUrl, inkData, history }
 
@@ -62,6 +66,30 @@
       var a = String(ans[q.id] || '').trim();
       return '<div class="tw-q"><div class="lb">' + (i + 1) + '. ' + esc(q.text) + '</div><div class="tw-ans' + (a ? '' : ' none') + '">' + (a ? esc(a) : 'No answer') + '</div></div>';
     }).join('') + '</div>';
+  }
+  /* ---- Publishing handed-in work ---- */
+  var PUB_KEYS_OK = ['Submitted', 'Graded', 'Corrections'];
+  function canAskPublish(d) { return !!d && PUB_KEYS_OK.indexOf(d.status) > -1; }
+  function shareLink(d) { return d && d.publishState === 'approved' && T.safeUrl(d.shareUrl) ? T.safeUrl(d.shareUrl) : ''; }
+  function linkBox(url) {
+    return '<div class="tw-share"><input type="text" readonly value="' + esc(url) + '" aria-label="Share link" onclick="this.select()">' +
+      '<button type="button" class="tc-btn sm" data-tw="copy" data-url="' + esc(url) + '"><i class="fas fa-copy"></i> Copy link</button>' +
+      '<a class="tc-btn light sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i> Open</a></div>';
+  }
+  /* What the builder (and their family) see about publishing this work. */
+  function publishHtml(d, isBuilder, who) {
+    if (!canAskPublish(d)) return '';
+    var st = d.publishState || '', url = shareLink(d), h = '<div class="tw-pub' + (st === 'approved' ? ' on' : '') + '"><div class="hd"><i class="fas fa-globe"></i> <b>Share it with friends and family</b></div>';
+    if (st === 'approved' && url) h += '<p>' + (isBuilder ? 'Published! Anyone with this link can see your work.' : 'Published. Anyone with this link can see ' + esc(who) + '’s work.') + '</p>' + linkBox(url) + (isBuilder ? '<button type="button" class="tc-btn light sm" data-tw="unpub" style="margin-top:.5rem"><i class="fas fa-eye-slash"></i> Take it down</button>' : '');
+    else if (st === 'approved') h += '<p><i class="fas fa-spinner fa-spin"></i> Making the link…</p>';
+    else if (st === 'requested') h += '<p><span class="tc-pill mid"><i class="fas fa-hourglass-half"></i> Publish request sent</span> ' + (isBuilder ? 'Your coach or the Studio Desk will look at it.' : 'Waiting for the coach.') + '</p>' + (isBuilder ? '<button type="button" class="tc-btn light sm" data-tw="unpub">Cancel the request</button>' : '');
+    else if (st === 'declined') h += '<div class="tw-pubnote"><b>Not published yet.</b>' + (d.publishNote ? ' ' + esc(d.publishNote) : '') + (d.publishDecidedByName ? '<small> · ' + esc(d.publishDecidedByName) + '</small>' : '') + '</div>' +
+      (isBuilder ? '<button type="button" class="tc-btn sm" data-tw="pubreq" style="margin-top:.5rem"><i class="fas fa-paper-plane"></i> I fixed it, ask again</button>' : '');
+    else h += isBuilder ? '<p>Proud of it? Ask to publish it. Your coach or the Studio Desk checks it first, then you get a link to share.</p><button type="button" class="tc-btn sm" data-tw="pubreq"><i class="fas fa-paper-plane"></i> Ask to publish</button>' : '<p>' + esc(who) + ' has not asked to publish this.</p>';
+    return h + '</div>';
+  }
+  function copyText(t, btn) {
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { if (btn) btn.innerHTML = '<i class="fas fa-check"></i> Copied'; }, function () { prompt('Copy this link', t); });
   }
   function hasWork(d, kind) {
     if (!d) return false;
@@ -180,6 +208,10 @@
       '.tw-step b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);font-size:.72rem}',
       '.tw-step.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}.tw-step.on b{background:#fff}',
       '.tw-step.done b{background:#2EB872;color:#fff}',
+      '.tw-pub{margin:.8rem 0;padding:.8rem .9rem;border:1px solid var(--line,rgba(38,51,49,.12));border-radius:12px;background:#fff;font-size:.86rem}.tw-pub.on{border-color:rgba(46,184,114,.4);background:rgba(46,184,114,.05)}',
+      '.tw-pub .hd{display:flex;align-items:center;gap:.45rem;margin-bottom:.35rem;color:var(--brand-deep,#245F5A)}.tw-pub .hd i{color:var(--brand,#55BFB3)}.tw-pub p{margin:.2rem 0 .5rem;color:var(--muted,#5A6E6A);line-height:1.5}',
+      '.tw-share{display:flex;gap:.4rem;flex-wrap:wrap}.tw-share input{flex:1;min-width:160px;padding:.45rem .6rem;border:1.5px solid var(--line,rgba(38,51,49,.15));border-radius:9px;font:inherit;font-size:.8rem;background:#F7FAF9}',
+      '.tw-pubnote{padding:.55rem .7rem;border-radius:10px;background:rgba(243,156,18,.12);color:#7a5200;line-height:1.45}.tw-pubnote small{color:var(--muted,#5A6E6A)}',
       '.tw-pop{display:grid;grid-template-columns:300px minmax(0,1fr);gap:1rem;align-items:start}',
       '.tw-shot{display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;padding:.45rem;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;background:#fff;text-decoration:none;color:var(--brand-deep,#245F5A);font-size:.8rem;font-weight:800}.tw-shot img{width:150px;height:94px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line,rgba(38,51,49,.1))}',
       '.tw-ctx{padding:0 0 .85rem;margin:0 0 .85rem;border-bottom:1px solid var(--line,rgba(38,51,49,.1))}',
@@ -378,7 +410,7 @@
     var CU = g.ClassroomUI.util, d = o.data || {}, lab = null, unsub = null;
     var m = CU.openModal({ title: (o.who ? o.who + ' · ' : '') + (o.title || 'Work'), wide: true, onClose: function () { if (lab) lab.destroy(); if (unsub) unsub(); } });
     function head() {
-      return '<div class="tw-bar">' + statePill(d.status) + (d.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(d.submittedAt)) + (d.submittedByName ? ' by ' + esc(d.submittedByName) : '') + (d.submitCount > 1 ? ' · round ' + d.submitCount : '') + '</span>' : '') +
+      return '<div id="twPubInfo" style="margin-bottom:.6rem"></div><div class="tw-bar">' + statePill(d.status) + (d.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(d.submittedAt)) + (d.submittedByName ? ' by ' + esc(d.submittedByName) : '') + (d.submitCount > 1 ? ' · round ' + d.submitCount : '') + '</span>' : '') +
         (o.subtitle ? '<span class="tw-note grow" style="text-align:right">' + esc(o.subtitle) + '</span>' : '') + '</div>' +
         (d.snapshotUrl && T.safeUrl(d.snapshotUrl) ? '<a class="tw-shot" href="' + esc(T.safeUrl(d.snapshotUrl)) + '" target="_blank" rel="noopener noreferrer" title="Open the picture taken at hand-in"><img src="' + esc(T.safeUrl(d.snapshotUrl)) + '" alt="Picture of the work at hand-in" loading="lazy"><span><i class="fas fa-camera"></i> Picture at hand-in</span></a>' : '') +
         (o.brief ? '<div class="tc-panel" style="padding:.8rem 1rem"><b style="color:var(--brand-deep,#245F5A)">What they had to make</b><div class="tc-plain" style="margin-top:.3rem;font-size:.9rem">' + esc(o.brief) + '</div></div>' : '') +
@@ -391,13 +423,29 @@
     else if (!g.CodeLab) hostW.innerHTML = '<div class="tc-empty">Paisley VS Code is not loaded on this page.</div>';
     else lab = g.CodeLab.mount(hostW, { build: d, canEdit: false, mode: o.kind === 'doc' ? 'doc' : 'code', title: o.who, collab: o.live ? { ref: o.ref, presence: o.presence, me: { uid: o.me.uid, name: o.me.name } } : null });
     if (o.live) unsub = o.ref.onSnapshot(function (s) { if (s.exists) { d = s.data(); var h = m.body.querySelector('#twHead'); if (h) h.innerHTML = head(); paintFoot(); } }, function () { });
+    function decidePublish(k, btn) {
+      if (k === 'copy') { copyText(shareLink(d), btn); return; }
+      var up = { publishDecidedBy: o.me.uid, publishDecidedByName: o.me.name || '', publishDecidedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
+      if (k === 'approve') { if (!confirm('Publish this for anyone with the link to see? Only ' + (o.who ? T.firstName(o.who) + '\u2019s' : 'the builder\u2019s') + ' first name is shown.')) return; up.publishState = 'approved'; up.publishNote = ''; }
+      else if (k === 'decline') { var why = prompt('Why not yet? The builder sees this note (for example: add your name to the page, fix the broken picture).', ''); if (why === null) return; up.publishState = 'declined'; up.publishNote = String(why).trim().slice(0, 600); }
+      else if (k === 'unpublish') { if (!confirm('Take it down? The share link stops working.')) return; up.publishState = 'unpublished'; }
+      btn.disabled = true;
+      o.ref.update(up).then(function () { d = Object.assign({}, d, up, { publishDecidedAt: new Date() }); paintFoot(); }).catch(function (e) { btn.disabled = false; alert('Could not save: ' + T.errMsg(e)); });
+    }
     function paintFoot() {
       var canMark = d.status && d.status !== 'Draft';
       m.foot.innerHTML = '<span class="tw-note" style="margin-right:auto">' + (canMark ? 'Mark it with ink, give a score and feedback, or ask for corrections. ' + esc(o.familyNote || 'The builder and their family are told.') : 'Not handed in yet. You can watch it, and mark it once it is handed in.') + '</span>' +
         '<button type="button" class="cr-btn" data-x>Close</button>' +
+        (d.publishState === 'requested' ? '<button type="button" class="cr-btn" data-pub="decline"><i class="fas fa-rotate-left"></i> Decline publishing</button><button type="button" class="cr-btn primary" data-pub="approve"><i class="fas fa-globe"></i> Approve publishing</button>' : '') +
+        (d.publishState === 'approved' ? (shareLink(d) ? '<button type="button" class="cr-btn" data-pub="copy"><i class="fas fa-copy"></i> Copy share link</button>' : '') + '<button type="button" class="cr-btn" data-pub="unpublish"><i class="fas fa-eye-slash"></i> Unpublish</button>' : '') +
         (canMark ? '<button type="button" class="cr-btn primary" data-mark><i class="fas fa-pen-nib"></i> ' + (d.status === 'Graded' ? 'Review the marks' : 'Mark with ink') + '</button>' : '');
+      [].forEach.call(m.foot.querySelectorAll('[data-pub]'), function (pb) { pb.onclick = function () { decidePublish(pb.dataset.pub, pb); }; });
       m.foot.querySelector('[data-x]').onclick = function () { m.close(); };
       var mk = m.foot.querySelector('[data-mark]');
+      var pubInfo = m.body.querySelector('#twPubInfo');
+      if (pubInfo) pubInfo.innerHTML = d.publishState === 'requested' ? '<div class="tw-pubnote"><b>' + esc(o.who || 'The builder') + ' asks to publish this.</b> Approve it to make a public link they can share, or decline it with a note so they can fix it (ask for corrections too if the work needs changes).</div>'
+        : d.publishState === 'approved' ? '<div class="tw-pub on" style="margin:0 0 .8rem"><div class="hd"><i class="fas fa-globe"></i> <b>Published</b></div>' + (shareLink(d) ? linkBox(shareLink(d)) : '<p>Making the link…</p>') + '</div>'
+        : d.publishState === 'declined' ? '<div class="tw-pubnote"><b>Publishing declined.</b> ' + esc(d.publishNote || '') + '</div>' : '';
       if (mk) mk.onclick = function () {
         mk.disabled = true;
         openMarking({ me: o.me, ref: o.ref, data: d, title: o.title, subtitle: o.subtitle, who: o.who, kind: o.kind, brief: o.brief, questions: o.questions, folder: o.folder, key: o.key,
@@ -485,7 +533,7 @@
       }
       headEl.innerHTML = '<div class="tw-bar">' + statePill(st) + (data && data.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(data.submittedAt)) + '</span>' : '') + '<span class="grow"></span>' + right + '</div>' +
         '<div class="tw-msg" id="twMsg" role="status"></div>' +
-        feedbackHtml(data, isBuilder ? 'You' : first) +
+        feedbackHtml(data, isBuilder ? 'You' : first) + publishHtml(data, isBuilder, first) +
         (!isBuilder && !data ? '<div class="tc-empty">' + esc(first) + ' has not started this yet.</div>' : '') +
         (isBuilder && editable() ? '<p class="tw-note" style="margin:0 0 .6rem">' + (kind === 'writing' ? 'It saves as you write.' : 'It saves as you type. Press Run to see your page. Make a folder such as images or videos, press its Upload button to add files from your computer, then click a file to use it.') + '</p>' : '');
     }
@@ -539,7 +587,19 @@
       } catch (e) { msg.textContent = 'Could not hand it in: ' + T.errMsg(e); msg.style.color = '#b8362a'; btn.disabled = false; }
       busy = false;
     }
-    host.addEventListener('click', function (e) { var b = e.target.closest('[data-tw="submit"]'); if (b) submit(b); });
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-tw]'); if (!b) return;
+      var k = b.dataset.tw;
+      if (k === 'submit') submit(b);
+      else if (k === 'copy') copyText(b.dataset.url, b);
+      else if ((k === 'pubreq' || k === 'unpub') && isBuilder && data) {
+        if (k === 'unpub' && data.publishState === 'approved' && !confirm('Take your work down? The link will stop working.')) return;
+        b.disabled = true;
+        ref.update({ publishState: k === 'pubreq' ? 'requested' : 'unpublished', publishRequestedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() })
+          .then(function () { if (k === 'pubreq') T.logActivity(me, 'publish_requested', 'Asked to publish ' + label, { origin: 'class' }); })
+          .catch(function (er) { b.disabled = false; var msg = host.querySelector('#twMsg'); if (msg) { msg.textContent = 'Could not send it: ' + T.errMsg(er); msg.style.color = '#b8362a'; } });
+      }
+    });
     var unsub = ref.onSnapshot(function (s) {
       if (dead) return;
       data = s.exists ? s.data() : null; loaded = true;
@@ -574,24 +634,24 @@
         .sort(function (a, b) { return (T.toDate(b.submittedAt || b.updatedAt) || 0) - (T.toDate(a.submittedAt || a.updatedAt) || 0); });
       paint();
     }, function (e) { if (!dead) host.innerHTML = '<div class="cr-empty">Could not load hand-ins: ' + esc(T.errMsg(e)) + '</div>'; });
-    var FILTERS = [['todo', 'To mark'], ['all', 'All'], ['Graded', 'Marked'], ['Corrections', 'Corrections asked'], ['Draft', 'Still working']];
+    var FILTERS = [['todo', 'To mark'], ['publish', 'Publish requests'], ['all', 'All'], ['Graded', 'Marked'], ['Corrections', 'Corrections asked'], ['Draft', 'Still working']];
     function paint() {
       if (S.rows === null) { host.innerHTML = '<div class="cr-empty">Loading hand-ins…</div>'; return; }
       var qq = S.q.trim().toLowerCase();
       var list = S.rows.filter(function (r) {
-        var okF = S.f === 'all' || (S.f === 'todo' ? r.status === 'Submitted' : r.status === S.f);
+        var okF = S.f === 'all' || (S.f === 'todo' ? r.status === 'Submitted' : S.f === 'publish' ? r.publishState === 'requested' : r.status === S.f);
         return okF && (!qq || (String(r.studentName) + ' ' + r.lessonTitle + ' ' + r.courseName).toLowerCase().indexOf(qq) !== -1);
       });
-      var todo = S.rows.filter(function (r) { return r.status === 'Submitted'; }).length;
-      host.innerHTML = '<div class="cr-filters">' + FILTERS.map(function (f) { return '<button type="button" class="cr-btn sm' + (S.f === f[0] ? ' primary' : '') + '" data-hf="' + f[0] + '">' + esc(f[1]) + (f[0] === 'todo' && todo ? ' (' + todo + ')' : '') + '</button>'; }).join('') +
+      var todo = S.rows.filter(function (r) { return r.status === 'Submitted'; }).length, pubs = S.rows.filter(function (r) { return r.publishState === 'requested'; }).length;
+      host.innerHTML = '<div class="cr-filters">' + FILTERS.map(function (f) { return '<button type="button" class="cr-btn sm' + (S.f === f[0] ? ' primary' : '') + '" data-hf="' + f[0] + '">' + esc(f[1]) + (f[0] === 'todo' && todo ? ' (' + todo + ')' : '') + (f[0] === 'publish' && pubs ? ' (' + pubs + ')' : '') + '</button>'; }).join('') +
         '<input type="search" data-hq placeholder="Search builder or lesson…" aria-label="Search" value="' + esc(S.q) + '"></div>' +
         (list.length ? '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Builder</th><th>Lesson</th><th>Class</th><th>State</th><th>Handed in</th><th>Score</th><th></th></tr></thead><tbody>' + list.map(function (r) {
           var s = byId[r.studentId], name = (s && s.name) || r.studentName || 'Builder';
           return '<tr><td><b>' + esc(name) + '</b></td><td>' + esc(r.lessonTitle || '') + '<div class="cr-note">' + (r.kind === 'writing' ? 'Writing' : 'Code') + '</div></td><td class="cr-note">' + esc(r.courseName || '') + (r.topicTitle ? ' · ' + esc(r.topicTitle) : '') + '</td>' +
-            '<td>' + statePill(r.status) + '</td><td class="cr-note">' + esc(fmt(r.submittedAt)) + '</td><td>' + esc(scoreText(r) || '–') + '</td>' +
+            '<td>' + statePill(r.status) + (r.publishState === 'requested' ? ' <span class="tc-pill mid"><i class="fas fa-globe"></i> Wants to publish</span>' : r.publishState === 'approved' ? ' <span class="tc-pill good"><i class="fas fa-globe"></i> Published</span>' : '') + '</td><td class="cr-note">' + esc(fmt(r.submittedAt)) + '</td><td>' + esc(scoreText(r) || '–') + '</td>' +
             '<td><button type="button" class="cr-btn sm' + (r.status === 'Submitted' ? ' primary' : '') + '" data-open="' + esc(r.id) + '"><i class="fas ' + (r.status === 'Submitted' ? 'fa-pen-nib' : 'fa-eye') + '"></i> ' + (r.status === 'Submitted' ? 'Open and mark' : 'Open') + '</button></td></tr>';
         }).join('') + '</tbody></table></div>' :
-          '<div class="cr-panel"><div class="cr-empty">' + (S.f === 'todo' ? 'Nothing waiting to be marked.' : 'No class work here yet.') + ' Builders hand in from the lesson’s “Make it” step.</div></div>');
+          '<div class="cr-panel"><div class="cr-empty">' + (S.f === 'todo' ? 'Nothing waiting to be marked.' : S.f === 'publish' ? 'Nobody is asking to publish right now.' : 'No class work here yet.') + ' Builders hand in from the lesson’s “Make it” step.</div></div>');
     }
     host.addEventListener('click', function (e) {
       var f = e.target.closest('[data-hf]'); if (f) { S.f = f.dataset.hf; paint(); return; }
@@ -617,6 +677,6 @@
 
   g.TechWork = {
     kindOf: kindOf, workId: workId, taskQs: taskQs, answersHtml: answersHtml, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
-    takeSnapshot: takeSnapshot, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
+    takeSnapshot: takeSnapshot, publishHtml: publishHtml, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
   };
 })(window);

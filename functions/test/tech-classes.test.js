@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const admin = require("firebase-admin");
 if (!admin.apps.length) admin.initializeApp({ projectId: "paisley-test" });
 const { _internals } = require("../tech");
-const { gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, workSnapshotHtml, classPassed, byCourse } = _internals;
+const { gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf } = _internals;
 
 const QUESTIONS = [
   { id: "a", type: "mcq", text: "Pick b", options: ["a", "b", "c"] },
@@ -119,4 +119,25 @@ test("a lesson without a title is named by its topic", () => {
   assert.equal(lessonTitle({ topicTitle: "Flow" }), "Flow lesson");
   assert.equal(lessonTitle({ type: "test", topicTitle: "Flow" }), "Flow practice test");
   assert.equal(lessonTitle({}), "New lesson");
+});
+
+test("a lesson with several videos asks for them to be watched; watchedAt means all of them", () => {
+  const ts = { toMillis: () => 1 };
+  const l = { type: "lesson", videos: [{ url: "https://a" }, { url: "https://b" }] };
+  assert.equal(hasVideo(l), true);
+  assert.equal(hasVideo({ type: "lesson", videos: [] }), false);
+  assert.equal(lessonGate(l).watch, true);
+  assert.equal(gateMet(l, { watchedVideos: { 0: true } }, null), false);
+  assert.equal(gateMet(l, { watchedVideos: { 0: true, 1: true }, watchedAt: ts }, null), true);
+});
+
+test("published class work shows only the first name and the work, never ids or marks", () => {
+  const a = { kind: "code", lessonTitle: "Lesson 1", courseName: "CODING", topicTitle: "Flow", studentId: "kid1", coachId: "c1", grade: 9, feedback: "x", codeFiles: [{ name: "index.html", content: "<h1>Hi</h1>" }], snapshotUrl: "https://x/s.jpg" };
+  const p = workShowcase(a, { name: "Amina Otieno" });
+  assert.equal(p.displayName, "Amina");
+  assert.equal(p.category, "CODE"); assert.equal(p.origin, "class");
+  for (const k of ["studentId", "coachId", "grade", "feedback"]) assert.equal(k in p, false);
+  assert.equal(p.codeFiles.length, 1);
+  assert.equal(showcaseIdOf("kid1_l1"), "cw_kid1_l1");
+  assert.equal(workShowcase({ kind: "writing", writingHtml: "<p>Hi</p>" }, { name: "Ben" }).category, "WRITING");
 });

@@ -82,6 +82,20 @@ test("their coach and admins mark it; other coaches cannot see it; guardians rea
   await assertSucceeds(as("admin1").collection("techLessonWork").where("lessonId", "==", "sent").get());
 });
 
+test("publishing: the builder asks, their coach or an admin decides", async () => {
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "requested", publishRequestedAt: new Date(), updatedAt: new Date() }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "approved" }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ shareUrl: "https://evil" }));
+  await env.withSecurityRulesDisabled(async (ctx) => { await ctx.firestore().doc("techLessonWork/kid1_wip").set(work({ lessonId: "wip", status: "Draft" })); });
+  await assertFails(as("kid1").doc("techLessonWork/kid1_wip").update({ publishState: "requested" }));      // not handed in yet
+  await assertFails(as("coach2").doc("techLessonWork/kid1_sent").update({ publishState: "approved" }));
+  await assertSucceeds(as("coach1").doc("techLessonWork/kid1_sent").update({ publishState: "declined", publishNote: "Add your name", publishDecidedBy: "coach1", publishDecidedAt: new Date() }));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "requested", publishRequestedAt: new Date() }));
+  await assertSucceeds(as("admin1").doc("techLessonWork/kid1_sent").update({ publishState: "approved" }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "requested" }));     // already approved
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "unpublished" }));
+});
+
 test("coaches and admins make groups; members see only their own", async () => {
   const grp = (by, ids) => ({ name: "Crew", memberIds: ids || ["kid1", "kid2"], members: [], createdBy: by });
   await assertSucceeds(as("coach2").collection("techGroups").add(grp("coach2")));

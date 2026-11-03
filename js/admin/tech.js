@@ -28,9 +28,31 @@
   function stat(n, l) { return '<div class="cr-panel" style="margin:0;padding:.8rem 1rem"><div style="font-size:1.4rem;font-weight:800;color:var(--brand-deep)">' + n + '</div><div class="cr-note">' + l + '</div></div>'; }
   function fmtDate(d) { var x = CU.toDate(d); return x ? x.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; }
 
+  /* Tech Studio workspace: its own side menu, and the open section filling the page beside it. */
+  function shellStyle() {
+    if (document.getElementById('tx-shell-style')) return;
+    var st = document.createElement('style'); st.id = 'tx-shell-style';
+    st.textContent = [
+      '.tx-shell{display:grid;grid-template-columns:220px minmax(0,1fr);gap:1.25rem;align-items:start}',
+      '.tx-side{position:sticky;top:.75rem;max-height:calc(100vh - 1.5rem);overflow:auto;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:.7rem .55rem}',
+      '.tx-side-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.1rem .45rem .55rem;margin-bottom:.3rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08))}',
+      '.tx-side-head b{font-size:.9rem;color:var(--brand-deep,#245F5A)}',
+      '.tx-group{margin:.55rem .5rem .25rem;font-size:.64rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#5A6E6A)}',
+      '.tx-tab{display:flex;align-items:center;gap:.6rem;width:100%;padding:.5rem .6rem;border:0;border-radius:9px;background:none;font:inherit;font-size:.84rem;font-weight:600;color:var(--ink,#263331);text-align:left;cursor:pointer}',
+      '.tx-tab i{width:16px;text-align:center;color:var(--muted,#5A6E6A);font-size:.85rem}',
+      '.tx-tab:hover{background:var(--paper,#F4F8F7)}',
+      '.tx-tab.on{background:rgba(85,191,179,.16);color:var(--brand-deep,#245F5A);font-weight:700}.tx-tab.on i{color:var(--brand,#55BFB3)}',
+      '.tx-tab .cr-badge-red,.tx-tab .tk-bub{margin-left:auto}',
+      '.tx-main{min-width:0;min-height:60vh;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;padding:1.2rem 1.3rem}',
+      '.tx-main>.cr-bar:first-child,.tx-main>div>.cr-bar:first-child{margin-top:0}',
+      '@media(max-width:900px){.tx-shell{grid-template-columns:minmax(0,1fr)}.tx-side{position:static;max-height:none;display:flex;gap:.3rem;overflow-x:auto;padding:.45rem}.tx-side-head,.tx-group{display:none}.tx-tab{width:auto;white-space:nowrap;flex:none}.tx-main{padding:1rem}}'
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+
   function mount(root, o) {
     var db = (typeof g.db !== 'undefined' && g.db) || (typeof window.db !== 'undefined' && window.db) || firebase.firestore();
-    CU.injectStyle(); T.injectStyle();
+    CU.injectStyle(); T.injectStyle(); shellStyle();
     root.classList.add('cr-root');
     var S = {
       tab: 'applications',
@@ -102,15 +124,19 @@
         ['wall', 'fa-trophy', 'Showcase', 0],
         ['navvideo', 'fa-circle-play', 'Navigation video', 0]
       ].filter(function (t) { return t[0] !== 'missions' || S.tab === 'missions' || S.content.some(function (c) { return c.kind === 'mission' || c.kind === 'challenge'; }); });
-      return '<div class="cr-tabs" role="tablist" id="txTabs">' + tabs.map(function (t) {
-        return '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="cr-btn ' + (S.tab === t[0] ? 'on' : '') + '" data-a="tab" data-v="' + t[0] + '"><i class="fas ' + t[1] + '"></i> ' + t[2] +
-          (t[3] ? ' <span class="cr-badge-red" style="position:static;display:inline-flex;margin-left:.3rem">' + t[3] + '</span>' : '') + '</button>';
-      }).join('') + '</div>';
+      var GROUP = { applications: 'People', builds: 'Learning', content: 'Resources', live: 'Running the studio', messages: 'Messages' };
+      return '<nav class="tx-side" role="tablist" aria-label="Tech Studio" aria-orientation="vertical" id="txTabs"><div class="tx-side-head"><b>Tech Studio</b><span id="txBellRow"></span></div>' + tabs.map(function (t) {
+        return (GROUP[t[0]] ? '<div class="tx-group">' + GROUP[t[0]] + '</div>' : '') +
+          '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="tx-tab' + (S.tab === t[0] ? ' on' : '') + '" data-a="tab" data-v="' + t[0] + '"><i class="fas ' + t[1] + '" aria-hidden="true"></i><span>' + t[2] + '</span>' +
+          (t[3] ? '<span class="cr-badge-red" style="position:static;display:inline-flex">' + t[3] + '</span>' : '') + '</button>';
+      }).join('') + '</nav>';
     }
-    function renderTabsOnly() { var el = root.querySelector('#txTabs'); if (el) el.outerHTML = tabsHtml(); if (S.bubbles) S.bubbles.paint(); }
+    function renderTabsOnly() { var el = root.querySelector('#txTabs'); if (el) { var keep = el.scrollTop; el.outerHTML = tabsHtml(); mountAdminBell(); var n = root.querySelector('#txTabs'); if (n) n.scrollTop = keep; } if (S.bubbles) S.bubbles.paint(); }
     function render() {
       cleanLive();
-      root.innerHTML = '<div style="display:flex;justify-content:flex-end;margin-bottom:.4rem" id="txBellRow"></div>' + legacyBanner() + tabsHtml() + '<div id="txBody"></div><div class="cr-note" id="txMsg" role="status" style="margin-top:.6rem"></div>';
+      var sideScroll = (root.querySelector('#txTabs') || {}).scrollTop || 0;
+      root.innerHTML = legacyBanner() + '<div class="tx-shell">' + tabsHtml() + '<main class="tx-main" id="txMain"><div id="txBody"></div><div class="cr-note" id="txMsg" role="status" style="margin-top:.6rem"></div></main></div>';
+      var side = root.querySelector('#txTabs'); if (side) side.scrollTop = sideScroll;
       mountAdminBell();
       var b = root.querySelector('#txBody');
       if (!S.loaded) { b.innerHTML = '<div class="cr-empty">Loading Tech Studio…</div>'; return; }
@@ -136,6 +162,8 @@
     S.bubbles = T.mountBubbles({ root: root, selector: '[data-a="tab"][data-v]', uid: o.uid, role: 'admin', current: function () { return root.offsetParent === null ? '' : S.tab; } });
     S.unsubs.push(db.collection('techSettings').doc('portal').onSnapshot(function (s) {
       S.navVideo = s.exists ? (s.data().navVideo || null) : null;
+      var was = S.selfAll; S.selfAll = s.exists && s.data().selfProjects === true;
+      if (was !== S.selfAll && S.tab === 'builders') render();
       if (S.tab === 'navvideo' && !S.navUp) render();
     }, function (e) { console.warn('tech settings:', e); }));
 
@@ -235,18 +263,19 @@
       var all = S.students.filter(function (s) { return status(s) !== 'Pending'; }), q = S.q.trim().toLowerCase();
       var list = all.filter(function (s) { return (S.status === 'all' || status(s) === S.status) && (S.skill === 'all' || (S.skill === 'none' ? !s.skillLevel : s.skillLevel === S.skill)) && (!q || (s.name + ' ' + s.email).toLowerCase().indexOf(q) > -1); }).sort(function (a, c) { return String(a.name).localeCompare(String(c.name)); });
       var n = function (f) { return all.filter(f).length; };
-      var h = '<div class="cr-bar"><div><h3>Tech Studio builders</h3><div class="cr-sub">Approved students. Pair coaches, lock or unlock accounts.</div></div></div>' +
+      var h = '<div class="cr-bar"><div><h3>Tech Studio builders</h3><div class="cr-sub">Approved students. Pair coaches, lock or unlock accounts, and choose who may start projects of their own.</div></div>' +
+        '<div class="cr-actions"><button type="button" class="cr-btn' + (S.selfAll ? ' primary' : '') + '" data-a="selfall" title="Turn own projects on or off for every builder"><i class="fas ' + (S.selfAll ? 'fa-toggle-on' : 'fa-toggle-off') + '"></i> Own projects for everyone: ' + (S.selfAll ? 'On' : 'Off') + '</button></div></div>' +
         '<div class="cr-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:1rem">' + stat(all.length, 'Total') + stat(n(function (s) { return s.status === 'Active'; }), 'Active') + stat(n(function (s) { return s.skillLevel === 'beginner'; }), 'Beginners') + stat(n(function (s) { return s.skillLevel === 'intermediate' || s.skillLevel === 'expert'; }), 'Intermediate & expert') + stat(n(function (s) { return s.status === 'Inactive'; }), 'Locked') + stat(n(function (s) { return s.coachId; }), 'With a coach') + stat(S.builds.length, 'Builds') + '</div>' +
         '<div class="cr-filters"><input type="search" data-f="q" placeholder="Search name or email…" value="' + esc(S.q) + '" aria-label="Search" style="min-width:230px"><select data-f="status" aria-label="Status">' +
         [['all', 'All'], ['Active', 'Active'], ['Inactive', 'Locked'], ['Declined', 'Declined']].map(function (x) { return '<option value="' + x[0] + '"' + (S.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select><select data-f="skill" aria-label="Level">' + [['all', 'All levels'], ['beginner', 'Beginner'], ['intermediate', 'Intermediate'], ['expert', 'Expert'], ['none', 'Not chosen']].map(function (x) { return '<option value="' + x[0] + '"' + (S.skill === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></div>';
       if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">' + (all.length ? 'No builders match these filters.' : 'No approved Tech Studio builders yet. Approve an application to start.') + '</div></div>'; return; }
-      b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Builder</th><th>Level</th><th>Status</th><th>Coach</th><th>Guardians</th><th>Builds</th><th>Mastered</th><th>Last seen</th><th></th></tr></thead><tbody>' + list.map(function (s) {
+      b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Builder</th><th>Level</th><th>Status</th><th>Coach</th><th>Guardians</th><th>Builds</th><th>Mastered</th><th>Own projects</th><th>Last seen</th><th></th></tr></thead><tbody>' + list.map(function (s) {
         var nb = S.builds.filter(function (x) { return x.studentId === s.id; }).length;
         var nm = S.builds.filter(function (x) { return x.studentId === s.id && x.mastery === 'approved'; }).length;
         var id = esc(s.id);
         var ng = (s.guardianAccounts || []).length;
         return '<tr><td><b>' + esc(s.name) + '</b><div class="cr-note">' + esc(s.email) + '</div>' + ((s.programmes || []).length ? '<span class="badge b-plain">Also: ' + esc(s.programmes.join(', ')) + '</span>' : '') + '</td><td>' + levelSelect(s) + '</td><td>' + badge(status(s)) + '</td>' +
-          '<td>' + esc(s.coachName || coachName(s.coachId) || '—') + '</td><td>' + (ng ? ng + ' linked' : ((s.guardians || []).length ? '<span class="cr-note">Not linked</span>' : '—')) + '</td><td>' + nb + '</td><td>' + nm + '</td><td class="cr-note" title="' + esc(fmtDate(T.lastSeen(s))) + '">' + esc(T.ago(T.lastSeen(s))) + '</td>' +
+          '<td>' + esc(s.coachName || coachName(s.coachId) || '—') + '</td><td>' + (ng ? ng + ' linked' : ((s.guardians || []).length ? '<span class="cr-note">Not linked</span>' : '—')) + '</td><td>' + nb + '</td><td>' + nm + '</td><td>' + (S.selfAll ? '<span class="cr-note">On for everyone</span>' : '<button type="button" class="cr-btn sm' + (s.selfProjects ? ' primary' : '') + '" data-a="selfone" data-id="' + id + '" aria-pressed="' + !!s.selfProjects + '" title="Let ' + esc(s.name) + ' start projects of their own"><i class="fas ' + (s.selfProjects ? 'fa-toggle-on' : 'fa-toggle-off') + '"></i> ' + (s.selfProjects ? 'On' : 'Off') + '</button>') + '</td><td class="cr-note" title="' + esc(fmtDate(T.lastSeen(s))) + '">' + esc(T.ago(T.lastSeen(s))) + '</td>' +
           '<td><div class="cr-actions"><button type="button" class="cr-btn sm" data-a="coach" data-id="' + id + '" title="Pair coach"><i class="fas fa-chalkboard-user"></i></button>' +
           '<button type="button" class="cr-btn sm" data-a="guardians" data-id="' + id + '" title="Parents and guardians"><i class="fas fa-user-shield"></i></button>' +
           '<button type="button" class="cr-btn sm" data-a="actof" data-id="' + id + '" title="Activity timeline"><i class="fas fa-wave-square"></i></button>' +
@@ -668,7 +697,10 @@
       var t = e.target.closest('[data-a]'); if (!t) return; var a = t.dataset.a, id = t.dataset.id;
       if ((S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups') && t.closest('#txPanel')) return;   // the classes module handles its own clicks
       var stu = function () { return S.students.filter(function (x) { return x.id === id; })[0]; };
-      if (a === 'tab') { S.tab = t.dataset.v; render(); }
+      if (a === 'tab') {
+        S.tab = t.dataset.v; render();
+        var top = root.querySelector('.tx-shell'); if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({ block: 'start' });
+      }
       else if (a === 'navvid-pick') { var nf = root.querySelector('#txNavFile'); if (nf) nf.click(); }
       else if (a === 'navvid-link') saveNavLink();
       else if (a === 'navvid-test') {
@@ -686,6 +718,15 @@
       }
       else if (a === 'approve') { var s = stu(); if (s) openApprove(s); }
       else if (a === 'decline') { var d = stu(); if (d && confirm('Decline ' + d.name + '? They will not be able to use Tech Studio.')) setStatus(id, 'Declined').then(function () { toast('Application declined.'); }).catch(fail); }
+      else if (a === 'selfall') {
+        var on = !S.selfAll;
+        if (!confirm(on ? 'Let every builder start projects of their own? The Create something buttons appear on their dashboards.' : 'Hide Create something from every builder? Builders you switched on one by one keep it.')) return;
+        db.collection('techSettings').doc('portal').set({ selfProjects: on, updatedAt: FV().serverTimestamp() }, { merge: true }).then(function () { toast(on ? 'Own projects are on for everyone.' : 'Own projects are off, except builders you switched on.'); }).catch(fail);
+      }
+      else if (a === 'selfone') {
+        var so = stu(); if (!so) return;
+        db.collection('techStudents').doc(id).update({ selfProjects: !so.selfProjects, updatedAt: FV().serverTimestamp() }).then(function () { toast(so.selfProjects ? so.name + ' can no longer start own projects.' : so.name + ' can now start projects of their own.'); }).catch(fail);
+      }
       else if (a === 'lock') { var l = stu(); if (l && confirm('Lock ' + l.name + '’s account? They will lose access until you unlock it.')) setStatus(id, 'Inactive').then(function () { toast('Account locked.'); }).catch(fail); }
       else if (a === 'unlock') { setStatus(id, 'Active').then(function () { toast('Account unlocked.'); }).catch(fail); }
       else if (a === 'coach') { var c = stu(); if (c) openCoach(c); }

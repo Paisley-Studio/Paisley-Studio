@@ -700,27 +700,31 @@ exports.onTechLessonWritten = onDocumentWritten(
     const b = event.data.before.exists ? event.data.before.data() : null;
     const a = event.data.after.exists ? event.data.after.data() : null;
     if (!a || a.status !== "published" || (b && b.status === "published")) return;
-    const lid = event.params.lid, word = a.type === "test" ? "practice test" : "lesson", course = a.courseName || "your class";
+    const lid = event.params.lid, course = a.courseName || "your class";
+    /* Posted with the whole class: every lesson of the post shares one notification id, so the first wins. */
+    const many = !!a.classPost && (a.classPostCount || 0) > 1;
+    const word = many ? `${a.classPostCount} lessons` : (a.type === "test" ? "practice test" : "lesson");
     /* A lesson may have no title of its own: class > topic names it. */
     const title = lessonTitle(a);
     const msg = `${course}${a.topicTitle ? " · " + a.topicTitle : ""}${a.title ? " · " + a.title : ""}`;
     const extra = { lessonId: lid, courseId: a.courseId || "", section: "classes" };
+    const nid = many ? `classpost_${a.classPost}` : `lesson_${lid}`;
     const url = APP + LINKS.student + "#classes";
     for (const s of await trackAudience(a.track)) {
-      const fresh = await techNotify(s.id, "student", "tech_lesson", `New ${word} in ${course}`, msg, Object.assign({ studentId: s.id, id: `lesson_${lid}`, link: LINKS.student + "#classes" }, extra));
+      const fresh = await techNotify(s.id, "student", "tech_lesson", many ? `${course}: ${word} posted` : `New ${word} in ${course}`, many ? `The whole class is ready: ${word}.` : msg, Object.assign({ studentId: s.id, id: nid, link: LINKS.student + "#classes" }, extra));
       if (!fresh) continue;
-      await email(s.email, `New ${word} in ${course}: ${title}`, {
-        preheader: msg, heading: `A new ${word} is ready.`,
-        intro: `Hi ${esc(first(s.name))}, ${esc(a.createdByName || "your coach")} posted “${esc(title)}” in ${esc(course)}.`,
-        body: `<p style="margin:0;">Open your studio to ${a.type === "test" ? "take the test" : "watch the lesson"}.</p>`,
+      await email(s.email, many ? `${course} is ready: ${word}` : `New ${word} in ${course}: ${title}`, {
+        preheader: msg, heading: many ? `${course} is ready.` : `A new ${word} is ready.`,
+        intro: many ? `Hi ${esc(first(s.name))}, ${esc(a.createdByName || "your coach")} posted ${esc(word)} in ${esc(course)}.` : `Hi ${esc(first(s.name))}, ${esc(a.createdByName || "your coach")} posted “${esc(title)}” in ${esc(course)}.`,
+        body: `<p style="margin:0;">Open your studio to ${many ? "start the class" : (a.type === "test" ? "take the test" : "watch the lesson")}.</p>`,
         cta: { label: `Open the ${word}`, url }
       });
       for (const g of await guardiansOf(s.id)) {
-        const gFresh = await techNotify(g.parentUid, "guardian", "tech_lesson", `New ${word} for ${first(s.name)}`, msg, Object.assign({ studentId: s.id, id: `lesson_${lid}_${s.id}`, link: LINKS.guardian + "#classes" }, extra));
+        const gFresh = await techNotify(g.parentUid, "guardian", "tech_lesson", many ? `${course} is ready for ${first(s.name)}` : `New ${word} for ${first(s.name)}`, many ? `${word} posted in ${course}.` : msg, Object.assign({ studentId: s.id, id: `${nid}_${s.id}`, link: LINKS.guardian + "#classes" }, extra));
         if (gFresh) {
-          await email(g.email, `New ${word} for ${first(s.name)}: ${title}`, {
-            preheader: msg, heading: `A new ${word} for ${first(s.name)}.`,
-            intro: `Hi ${esc(first(g.name))}, ${esc(a.createdByName || "their coach")} posted “${esc(title)}” in ${esc(course)} for ${esc(first(s.name))}.`,
+          await email(g.email, many ? `${course} is ready for ${first(s.name)}` : `New ${word} for ${first(s.name)}: ${title}`, {
+            preheader: msg, heading: many ? `${course} is ready for ${first(s.name)}.` : `A new ${word} for ${first(s.name)}.`,
+            intro: many ? `Hi ${esc(first(g.name))}, ${esc(a.createdByName || "their coach")} posted ${esc(word)} in ${esc(course)} for ${esc(first(s.name))}.` : `Hi ${esc(first(g.name))}, ${esc(a.createdByName || "their coach")} posted “${esc(title)}” in ${esc(course)} for ${esc(first(s.name))}.`,
             body: `<p style="margin:0;">You can watch it and see their results in the guardian portal.</p>`,
             cta: { label: "Open the guardian portal", url: APP + LINKS.guardian + "#classes" }
           });
@@ -749,12 +753,14 @@ function lessonTitle(l) {
    (bell and email) hear which class is next.
 ========================================================= */
 const DEFAULT_PASS = 50;
+/* A lesson may hold several videos (videos[]); video mirrors the first. watchedAt means all were watched. */
+const hasVideo = (l) => (Array.isArray(l && l.videos) && l.videos.some((v) => v && v.url)) || !!(l && l.video && l.video.url);
 function lessonGate(l) {
   const g = (l && l.gate) || { watch: true, quiz: true, work: true, pass: DEFAULT_PASS };
   const qs = Array.isArray(l && l.questions) ? l.questions : [];
   const pass = Number(g.pass);
   return {
-    watch: !!g.watch && l.type !== "test" && !!(l.video && l.video.url),
+    watch: !!g.watch && l.type !== "test" && hasVideo(l),
     quiz: !!g.quiz && qs.length > 0,
     marked: qs.some((q) => q && q.type !== "open"),
     pass: g.pass !== "" && g.pass != null && Number.isFinite(pass) ? Math.max(0, Math.min(100, Math.round(pass))) : DEFAULT_PASS,
@@ -837,8 +843,8 @@ async function announceClassPass(uid, c, lessonCount) {
   const lvl = n > 0 ? `Level ${n} (${course})` : course;
   const nextLvl = next ? `Level ${n + 1} (${next.name})` : "";
   const idBase = `classpass_${uid}_${c.id}`;
-  await techNotify(uid, "student", "tech_unlock", next ? `Level ${n + 1} unlocked: ${next.name}` : `You passed ${course}!`,
-    next ? `You passed ${lvl}. ${next.name} is open now. Keep going!` : `You passed ${lvl}. That was the last class for now. Amazing work!`,
+  await techNotify(uid, "student", "tech_unlock", next ? `You passed ${lvl}! Unlock Level ${n + 1}` : `You passed ${course}!`,
+    next ? `You finished every lesson in ${course}. Open Classes and press Unlock Level ${n + 1} to start ${next.name}.` : `You passed ${lvl}. That was the last class for now. Amazing work!`,
     { studentId: uid, id: idBase, section: "classes", courseId: next ? next.id : c.id, link: LINKS.student + "#classes" });
   const staffLine = `${s.name || "A builder"} passed ${lvl}` + (next ? ` and moves on to ${nextLvl}.` : ".");
   if (s.coachId) await techNotify(s.coachId, "coach", "tech_unlock", "Class passed", staffLine, { studentId: uid, id: idBase, section: "results", courseId: c.id });
@@ -863,11 +869,10 @@ async function announceClassPass(uid, c, lessonCount) {
 exports.onTechLessonProgressWritten = onDocumentWritten(
   { document: "techLessonProgress/{pid}", region: LOCATION, secrets: SMTP_SECRETS },
   async (event) => {
-    const b = event.data.before.exists ? event.data.before.data() : null;
     const a = event.data.after.exists ? event.data.after.data() : null;
     if (!a || !a.studentId || !a.lessonId) return;
-    /* Already finished before this write: nothing new (the run that set passedAt checked the class). */
-    if (b && b.passedAt) return;
+    /* Every write checks: the class page touches a finished lesson to ask again for a class
+       finished before levels existed. checkClassPass stops at one read once the class is recorded. */
     await checkLessonPass(a.studentId, a.lessonId);
   }
 );
@@ -1005,6 +1010,8 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
     const b = event.data.before.exists ? event.data.before.data() : null;
     const a = event.data.after.exists ? event.data.after.data() : null;
     if (!a) return;
+    /* Publishing is its own conversation, beside marking. */
+    if (((b && b.publishState) || "") !== (a.publishState || "")) await publishEvent(event.params.wid, b, a);
     const ev = workEvent(b, a);
     if (!ev) return;
     const wid = event.params.wid, sid = a.studentId, s = await techStudent(sid);
@@ -1071,6 +1078,75 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
     }
   }
 );
+
+/* ---------------------------------------------------------
+   Publishing class work: the builder asks (publishState "requested"), their
+   coach or an admin approves or declines with a note. Approved work gets a
+   public copy at techShowcase/cw_{workId}, shown at /tech/p/cw_{workId}
+   with only the builder's first name; declined or taken down removes it.
+--------------------------------------------------------- */
+const showcaseIdOf = (wid) => "cw_" + String(wid).replace(/[^\w-]/g, "_").slice(0, 200);
+function workShowcase(a, s) {
+  const writing = a.kind === "writing";
+  const where = [a.courseName, a.topicTitle].filter(Boolean).join(" · ");
+  return {
+    title: String(a.lessonTitle || (writing ? "My writing" : "My project")).slice(0, 160),
+    description: where ? `Made in ${where} at Paisley Tech Studio.` : "Made at Paisley Tech Studio.",
+    category: writing ? "WRITING" : "CODE", origin: "class", displayName: first(s && s.name, "A Paisley student"),
+    codeFiles: writing ? [] : (a.codeFiles || []).slice(0, 60), codeActive: a.codeActive || "", codeAssets: writing ? [] : (a.codeAssets || []).slice(0, 60),
+    writingHtml: writing ? String(a.writingHtml || "").slice(0, 200000) : "",
+    images: /^https:\/\//.test(a.snapshotUrl || "") ? [{ url: a.snapshotUrl, name: "Snapshot" }] : [],
+    sourceType: "lessonWork", disciplines: [], skills: [],
+    publishedAt: FV().serverTimestamp()
+  };
+}
+async function publishEvent(wid, b, a) {
+  const db = admin.firestore(), sid = a.studentId, s = await techStudent(sid);
+  if (!s) return;
+  const st = a.publishState || "", who = s.name || "A builder", kid = first(s.name, "Your child");
+  const what = a.lessonTitle || "class work", where = `${a.courseName || "Class"}${a.topicTitle ? " · " + a.topicTitle : ""}`;
+  const scId = showcaseIdOf(wid), round = tsMs(a.publishRequestedAt) || tsMs(a.publishDecidedAt) || Date.now();
+  const pic = /^https:\/\//.test(a.snapshotUrl || "") ? a.snapshotUrl : "";
+  const extra = { studentId: sid, courseId: a.courseId || "", image: pic };
+  if (st === "requested") {
+    const line = `${who} asks to publish ${what} (${where}).`;
+    const coach = s.coachId || a.coachId;
+    if (coach) await techNotify(coach, "coach", "tech_publish", "Publish request", line, Object.assign({ id: `pub_${wid}_${round}`, section: "results" }, extra));
+    await notifyAdmins("tech_publish", "Publish request", line, Object.assign({ id: `pub_${wid}_${round}`, section: "results" }, extra));
+    return;
+  }
+  if (st === "approved") {
+    await db.collection("techShowcase").doc(scId).set(workShowcase(a, s));
+    const url = APP + "/tech/p/" + encodeURIComponent(scId);
+    await db.collection("techLessonWork").doc(wid).update({ shareId: scId, shareUrl: url, publishedAt: FV().serverTimestamp() });
+    const by = a.publishDecidedByName || "Your coach";
+    const fresh = await techNotify(sid, "student", "tech_publish", "Your work is published!", `${by} approved ${what}. Share your link with friends and family.`, Object.assign({ id: `pubok_${wid}_${round}`, section: "classes", link: LINKS.student + "#classes" }, extra));
+    if (fresh) await email(s.email, `Your work is published: ${what}`, {
+      preheader: "Share your link with friends and family.", heading: "Your work is published!",
+      intro: `Hi ${esc(first(s.name))}, ${esc(by)} approved ${esc(what)} (${esc(where)}).`,
+      body: workSnapshotHtml(pic, first(s.name)) + `<p style="margin:0 0 8px;">Anyone with this link can see it:</p><p style="margin:0;"><a href="${esc(url)}">${esc(url)}</a></p>`,
+      cta: { label: "Open your published work", url }
+    });
+    for (const g of await guardiansOf(sid)) {
+      const gFresh = await techNotify(g.parentUid, "guardian", "tech_publish", `${kid}'s work is published`, `${what} (${where}) is public now. Share the link with family and friends.`, Object.assign({ id: `pubok_${wid}_${round}_${g.parentUid}`, section: "classes", link: LINKS.guardian + "#classes" }, extra));
+      if (gFresh) await email(g.email, `${kid}'s work is published: share it!`, {
+        preheader: `See what ${kid} made, and share it with family and friends.`, heading: `${kid}'s work is published!`,
+        intro: `Hi ${esc(first(g.name))}, ${esc(by)} approved ${esc(kid)}'s ${esc(what)} (${esc(where)}) for publishing.`,
+        body: workSnapshotHtml(pic, kid) + `<p style="margin:0 0 8px;">Share this link with family and friends. Only ${esc(kid)}'s first name is shown:</p><p style="margin:0 0 10px;"><a href="${esc(url)}">${esc(url)}</a></p><p style="margin:0;"><b>Keep encouraging them!</b></p>`,
+        cta: { label: `See ${kid}'s work`, url }
+      });
+    }
+    await logActivity(sid, "work_published", `Published ${what}`, { studentName: s.name || "", by: "coach", origin: "class" });
+    return;
+  }
+  /* declined or taken down: the public copy goes */
+  await db.collection("techShowcase").doc(scId).delete().catch(() => {});
+  if (b && b.shareUrl) await db.collection("techLessonWork").doc(wid).update({ shareUrl: "", shareId: "" }).catch(() => {});
+  if (st === "declined") {
+    const by = a.publishDecidedByName || "Your coach";
+    await techNotify(sid, "student", "tech_publish", "Not published yet", `${by} looked at ${what}.${a.publishNote ? " " + String(a.publishNote).slice(0, 300) : ""} Fix it, then ask again.`, Object.assign({ id: `pubno_${wid}_${round}`, section: "classes", link: LINKS.student + "#classes" }, extra));
+  }
+}
 
 /* Builders added to a group hear who they are working with. */
 exports.onTechGroupWritten = onDocumentWritten(
@@ -1599,4 +1675,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml, classPassed, byCourse };
+exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf };

@@ -154,3 +154,16 @@ test("a builder cannot mark their own lesson as finished", async () => {
   await assertFails(as("kid1").doc("techLessonProgress/kid1_draft").set({ studentId: "kid1", lessonId: "draft", passedAt: new Date() }));
   await assertSucceeds(as("kid1").doc("techLessonProgress/kid1_live").update({ watchedAt: new Date(), updatedAt: new Date() }));
 });
+
+test("a builder unlocks the next class only after the server recorded the pass", async () => {
+  const unl = (cid) => ({ studentId: "kid1", courseId: cid, nextCourseId: "c2", at: require("firebase/firestore").serverTimestamp() });
+  await assertFails(as("kid1").doc("techUnlocks/kid1_cX").set(unl("cX")));                 // not passed
+  await env.withSecurityRulesDisabled(async (ctx) => { await ctx.firestore().doc("techCourseProgress/kid1_cX").set({ studentId: "kid1", courseId: "cX", passedAt: new Date() }); });
+  await assertFails(as("kid2").doc("techUnlocks/kid1_cX").set(Object.assign(unl("cX"), { studentId: "kid2" })));
+  await assertFails(as("kid1").doc("techUnlocks/kid1_cX").set(Object.assign(unl("cX"), { extra: 1 })));
+  await assertSucceeds(as("kid1").doc("techUnlocks/kid1_cX").set(unl("cX")));
+  await assertFails(as("kid1").doc("techUnlocks/kid1_cX").update({ nextCourseId: "c9" }));
+  await assertSucceeds(as("mum").collection("techUnlocks").where("studentId", "==", "kid1").get());
+  await assertFails(as("kid2").doc("techUnlocks/kid1_cX").get());
+  await assertSucceeds(as("kid1").doc("techLessonProgress/kid1_live").set({ watchedVideos: { 0: true } }, { merge: true }));
+});

@@ -74,19 +74,27 @@
     var gt = (l && l.gate) || { watch: true, quiz: true, work: true, pass: DEFAULT_PASS };
     var qs = (l && l.questions) || [], pass = Number(gt.pass);
     return {
-      watch: !!gt.watch && l.type !== 'test' && !!(l.video && l.video.url),
+      watch: !!gt.watch && l.type !== 'test' && videosOf(l).length > 0,
       quiz: !!gt.quiz && qs.length > 0,
       marked: qs.some(function (q) { return q.type !== 'open'; }),
       pass: isFinite(pass) && gt.pass !== '' && gt.pass != null ? Math.max(0, Math.min(100, Math.round(pass))) : DEFAULT_PASS,
       work: !!gt.work && !!l.task
     };
   }
+  /* A lesson can hold several videos (videos[]); old lessons have one (video). video always mirrors the first. */
+  function videosOf(l) {
+    var v = l && l.videos && l.videos.length ? l.videos : (l && l.video ? [l.video] : []);
+    return v.filter(function (x) { return x && T.safeUrl(x.url); });
+  }
   function handedIn(w) { return !!w && ((w.submitCount || 0) > 0 || ['Submitted', 'Graded', 'Corrections'].indexOf(w.status) > -1); }
   /* The steps to pass one lesson, each done or not, for one builder. */
   function gateSteps(l, p, w) {
     var gt = gateOf(l), steps = [];
     p = p || {};
-    if (gt.watch) steps.push({ k: 'watch', icon: 'fa-circle-play', label: 'Watch the video', done: !!p.watchedAt });
+    if (gt.watch) {
+      var nv = videosOf(l).length, seen = Object.keys(p.watchedVideos || {}).filter(function (k) { return p.watchedVideos[k] && Number(k) < nv; }).length;
+      steps.push({ k: 'watch', icon: 'fa-circle-play', label: nv > 1 ? 'Watch all ' + nv + ' videos' + (p.watchedAt ? '' : ' (' + seen + '/' + nv + ')') : 'Watch the video', done: !!p.watchedAt });
+    }
     if (gt.quiz) steps.push(gt.marked
       ? { k: 'quiz', icon: 'fa-circle-question', label: 'Score ' + gt.pass + '% or more in the quiz', done: p.bestPercent != null && p.bestPercent >= gt.pass }
       : { k: 'quiz', icon: 'fa-circle-question', label: 'Answer the quiz', done: !!p.lastAttemptAt || (p.attempts || 0) > 0 });
@@ -229,6 +237,31 @@
       '.tc-steps.passed{border-color:rgba(46,184,114,.35);background:rgba(46,184,114,.06)}.tc-steps .ok{font-weight:800;color:#1f8557}',
       '.tc-shake{animation:tcShake .4s}@keyframes tcShake{25%{transform:translateX(-4px)}50%{transform:translateX(4px)}75%{transform:translateX(-2px)}}',
       '.tc-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2100;max-width:min(92vw,420px);padding:.7rem 1rem;border-radius:12px;background:#263331;color:#fff;font-size:.86rem;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.25)}',
+      /* several videos: the strip under the player */
+      '.tc-vbar{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;width:min(100%,calc(60vh * 16 / 9));margin:-.4rem auto 1rem;padding:.6rem .8rem;background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px}',
+      '.tc-vbar .t{min-width:0;flex:1}.tc-vbar .k{display:block;font-size:.66rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--brand,#55BFB3)}.tc-vbar .t b{display:block;font-size:.9rem;color:var(--brand-deep,#245F5A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.tc-vchips{display:flex;gap:.3rem;flex-wrap:wrap}.tc-vchip{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--line,rgba(38,51,49,.18));background:#fff;font:inherit;font-size:.74rem;font-weight:800;color:var(--muted,#5A6E6A);cursor:pointer}',
+      '.tc-vchip.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}.tc-vchip.done:not(.on){background:#2EB872;border-color:#2EB872;color:#fff}',
+      '.tc-vbar .acts{display:flex;gap:.4rem;margin-left:auto}',
+      '.tc-pulse{animation:tcPulse 1.4s ease-in-out infinite}@keyframes tcPulse{50%{box-shadow:0 0 0 6px rgba(85,191,179,.28)}}',
+      '.tc-upnext{position:absolute;right:14px;bottom:14px;z-index:2;display:flex;align-items:center;gap:.7rem;max-width:calc(100% - 28px);padding:.7rem .8rem .7rem 1rem;border-radius:14px;background:rgba(15,26,20,.88);color:#fff;font-size:.84rem;box-shadow:0 10px 30px rgba(0,0,0,.35)}',
+      '.tc-upnext small{display:block;opacity:.75;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}',
+      /* the lesson video floating over the practice tool: drag it, resize it, close it */
+      '.tc-mini{position:fixed;z-index:700;width:340px;min-width:220px;max-width:calc(100vw - 16px);background:#0F1A14;border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column}',
+      '.tc-mini.big{width:min(720px,calc(100vw - 16px))}',
+      '.tc-mini-bar{display:flex;align-items:center;gap:.35rem;padding:.35rem .4rem .35rem .7rem;background:#1C2B26;color:#E6F2EF;cursor:grab;touch-action:none;user-select:none}',
+      '.tc-mini.dragging .tc-mini-bar{cursor:grabbing}',
+      '.tc-mini-bar .t{flex:1;min-width:0;font-size:.74rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tc-mini-bar .t i{color:#55BFB3;margin-right:.3rem}',
+      '.tc-mini-bar button{flex:none;width:28px;height:28px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#fff;cursor:pointer;font-size:.78rem}.tc-mini-bar button:hover{background:rgba(255,255,255,.2)}.tc-mini-bar button:disabled{opacity:.35;cursor:default}',
+      '.tc-mini-stage{position:relative;aspect-ratio:16/9;background:#000}.tc-mini-stage video,.tc-mini-stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}',
+      '.tc-mini-grip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.55) 60%,transparent 60%,transparent 70%,rgba(255,255,255,.55) 70%,rgba(255,255,255,.55) 80%,transparent 80%);z-index:2}',
+      '.tc-pop-vid{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .85rem;border-radius:11px;border:1.5px solid var(--line,rgba(38,51,49,.15));background:#fff;color:var(--brand-deep,#245F5A);font:inherit;font-size:.8rem;font-weight:800;cursor:pointer}',
+      '@media(max-width:640px){.tc-mini{width:min(280px,calc(100vw - 16px))}}',
+      /* the class is done: unlock the next one */
+      '.tc-claim{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;padding:.9rem 1.1rem;margin:0 0 1rem;border-radius:16px;background:linear-gradient(135deg,#FFF6D8,#E5F2EF);border:1px solid rgba(245,200,66,.55)}',
+      '.tc-claim .big{font-size:1.8rem;line-height:1}.tc-claim .t{flex:1;min-width:200px}.tc-claim b{display:block;color:var(--brand-deep,#245F5A);font-size:.98rem}.tc-claim small{color:var(--muted,#5A6E6A);font-weight:600;font-size:.8rem}',
+      '.tc-claim.float{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1500;width:min(560px,calc(100vw - 24px));margin:0;box-shadow:0 18px 50px rgba(0,0,0,.28)}',
+      '.tc-vrow{border:1px solid var(--line,rgba(38,51,49,.12));border-radius:12px;padding:.7rem;margin-bottom:.5rem;background:#fff}.tc-vrow-h{display:flex;gap:.6rem;align-items:center;margin-bottom:.45rem}.tc-vrow-h b{flex:none;font-size:.8rem;color:var(--brand-deep,#245F5A)}.tc-vrow-h input{flex:1;min-width:0}',
       /* the celebration */
       '.tc-cele{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:16px;background:rgba(15,26,20,.45);animation:tcFade .25s}',
       '.tc-cele canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}',
@@ -323,6 +356,10 @@
     document.body.appendChild(el);
     var stop = confetti(el.querySelector('canvas'));
     clap();
+    /* and a cheer, in the browser's own voice */
+    if (o.shout && g.speechSynthesis && g.SpeechSynthesisUtterance) {
+      try { var u = new g.SpeechSynthesisUtterance(o.shout); u.pitch = 1.6; u.rate = 1.05; u.volume = 1; g.speechSynthesis.cancel(); setTimeout(function () { g.speechSynthesis.speak(u); }, 350); } catch (e) { /* no voice is fine */ }
+    }
     function close() { stop(); el.remove(); document.removeEventListener('keydown', key); }
     function key(e) { if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', key);
@@ -483,7 +520,9 @@
     var CU = g.ClassroomUI.util, me = o.me, cls = o.course, topics = o.topics, item = o.item, isTest = item ? item.type === 'test' : o.type === 'test';
     var word = isTest ? 'practice test' : 'lesson';
     var ref = item ? LESSONS().doc(item.id) : LESSONS().doc();
-    var video = (item && item.video) ? Object.assign({}, item.video) : { url: '', path: '', name: '' };
+    var vids = ((item && item.videos && item.videos.length) ? item.videos : (item && item.video && item.video.url ? [item.video] : []))
+      .map(function (v) { return { url: v.url || '', path: v.path || '', name: v.name || '', title: v.title || '' }; });
+    if (!vids.length) vids.push({ url: '', path: '', name: '', title: '' });
     var files = ((item && item.files) || []).slice();
     var busy = 0, dirty = false;
     var key = {};
@@ -502,17 +541,15 @@
       '<div class="cr-row2"><div class="cr-field"><label for="tcT">Title (optional)</label><input type="text" id="tcT" maxlength="160" placeholder="Leave empty to call it ' + (isTest ? 'Practice test' : 'Lesson') + ' 1, 2, 3…" value="' + esc(item ? item.title : '') + '"></div>' +
       '<div class="cr-field"><label for="tcTop">Topic</label><select id="tcTop">' + topics.map(function (t) { return '<option value="' + esc(t.id) + '"' + (t.id === topicId0 ? ' selected' : '') + '>' + esc(t.title) + '</option>'; }).join('') + '</select></div></div>' +
       (isTest ? '' :
-        '<div class="cr-field"><label for="tcVid">Video</label><div class="cr-actions" style="flex-wrap:wrap"><input id="tcVid" type="url" maxlength="1200" placeholder="Paste an AWS, YouTube, Vimeo or Google Drive link" value="' + esc(video.url || '') + '" style="flex:1;min-width:220px">' +
-          '<button type="button" class="cr-btn sm" id="tcVidTest"><i class="fas fa-gauge-high"></i> Test link</button>' +
-          '<label class="cr-btn sm" style="margin:0;cursor:pointer"><i class="fas fa-upload"></i> Upload<input type="file" id="tcVidFile" accept="video/*" hidden></label></div>' +
-          '<div class="cr-note" id="tcVidNote" style="margin-top:.35rem">' + (video.path ? 'Uploaded: ' + esc(video.name || 'video') : 'Builders watch it here on the page. For Google Drive, share the video as “Anyone with the link”.') + '</div></div>' +
+        '<div class="cr-field"><label>Videos</label><div id="tcVids"></div><button type="button" class="cr-btn sm" id="tcVidAdd"><i class="fas fa-plus"></i> Add another video</button>' +
+          '<div class="cr-note" style="margin-top:.35rem">Paste an AWS, YouTube, Vimeo or Google Drive link, or upload. Builders watch them in this order, with a Next video button between them. For Google Drive, share the video as “Anyone with the link”.</div></div>' +
         '<div class="cr-field"><label>Notes</label><div id="tcNotes"></div></div>') +
       '<div class="cr-field"><label for="tcIns">Instructions (optional)</label><textarea id="tcIns" rows="2" maxlength="3000" placeholder="' + (isTest ? 'What builders should know before they start' : 'What to do after watching') + '">' + esc((item && item.instructions) || '') + '</textarea></div>' +
       (isTest ? '' :
         '<div class="cr-field"><label>PDFs and files (optional)</label><div id="tcFiles"></div><div class="cr-actions" style="margin-top:.4rem"><label class="cr-btn sm" style="margin:0;cursor:pointer"><i class="fas fa-upload"></i> Upload file<input type="file" id="tcFileIn" multiple hidden accept="application/pdf,image/*,audio/*,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip"></label></div><div class="cr-note" id="tcFileNote" style="margin-top:.35rem">PDFs open on the page. Files up to 50 MB.</div></div>') +
       '<div class="tc-section"><i class="fas fa-circle-question"></i> ' + (isTest ? 'Questions' : 'Quiz to test understanding (optional)') + '</div><div class="cr-note" style="margin-bottom:.5rem">Options are up to you. A written answer needs no options or answer: builders type it and you read it in Results. Multiple choice, true or false, and short answers with accepted answers are marked automatically. Builders can try again.</div><div id="tcQs"></div>' +
       '<div class="tc-section"><i class="fas fa-laptop-code"></i> Practice for this lesson</div>' +
-      '<div class="cr-note" style="margin-bottom:.5rem">Attach a practice tool to this ' + (isTest ? 'test' : 'lesson') + '. Under the video, builders get a Practise button that opens it full size with your requirements beside it: Paisley VS Code (autocomplete, Emmet, folders, picture and video uploads, full screen) or the writing pad. The pop-up carries the class, topic and lesson name. Add questions for a short quiz or test beside the work: builders answer them there and hand them in with the work, and you mark both with ink in Results > Class work hand-ins. Their family sees your feedback.</div>' +
+      '<div class="cr-note" style="margin-bottom:.5rem">Attach a practice tool to this ' + (isTest ? 'test' : 'lesson') + '. Under the videos, builders get a Practise button that opens it full size with your requirements beside it: Paisley VS Code (autocomplete, Emmet, folders, picture and video uploads, full screen) or the writing pad. The pop-up carries the class, topic and lesson name. Add questions for a short quiz or test beside the work: builders answer them there and hand them in with the work, and you mark both with ink in Results > Class work hand-ins. Their family sees your feedback.</div>' +
       '<div class="cr-row2"><div class="cr-field"><label for="tcTaskT">Practice tool</label><select id="tcTaskT">' + [['', 'None'], ['code', 'Paisley VS Code (HTML, CSS, JavaScript)'], ['writing', 'Writing pad']].map(function (p) { var cur = item && item.task && g.TechWork ? g.TechWork.kindOf(item.task) : ''; return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></div><div></div></div>' +
       '<div class="cr-field" id="tcTaskBox"><label for="tcTask">Requirements (what they should make)</label><textarea id="tcTask" rows="4" maxlength="3000" placeholder="e.g. Make a page with a heading, a picture of your favourite animal and a button that changes the colour.">' + esc((item && item.task && item.task.brief) || '') + '</textarea><div class="cr-note" style="margin-top:.3rem">Optional. Without it they practise what the lesson showed.</div></div>' +
       '<div class="cr-field" id="tcTaskQBox"><label>Questions to answer with the work (optional)</label><div class="cr-note" style="margin-bottom:.45rem">A short quiz or test that goes with the work, for example “Which tag makes a link?” or “Explain what your code does”. Builders answer beside the work and hand everything in together; you read and mark the answers with the work (they are not marked automatically).</div><div id="tcTaskQs"></div>' +
@@ -550,24 +587,46 @@
     if (!isTest) {
       paintFiles();
       $('#tcFiles').addEventListener('click', function (e) { var b = e.target.closest('[data-fdel]'); if (!b) return; var f = files.splice(Number(b.dataset.fdel), 1)[0]; dirty = true; if (f) dropStored(f.path); paintFiles(); });
-      $('#tcVid').addEventListener('input', function () {
-        var v = $('#tcVid').value.trim();
-        if (video.path && v !== video.url) { dropStored(video.path); video = { url: v, path: '', name: '' }; } else video.url = v;
-        $('#tcVidNote').textContent = v ? g.FastVideo.problem(v) : '';
-      });
-      $('#tcVidTest').onclick = function () {
-        var b = this; b.disabled = true; $('#tcVidNote').textContent = 'Testing the link…';
-        g.FastVideo.test($('#tcVid').value).then(function (r) { $('#tcVidNote').textContent = g.FastVideo.testMessage(r); b.disabled = false; });
+      var vNote = function (i, t) { var el = m.body.querySelector('[data-vnote="' + i + '"]'); if (el) el.textContent = t || ''; };
+      var readVids = function () { [].forEach.call(m.body.querySelectorAll('[data-vi]'), function (row) { var i = Number(row.dataset.vi), v = vids[i]; if (!v) return; v.title = row.querySelector('[data-vf="title"]').value; var u = row.querySelector('[data-vf="url"]').value.trim(); if (v.path && u !== v.url) { dropStored(v.path); v.path = ''; v.name = ''; } v.url = u; }); };
+      var paintVids = function () {
+        $('#tcVids').innerHTML = vids.map(function (v, i) {
+          return '<div class="tc-vrow" data-vi="' + i + '"><div class="tc-vrow-h"><b>Video ' + (i + 1) + '</b><input type="text" data-vf="title" maxlength="120" placeholder="Title (optional), e.g. Setting up" aria-label="Video ' + (i + 1) + ' title" value="' + esc(v.title) + '">' +
+            (i > 0 ? '<button type="button" class="cr-btn sm" data-vmove="' + i + '" title="Move earlier" aria-label="Move video ' + (i + 1) + ' earlier"><i class="fas fa-arrow-up"></i></button>' : '') +
+            (vids.length > 1 ? '<button type="button" class="cr-btn sm danger" data-vdel="' + i + '" title="Remove" aria-label="Remove video ' + (i + 1) + '"><i class="fas fa-xmark"></i></button>' : '') + '</div>' +
+            '<div class="cr-actions" style="flex-wrap:wrap"><input type="url" data-vf="url" maxlength="1200" placeholder="https://…" aria-label="Video ' + (i + 1) + ' link" value="' + esc(v.url) + '" style="flex:1;min-width:220px">' +
+            '<button type="button" class="cr-btn sm" data-vtest="' + i + '"><i class="fas fa-gauge-high"></i> Test link</button>' +
+            '<label class="cr-btn sm" style="margin:0;cursor:pointer"><i class="fas fa-upload"></i> Upload<input type="file" data-vup="' + i + '" accept="video/*" hidden></label></div>' +
+            '<div class="cr-note" data-vnote="' + i + '" style="margin-top:.3rem">' + (v.path ? 'Uploaded: ' + esc(v.name || 'video') : '') + '</div></div>';
+        }).join('');
+        $('#tcVidAdd').style.display = vids.length >= 10 ? 'none' : '';
       };
-      $('#tcVidFile').addEventListener('change', function (e) {
-        var f = e.target.files[0], note = $('#tcVidNote'); if (!f) return;
-        if (f.size >= 500 * 1048576) { note.textContent = 'Too large: videos up to 500 MB. Use an AWS link for longer ones.'; return; }
-        busy++; note.textContent = 'Uploading 0%…';
-        uploadFile(ref.id, f, function (p) { note.textContent = 'Uploading ' + p + '%…'; }).then(function (r) {
-          if (video.path) dropStored(video.path);
-          video = { url: r.url, path: r.path, name: r.name }; $('#tcVid').value = r.url; dirty = true;
-          note.textContent = 'Uploaded ✓ ' + r.name;
-        }).catch(function (er) { note.textContent = 'Upload failed: ' + T.errMsg(er); }).then(function () { busy--; });
+      paintVids();
+      $('#tcVidAdd').onclick = function () { readVids(); vids.push({ url: '', path: '', name: '', title: '' }); dirty = true; paintVids(); var ins = m.body.querySelectorAll('[data-vf="url"]'); ins[ins.length - 1].focus(); };
+      $('#tcVids').addEventListener('input', function (e) {
+        if (e.target.dataset.vf !== 'url') return;
+        var i = Number(e.target.closest('[data-vi]').dataset.vi), u = e.target.value.trim();
+        vNote(i, u ? g.FastVideo.problem(u) : '');
+      });
+      $('#tcVids').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-vdel],[data-vmove],[data-vtest]'); if (!b) return;
+        readVids();
+        if (b.dataset.vdel) { var gone = vids.splice(Number(b.dataset.vdel), 1)[0]; if (gone && gone.path) dropStored(gone.path); dirty = true; paintVids(); }
+        else if (b.dataset.vmove) { var k = Number(b.dataset.vmove), x = vids[k]; vids[k] = vids[k - 1]; vids[k - 1] = x; dirty = true; paintVids(); }
+        else { var ti = Number(b.dataset.vtest); b.disabled = true; vNote(ti, 'Testing the link…'); g.FastVideo.test(vids[ti].url).then(function (r) { vNote(ti, g.FastVideo.testMessage(r)); b.disabled = false; }); }
+      });
+      $('#tcVids').addEventListener('change', function (e) {
+        if (e.target.dataset.vup == null) return;
+        var i = Number(e.target.dataset.vup), fl = e.target.files[0]; if (!fl) return;
+        if (fl.size >= 500 * 1048576) { vNote(i, 'Too large: videos up to 500 MB. Use an AWS link for longer ones.'); return; }
+        readVids(); busy++; vNote(i, 'Uploading 0%…');
+        uploadFile(ref.id, fl, function (p) { vNote(i, 'Uploading ' + p + '%…'); }).then(function (r) {
+          var v = vids[i]; if (!v) { dropStored(r.path); return; }
+          if (v.path) dropStored(v.path);
+          v.url = r.url; v.path = r.path; v.name = r.name; dirty = true;
+          var inp = m.body.querySelector('[data-vi="' + i + '"] [data-vf="url"]'); if (inp) inp.value = r.url;
+          vNote(i, 'Uploaded ✓ ' + r.name);
+        }).catch(function (er) { vNote(i, 'Upload failed: ' + T.errMsg(er)); }).then(function () { busy--; });
       });
       $('#tcFileIn').addEventListener('change', function (e) {
         var note = $('#tcFileNote');
@@ -589,16 +648,24 @@
       err('');
       if (busy) return err('Please wait for the upload to finish.');
       var title = $('#tcT').value.trim();
-      var videoUrl = isTest ? '' : T.safeUrl($('#tcVid').value.trim());
-      if (!isTest && $('#tcVid').value.trim() && !videoUrl) return err('The video link must start with https://');
-      if (videoUrl && !video.path) { var bad = g.FastVideo.problem(videoUrl); if (bad) return err(bad); }
+      var videos = [];
+      if (!isTest) {
+        readVids();
+        for (var vi = 0; vi < vids.length; vi++) {
+          var vv = vids[vi]; if (!vv.url) continue;
+          var safe = T.safeUrl(vv.url);
+          if (!safe) return err('Video ' + (vi + 1) + ': the link must start with https://');
+          if (!vv.path) { var bad = g.FastVideo.problem(safe); if (bad) return err('Video ' + (vi + 1) + ': ' + bad); }
+          videos.push({ url: safe, path: vv.path || '', name: vv.name || '', title: String(vv.title || '').trim().slice(0, 120) });
+        }
+      }
       var built;
       try { built = qs.collect(); } catch (e) { return err(e.message); }
       var notesHtml = notes ? notes.html() : '';
       if (status === 'published') {
         if (isTest && !built.questions.length && !$('#tcIns').value.trim() && !$('#tcTaskT').value) return err('Add instructions, a practice tool or a question before posting.');
         var plainNotes = notesHtml.replace(/<[^>]+>/g, '').trim();
-        if (!isTest && !videoUrl && !plainNotes && !files.length && !built.questions.length && !$('#tcTaskT').value) return err('Add a video, notes, a file, a practice tool or a quiz before posting.');
+        if (!isTest && !videos.length && !plainNotes && !files.length && !built.questions.length && !$('#tcTaskT').value) return err('Add a video, notes, a file, a practice tool or a quiz before posting.');
       }
       var topicId = $('#tcTop').value, topic = topics.filter(function (t) { return t.id === topicId; })[0] || {};
       var brief = $('#tcTask').value.trim(), taskKind = $('#tcTaskT').value;
@@ -609,7 +676,7 @@
       var d = {
         type: isTest ? 'test' : 'lesson', title: title.slice(0, 160), courseId: cls.id, courseName: cls.name, topicId: topicId, topicTitle: topic.title || '',
         track: cls.track, discipline: cls.discipline, status: status,
-        video: videoUrl ? { url: videoUrl, path: video.path || '', name: video.name || '' } : null,
+        videos: videos, video: videos[0] || null,
         notes: notesHtml, instructions: $('#tcIns').value.trim().slice(0, 3000), files: files.slice(0, 20),
         questions: built.questions, questionCount: built.questions.length,
         task: taskKind ? { brief: brief.slice(0, 3000), kind: taskKind, category: taskKind === 'writing' ? 'WRITING' : 'CODE', questions: taskQuestions } : null,
@@ -680,7 +747,7 @@
     function statusBadge(l) { return '<span class="cr-badge ' + (l.status === 'published' ? 'published' : 'draft') + '">' + (l.status === 'published' ? 'Posted' : 'Draft') + '</span>'; }
     function itemMeta(l) {
       var bits = [];
-      if (l.video) bits.push('Video');
+      var nv = videosOf(l).length; if (nv) bits.push(nv === 1 ? 'Video' : nv + ' videos');
       if (l.notes) bits.push('Notes');
       if ((l.files || []).length) bits.push(l.files.length + ' file' + (l.files.length === 1 ? '' : 's'));
       if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
@@ -697,13 +764,13 @@
         '<button type="button" class="cr-btn" data-a="class-down" data-id="' + esc(c.id) + '"' + (lvIdx < 0 || lvIdx >= lvList.length - 1 ? ' disabled' : '') + ' title="Move later in the order"><i class="fas fa-arrow-right"></i> Move later</button>' +
         (isAdmin ? '<button type="button" class="cr-btn" data-a="open-for"><i class="fas fa-lock-open"></i> Open for a builder</button>' : '') +
         (canC ? '<button type="button" class="cr-btn" data-a="rename"><i class="fas fa-gear"></i> Settings</button><button type="button" class="cr-btn danger" data-a="del-class" aria-label="Delete class" title="Delete class"><i class="fas fa-trash"></i></button>' : '') +
+        (S.items.some(function (x) { return x.status !== 'published'; }) ? '<button type="button" class="cr-btn" data-a="post-class"><i class="fas fa-paper-plane"></i> Post the whole class</button>' : '') +
         '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add topic</button></div></div>';
       if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">No topics yet. Add a topic (for example “Flow”), then add lessons inside it.</div></div>';
       S.topics.forEach(function (t, ti) {
         var ls = S.items.filter(function (l) { return l.topicId === t.id; }).sort(byOrder), open = !S.collapsed[t.id];
         h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</span><div class="cr-actions">' +
           '<button type="button" class="cr-btn sm primary" data-a="add-lesson" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Lesson</button>' +
-          '<button type="button" class="cr-btn sm primary" data-a="add-test" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Practice test</button>' +
           '<button type="button" class="cr-btn sm" title="Move topic up" aria-label="Move topic up" data-a="topic-up" data-id="' + esc(t.id) + '"' + (ti === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>' +
           '<button type="button" class="cr-btn sm" title="Move topic down" aria-label="Move topic down" data-a="topic-down" data-id="' + esc(t.id) + '"' + (ti === S.topics.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>' +
           (canEdit(t) ? '<button type="button" class="cr-btn sm" title="Edit topic" aria-label="Edit topic" data-a="edit-topic" data-id="' + esc(t.id) + '"><i class="fas fa-pen"></i></button><button type="button" class="cr-btn sm danger" title="Delete topic" aria-label="Delete topic" data-a="del-topic" data-id="' + esc(t.id) + '"><i class="fas fa-trash"></i></button>' : '') +
@@ -778,7 +845,24 @@
         bt.commit().then(function () { m.close(); if (track !== c.track) { S.track = track; note('Moved to ' + trackName(track) + '.'); } }).catch(function (e) { b.disabled = false; err.textContent = T.errMsg(e); });
       };
     }
-    /* Admin: open this class (all of it, or up to one level) for one builder, at any level. */
+    /* Every draft lesson of the class goes out at once. Builders and families get one bell and one email for the lot. */
+    function postClass() {
+      var drafts = inOrder(S.topics, S.items.filter(function (x) { return x.status !== 'published'; }));
+      var mine = drafts.filter(canEdit), empty = mine.filter(function (x) { return !videosOf(x).length && !x.notes && !(x.files || []).length && !x.questionCount && !x.task && !x.instructions; });
+      if (!drafts.length) { note('Everything in this class is already posted.'); return; }
+      if (!mine.length) { note('These drafts were made by another coach, so only they or an admin can post them.', true); return; }
+      if (empty.length) { note('Some drafts are still empty (no video, notes, file, quiz or practice). Fill them in or delete them first.', true); return; }
+      var skipped = drafts.length - mine.length;
+      if (!confirm('Post ' + mine.length + ' lesson' + (mine.length === 1 ? '' : 's') + ' in “' + S.course.name + '” to every ' + trackName(S.course.track) + ' builder and their parents? They get one bell and one email for the whole class.' + (skipped ? ' (' + skipped + ' made by another coach stay as drafts.)' : ''))) return;
+      var bt = db.batch(), now = FV().serverTimestamp(), batchId = Date.now().toString(36) + shortId();
+      mine.forEach(function (x) {
+        var up = { status: 'published', updatedAt: now, classPost: batchId, classPostCount: mine.length };
+        if (!x.publishedAt) up.publishedAt = now;
+        bt.update(LESSONS().doc(x.id), up);
+      });
+      bt.commit().then(function () { note('Posted ' + mine.length + ' lesson' + (mine.length === 1 ? '' : 's') + '. Builders on this level and their parents are being told once.'); }).catch(fail);
+    }
+    /* Admin: open this class for one builder, at any level. */
     function openFor() {
       var c = S.course, m = CU.openModal({ title: 'Open “' + c.name + '” for a builder', wide: true });
       var builders = (o.students || []).filter(function (s) { return s.status !== 'Rejected'; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
@@ -848,7 +932,7 @@
       var bt = db.batch(), ref = LESSONS().doc(l.id);
       bt.delete(ref); bt.delete(ref.collection('private').doc('key'));
       return bt.commit().then(function () {
-        if (l.video && l.video.path) dropStored(l.video.path);
+        videosOf(l).concat(l.video ? [l.video] : []).forEach(function (v) { if (v.path) dropStored(v.path); });
         (l.files || []).forEach(function (f) { dropStored(f.path); });
       });
     }
@@ -871,6 +955,7 @@
       else if (a === 'back') closeCourse();
       else if (a === 'rename') openRename();
       else if (a === 'open-for') openFor();
+      else if (a === 'post-class') postClass();
       else if (a === 'class-up' || a === 'class-down') swap(COURSES(), ladderOf(S.track), id, a === 'class-up' ? -1 : 1);
       else if (a === 'del-class') {
         if (S.topics.length) { note('Remove this class’s topics first.', true); return; }
@@ -1027,7 +1112,7 @@
     host.classList.add('tc-learn');
     var me = o.me, student = o.student, isBuilder = me.role === 'student', track = T.trackOf(student.skillLevel), first = T.firstName(student.name);
     var S = { screen: 'home', courses: null, course: null, topics: [], items: [], progress: {}, unread: [], attempts: null, lesson: null,
-      works: {}, access: {}, extra: {}, lessons: null, passes: {}, progLoaded: false, workLoaded: false, seen: null, seenLessons: null, ready: [] };
+      works: {}, access: {}, extra: {}, lessons: null, passes: {}, unlocks: {}, progLoaded: false, workLoaded: false, seenLessons: null, ready: [], vi: 0, vw: {}, poked: {}, later: {} };
     var unsubs = [], courseUnsubs = [], dead = false, tracks = T.tracksFor(student.skillLevel);
     var fail = function (e) { console.warn('tech classes:', e); };
     var query = function (q, fn, onErr) { return q.onSnapshot(function (s) { if (!dead) fn(s); }, function (e) { fail(e); if (onErr && !dead) onErr(e); }); };
@@ -1035,6 +1120,7 @@
     /* Something changed that can open or close a padlock. */
     function changed() {
       if (S.screen !== 'lesson') paint(); else refreshLessonBits();
+      claimFloat();
       if (ready()) { var q = S.ready; S.ready = []; q.forEach(function (fn) { fn(); }); }
       afterData();
     }
@@ -1056,6 +1142,11 @@
     /* Classes the server recorded as passed stay passed when new lessons are added to them. */
     unsubs.push(query(db.collection('techCourseProgress').where('studentId', '==', student.id), function (s) {
       S.passes = {}; s.docs.forEach(function (d) { if (d.data().passedAt) S.passes[d.data().courseId] = d.data(); });
+      changed();
+    }));
+    /* Unlock presses: the next class opens when the builder presses Unlock on a passed class. */
+    unsubs.push(query(db.collection('techUnlocks').where('studentId', '==', student.id), function (s) {
+      S.unlocks = {}; s.docs.forEach(function (d) { S.unlocks[d.data().courseId] = d.data(); });
       changed();
     }));
     /* Classes an admin opened for this builder, at any level. */
@@ -1082,11 +1173,12 @@
     function courseCount(c) { var ls = lessonsOf(c.id); return { done: ls.filter(passedLesson).length, all: ls.length }; }
     /* A class is passed when it has lessons and every one is finished (or the server already passed it). */
     function coursePassed(c) { if (S.passes[c.id]) return true; var ls = lessonsOf(c.id); return ls.length > 0 && ls.every(passedLesson); }
-    /* Level 1 is open; each class after it opens when the one before is passed, or an admin opened it. */
+    /* Level 1 is open; each class after it opens when the builder unlocks it from the class before (passed,
+       then Unlock pressed), or an admin opened it. */
     function ladder() {
       var list = S.courses || [], out = {};
       list.forEach(function (c, i) {
-        out[c.id] = { n: i + 1, passed: coursePassed(c), open: i === 0 || !!accessFor(c.id) || out[list[i - 1].id].passed, prev: list[i - 1] || null, next: list[i + 1] || null };
+        out[c.id] = { n: i + 1, passed: coursePassed(c), open: i === 0 || !!accessFor(c.id) || !!S.unlocks[list[i - 1].id], prev: list[i - 1] || null, next: list[i + 1] || null };
       });
       extraCourses().forEach(function (c) { out[c.id] = { n: 0, passed: coursePassed(c), open: true, prev: null, next: null }; });
       return out;
@@ -1095,35 +1187,56 @@
       var L = ladder()[c.id];
       toast(L && L.prev ? 'Level ' + L.n + ', ' + c.name + ', is locked. ' + (isBuilder ? 'Finish' : first + ' needs to finish') + ' every lesson in Level ' + (L.n - 1) + ', ' + L.prev.name + ', to unlock it.' : 'This class is locked for now.');
     }
-    /* A class passed while the builder is here: confetti, applause, and the way on. A lesson gets a small cheer. */
+    /* A class ready to unlock its next one: 'ready' (the server confirmed the pass), 'checking' or ''. */
+    function claimState(c) {
+      var L = ladder()[c.id];
+      if (!isBuilder || !L || !L.passed || !L.next || S.unlocks[c.id]) return '';
+      if (S.passes[c.id]) return 'ready';
+      /* Finished here but not recorded yet (or finished before levels existed): ask the server to look. */
+      if (!S.poked[c.id]) { S.poked[c.id] = 1; var any = lessonsOf(c.id)[0]; if (any) touch(any, {}); }
+      return 'checking';
+    }
+    function claimable() { return (S.courses || []).filter(function (c) { return claimState(c); }); }
+    function claimHtml(c, float) {
+      var L = ladder()[c.id], st = claimState(c); if (!st) return '';
+      return '<div class="tc-claim' + (float ? ' float' : '') + '" role="status"><span class="big" aria-hidden="true">🎉</span><div class="t"><b>You finished every lesson in ' + esc(c.name) + '!</b><small>Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is waiting for you.</small></div>' +
+        (st === 'ready' ? '<button type="button" class="tc-btn gold tc-pulse" data-tc="unlock" data-id="' + esc(c.id) + '"><i class="fas fa-lock-open"></i> Unlock Level ' + (L.n + 1) + '</button>' : '<span class="tc-pill"><i class="fas fa-spinner fa-spin"></i> Checking your work…</span>') +
+        (float ? '<button type="button" class="tc-btn light sm" data-tc="later" data-id="' + esc(c.id) + '">Later</button>' : '') + '</div>';
+    }
+    /* Over the practice pop-up the banner floats, so the builder sees it the moment the work goes in. */
+    var floatEl = null;
+    function claimFloat() {
+      var c = S.pop ? claimable().filter(function (x) { return !S.later[x.id]; })[0] : null;
+      if (!c) { if (floatEl) { floatEl.remove(); floatEl = null; } return; }
+      if (!floatEl) { floatEl = document.createElement('div'); document.body.appendChild(floatEl); floatEl.addEventListener('click', onClick); }
+      floatEl.innerHTML = claimHtml(c, true);
+    }
+    function unlock(cid, btn) {
+      var c = (S.courses || []).filter(function (x) { return x.id === cid; })[0], L = c && ladder()[cid];
+      if (!c || !L || !L.next) return;
+      if (btn) btn.disabled = true;
+      db.collection('techUnlocks').doc(student.id + '_' + cid).set({ studentId: student.id, courseId: cid, nextCourseId: L.next.id, at: FV().serverTimestamp() }).then(function () {
+        S.unlocks[cid] = { courseId: cid };
+        var next = L.next;
+        claimFloat(); if (S.screen !== 'lesson') paint(); else refreshLessonBits();
+        T.logActivity(me, 'level_unlocked', 'Unlocked Level ' + (L.n + 1) + ': ' + next.name, { origin: 'class' });
+        celebrate({ emoji: '🎉', badge: 'Level ' + (L.n + 1) + ' unlocked', title: 'Hooray! You passed Level ' + L.n + ': ' + c.name + '!',
+          line: 'Level ' + (L.n + 1) + ', ' + next.name + ', is open now, and your family has been told. Keep going!',
+          shout: 'Hooray! Well done ' + first + '! Level ' + (L.n + 1) + ' unlocked!',
+          go: ['Start ' + next.name, function () { closePractice(); openCourse(next); }], stay: 'Stay here' });
+      }).catch(function (e) { if (btn) btn.disabled = false; toast('Could not unlock it yet: ' + T.errMsg(e)); });
+    }
+    /* A finished lesson gets a small note while the builder works; nothing fires on its own when pages open. */
     function afterData() {
       if (!isBuilder || !ready()) return;
-      var lad = ladder(), list = S.courses || [];
-      if (!S.seen) {
-        S.seen = {}; S.seenLessons = {};
-        list.forEach(function (c) { if (lad[c.id].passed) S.seen[c.id] = 1; });
-        (S.lessons || []).forEach(function (l) { if (passedLesson(l)) S.seenLessons[l.id] = 1; });
-        return;
-      }
-      var freshL = (S.lessons || []).filter(function (l) { return passedLesson(l) && !S.seenLessons[l.id]; });
-      freshL.forEach(function (l) { S.seenLessons[l.id] = 1; });
-      var fresh = list.filter(function (c) { return lad[c.id].passed && !S.seen[c.id]; });
-      fresh.forEach(function (c) { S.seen[c.id] = 1; });
-      if (fresh.length) {
-        var c = fresh[fresh.length - 1], L = lad[c.id], next = L.next;
-        celebrate(next ? {
-          emoji: '🎉', badge: 'Level ' + (L.n + 1) + ' unlocked', title: 'You passed Level ' + L.n + ': ' + c.name + '!',
-          line: 'Brilliant work! Level ' + (L.n + 1) + ', ' + next.name + ', is open now, and your family has been told. Keep going!',
-          go: ['Continue to ' + next.name, function () { closePractice(); openCourse(next); }], stay: 'Stay here'
-        } : {
-          emoji: '🏆', badge: 'Every level passed', title: 'You passed Level ' + L.n + ': ' + c.name + '!',
-          line: 'That was the last level for now, and your family has been told. Amazing work!',
-          go: ['Back to my classes', goHome], stay: 'Stay here'
-        });
-      } else if (freshL.length) {
-        var l = freshL[freshL.length - 1], cc = list.filter(function (x) { return x.id === l.courseId; })[0];
-        if (cc) { var k = courseCount(cc), left = k.all - k.done; toast('Lesson finished ✓ ' + k.done + ' of ' + k.all + ' done in ' + cc.name + '.' + (left && lad[cc.id].next ? ' Finish ' + (left === 1 ? 'the last one' : 'the other ' + left) + ' to unlock ' + lad[cc.id].next.name + '.' : '')); }
-      }
+      if (!S.seenLessons) { S.seenLessons = {}; (S.lessons || []).forEach(function (l) { if (passedLesson(l)) S.seenLessons[l.id] = 1; }); return; }
+      var fresh = (S.lessons || []).filter(function (l) { return passedLesson(l) && !S.seenLessons[l.id]; });
+      fresh.forEach(function (l) { S.seenLessons[l.id] = 1; });
+      if (!fresh.length || S.screen !== 'lesson') return;
+      var l = fresh[fresh.length - 1], cc = (S.courses || []).filter(function (x) { return x.id === l.courseId; })[0];
+      if (!cc) return;
+      var k = courseCount(cc), left = k.all - k.done;
+      if (left) toast('Lesson finished ✓ ' + k.done + ' of ' + k.all + ' done in ' + cc.name + '. ' + (left === 1 ? 'One more' : left + ' more') + ' to finish the class.');
     }
     unsubs.push(query(db.collection('techNotifications').where('recipientId', '==', me.uid).where('read', '==', false).limit(300), function (s) {
       S.unread = docs(s).filter(function (n) { return n.lessonId && (!n.studentId || n.studentId === student.id); });
@@ -1190,6 +1303,7 @@
       var intro = isBuilder ? 'Your classes at ' + trackName(track) + ' level, in order. Finish every lesson in a class to unlock the next one.' : first + '’s classes at ' + trackName(track) + ' level, in order. Each one unlocks when ' + first + ' finishes the one before. You can watch and read everything open; only ' + first + ' can take the quizzes.';
       var h = '<div class="tc-hbar"><h3>' + (isBuilder ? 'My classes' : esc(first) + '’s classes') + '</h3><div class="sub">' + levelBadge(track) + '<span>' + esc(intro) + '</span></div></div>';
       var list = allCourses();
+      h += claimable().map(function (c) { return claimHtml(c); }).join('');
       h += list.length ? '<div class="tc-grid">' + list.map(function (c) {
         var L = lad[c.id], n = unreadFor('courseId', c.id), k = courseCount(c);
         var ic = '<span class="ic"><i class="fas ' + (L.open ? (ICON[c.discipline] || 'fa-chalkboard') : 'fa-lock') + '"></i></span>';
@@ -1220,8 +1334,9 @@
     /* "To finish this lesson: watch, quiz, hand in", ticked as they go, and what the class still needs. */
     function stepsHtml(l) {
       var st = lessonState(l), c = S.course, L = ladder()[c.id] || {}, k = courseCount(c), left = k.all - k.done;
-      var after = L.next ? (L.passed ? '<span class="tc-step done"><i class="fas fa-lock-open"></i> Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is open</span>'
+      var after = L.next ? (S.unlocks[c.id] ? '<span class="tc-step done"><i class="fas fa-lock-open"></i> Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is open</span>'
         : '<span class="tc-step"><i class="fas fa-lock" aria-hidden="true"></i> ' + left + ' lesson' + (left === 1 ? '' : 's') + ' left to unlock ' + esc(L.next.name) + '</span>') : '';
+      if (st.passed && claimState(c)) return '<div id="tcSteps">' + claimHtml(c) + '</div>';
       if (st.passed) return '<div class="tc-steps passed" id="tcSteps"><span class="ok"><i class="fas fa-circle-check"></i> Lesson finished</span>' + after + '</div>';
       return '<div class="tc-steps" id="tcSteps"><b>To finish this lesson</b>' + st.steps.map(function (s) {
         return '<span class="tc-step' + (s.done ? ' done' : '') + '"><i class="fas ' + (s.done ? 'fa-circle-check' : 'fa-circle') + '" aria-hidden="true"></i>' + esc(s.label) + (s.done ? '<span class="tc-sr"> (done)</span>' : '') + '</span>';
@@ -1247,7 +1362,8 @@
       var h = crumb(' <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(c.name) + '</span>') +
         '<div class="tc-hbar"><h3>' + (L.n ? '<span style="color:var(--brand,#55BFB3)">Level ' + L.n + ' · </span>' : '') + esc(c.name) + '</h3><div class="sub">' + levelBadge(c.track) + '<span>' + esc(T.disciplineLabel(c.discipline)) + '</span>' +
         progHtml(k, 'lessons finished') + (L.passed ? '<span class="tc-pill good"><i class="fas fa-check"></i> Passed</span>' : '') + '</div></div>';
-      if (L.next && ready()) h += L.passed
+      if (L.next && ready() && claimState(c)) h += claimHtml(c);
+      else if (L.next && ready()) h += S.unlocks[c.id]
         ? '<div class="tc-steps passed"><span class="ok"><i class="fas fa-lock-open"></i> Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is open</span><button type="button" class="tc-btn sm" data-tc="course" data-id="' + esc(L.next.id) + '">Go to ' + esc(L.next.name) + ' <i class="fas fa-arrow-right"></i></button></div>'
         : '<div class="tc-steps"><span class="tc-step"><i class="fas fa-lock" aria-hidden="true"></i> ' + (isBuilder ? 'Finish' : esc(first) + ' needs to finish') + ' every lesson here to unlock Level ' + (L.n + 1) + ', ' + esc(L.next.name) + (k.all ? ' (' + left + ' to go)' : '') + '.</span></div>';
       var shown = 0;
@@ -1257,7 +1373,7 @@
         shown++;
         var names = labelsFor(ls);
         h += '<div class="tc-topic"><div class="tc-topic-head">' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</div>' + ls.map(function (l) {
-          var bits = []; if (l.type === 'test') bits.push('Practice test'); if (l.video) bits.push('Video'); if (l.notes) bits.push('Notes'); if (l.task) bits.push(g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Write it' : 'Code it'); if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
+          var bits = []; if (l.type === 'test') bits.push('Practice test'); var nv = videosOf(l).length; if (nv) bits.push(nv === 1 ? 'Video' : nv + ' videos'); if (l.notes) bits.push('Notes'); if (l.task) bits.push(g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Write it' : 'Code it'); if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
           var fin = passedLesson(l);
           return '<button type="button" class="tc-row' + (fin ? ' passed' : '') + '" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="n">' + (fin ? '<i class="fas fa-circle-check" title="Finished"></i>' : (nums[l.id] || '')) + '</span><span class="t"><b>' + esc(names[l.id]) + '</b>' + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span>' + itemState(l) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
         }).join('') + '</div>';
@@ -1265,11 +1381,59 @@
       if (!shown) h += '<div class="tc-empty">Nothing has been posted in this class yet.</div>';
       host.innerHTML = h;
     }
-    function stageHtml(l) {
-      var url = l.video && T.safeUrl(l.video.url); if (!url) return '';
-      var inner = g.FastVideo.embed(url) ? g.FastVideo.embedHtml(url, { title: l.title }) :
+    /* The player for the lesson's videos: one at a time, with a strip to move between them. */
+    function stageHtml(l) { return videosOf(l).length ? '<section id="tcVids" aria-label="Videos">' + vidStage(l) + '</section><div id="tcVBar">' + vidBar(l) + '</div>' : ''; }
+    function vidStage(l) {
+      var vs = videosOf(l), i = Math.min(S.vi, vs.length - 1), url = T.safeUrl(vs[i].url), title = vs[i].title || l.title || 'Video';
+      var inner = g.FastVideo.embed(url) ? g.FastVideo.embedHtml(url, { title: title }) :
         g.FastVideo.videoHtml(url, { attrs: 'controls playsinline controlsList="nodownload noremoteplayback" disablePictureInPicture data-tc-video' });
       return '<div class="tc-stage" data-tc-stage>' + inner + '</div>';
+    }
+    function watchedSet(l) {
+      var p = S.progress[l.id] || {}, out = Object.assign({}, p.watchedVideos || {}, S.vw[l.id] || {});
+      if (p.watchedAt) videosOf(l).forEach(function (v, n) { out[n] = true; });
+      return out;
+    }
+    function vidBar(l) {
+      var vs = videosOf(l); if (vs.length < 2) return '';
+      var i = Math.min(S.vi, vs.length - 1), seen = watchedSet(l), v = vs[i];
+      return '<div class="tc-vbar"><div class="t"><span class="k">Video ' + (i + 1) + ' of ' + vs.length + '</span><b>' + esc(v.title || 'Video ' + (i + 1)) + '</b></div>' +
+        '<div class="tc-vchips" role="group" aria-label="Videos">' + vs.map(function (x, n) {
+          return '<button type="button" class="tc-vchip' + (n === i ? ' on' : '') + (seen[n] ? ' done' : '') + '" data-tc="vid" data-n="' + n + '" title="' + esc(x.title || 'Video ' + (n + 1)) + '" aria-label="Video ' + (n + 1) + (seen[n] ? ', watched' : '') + '"' + (n === i ? ' aria-current="true"' : '') + '>' + (seen[n] && n !== i ? '<i class="fas fa-check"></i>' : n + 1) + '</button>';
+        }).join('') + '</div><div class="acts">' +
+        (i > 0 ? '<button type="button" class="tc-btn light sm" data-tc="vid" data-n="' + (i - 1) + '"><i class="fas fa-arrow-left"></i> Previous</button>' : '') +
+        (i < vs.length - 1 ? '<button type="button" class="tc-btn sm' + (seen[i] ? ' tc-pulse' : '') + '" data-tc="vid" data-n="' + (i + 1) + '">Next video <i class="fas fa-arrow-right"></i></button>' : '') +
+        '</div></div>';
+    }
+    function showVideo(n) {
+      var l = S.lesson; if (!l) return;
+      var box = host.querySelector('#tcVids'); if (!box) return;
+      box.querySelectorAll('video').forEach(function (v) { try { g.FastVideo.release(v); } catch (e) { } });
+      S.vi = n; box.innerHTML = vidStage(l);
+      var bar = host.querySelector('#tcVBar'); if (bar) bar.innerHTML = vidBar(l);
+      var top = box.getBoundingClientRect().top; if (top < 0 || top > g.innerHeight * 0.6) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      var vid = box.querySelector('video'); if (vid) { var pl = vid.play && vid.play(); if (pl && pl.catch) pl.catch(function () { }); }
+    }
+    /* One video watched: the lesson's watchedAt comes when every one of them is. */
+    function markWatched(l, n) {
+      if (!isBuilder) return;
+      var vs = videosOf(l); if (!vs.length) return;
+      (S.vw[l.id] = S.vw[l.id] || {})[n] = true;
+      var seen = watchedSet(l), all = vs.every(function (v, k) { return seen[k]; }), p = S.progress[l.id] || {};
+      var map = {}; map[n] = true;
+      var up = { watchedVideos: map };
+      if (all && !p.watchedAt) up.watchedAt = FV().serverTimestamp();
+      touch(l, up);
+      T.logActivity(me, 'video_watched', 'Watched ' + (vs.length > 1 ? 'video ' + (n + 1) + ' of ' : '') + '“' + nameOf(l) + '”', { origin: 'class' });
+      var bar = host.querySelector('#tcVBar'); if (bar) bar.innerHTML = vidBar(l);
+    }
+    function upNext(l) {
+      var vs = videosOf(l), i = S.vi, stage = host.querySelector('#tcVids .tc-stage');
+      if (!stage || i >= vs.length - 1 || stage.querySelector('.tc-upnext')) return;
+      var nx = vs[i + 1];
+      var el = document.createElement('div'); el.className = 'tc-upnext';
+      el.innerHTML = '<div><small>Up next</small><b>' + esc(nx.title || 'Video ' + (i + 2)) + '</b></div><button type="button" class="tc-btn gold sm" data-tc="vid" data-n="' + (i + 1) + '"><i class="fas fa-play"></i> Play next</button>';
+      stage.appendChild(el);
     }
     var isWriting = function (l) { return !!(g.TechWork && g.TechWork.kindOf(l.task) === 'writing'); };
     /* The lesson's practice tool, one press away under the video. */
@@ -1295,35 +1459,115 @@
     function openPractice(l) {
       closePractice();
       var w = isWriting(l), label = nameOf(l);
+      /* the floating player picks up where the page's video was */
+      var from = host.querySelector('#tcVids video'), at = from && !from.ended ? from.currentTime || 0 : 0;
       host.querySelectorAll('video').forEach(function (v) { try { v.pause(); } catch (e) { } });
       var pop = document.createElement('div');
       pop.className = 'tc-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-modal', 'true'); pop.setAttribute('aria-label', 'Practice');
       pop.innerHTML = '<div class="tc-pop-box"><header class="tc-pop-head"><span class="ic"><i class="fas ' + (w ? 'fa-pen-nib' : 'fa-laptop-code') + '"></i></span>' +
         '<div class="t"><b>' + esc(l.topicTitle || S.course.name) + ' · ' + esc(label) + (isBuilder ? '' : ' · ' + esc(first)) + '</b><small>' + esc(S.course.name) + ' · ' + (w ? 'Writing pad' : 'Paisley VS Code') + '</small></div>' +
+        (videosOf(l).length ? '<button type="button" class="tc-pop-vid" data-pop="video" hidden><i class="fas fa-circle-play"></i> Show the video</button>' : '') +
         '<button type="button" class="tc-pop-x" data-pop="close" aria-label="Close" title="Close (your work is saved)"><i class="fas fa-xmark"></i></button></header><div class="tc-pop-body"></div></div>';
       document.body.appendChild(pop);
       document.documentElement.style.overflow = 'hidden';
-      S.pop = pop;
+      S.pop = pop; claimFloat();
       S.work = g.TechWork.mountLessonWork(pop.querySelector('.tc-pop-body'), { me: me, student: student, lesson: Object.assign({}, l, { courseName: l.courseName || S.course.name }), label: label, layout: 'pop' });
-      pop.addEventListener('click', function (e) { if (e.target.closest('[data-pop="close"]')) closePractice(); });
+      pop.addEventListener('click', function (e) {
+        if (e.target.closest('[data-pop="close"]')) closePractice();
+        else if (e.target.closest('[data-pop="video"]')) openMini(l, S.vi, 0);
+      });
+      if (videosOf(l).length) openMini(l, S.vi, at);
       if (isBuilder) T.logActivity(me, 'project_opened', 'Opened the practice for ' + label, { origin: 'class' });
     }
+    /* The lesson's video beside the work, like a picture-in-picture: drag it by its bar, pull its corner to
+       resize, make it big or small, step through the lesson's videos, or close it (Show the video brings it back). */
+    var mini = null, miniPos = null;
+    function closeMini() {
+      if (!mini) return;
+      mini.querySelectorAll('video').forEach(function (v) { try { g.FastVideo.release(v); } catch (e) { } });
+      mini.remove(); mini = null;
+      var b = S.pop && S.pop.querySelector('[data-pop="video"]'); if (b) b.hidden = false;
+    }
+    function openMini(l, n, at) {
+      closeMini();
+      var vs = videosOf(l); if (!vs.length || !S.pop) return;
+      n = Math.max(0, Math.min(n || 0, vs.length - 1));
+      var v = vs[n], url = T.safeUrl(v.url), title = v.title || (vs.length > 1 ? 'Video ' + (n + 1) : nameOf(l));
+      mini = document.createElement('div');
+      mini.className = 'tc-mini'; mini.setAttribute('role', 'region'); mini.setAttribute('aria-label', 'Lesson video');
+      mini.innerHTML = '<div class="tc-mini-bar" data-mini="drag"><span class="t"><i class="fas fa-grip-vertical" aria-hidden="true"></i>' + (vs.length > 1 ? (n + 1) + '/' + vs.length + ' · ' : '') + esc(title) + '</span>' +
+        (vs.length > 1 ? '<button type="button" data-mini="prev" aria-label="Previous video" title="Previous video"' + (n ? '' : ' disabled') + '><i class="fas fa-backward-step"></i></button><button type="button" data-mini="next" aria-label="Next video" title="Next video"' + (n < vs.length - 1 ? '' : ' disabled') + '><i class="fas fa-forward-step"></i></button>' : '') +
+        '<button type="button" data-mini="size" aria-label="Make bigger" title="Bigger / smaller"><i class="fas fa-up-right-and-down-left-from-center"></i></button>' +
+        '<button type="button" data-mini="close" aria-label="Close the video" title="Close"><i class="fas fa-xmark"></i></button></div>' +
+        '<div class="tc-mini-stage">' + (g.FastVideo.embed(url) ? g.FastVideo.embedHtml(url, { title: title }) : g.FastVideo.videoHtml(url, { attrs: 'controls playsinline controlsList="nodownload noremoteplayback" disablePictureInPicture' })) + '</div><span class="tc-mini-grip" data-mini="grip" aria-hidden="true"></span>';
+      document.body.appendChild(mini);
+      var b = S.pop.querySelector('[data-pop="video"]'); if (b) b.hidden = true;
+      if (miniPos) { mini.style.left = miniPos.left + 'px'; mini.style.top = miniPos.top + 'px'; if (miniPos.width) mini.style.width = miniPos.width + 'px'; }
+      else { mini.style.left = '22px'; mini.style.top = Math.max(70, g.innerHeight - mini.offsetHeight - 22) + 'px'; }
+      keepIn();
+      var vid = mini.querySelector('video');
+      if (vid) {
+        if (at) vid.addEventListener('loadedmetadata', function () { try { vid.currentTime = at; } catch (e) { } }, { once: true });
+        var pl = vid.play && vid.play(); if (pl && pl.catch) pl.catch(function () { });
+        vid.addEventListener('timeupdate', function () { var key = l.id + ':' + n; if (S.watched !== key && vid.duration && vid.currentTime / vid.duration >= 0.8) { S.watched = key; markWatched(l, n); } });
+        vid.addEventListener('ended', function () { if (n < vs.length - 1) openMini(l, n + 1, 0); });
+      }
+      mini.addEventListener('click', function (e) {
+        if (e.target.closest('[data-fv-embed]')) markWatched(l, n);
+        var t = e.target.closest('button[data-mini]'); if (!t) return;
+        var k = t.dataset.mini;
+        if (k === 'close') closeMini();
+        else if (k === 'prev') openMini(l, n - 1, 0);
+        else if (k === 'next') openMini(l, n + 1, 0);
+        else if (k === 'size') { mini.style.width = ''; mini.classList.toggle('big'); if (miniPos) miniPos.width = 0; keepIn(); }
+      });
+      /* drag by the bar, resize from the corner (pointer events: mouse, pen and touch) */
+      mini.addEventListener('pointerdown', function (e) {
+        var k = e.target.closest('[data-mini]'); if (!k || (k.dataset.mini !== 'drag' && k.dataset.mini !== 'grip') || e.target.closest('button')) return;
+        e.preventDefault();
+        var r = mini.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, grip = k.dataset.mini === 'grip';
+        mini.classList.add('dragging');
+        /* the frame under the pointer would swallow the moves */
+        mini.querySelectorAll('iframe,video').forEach(function (x) { x.style.pointerEvents = 'none'; });
+        function move(ev) {
+          if (grip) { mini.classList.remove('big'); mini.style.width = Math.max(220, Math.min(g.innerWidth - r.left - 8, r.width + ev.clientX - sx)) + 'px'; }
+          else { mini.style.left = (r.left + ev.clientX - sx) + 'px'; mini.style.top = (r.top + ev.clientY - sy) + 'px'; }
+          keepIn();
+        }
+        function up() {
+          g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', up); g.removeEventListener('pointercancel', up);
+          mini.classList.remove('dragging');
+          mini.querySelectorAll('iframe,video').forEach(function (x) { x.style.pointerEvents = ''; });
+          var rr = mini.getBoundingClientRect(); miniPos = { left: rr.left, top: rr.top, width: grip ? rr.width : (miniPos && miniPos.width) || 0 };
+        }
+        g.addEventListener('pointermove', move); g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+      });
+    }
+    function keepIn() {
+      if (!mini) return;
+      var r = mini.getBoundingClientRect();
+      mini.style.left = Math.max(8, Math.min(g.innerWidth - r.width - 8, r.left)) + 'px';
+      mini.style.top = Math.max(8, Math.min(g.innerHeight - Math.min(r.height, g.innerHeight - 16) - 8, r.top)) + 'px';
+    }
+    g.addEventListener('resize', keepIn);
     function closePractice() {
+      closeMini();
       if (S.work) { try { S.work.destroy(); } catch (e) { } S.work = null; }
       if (S.pop) { S.pop.remove(); S.pop = null; document.documentElement.style.overflow = ''; }
+      if (typeof claimFloat === 'function') claimFloat();
     }
     function sideList(l) {
       var ls = S.items.filter(function (x) { return x.topicId === l.topicId; }), names = labelsFor(ls);
       return '<aside class="tc-lside" aria-label="Lessons in this topic"><h4>' + esc(l.topicTitle || 'This topic') + '</h4>' + ls.map(function (x, n) {
         var on = x.id === l.id, done = passedLesson(x);
-        var bits = []; if (x.video) bits.push('Video'); if (x.task) bits.push(isWriting(x) ? 'Writing' : 'Code'); if (x.questionCount) bits.push('Quiz');
+        var bits = []; if (videosOf(x).length) bits.push(videosOf(x).length === 1 ? 'Video' : videosOf(x).length + ' videos'); if (x.task) bits.push(isWriting(x) ? 'Writing' : 'Code'); if (x.questionCount) bits.push('Quiz');
         return '<button type="button" class="tc-sitem' + (on ? ' on' : '') + (done ? ' done' : '') + '" data-tc="lesson" data-id="' + esc(x.id) + '"' + (on ? ' aria-current="true"' : '') + '><span class="n">' + (done ? '<i class="fas fa-check"></i>' : (x.type === 'test' ? '<i class="fas fa-clipboard-question"></i>' : n + 1)) + '</span>' +
           '<span class="t">' + esc(names[x.id]) + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span></button>';
       }).join('') + '<div style="border-top:1px solid var(--line,rgba(38,51,49,.08));margin-top:.5rem;padding-top:.5rem"><button type="button" class="tc-sitem" data-tc="back"><span class="n"><i class="fas fa-arrow-left"></i></span><span class="t">All of ' + esc(S.course.name) + '</span></button></div></aside>';
     }
     function openLesson(l) {
       releaseVideos(); closePractice();
-      S.screen = 'lesson'; S.lesson = l;
+      S.screen = 'lesson'; S.lesson = l; S.vi = 0;
       var files = (l.files || []).filter(function (f) { return T.safeUrl(f.url); });
       var word = l.type === 'test' ? 'Practice test' : 'Lesson', label = nameOf(l);
       var tabs = [];
@@ -1337,7 +1581,7 @@
       }).join('') + '</div>' + tabs.map(function (t, n) { return '<div class="tc-boxpane" data-tabpane="' + t[0] + '"' + (n ? ' hidden' : '') + '>' + t[2] + '</div>'; }).join('') + '</section>' : '';
       var quiz = (l.questions || []).length ? '<div class="tc-panel" id="tcQuiz"></div>' : '';
       var meta = [];
-      if (l.video) meta.push('<span class="tc-pill"><i class="fas fa-circle-play"></i> Video</span>');
+      var nvids = videosOf(l).length; if (nvids) meta.push('<span class="tc-pill"><i class="fas fa-circle-play"></i> ' + (nvids === 1 ? 'Video' : nvids + ' videos') + '</span>');
       if (l.task) meta.push('<span class="tc-pill"><i class="fas ' + (isWriting(l) ? 'fa-pen-nib' : 'fa-code') + '"></i> ' + (isWriting(l) ? 'Writing pad' : 'Paisley VS Code') + '</span>');
       if (l.questionCount) meta.push('<span class="tc-pill"><i class="fas fa-circle-question"></i> ' + l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's') + '</span>');
       var nav = navHtml(l), lvN = (ladder()[S.course.id] || {}).n;
@@ -1396,11 +1640,14 @@
         if (!dead && S.lesson && S.lesson.id === l.id) { paintQuiz(l, r.data); var box = host.querySelector('#tcQuiz'); if (box) box.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
       }).catch(function (e) { btn.disabled = false; msg.textContent = 'Could not submit: ' + T.errMsg(e); });
     }
-    host.addEventListener('click', function (e) {
-      if (e.target.closest('[data-fv-embed]') && isBuilder && S.lesson) touch(S.lesson, { watchedAt: FV().serverTimestamp() });
+    function onClick(e) {
+      if (e.target.closest('[data-fv-embed]') && S.lesson) markWatched(S.lesson, S.vi);
       var t = e.target.closest('[data-tc]'); if (!t) return;
       var a = t.dataset.tc, id = t.dataset.id;
-      if (a === 'home') goHome();
+      if (a === 'unlock') unlock(id, t);
+      else if (a === 'later') { S.later[id] = 1; claimFloat(); }
+      else if (a === 'vid') showVideo(Number(t.dataset.n));
+      else if (a === 'home') goHome();
       else if (a === 'course') { var c = allCourses().filter(function (x) { return x.id === id; })[0]; if (c) openCourse(c); }
       else if (a === 'course-locked') {
         t.classList.remove('tc-shake'); void t.offsetWidth; t.classList.add('tc-shake');
@@ -1420,17 +1667,20 @@
         if (!f || !slot) return;
         slot.innerHTML = slot.innerHTML ? '' : '<iframe class="tc-pdf" src="' + esc(T.safeUrl(f.url)) + '#toolbar=0" title="' + esc(f.name) + '"></iframe>';
       }
-    });
+    }
+    host.addEventListener('click', onClick);
     host.addEventListener('contextmenu', function (e) { if (e.target.closest('[data-tc-stage]')) e.preventDefault(); });
     /* timeupdate does not bubble, so listen on the way down. Four fifths in counts as watched. */
     host.addEventListener('timeupdate', function (e) {
       if (!isBuilder || !S.lesson || !e.target.matches || !e.target.matches('video')) return;
-      var v = e.target;
-      if (S.watched !== S.lesson.id && v.duration && v.currentTime / v.duration >= 0.8) {
-        S.watched = S.lesson.id;
-        touch(S.lesson, { watchedAt: FV().serverTimestamp() });
-        T.logActivity(me, 'video_watched', 'Watched “' + nameOf(S.lesson) + '”', { origin: 'class' });
-      }
+      var v = e.target, key = S.lesson.id + ':' + S.vi;
+      if (S.watched !== key && v.duration && v.currentTime / v.duration >= 0.8) { S.watched = key; markWatched(S.lesson, S.vi); }
+    }, true);
+    /* At the end of one video, offer the next. */
+    host.addEventListener('ended', function (e) {
+      if (!S.lesson || !e.target.matches || !e.target.matches('video')) return;
+      if (S.watched !== S.lesson.id + ':' + S.vi) { S.watched = S.lesson.id + ':' + S.vi; markWatched(S.lesson, S.vi); }
+      upNext(S.lesson);
     }, true);
     if (o.lessonId) {
       LESSONS().doc(o.lessonId).get().then(function (d) {
@@ -1439,7 +1689,7 @@
       }).catch(fail);
     }
     paint();
-    return { destroy: function () { dead = true; releaseVideos(); closePractice(); if (S.pUnsub) S.pUnsub(); unsubs.forEach(function (u) { u(); }); clearCourse(); } };
+    return { destroy: function () { dead = true; g.removeEventListener('resize', keepIn); releaseVideos(); closePractice(); if (floatEl) { floatEl.remove(); floatEl = null; } if (S.pUnsub) S.pUnsub(); unsubs.forEach(function (u) { u(); }); clearCourse(); } };
   }
 
   g.TechClasses = { mountManager: mountManager, mountResults: mountResults, mountLearner: mountLearner, style: style, labelsFor: labelsFor, gateOf: gateOf, gateSteps: gateSteps, inOrder: inOrder, celebrate: celebrate };

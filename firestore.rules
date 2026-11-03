@@ -1176,9 +1176,9 @@ service cloud.firestore {
       allow create: if techStudentActive() &&
         request.resource.data.studentId == request.auth.uid &&
         id == request.auth.uid + '_' + request.resource.data.lessonId &&
-        request.resource.data.keys().hasOnly(['studentId', 'lessonId', 'courseId', 'topicId', 'track', 'title', 'openedAt', 'watchedAt', 'updatedAt']);
+        request.resource.data.keys().hasOnly(['studentId', 'lessonId', 'courseId', 'topicId', 'track', 'title', 'openedAt', 'watchedAt', 'watchedVideos', 'updatedAt']);
       allow update: if isSignedIn() && resource.data.studentId == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'topicId', 'openedAt', 'watchedAt', 'updatedAt']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'topicId', 'openedAt', 'watchedAt', 'watchedVideos', 'updatedAt']);
       allow delete: if isAdmin();
     }
     // A class a builder has passed (every lesson finished), which unlocks the next class.
@@ -1189,6 +1189,22 @@ service cloud.firestore {
         isTechCoachOf(resource.data.studentId) ||
         isTechGuardianOf(resource.data.studentId);
       allow write: if false;
+    }
+    // The builder pressing Unlock on a class they passed: this is what opens the next class.
+    // Only once the server has recorded the pass (techCourseProgress with the same id).
+    match /techUnlocks/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isTechCoachOf(resource.data.studentId) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        id == request.auth.uid + '_' + request.resource.data.courseId &&
+        exists(/databases/$(database)/documents/techCourseProgress/$(id)) &&
+        request.resource.data.keys().hasOnly(['studentId', 'courseId', 'nextCourseId', 'at']) &&
+        request.resource.data.at == request.time;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
     // Classes an admin opened for one builder, whatever their level: open.{courseId} = 'all'.
     match /techAccess/{uid} {
@@ -1222,7 +1238,8 @@ service cloud.firestore {
     }
     function techMarkKeys() {
       return ['status', 'feedback', 'grade', 'maxScore', 'gradedBy', 'gradedByName', 'gradedAt', 'released', 'releasedAt',
-        'inkData', 'inkUpdatedAt', 'gradedFileUrl', 'gradedFileName', 'gradedStoragePath', 'history', 'updatedAt'];
+        'inkData', 'inkUpdatedAt', 'gradedFileUrl', 'gradedFileName', 'gradedStoragePath', 'history', 'updatedAt',
+        'publishState', 'publishNote', 'publishDecidedBy', 'publishDecidedByName', 'publishDecidedAt'];
     }
     match /techLessonWork/{id} {
       // The id is {uid}_{lessonId}, so a builder can also open their own work before it exists.
@@ -1244,6 +1261,12 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(techWorkKeys()) &&
           resource.data.status in ['Draft', 'Corrections'] &&
           (request.resource.data.status == resource.data.status || request.resource.data.status == 'Submitted')) ||
+        // Handed-in work: the builder may ask to publish it, or withdraw it (shareUrl comes only from functions).
+        (techStudentActive() && resource.data.studentId == request.auth.uid &&
+          resource.data.status in ['Submitted', 'Graded', 'Corrections'] &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['publishState', 'publishRequestedAt', 'updatedAt']) &&
+          ((request.resource.data.publishState == 'requested' && resource.data.get('publishState', '') != 'approved') ||
+            request.resource.data.publishState == 'unpublished')) ||
         (isTechCoachOf(resource.data.studentId) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(techMarkKeys()) &&
           request.resource.data.status in ['Draft', 'Submitted', 'Graded', 'Corrections']);

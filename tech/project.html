@@ -107,7 +107,7 @@ function render(p){
     (tools.length?'<div><b>AI tools used.</b><div class="tools" style="margin-top:.3rem">'+tools.map(t=>'<span>'+esc(t)+'</span>').join('')+'</div></div>':'')+
     (r.purpose?'<div><b>How I used AI.</b> '+esc(r.purpose)+'</div>':'')+
     (r.learned?'<div><b>What I learned.</b> '+esc(r.learned)+'</div>':'');
-  view.innerHTML='<section class="hero"><span class="kind"><i class="fas '+(ICON[cat]||ICON.Other)+'"></i> '+esc(LABEL[cat]||cat)+(p.origin==='self'?' · Self-led project':'')+'</span>'+
+  view.innerHTML='<section class="hero"><span class="kind"><i class="fas '+(ICON[cat]||ICON.Other)+'"></i> '+esc(LABEL[cat]||cat)+(p.origin==='self'?' · Self-led project':(p.origin==='class'?' · Class work':''))+'</span>'+
       '<h1>'+esc(p.title||'Student project')+'</h1>'+(p.description?'<p>'+esc(p.description)+'</p>':'')+
       '<div class="by">By '+esc(p.displayName||'a Paisley student')+'</div>'+
       ((p.disciplines||[]).length||(p.skills||[]).length?'<div class="chips">'+(p.disciplines||[]).concat(p.skills||[]).map(x=>'<span class="chip">'+esc(x)+'</span>').join('')+'</div>':'')+'</section>'+
