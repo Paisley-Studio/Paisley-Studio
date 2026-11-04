@@ -592,7 +592,7 @@
         else if (st === 'Submitted') right = '<span class="tw-note"><i class="fas fa-hourglass-half"></i> With your coach for marking. You can look, but not change it now.</span>';
       }
       headEl.innerHTML = '<div class="tw-bar">' + statePill(st) + (data && data.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(data.submittedAt)) + '</span>' : '') + '<span class="grow"></span>' + right + '</div>' +
-        '<div class="tw-msg" id="twMsg" role="status"></div>' +
+        '<div class="tw-msg" id="twMsg" role="status"' + (carriedNote && !data ? ' style="color:var(--brand-deep,#245F5A);margin:.5rem 0">Your code from the lesson before is here. Carry on from where you stopped.' : '>') + '</div>' +
         feedbackHtml(data, isBuilder ? 'You' : first) + publishHtml(data, isBuilder, first) +
         (!isBuilder && !data ? '<div class="tc-empty">' + esc(first) + ' has not started this yet.</div>' : '') +
         (isBuilder && editable() ? '<p class="tw-note" style="margin:0 0 .6rem">' + (kind === 'writing' ? 'It saves as you write.' : 'It saves as you type. Press Run to see your page. Make a folder such as images or videos, press its Upload button to add files from your computer, then click a file to use it.') + '</p>' : '');
@@ -602,8 +602,18 @@
       if (editor && editorEditable === want) return;
       if (editor) { try { editor.destroy(); } catch (e) { } editor = null; }
       if (!isBuilder && !data) { edEl.innerHTML = ''; return; }
+      /* A new code practice opens with the builder's code from the lesson before, or the lesson's starting code. */
+      if (kind !== 'writing' && want && !data && seed === undefined) {
+        if (!seeding) {
+          edEl.innerHTML = '<div class="tc-empty"><i class="fas fa-spinner fa-spin"></i> Opening your code…</div>';
+          seeding = startCode().then(function (s) { seed = s; }, function () { seed = null; }).then(function () { seeding = null; if (!dead) mountEditor(); });
+        }
+        return;
+      }
       editorEditable = want;
       var build = Object.assign({ id: ref.id, studentId: student.id }, data || {});
+      var carried = false;
+      if (kind !== 'writing' && want && !data && seed) { carried = !!seed.carried; Object.assign(build, { codeFiles: seed.codeFiles, codeFolders: seed.codeFolders || [], codeAssets: seed.codeAssets || [], codeActive: seed.codeActive || 'index.html' }); }
       if (kind === 'writing') {
         if (!want) { edEl.innerHTML = data && data.writingHtml ? '<div class="tw-article">' + T.cleanHtml(data.writingHtml) + '</div>' : ''; return; }
         if (!g.WritingStudio) { edEl.innerHTML = '<div class="tc-empty">The writing pad is not loaded on this page.</div>'; return; }
@@ -618,7 +628,21 @@
             return r.put(f, { contentType: f.type || undefined, cacheControl: 'public,max-age=31536000' }).then(function () { return r.getDownloadURL(); }).then(function (url) { return { url: url, storagePath: path }; });
           } : null
         });
+        if (carried) { carriedNote = true; paintHead(); }
       }
+    }
+    var seed, seeding = null, carriedNote = false;
+    function startCode() {
+      var t = l.task || {}, own = String(t.starter || '').trim() ? { codeFiles: [{ name: 'index.html', lang: 'html', content: String(t.starter).replace(/\s+$/, '') + '\n' }], codeActive: 'index.html' } : null;
+      var ids = (o.carryFrom || []).slice(0, 8);
+      if (t.startFrom === 'starter' || !ids.length) return Promise.resolve(own);
+      return Promise.all(ids.map(function (id) {
+        return WORK().doc(workId(student.id, id)).get().then(function (s) { return s.exists ? s.data() : null; }, function () { return null; });
+      })).then(function (list) {
+        var prev = list.filter(function (d) { return d && (d.codeFiles || []).some(function (f) { return String(f.content || '').trim(); }); })[0];
+        if (!prev) return own;
+        return { carried: true, codeFiles: prev.codeFiles.map(function (f) { return { name: f.name, lang: f.lang, content: String(f.content || '') }; }), codeFolders: (prev.codeFolders || []).slice(), codeAssets: (prev.codeAssets || []).slice(), codeActive: prev.codeActive || 'index.html' };
+      });
     }
     async function submit(btn) {
       var msg = host.querySelector('#twMsg');

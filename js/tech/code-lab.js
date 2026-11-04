@@ -68,7 +68,7 @@
     return 'html';
   }
   function defaultFile(lang, name) {
-    if (lang === 'html') return { name: name || 'index.html', lang: 'html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>My project</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Hello, studio!</h1>\n  <script src="script.js"></script>\n</body>\n</html>\n' };
+    if (lang === 'html') return { name: name || 'index.html', lang: 'html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>My project</title>\n</head>\n<body>\n  <h1>Hello, studio!</h1>\n</body>\n</html>\n' };
     if (lang === 'css') return { name: name || 'style.css', lang: 'css', content: 'body {\n  font-family: sans-serif;\n  background: #F1F9F7;\n  color: #263331;\n  padding: 2rem;\n}\n' };
     if (lang === 'js') return { name: name || 'script.js', lang: 'js', content: 'console.log("Code Lab is alive");\n' };
     if (lang === 'md') return { name: name || 'notes.md', lang: 'md', content: '# Notes\n\n' };
@@ -128,6 +128,60 @@
       .then(function () { return g.CodeMirror; })
       .catch(function (e) { libs = null; throw e; });
     return libs;
+  }
+
+  /* HTML tags offered as you type a word on its own (d -> div): picking one writes the whole tag,
+     opening and closing, with the cursor where the content goes (| marks it). Most used first. */
+  var BLOCK = function (t) { return '<' + t + '>\n  |\n</' + t + '>'; };
+  var TAG_SNIPS = [
+    ['div', '<div>|</div>'], ['p', '<p>|</p>'], ['h1', '<h1>|</h1>'], ['h2', '<h2>|</h2>'], ['h3', '<h3>|</h3>'],
+    ['a', '<a href="|"></a>'], ['img', '<img src="|" alt="">'], ['button', '<button>|</button>'],
+    ['ul', '<ul>\n  <li>|</li>\n</ul>'], ['ol', '<ol>\n  <li>|</li>\n</ol>'], ['li', '<li>|</li>'], ['span', '<span>|</span>'],
+    ['section', BLOCK('section')], ['header', BLOCK('header')], ['footer', BLOCK('footer')], ['nav', BLOCK('nav')], ['main', BLOCK('main')],
+    ['article', BLOCK('article')], ['aside', BLOCK('aside')], ['form', BLOCK('form')],
+    ['input', '<input type="text" placeholder="|">'], ['label', '<label>|</label>'], ['textarea', '<textarea>|</textarea>'],
+    ['select', '<select>\n  <option>|</option>\n</select>'], ['option', '<option>|</option>'],
+    ['table', '<table>\n  <tr>\n    <td>|</td>\n  </tr>\n</table>'], ['tr', '<tr>\n  <td>|</td>\n</tr>'], ['td', '<td>|</td>'], ['th', '<th>|</th>'],
+    ['br', '<br>|'], ['hr', '<hr>|'], ['strong', '<strong>|</strong>'], ['em', '<em>|</em>'], ['b', '<b>|</b>'], ['i', '<i>|</i>'],
+    ['small', '<small>|</small>'], ['mark', '<mark>|</mark>'], ['blockquote', '<blockquote>|</blockquote>'], ['pre', '<pre>|</pre>'], ['code', '<code>|</code>'],
+    ['video', '<video src="|" controls></video>'], ['audio', '<audio src="|" controls></audio>'], ['iframe', '<iframe src="|"></iframe>'],
+    ['canvas', '<canvas id="|" width="400" height="300"></canvas>'], ['figure', BLOCK('figure')], ['figcaption', '<figcaption>|</figcaption>'],
+    ['style', BLOCK('style')], ['script', BLOCK('script')], ['link', '<link rel="stylesheet" href="|">'],
+    ['meta', '<meta charset="UTF-8">|'], ['title', '<title>|</title>'], ['head', BLOCK('head')], ['body', BLOCK('body')],
+    ['h4', '<h4>|</h4>'], ['h5', '<h5>|</h5>'], ['h6', '<h6>|</h6>']
+  ];
+  var PAGE_SNIP = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>My page</title>\n</head>\n<body>\n  |\n</body>\n</html>';
+  /* Writes a snippet over the typed word, indented like its line, with the cursor at |. */
+  function putSnippet(cm, from, to, snip) {
+    var indent = /^\s*/.exec(cm.getLine(from.line))[0];
+    snip = snip.replace(/\n/g, '\n' + indent);
+    var at = snip.indexOf('|'); if (at < 0) at = snip.length; else snip = snip.slice(0, at) + snip.slice(at + 1);
+    cm.replaceRange(snip, from, to, '+complete');
+    var lines = snip.slice(0, at).split('\n');
+    cm.setCursor({ line: from.line + lines.length - 1, ch: lines.length === 1 ? from.ch + at : lines[lines.length - 1].length });
+  }
+  /* The tag list for the word before the cursor, when that word stands on its own
+     (start of a line, or just after a tag), never inside a tag or an Emmet abbreviation. */
+  function tagHint(ed) {
+    var cur = ed.getCursor(), line = ed.getLine(cur.line), end = cur.ch, start = end;
+    while (start && /[\w!]/.test(line.charAt(start - 1))) start--;
+    var word = line.slice(start, end), before = line.slice(0, start);
+    if (!word || !(/^\s*$/.test(before) || /<[^<>]*>\s*$/.test(before))) return null;
+    if (/\w/.test(line.charAt(end))) return null;   /* in the middle of a word */
+    var CMg = g.CodeMirror, from = CMg.Pos(cur.line, start), to = CMg.Pos(cur.line, end), list;
+    function item(name, snip, label) {
+      return {
+        text: name, snip: snip,
+        render: function (el) { el.innerHTML = '<b class="cl-h-tag">' + esc(label || name) + '</b><span class="cl-h-snip">' + esc(snip.replace('|', '').replace(/\n\s*/g, ' ')) + '</span>'; },
+        hint: function (cm, data, c) { putSnippet(cm, data.from, data.to, c.snip); }
+      };
+    }
+    if (word.charAt(0) === '!') list = word === '!' ? [item('!', PAGE_SNIP, '! whole page')] : [];
+    else {
+      var w = word.toLowerCase();
+      list = TAG_SNIPS.filter(function (t) { return t[0].indexOf(w) === 0; }).map(function (t) { return item(t[0], t[1]); });
+    }
+    return list.length ? { list: list, from: from, to: to } : null;
   }
 
   /* Words offered as you type JavaScript, on top of the words already in the file. */
@@ -249,7 +303,7 @@
 
     function seedFiles(src) {
       var list = Array.isArray(src.codeFiles) && src.codeFiles.length ? src.codeFiles : null;
-      if (!list) return docMode ? [{ name: 'writing.md', lang: 'md', content: '' }] : [defaultFile('html'), defaultFile('css'), defaultFile('js')];
+      if (!list) return docMode ? [{ name: 'writing.md', lang: 'md', content: '' }] : [defaultFile('html')];
       return list.map(function (f) { var n = cleanName(f.name) || 'untitled.txt'; return { name: n, lang: f.lang || langOf(n), content: String(f.content || '') }; });
     }
     var files = seedFiles(build);
@@ -343,7 +397,7 @@
     function renderCrumb() {
       var f = activeFile();
       crumbEl.innerHTML = f ? '<i class="' + (LANGS[f.lang] || LANGS.txt).icon + '"></i> ' + esc(f.name) : '';
-      langEl.textContent = f ? (LANGS[f.lang] || LANGS.txt).label + (cm && canEdit ? ' · Ctrl+Space for suggestions' + (f.lang === 'html' || f.lang === 'css' ? ' · Emmet: type then Tab' : '') : '') : '';
+      langEl.textContent = f ? (LANGS[f.lang] || LANGS.txt).label + (cm && canEdit ? (f.lang === 'html' ? ' · Type a tag (d → div), Enter or Tab writes it' : '') + ' · Ctrl+Space for suggestions' + (f.lang === 'html' || f.lang === 'css' ? ' · Emmet: ul>li*3 then Tab' : '') : '') : '';
     }
 
     /* ---------- editor ---------- */
@@ -364,6 +418,7 @@
       var CMg = g.CodeMirror, cur = ed.getCursor(), tok = ed.getTokenAt(cur);
       var inner = CMg.innerMode(ed.getMode(), tok.state).mode.name, r = null;
       try {
+        if (inner === 'xml' && !/tag|attribute|string|comment/.test(tok.type || '') && (r = tagHint(ed))) return r;
         if (inner === 'xml' && CMg.hint.html) r = CMg.hint.html(ed, o);
         else if (inner === 'css' && CMg.hint.css) r = CMg.hint.css(ed, o);
         else if (inner === 'javascript') r = jsHint(ed);
@@ -416,7 +471,7 @@
         value: docFor(f), lineNumbers: true, indentUnit: 2, tabSize: 2, indentWithTabs: false, lineWrapping: docMode,
         autoCloseTags: true, autoCloseBrackets: true, matchBrackets: true, matchTags: { bothTags: true }, styleActiveLine: canEdit,
         readOnly: canEdit ? false : 'nocursor', extraKeys: keys, viewportMargin: 30,
-        emmet: { mark: !docMode, preview: true, markTagPairs: true, previewOpenTag: false, autoRenameTags: true }
+        emmet: { mark: !docMode, preview: false, markTagPairs: true, previewOpenTag: false, autoRenameTags: true }
       });
       cm.on('change', function (ed, ch) {
         if (applying || !canEdit) return;
@@ -438,7 +493,7 @@
       var lang = (activeFile() || {}).lang;
       var tok = ed.getTokenAt(ed.getCursor()), inner = g.CodeMirror.innerMode(ed.getMode(), tok.state).mode.name;
       var go = false;
-      if (inner === 'xml') go = typed === '<' || (typed === ' ' && /^<\w/.test(ed.getLine(ed.getCursor().line).slice(0, ed.getCursor().ch).split('>').pop() || '')) || (/\w/.test(typed) && /tag|attribute/.test(tok.type || ''));
+      if (inner === 'xml') go = (/[\w!]/.test(typed) && !/tag|attribute|string|comment/.test(tok.type || '') && !!tagHint(ed)) || typed === '<' || (typed === ' ' && /^<\w/.test(ed.getLine(ed.getCursor().line).slice(0, ed.getCursor().ch).split('>').pop() || '')) || (/\w/.test(typed) && /tag|attribute/.test(tok.type || ''));
       else if (inner === 'css') go = /[\w-]/.test(typed) && !/comment/.test(tok.type || '');
       else if (inner === 'javascript' || lang === 'js') go = /[\w.$]/.test(typed) && !/comment|string/.test(tok.type || '');
       if (go) ed.showHint({ hint: smartHint, container: hintBox(), completeSingle: false, closeCharacters: /[\s()\[\]{};:>,"']/ });
@@ -924,6 +979,9 @@
       '.cl-rline{background:rgba(28,126,214,.06)}',
       '.CodeMirror-hints{z-index:1000;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15)}',
       '.CodeMirror-hint-active{background:#245F5A}',
+      '.CodeMirror-hint .cl-h-tag{display:inline-block;min-width:4.5em;font-weight:700}.CodeMirror-hint .cl-h-snip{margin-left:.8em;opacity:.6;font-size:11.5px}',
+      /* Above the practice pop-up (600) and full screen (2000); CodeMirror's own sheet loads later and sets 10. */
+      'body .CodeMirror-hints{z-index:3000!important;max-width:min(460px,90vw)}body .emmet-abbreviation-preview{z-index:3000!important}body li.CodeMirror-hint-active{background:#245F5A!important;color:#fff!important}.CodeMirror-hint{overflow:hidden;text-overflow:ellipsis}',
       '.emmet-abbreviation-preview{z-index:1000;background:#fff;border:1px solid #D5E3DF;border-radius:8px;padding:.4rem .6rem;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px}',
       '@media(max-width:860px){.cl-body,.cl-body.cl-stacked{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(300px,1fr) 300px;height:auto}.cl-docmode .cl-body{grid-template-columns:minmax(0,1fr)}',
       '  .cl-tree{display:none;position:absolute;z-index:20;top:42px;left:0;bottom:0;width:240px;box-shadow:8px 0 24px rgba(0,0,0,.12)}.cl-tree-open .cl-tree{display:flex}.cl-treebtn{display:inline-flex}',

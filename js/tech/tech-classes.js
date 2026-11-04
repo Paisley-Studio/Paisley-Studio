@@ -24,8 +24,8 @@
 
    Levels and locks. The classes of one level track, in techCourses.order (then
    name), are Level 1, 2, 3… Level 1 is open; every other class shows a padlock
-   until the class before it is passed. Topics and lessons inside an open class
-   are always open. A class is passed when every lesson posted in it is finished;
+   until the class before it is passed. Inside an open class, lessons open in
+   order: each opens once the one before it is finished (lockedBy). A class is passed when every lesson posted in it is finished;
    what finishing a lesson takes is lesson.gate { watch, quiz, pass (%), work }
    (gateSteps; functions/tech.js mirrors it, records techCourseProgress.passedAt
    and tells the builder, coach, admins and guardians). A new class goes to the
@@ -537,6 +537,7 @@
     var topicId0 = item ? item.topicId : o.topicId;
     var gate0 = (item && item.gate) || { watch: true, quiz: true, work: true, pass: DEFAULT_PASS };
     if (gate0.pass == null) gate0 = Object.assign({}, gate0, { pass: DEFAULT_PASS });
+    var starter0 = (item && item.task && item.task.starter) || '', startFrom0 = (item && item.task && item.task.startFrom) || 'previous';
     m.body.innerHTML =
       '<div class="cr-row2"><div class="cr-field"><label for="tcT">Title (optional)</label><input type="text" id="tcT" maxlength="160" placeholder="Leave empty to call it ' + (isTest ? 'Practice test' : 'Lesson') + ' 1, 2, 3…" value="' + esc(item ? item.title : '') + '"></div>' +
       '<div class="cr-field"><label for="tcTop">Topic</label><select id="tcTop">' + topics.map(function (t) { return '<option value="' + esc(t.id) + '"' + (t.id === topicId0 ? ' selected' : '') + '>' + esc(t.title) + '</option>'; }).join('') + '</select></div></div>' +
@@ -552,10 +553,18 @@
       '<div class="cr-note" style="margin-bottom:.5rem">Attach a practice tool to this ' + (isTest ? 'test' : 'lesson') + '. Under the videos, builders get a Practise button that opens it full size with your requirements beside it: Paisley VS Code (autocomplete, Emmet, folders, picture and video uploads, full screen) or the writing pad. The pop-up carries the class, topic and lesson name. Add questions for a short quiz or test beside the work: builders answer them there and hand them in with the work, and you mark both with ink in Results > Class work hand-ins. Their family sees your feedback.</div>' +
       '<div class="cr-row2"><div class="cr-field"><label for="tcTaskT">Practice tool</label><select id="tcTaskT">' + [['', 'None'], ['code', 'Paisley VS Code (HTML, CSS, JavaScript)'], ['writing', 'Writing pad']].map(function (p) { var cur = item && item.task && g.TechWork ? g.TechWork.kindOf(item.task) : ''; return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></div><div></div></div>' +
       '<div class="cr-field" id="tcTaskBox"><label for="tcTask">Requirements (what they should make)</label><textarea id="tcTask" rows="4" maxlength="3000" placeholder="e.g. Make a page with a heading, a picture of your favourite animal and a button that changes the colour.">' + esc((item && item.task && item.task.brief) || '') + '</textarea><div class="cr-note" style="margin-top:.3rem">Optional. Without it they practise what the lesson showed.</div></div>' +
+      '<div class="cr-field" id="tcStartBox"><label>What Paisley VS Code opens with</label>' +
+        '<div style="display:grid;gap:.4rem;margin:.1rem 0 .55rem">' +
+          '<label style="display:flex;gap:.5rem;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:700;font-size:.86rem"><input type="radio" name="tcStartFrom" value="previous"' + (startFrom0 !== 'starter' ? ' checked' : '') + ' style="margin-top:.2rem"><span>Carry on from their code in the lesson before<small style="display:block;font-weight:500;font-size:.8rem;color:var(--muted,#5A6E6A)">Each builder continues their own code from the last practice in this class. Someone with nothing before gets the starting code below (or a blank index.html).</small></span></label>' +
+          '<label style="display:flex;gap:.5rem;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:700;font-size:.86rem"><input type="radio" name="tcStartFrom" value="starter"' + (startFrom0 === 'starter' ? ' checked' : '') + ' style="margin-top:.2rem"><span>Start everyone with the code below<small style="display:block;font-weight:500;font-size:.8rem;color:var(--muted,#5A6E6A)">Use this when the lesson needs a fresh start.</small></span></label>' +
+        '</div>' +
+        '<label for="tcStarter" style="text-transform:none;letter-spacing:0">Starting code for index.html (optional)</label>' +
+        '<textarea id="tcStarter" rows="9" maxlength="60000" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;white-space:pre;tab-size:2" placeholder="<!DOCTYPE html>&#10;<html>&#10;<body>&#10;  <h1>My page</h1>&#10;</body>&#10;</html>">' + esc(starter0) + '</textarea>' +
+        '<div class="cr-note" style="margin-top:.3rem">Leave it empty for a plain index.html. Put CSS in a &lt;style&gt; tag and JavaScript in a &lt;script&gt; tag, or let builders add their own files.</div></div>' +
       '<div class="cr-field" id="tcTaskQBox"><label>Questions to answer with the work (optional)</label><div class="cr-note" style="margin-bottom:.45rem">A short quiz or test that goes with the work, for example “Which tag makes a link?” or “Explain what your code does”. Builders answer beside the work and hand everything in together; you read and mark the answers with the work (they are not marked automatically).</div><div id="tcTaskQs"></div>' +
       '<button type="button" class="cr-btn sm" id="tcTaskQAdd"><i class="fas fa-plus"></i> Add a question</button></div>' +
       '<div class="tc-section"><i class="fas fa-flag-checkered"></i> To finish this ' + word + '</div>' +
-      '<div class="cr-note" style="margin-bottom:.5rem">Lessons inside a class are always open. A builder passes the class (and unlocks the next class, with a celebration and an email to their family) when every lesson in it is finished. Tick what finishing this ' + word + ' takes. A step the ' + word + ' does not have is skipped, and with nothing ticked, opening it is enough.</div>' +
+      '<div class="cr-note" style="margin-bottom:.5rem">Lessons open in order: a builder finishes each lesson before the next one opens, because each builds on the one before. A builder passes the class (and unlocks the next class, with a celebration and an email to their family) when every lesson in it is finished. Tick what finishing this ' + word + ' takes. A step the ' + word + ' does not have is skipped, and with nothing ticked, opening it is enough.</div>' +
       '<div class="cr-field" style="display:grid;gap:.45rem">' +
         '<label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0;font-weight:700"><input type="checkbox" id="tcGW"' + (gate0.watch ? ' checked' : '') + (isTest ? ' disabled' : '') + '> Watch the video' + (isTest ? ' (lessons only)' : '') + '</label>' +
         '<label style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;text-transform:none;letter-spacing:0;font-weight:700"><input type="checkbox" id="tcGQ"' + (gate0.quiz ? ' checked' : '') + '> Pass the quiz with at least <input type="number" id="tcGP" min="0" max="100" step="5" value="' + esc(gate0.pass) + '" style="width:5rem" aria-label="Pass mark in percent">%</label>' +
@@ -564,7 +573,13 @@
     var $ = function (s) { return m.body.querySelector(s); };
     var notes = isTest ? null : notesEditor($('#tcNotes'), item && item.notes);
     var qs = questionBuilder($('#tcQs'), item && item.questions, key);
-    var syncTask = function () { var on = $('#tcTaskT').value ? '' : 'none'; $('#tcTaskBox').style.display = on; $('#tcTaskQBox').style.display = on; };
+    var syncTask = function () { var on = $('#tcTaskT').value ? '' : 'none'; $('#tcTaskBox').style.display = on; $('#tcTaskQBox').style.display = on; $('#tcStartBox').style.display = $('#tcTaskT').value === 'code' ? '' : 'none'; };
+    /* Tab in the starting code indents instead of leaving the box. */
+    $('#tcStarter').addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab' || e.shiftKey) return;
+      e.preventDefault(); var ta = e.target, s = ta.selectionStart, en = ta.selectionEnd;
+      ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(en); ta.selectionStart = ta.selectionEnd = s + 2; dirty = true;
+    });
     /* The task's own questions: just wording; the coach marks the answers with the work. */
     var tq = (((item && item.task) || {}).questions || []).filter(function (x) { return x && x.id; }).map(function (x) { return { id: x.id, text: x.text || '' }; });
     var newQid = function () { return 'tq' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); };
@@ -679,7 +694,8 @@
         videos: videos, video: videos[0] || null,
         notes: notesHtml, instructions: $('#tcIns').value.trim().slice(0, 3000), files: files.slice(0, 20),
         questions: built.questions, questionCount: built.questions.length,
-        task: taskKind ? { brief: brief.slice(0, 3000), kind: taskKind, category: taskKind === 'writing' ? 'WRITING' : 'CODE', questions: taskQuestions } : null,
+        task: taskKind ? Object.assign({ brief: brief.slice(0, 3000), kind: taskKind, category: taskKind === 'writing' ? 'WRITING' : 'CODE', questions: taskQuestions },
+          taskKind === 'code' ? { starter: $('#tcStarter').value.replace(/\s+$/, '').slice(0, 60000), startFrom: (m.body.querySelector('input[name="tcStartFrom"]:checked') || {}).value === 'starter' ? 'starter' : 'previous' } : {}) : null,
         gate: { watch: !isTest && $('#tcGW').checked, quiz: $('#tcGQ').checked, pass: passMark, work: $('#tcGK').checked },
         updatedAt: FV().serverTimestamp()
       };
@@ -731,7 +747,7 @@
       if (S.screen === 'course' && S.course) return paintCourse();
       if (!S.loaded) { host.innerHTML = '<div class="cr-empty">Loading classes…</div>'; return; }
       var list = ladderOf(S.track);
-      host.innerHTML = '<div class="cr-bar"><div><h3>Classes</h3><div class="cr-sub">Each level has its own classes, taught in order: Level 1 is open, and every class after it shows builders a padlock until they finish every lesson of the class before. A new class goes to the end, so it arrives locked; change the order inside a class with Move earlier / Move later. Inside an open class, topics and lessons are always open. Whatever you post goes to every builder on that level and their parents, with a bell and an email.</div></div><button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add class</button></div>' +
+      host.innerHTML = '<div class="cr-bar"><div><h3>Classes</h3><div class="cr-sub">Each level has its own classes, taught in order: Level 1 is open, and every class after it shows builders a padlock until they finish every lesson of the class before. A new class goes to the end, so it arrives locked; change the order inside a class with Move earlier / Move later. Inside an open class, lessons open in order: each one opens when the builder finishes the one before. Whatever you post goes to every builder on that level and their parents, with a bell and an email.</div></div><button type="button" class="cr-btn primary" data-a="add-class"><i class="fas fa-plus"></i> Add class</button></div>' +
         trackTabs(S.track) +
         (list.length ? '<div class="cr-grid">' + list.map(function (c) {
           var n = list.indexOf(c) + 1;
@@ -1170,6 +1186,19 @@
     function lessonState(l) { return gateSteps(l, S.progress[l.id], S.works[l.id]); }
     function passedLesson(l) { return lessonState(l).passed; }
     function lessonsOf(cid) { return (S.lessons || []).filter(function (l) { return l.courseId === cid; }); }
+    /* Lessons open in order: the first unfinished lesson before this one, which keeps it locked.
+       Work already finished or handed in stays open (corrections, and builders who went ahead before locks). */
+    function lockedBy(l) {
+      if (!isBuilder || !l || passedLesson(l) || handedIn(S.works[l.id])) return null;
+      var all = orderedItems(), i = all.findIndex(function (x) { return x.id === l.id; });
+      for (var k = 0; k < i; k++) if (!passedLesson(all[k])) return all[k];
+      return null;
+    }
+    function lockedToast(l) {
+      var b = lockedBy(l); if (!b) return false;
+      toast('Finish “' + nameOf(b) + '” first. Each lesson builds on the one before it.');
+      return true;
+    }
     function courseCount(c) { var ls = lessonsOf(c.id); return { done: ls.filter(passedLesson).length, all: ls.length }; }
     /* A class is passed when it has lessons and every one is finished (or the server already passed it). */
     function coursePassed(c) { if (S.passes[c.id]) return true; var ls = lessonsOf(c.id); return ls.length > 0 && ls.every(passedLesson); }
@@ -1257,6 +1286,7 @@
         if (thenLesson) {
           var want = thenLesson; thenLesson = null;
           var l = S.items.filter(function (x) { return x.id === want; })[0];
+          if (l && lockedToast(l)) l = null;
           if (l) {
             openLesson(l);
             /* "Make corrections" from Results goes straight to the practice tool. */
@@ -1350,13 +1380,15 @@
     function navHtml(l) {
       var all = orderedItems(), i = all.findIndex(function (x) { return x.id === l.id; }), prev = all[i - 1], next = all[i + 1];
       return '<div class="tc-nav" id="tcNav">' + (prev ? '<button type="button" class="tc-btn light" data-tc="lesson" data-id="' + esc(prev.id) + '"><i class="fas fa-arrow-left"></i> Previous</button>' : '<span></span>') +
-        (next ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Next ' + (next.type === 'test' ? 'practice test' : 'lesson') + ' <i class="fas fa-arrow-right"></i></button>' : '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>') + '</div>';
+        (next && lockedBy(next) ? '<button type="button" class="tc-btn light" data-tc="lesson-locked" data-id="' + esc(next.id) + '" title="Finish this ' + wordOf(l) + ' to open the next one"><i class="fas fa-lock"></i> Next ' + (next.type === 'test' ? 'practice test' : 'lesson') + ' opens when you finish this one</button>'
+          : next ? '<button type="button" class="tc-btn" data-tc="lesson" data-id="' + esc(next.id) + '">Next ' + (next.type === 'test' ? 'practice test' : 'lesson') + ' <i class="fas fa-arrow-right"></i></button>' : '<button type="button" class="tc-btn light" data-tc="back">Back to the class</button>') + '</div>';
     }
     function refreshLessonBits() {
       if (S.screen !== 'lesson' || !S.lesson) return;
       var l = S.lesson, el;
       if ((el = host.querySelector('#tcSteps'))) el.outerHTML = stepsHtml(l);
       if ((el = host.querySelector('.tc-lside'))) el.outerHTML = sideList(l);
+      if ((el = host.querySelector('#tcNav'))) el.outerHTML = navHtml(l);
     }
     function crumb(extra) { return '<div class="tc-crumb"><button type="button" data-tc="home">Classes</button>' + extra + '</div>'; }
     function paintCourse() {
@@ -1379,7 +1411,8 @@
         var names = labelsFor(ls);
         h += '<div class="tc-topic"><div class="tc-topic-head">' + esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</div>' + ls.map(function (l) {
           var bits = []; if (l.type === 'test') bits.push('Practice test'); var nv = videosOf(l).length; if (nv) bits.push(nv === 1 ? 'Video' : nv + ' videos'); if (l.notes) bits.push('Notes'); if (l.task) bits.push(g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Write it' : 'Code it'); if (l.questionCount) bits.push(l.questionCount + ' question' + (l.questionCount === 1 ? '' : 's'));
-          var fin = passedLesson(l);
+          var fin = passedLesson(l), lk = lockedBy(l);
+          if (lk) return '<button type="button" class="tc-row locked" data-tc="lesson-locked" data-id="' + esc(l.id) + '" aria-label="' + esc(names[l.id]) + ', locked"><span class="n"><i class="fas fa-lock" aria-hidden="true"></i></span><span class="t"><b>' + esc(names[l.id]) + '</b><small>Finish “' + esc(nameOf(lk)) + '” to open it</small></span><i class="fas fa-lock" style="font-size:.7rem;opacity:.45" aria-hidden="true"></i></button>';
           return '<button type="button" class="tc-row' + (fin ? ' passed' : '') + '" data-tc="lesson" data-id="' + esc(l.id) + '"><span class="n">' + (fin ? '<i class="fas fa-circle-check" title="Finished"></i>' : (nums[l.id] || '')) + '</span><span class="t"><b>' + esc(names[l.id]) + '</b>' + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span>' + itemState(l) + '<i class="fas fa-chevron-right" style="font-size:.7rem;opacity:.5"></i></button>';
         }).join('') + '</div>';
       });
@@ -1476,7 +1509,9 @@
       document.body.appendChild(pop);
       document.documentElement.style.overflow = 'hidden';
       S.pop = pop; claimFloat();
-      S.work = g.TechWork.mountLessonWork(pop.querySelector('.tc-pop-body'), { me: me, student: student, lesson: Object.assign({}, l, { courseName: l.courseName || S.course.name }), label: label, layout: 'pop' });
+      S.work = g.TechWork.mountLessonWork(pop.querySelector('.tc-pop-body'), { me: me, student: student, lesson: Object.assign({}, l, { courseName: l.courseName || S.course.name }), label: label, layout: 'pop',
+        /* Earlier code practices in this class, nearest first: a new practice carries on from the latest one. */
+        carryFrom: (function () { var all = orderedItems(), i = all.findIndex(function (x) { return x.id === l.id; }); return all.slice(0, Math.max(0, i)).filter(function (x) { return x.task && !isWriting(x); }).reverse().map(function (x) { return x.id; }); })() });
       pop.addEventListener('click', function (e) {
         if (e.target.closest('[data-pop="close"]')) closePractice();
         else if (e.target.closest('[data-pop="video"]')) openMini(l, S.vi, 0);
@@ -1565,6 +1600,7 @@
       var ls = S.items.filter(function (x) { return x.topicId === l.topicId; }), names = labelsFor(ls);
       return '<aside class="tc-lside" aria-label="Lessons in this topic"><h4>' + esc(l.topicTitle || 'This topic') + '</h4>' + ls.map(function (x, n) {
         var on = x.id === l.id, done = passedLesson(x);
+        if (!on && lockedBy(x)) return '<button type="button" class="tc-sitem locked" data-tc="lesson-locked" data-id="' + esc(x.id) + '" aria-label="' + esc(names[x.id]) + ', locked"><span class="n"><i class="fas fa-lock"></i></span><span class="t">' + esc(names[x.id]) + '<small>Locked</small></span></button>';
         var bits = []; if (videosOf(x).length) bits.push(videosOf(x).length === 1 ? 'Video' : videosOf(x).length + ' videos'); if (x.task) bits.push(isWriting(x) ? 'Writing' : 'Code'); if (x.questionCount) bits.push('Quiz');
         return '<button type="button" class="tc-sitem' + (on ? ' on' : '') + (done ? ' done' : '') + '" data-tc="lesson" data-id="' + esc(x.id) + '"' + (on ? ' aria-current="true"' : '') + '><span class="n">' + (done ? '<i class="fas fa-check"></i>' : (x.type === 'test' ? '<i class="fas fa-clipboard-question"></i>' : n + 1)) + '</span>' +
           '<span class="t">' + esc(names[x.id]) + (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '') + '</span></button>';
@@ -1664,7 +1700,8 @@
         host.querySelectorAll('[data-tc="tab"]').forEach(function (b) { var on = b === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
         host.querySelectorAll('[data-tabpane]').forEach(function (p) { p.hidden = p.dataset.tabpane !== t.dataset.v; });
       }
-      else if (a === 'lesson') { var l = S.items.filter(function (x) { return x.id === id; })[0]; if (l) openLesson(l); }
+      else if (a === 'lesson') { var l = S.items.filter(function (x) { return x.id === id; })[0]; if (l && !lockedToast(l)) openLesson(l); }
+      else if (a === 'lesson-locked') { var ll = S.items.filter(function (x) { return x.id === id; })[0]; if (ll && !lockedToast(ll)) openLesson(ll); }
       else if (a === 'submit') submitQuiz(S.lesson, t);
       else if (a === 'retry') paintQuiz(S.lesson);
       else if (a === 'pdf') {

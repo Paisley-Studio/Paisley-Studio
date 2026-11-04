@@ -33,9 +33,7 @@
   function starter(kind, title) {
     if (kind === 'writing') return [{ name: 'writing.md', lang: 'md', content: '# ' + (title || 'Our writing') + '\n\n' }];
     return [
-      { name: 'index.html', lang: 'html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>' + String(title || 'Our project').replace(/[<>&"]/g, '') + '</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>' + String(title || 'Our project').replace(/[<>&"]/g, '') + '</h1>\n  <script src="script.js"></script>\n</body>\n</html>\n' },
-      { name: 'style.css', lang: 'css', content: 'body {\n  font-family: sans-serif;\n  padding: 2rem;\n}\n' },
-      { name: 'script.js', lang: 'js', content: '' }
+      { name: 'index.html', lang: 'html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>' + String(title || 'Our project').replace(/[<>&"]/g, '') + '</title>\n</head>\n<body>\n  <h1>' + String(title || 'Our project').replace(/[<>&"]/g, '') + '</h1>\n</body>\n</html>\n' }
     ];
   }
   function style() {
