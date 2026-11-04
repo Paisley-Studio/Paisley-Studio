@@ -959,10 +959,7 @@
           ? 'No topics yet. Add a topic, then add assignments inside it.'
           : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
         S.topics.forEach(function (t) {
-          var rows = ITEMS.filter(function (x) { return x.tid === t.id; }).sort(function (a, b) {
-            var da = dueOf(a, 'assignment'), db2 = dueOf(b, 'assignment');
-            return (da ? da.getTime() : 0) - (db2 ? db2.getTime() : 0);
-          });
+          var rows = ITEMS.filter(function (x) { return x.tid === t.id; }).sort(lmzWorkOrder);   /* number order: 1, 2, 3 ... */
           if (S.view === 'past' && !rows.length) return;
           var open = !S.collapsed[t.id];
           var topicActions = (isAdmin && !S.monitoringOnly && !opts.audience) ? '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="add-assignment" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Prepare assignment</button></div>' : '';
@@ -983,6 +980,7 @@
                 itemPill(it) +
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 (!isAdmin && !isLesson ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
+                (!S.monitoringOnly && global.WorkUI.renewItem ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(it.id) + '" title="Open hand-ins again so students can hand in more work. Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
                 delBtnHtml(it) + '</div></div>';
             });
@@ -1467,6 +1465,7 @@
           }
         }
         else if (a === 'release' && item) global.WorkUI.openRelease(item, user);
+        else if (a === 'renew' && item && global.WorkUI.renewItem) global.WorkUI.renewItem(item, user, function (n) { refresh(); alert('Renewed: ' + n + ' student' + (n === 1 ? '' : 's') + ' can hand in again.'); });
         else if (a === 'add-assignment') {
           if (!isAdmin) { alert('Assignments are prepared by the Studio Desk.'); return; }
           openPostAssignment({ cls: S.cls, topics: S.topics, topicId: id, user: user, afterSave: refresh });

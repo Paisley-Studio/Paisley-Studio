@@ -1204,6 +1204,23 @@ function lmzWorkPredatesStudent(student, item, uid) {
   return !!posted && posted < joined;
 }
 
+/* The one order for homework, classwork and exams on every dashboard: by the number in the
+   title (Homework 1, 2, 3 ... 10), then by the rest of the title, then oldest posted first.
+   Work with no number in its title comes after the numbered work, oldest first. */
+function _lmzWorkNum(it) {
+  var m = /(\d+(?:\.\d+)?)/.exec(String((it && it.title) || ''));
+  return m ? parseFloat(m[1]) : null;
+}
+function lmzWorkOrder(a, b) {
+  var na = _lmzWorkNum(a), nb = _lmzWorkNum(b);
+  if (na != null && nb != null && na !== nb) return na - nb;
+  if ((na == null) !== (nb == null)) return na == null ? 1 : -1;
+  var pa = _lmzMs((a && a.createdAt) || (a && a.publishedAt)) || 0, pb = _lmzMs((b && b.createdAt) || (b && b.publishedAt)) || 0;
+  if (na == null && pa !== pb) return pa - pb;
+  var t = String((a && a.title) || '').localeCompare(String((b && b.title) || ''), undefined, { numeric: true, sensitivity: 'base' });
+  return t || (pa - pb);
+}
+
 var LMZ_SUBJECTS = [
   { id: 'english',            name: 'English',            keyStages: [2, 3, 4, 5] },
   { id: 'mathematics',        name: 'Mathematics',        keyStages: [2, 3, 4, 5], aliases: ['maths', 'math'] },

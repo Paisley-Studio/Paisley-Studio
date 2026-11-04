@@ -100,10 +100,81 @@
     var resub = !!sub && sub.status === 'Submitted' && (h.length > 0 || !!sub.gradedAt);
     return { resub: resub, round: h.length ? h.length + 1 : (resub ? 2 : 1), history: h };
   }
+  /* Open again because staff pressed Renew (not sent back for corrections): status Corrections
+     with a renewedAt newer than the last marking. */
+  function renewedOpen(sub) {
+    if (!sub || sub.status !== 'Corrections' || !sub.renewedAt) return false;
+    var r = U.toDate(sub.renewedAt), g = sub.gradedAt ? U.toDate(sub.gradedAt) : null;
+    return !g || !r || r.getTime() >= g.getTime();
+  }
+
+  /* Renew: every marked hand-in of this homework or classwork opens again, so students hand in
+     the next part (e.g. "do questions 6-10 now"). The earlier upload, mark and feedback go into
+     the hand-in's history, so nothing is lost; the student and parents get a notice. */
+  async function renewItem(it, user, done) {
+    if (!it || it.kind === 'exam' || it.flat) return;
+    injectStyle();
+    var ref = coll(it.cid, it.tid, it.isClasswork ? 'lesson' : 'assignment').doc(it.id).collection('submissions');
+    var m = U.openModal({ title: 'Renew — ' + (it.title || 'work') });
+    m.body.innerHTML = '<div class="cr-empty">Loading…</div>';
+    var snap;
+    try { snap = await ref.get(); } catch (e) { m.body.innerHTML = '<div class="cr-empty">Could not load the hand-ins: ' + esc(e.message || e) + '</div>'; return; }
+    var marked = [], waiting = 0;
+    snap.docs.forEach(function (d) {
+      var s = d.data() || {};
+      if (s.handIn === 'physical') return;
+      if (s.status === 'Graded') marked.push(d);
+      else if (s.status === 'Submitted') waiting++;
+    });
+    var close = '<button type="button" class="cr-btn" data-a="x">Cancel</button>';
+    if (!marked.length) {
+      m.body.innerHTML = '<div class="cr-note">There is no marked work to open again yet.' + (waiting ? ' ' + waiting + ' hand-in' + (waiting === 1 ? ' is' : 's are') + ' not marked yet; those students can still replace their upload.' : '') + ' Students who have not handed in can still hand in.</div>';
+      m.foot.innerHTML = close.replace('Cancel', 'Close');
+      m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
+      return;
+    }
+    m.body.innerHTML = '<div class="cr-note" style="margin-bottom:.7rem">Opens hand-ins again for <b>' + marked.length + ' student' + (marked.length === 1 ? '' : 's') + '</b> whose work is marked, so they can hand in the next part. Their earlier work, mark and feedback stay in their history. Each student and their parents get a notice.' +
+      (waiting ? '<br>' + waiting + ' hand-in' + (waiting === 1 ? ' is' : 's are') + ' not marked yet. Mark ' + (waiting === 1 ? 'it' : 'them') + ' first, or the student can simply replace the upload.' : '') + '</div>' +
+      '<div class="cr-field"><label>What should they hand in now? (optional)</label><textarea id="wkRenewNote" rows="3" style="width:100%;box-sizing:border-box" maxlength="500" placeholder="For example: now do questions 6 to 10"></textarea></div>';
+    m.foot.innerHTML = '<span class="cr-err" id="wkRenewErr"></span>' + close + '<button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-rotate-right"></i> Renew</button>';
+    m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(); };
+    m.foot.querySelector('[data-a="go"]').onclick = async function () {
+      var btn = this; btn.disabled = true;
+      var note = m.body.querySelector('#wkRenewNote').value.trim();
+      var F = firebase.firestore.FieldValue, now = Date.now();
+      try {
+        for (var i = 0; i < marked.length; i += 400) {
+          var batch = db.batch();
+          marked.slice(i, i + 400).forEach(function (d) {
+            var s = d.data() || {}, hist = Array.isArray(s.history) ? s.history : [];
+            var sMs = s.submittedAt ? (U.toDate(s.submittedAt) || { getTime: function () { return 0; } }).getTime() : 0;
+            batch.update(d.ref, {
+              status: 'Corrections', grade: null, maxScore: null,
+              renewedAt: F.serverTimestamp(), renewedBy: user.uid, renewedByName: user.name || user.displayName || '', renewNote: note,
+              history: F.arrayUnion({
+                round: hist.length + 1, outcome: 'Renewed',
+                studentFileUrl: s.fileUrl || '', studentFileName: s.fileName || '', studentText: s.textAnswer || '', submittedAtMs: sMs,
+                markedFileUrl: s.gradedFileUrl || '', markedFileName: s.gradedFileName || '',
+                feedback: s.feedback || '', grade: s.grade != null ? s.grade : null, maxScore: s.maxScore != null ? s.maxScore : null,
+                gradedByName: s.gradedByName || '', note: note, at: now
+              })
+            });
+          });
+          await batch.commit();
+        }
+        m.close();
+        if (typeof done === 'function') done(marked.length);
+      } catch (e) {
+        m.foot.querySelector('#wkRenewErr').textContent = 'Could not renew: ' + (e.message || e);
+        btn.disabled = false;
+      }
+    };
+  }
   // hardCopy: the student hands in on paper (students use item._hardCopy, set by loadStudentWork).
   function workState(item, sub, kind, hardCopy) {
     var now = Date.now();
     if (sub && sub.status === 'Graded') return { k: 'graded', cls: 'b-confirmed', icon: 'fa-circle-check', text: 'Graded: ' + (fmtScore(sub) || 'done') };
+    if (renewedOpen(sub)) return { k: 'corrections', renewed: true, cls: 'b-pending', icon: 'fa-rotate-right', text: 'Open again \u2013 hand in the next part' };
     if (sub && sub.status === 'Corrections') return { k: 'corrections', cls: 'b-declined', icon: 'fa-rotate-left', text: 'Corrections sent \u2013 with student' };
     if (sub && sub.status === 'Suspended') return { k: 'suspended', cls: 'b-declined', icon: 'fa-ban', text: 'Suspended' };
     if (sub && sub.status === 'In progress') return { k: 'progress', cls: 'b-pending', icon: 'fa-hourglass-half', text: 'In progress' };
@@ -1007,13 +1078,8 @@
           ? 'No topics yet. Add a topic, then add assignments inside it.'
           : 'No topics have been added to this classroom yet. The Studio Desk manages topics — check back soon.') + '</div></div>';
         S.topics.forEach(function (t) {
-          var rows = ITEMS.filter(function (x) { return x.tid === t.id; }).sort(function (a, b) {
-            var ca = counts(a), cb = counts(b);
-            if ((cb.resub > 0) !== (ca.resub > 0)) return cb.resub > 0 ? 1 : -1;
-            if ((cb.toGrade > 0) !== (ca.toGrade > 0)) return cb.toGrade > 0 ? 1 : -1;
-            var da = dueOf(a, 'assignment'), db2 = dueOf(b, 'assignment');
-            return (da ? da.getTime() : 0) - (db2 ? db2.getTime() : 0);
-          });
+          /* Always in number order (1, 2, 3 ...); the bubbles show what needs marking. */
+          var rows = ITEMS.filter(function (x) { return x.tid === t.id; }).sort(lmzWorkOrder);
           var tMark = 0, tResub = 0;
           rows.forEach(function (x) { var cx = counts(x); tMark += cx.toGrade; tResub += cx.resub; });
           if (S.view === 'past' && !rows.length) return;
@@ -1038,6 +1104,7 @@
                 itemPill(it) +
                 '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
                 (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(it.id) + '"') : '') +
+                (!S.monitoringOnly ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(it.id) + '" title="Open hand-ins again so students can hand in more work (e.g. the next questions). Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
                 delBtnHtml(it) + '</div></div>';
             });
@@ -1056,8 +1123,11 @@
         (isAdmin ? '<button type="button" class="cr-btn" data-a="wd-here" style="margin-right:.4rem;border-color:#D98A00;color:#9A6200;background:#FFF8E6"><i class="fas fa-eye-slash"></i> Withdraw</button>' : '') +
         (isAdmin && (kind === 'exam' || !it.isClasswork) ? '<button type="button" class="cr-btn danger" data-a="del-here" style="margin-right:auto;border-color:#E74C3C;color:#E74C3C;background:#fff"><i class="fas fa-trash"></i> Delete</button>' : (isAdmin ? '<span style="margin-right:auto"></span>' : '')) +
         (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release-here" style="margin-right:auto;"', U.releasedByMe(it, user.uid) ? ' ' : 'primary') : '') +
+        (kind !== 'exam' && !S.monitoringOnly ? '<button type="button" class="cr-btn" data-a="renew-here" title="Open hand-ins again so students can hand in more work"><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
         '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      var renewHere = m.foot.querySelector('[data-a="renew-here"]');
+      if (renewHere) renewHere.onclick = function () { renewItem(it, user, function () { paint(); refresh(); }); };
       var delHere = m.foot.querySelector('[data-a="del-here"]');
       if (delHere) delHere.onclick = async function () { var ok = await deleteItem(it); if (ok) m.close(); };
       var wdHere = m.foot.querySelector('[data-a="wd-here"]');
@@ -1213,7 +1283,8 @@
       var h = (sub && Array.isArray(sub.history) ? sub.history : []).slice().sort(function (a, b) { return (a.round || 0) - (b.round || 0); });
       function safe(u) { return /^https:\/\//.test(String(u || '')); }
       hm.body.innerHTML = h.length ? h.map(function (e) {
-        return '<div class="wk-sec corr" style="margin-bottom:.8rem"><h4><i class="fas fa-rotate-left"></i> Attempt ' + esc(e.round || '?') + ' \u2014 sent back for corrections' +
+        var ren = e.outcome === 'Renewed', sc = e.grade != null ? ' (' + e.grade + (e.maxScore != null ? '/' + e.maxScore : '') + ')' : '';
+        return '<div class="wk-sec corr" style="margin-bottom:.8rem"><h4><i class="fas ' + (ren ? 'fa-rotate-right' : 'fa-rotate-left') + '"></i> Attempt ' + esc(e.round || '?') + ' \u2014 ' + (ren ? 'marked' + esc(sc) + ', then renewed' + (e.note ? ': ' + esc(e.note) : '') : 'sent back for corrections') +
           (e.at ? ' \u00b7 ' + esc(U.fmtDateTime(new Date(e.at))) : '') + '</h4>' +
           (e.studentText ? '<div class="wk-box">' + esc(e.studentText) + '</div>' : '') +
           '<div class="wk-chips" style="margin:.4rem 0">' +
@@ -1573,6 +1644,7 @@
           }
         }
         else if (a === 'release' && item) global.WorkUI.openRelease(item, user);
+        else if (a === 'renew' && item) renewItem(item, user, function (n) { refresh(); alert('Renewed: ' + n + ' student' + (n === 1 ? '' : 's') + ' can hand in again.'); });
         else if (a === 'add-assignment') {
           if (!isAdmin) { alert('Assignments are prepared by the Studio Desk.'); return; }
           openPostAssignment({ cls: S.cls, topics: S.topics, topicId: id, user: user, afterSave: refresh });
@@ -1727,7 +1799,9 @@
       it._hardCopy = hardCopy;
       if (keep(it)) out.exams.push(it);
     });
-
+    var tix = {}; (topics || []).forEach(function (t, i) { tix[t.id] = i; });
+    items.forEach(function (it) { it._tix = tix[it.tid] != null ? tix[it.tid] : 9999; });
+    out.assignments.sort(lmzWorkOrder); out.lessons.sort(lmzWorkOrder); out.exams.sort(lmzWorkOrder);
     return out;
   }
 
@@ -1765,7 +1839,7 @@
         var pick = isEx ? pc.w.exams : pc.w.assignments.concat(pc.w.lessons);
         pick.forEach(function (x) { x._cls = pc.cls; all.push(x); });
       });
-      S.items = all.filter(function (it) { return studentSees(student, it); });
+      S.items = all.filter(function (it) { return studentSees(student, it); }).sort(lmzWorkOrder);
       S.loaded = true;
     }
 
@@ -1814,9 +1888,10 @@
       var byTopic = {}, order = [];
       cur.forEach(function (it) {
         var key = it.tid || '_flat';
-        if (!byTopic[key]) { byTopic[key] = { title: it.topicTitle || (isEx ? 'Exams' : 'Work'), items: [] }; order.push(key); }
+        if (!byTopic[key]) { byTopic[key] = { title: it.topicTitle || (isEx ? 'Exams' : 'Work'), tix: it._tix != null ? it._tix : 9999, items: [] }; order.push(key); }
         byTopic[key].items.push(it);
       });
+      order.sort(function (a, b) { return byTopic[a].tix - byTopic[b].tix; });   /* topics in the class's own order */
       if (!order.length) h += '<div class="cr-panel"><div class="cr-empty">Nothing waiting for you here.</div></div>';
       order.forEach(function (key) {
         h += '<div class="cr-panel" style="margin-bottom:1rem"><h4 style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)">' + esc(byTopic[key].title) + '</h4>' + byTopic[key].items.map(rowHtml).join('') + '</div>';
@@ -1927,6 +2002,15 @@
           : '<div class="cr-note">No marked copy was attached \u2014 the score and feedback above are your result.</div>') +
         '</div>';
     }
+    if (renewedOpen(sub)) {
+      var last = (Array.isArray(sub.history) ? sub.history : []).filter(function (x) { return x && x.outcome === 'Renewed'; }).sort(function (a, b) { return (a.round || 0) - (b.round || 0); }).pop() || {};
+      var was = last.grade != null && last.maxScore != null ? last.grade + '/' + last.maxScore : (last.grade != null ? String(last.grade) : '');
+      return '<div class="wk-sec wait"><h4><i class="fas fa-rotate-right"></i> Open again: hand in the next part</h4>' +
+        '<div class="cr-note" style="margin-bottom:.4rem">' + (sub.renewedByName ? esc(sub.renewedByName) + ' opened' : 'Your tutor opened') + ' this work again' + (sub.renewedAt ? ' · ' + esc(U.fmtDateTime(sub.renewedAt)) : '') + '. Your earlier work' + (was ? ' and mark (' + esc(was) + ')' : '') + ' are kept.</div>' +
+        (sub.renewNote ? '<div class="wk-fb"><b>What to hand in now</b><br>' + esc(sub.renewNote) + '</div>' : '') +
+        (okUrl(last.markedFileUrl) ? '<a class="wk-dl alt" href="' + esc(last.markedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Earlier marked copy</a>' : '') +
+        '</div>';
+    }
     if (sub.status === 'Corrections') {
       return '<div class="wk-sec corr"><h4><i class="fas fa-rotate-left"></i> Corrections requested</h4>' +
         '<div class="cr-note" style="margin-bottom:.4rem">Your tutor sent this back' + (gAt ? ' \u00b7 ' + esc(U.fmtDateTime(gAt)) : '') + '. Read the notes, fix your work and upload it again below.</div>' +
@@ -1962,6 +2046,7 @@
       var status = sub ? sub.status : '';
       var isGraded = status === 'Graded';
       var isCorr = status === 'Corrections';
+      var isRenew = renewedOpen(sub);
       var hardCopy = !!(meDoc && meDoc.exists) && lmzHandsInOnPaper(meDoc.data(), it.subjectId || String((String(cid).match(/^(.*?)_y\d+/) || [])[1] || ''));
       var canUpload = !isGraded && !(hardCopy && !isCorr);
 
@@ -1982,7 +2067,7 @@
 
       var form = '';
       if (canUpload) {
-        form = '<div class="cr-panel"><h4 style="margin:0 0 .5rem">' + (isCorr ? 'Upload your corrected work' : (sub ? 'Replace my upload' : 'Hand in my work')) + '</h4>' +
+        form = '<div class="cr-panel"><h4 style="margin:0 0 .5rem">' + (isRenew ? 'Hand in the next part' : (isCorr ? 'Upload your corrected work' : (sub ? 'Replace my upload' : 'Hand in my work'))) + '</h4>' +
           '<div class="cr-field"><label>Your Answer (Optional)</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here...">' + esc(sub && sub.textAnswer || '') + '</textarea></div>' +
           '<div class="cr-field"><label>Upload File (PDF/Image)</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none"></div>' +
           '<div class="cr-prog" id="subProg" style="display:none;height:4px;background:var(--line);margin-top:1rem;border-radius:2px"><div style="height:100%;background:var(--brand);width:0%;transition:width .2s"></div></div></div>';
@@ -1994,7 +2079,7 @@
         m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(); };
         return;
       }
-      m.foot.innerHTML = '<span class="cr-err" id="subErr"></span><button class="cr-btn" data-a="cancel">Cancel</button><button class="cr-btn primary" data-a="submit"><i class="fas fa-paper-plane"></i> ' + (isCorr ? 'Resubmit' : 'Submit') + '</button>';
+      m.foot.innerHTML = '<span class="cr-err" id="subErr"></span><button class="cr-btn" data-a="cancel">Cancel</button><button class="cr-btn primary" data-a="submit"><i class="fas fa-paper-plane"></i> ' + (isRenew ? 'Hand in again' : (isCorr ? 'Resubmit' : 'Submit')) + '</button>';
 
       var fileIn = m.body.querySelector('#subFile');
       var file = null;
@@ -2085,8 +2170,9 @@
 
   function rowActionHtml(it, onclickAttr) {
     var st = it.sub && it.sub.status;
-    var label = st === 'Graded' ? 'View graded work' : (st === 'Corrections' ? 'Fix &amp; resubmit' : (it.sub ? 'View my work' : 'Open'));
-    var icon = st === 'Graded' ? 'fa-circle-check' : (st === 'Corrections' ? 'fa-rotate-left' : 'fa-eye');
+    var again = renewedOpen(it.sub);
+    var label = st === 'Graded' ? 'View graded work' : (again ? 'Hand in again' : (st === 'Corrections' ? 'Fix &amp; resubmit' : (it.sub ? 'View my work' : 'Open')));
+    var icon = st === 'Graded' ? 'fa-circle-check' : (again ? 'fa-rotate-right' : (st === 'Corrections' ? 'fa-rotate-left' : 'fa-eye'));
     var cls = st === 'Graded' ? 'cr-btn sm wk-gbtn' : 'cr-btn sm primary';
     var extra = st === 'Graded' && okUrl(it.sub.gradedFileUrl)
       ? '<a class="cr-btn sm" href="' + esc(it.sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer" style="text-decoration:none"><i class="fas fa-download"></i> Marked copy</a>' : '';
@@ -2167,7 +2253,8 @@
         return; 
       }
 
-      // 5. Render
+      // 5. Render (in number order: Homework 1, 2, 3 ...)
+      all.sort(lmzWorkOrder);
       var by = {};
       all.forEach(function (it) { var n = it._cls.subjectName || it._cls.subjectId; (by[n] = by[n] || []).push(it); });
       var h = '';
@@ -2257,6 +2344,8 @@
   global.WorkUI = global.WorkUI || {};
   Object.assign(global.WorkUI, {
     isStudentTodo: isStudentTodo,
+    renewItem: renewItem,
+    renewedOpen: renewedOpen,
     mountManagement: mountManagement,
     openPostAssignment: openPostAssignment,
     openCreateExam: openCreateExam,

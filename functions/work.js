@@ -214,6 +214,29 @@ async function handleWorkWrite(event, kind) {
     return;
   }
 
+  // 1c. A tutor pressed Renew: marked work is open to hand in again (status Corrections with a
+  // new renewedAt). Tell the student and parents in plain words, not "corrections requested".
+  const msOf = (t) => { const d = W.toDate(t); return d ? d.getTime() : 0; };
+  if (after.status === "Corrections" && after.renewedAt && msOf(after.renewedAt) !== msOf(before && before.renewedAt)) {
+    const claimed = await W.claimOnce(W.stableId("renewed", cid, parentId, studentId, String(msOf(after.renewedAt))));
+    if (!claimed) return;
+    const studentSnap = await W.db().collection("students").doc(studentId).get();
+    const student = studentSnap.exists ? { id: studentId, ...studentSnap.data() } : { id: studentId, name: after.studentName };
+    const subj = item.subjectName || item.subject || "";
+    const note = String(after.renewNote || "").trim();
+    const studentMsg = `${item.title || noun} (${subj}) is open again. Your tutor wants you to hand in more work.` + (note ? ` ${note}` : "") + " Your earlier work and mark are kept.";
+    const parentMsg = `${student.name || "Your child"}'s ${noun.toLowerCase()} "${item.title || ""}" (${subj}) is open again for the next part.` + (note ? ` ${note}` : "");
+    try {
+      await W.notify(studentId, "student", { type: kind === "exam" ? "exam_renewed" : "homework_renewed", title: `${noun} open again: ${item.title || ""}`, message: studentMsg, relatedEntity: relEntity, relatedEntityId: entityId });
+    } catch (e) { console.warn("renewed: student notice failed", e.message || e); }
+    for (const p of await W.parentsOfStudent(studentId)) {
+      try {
+        await W.notify(p.id, "parent", { type: kind === "exam" ? "exam_renewed" : "homework_renewed", title: `${student.name || "Your child"}: ${noun.toLowerCase()} open again`, message: parentMsg, relatedEntity: relEntity, relatedEntityId: entityId, extra: { studentId } });
+      } catch (e) { console.warn("renewed: parent notice failed", e.message || e); }
+    }
+    return;
+  }
+
   // 2. Marks released (Graded) or work sent back (Corrections)
   const status = after.status;
   if (after.released !== true || (status !== "Graded" && status !== "Corrections")) return;

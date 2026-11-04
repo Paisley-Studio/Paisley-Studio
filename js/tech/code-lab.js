@@ -133,8 +133,10 @@
   /* HTML tags offered as you type a word on its own (d -> div): picking one writes the whole tag,
      opening and closing, with the cursor where the content goes (| marks it). Most used first. */
   var BLOCK = function (t) { return '<' + t + '>\n  |\n</' + t + '>'; };
+  var PAGE_SNIP = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>My page</title>\n</head>\n<body>\n  |\n</body>\n</html>';
+  /* doc, DOC, html or ! all give the whole starting page (the boilerplate). */
   var TAG_SNIPS = [
-    ['div', '<div>|</div>'], ['p', '<p>|</p>'], ['h1', '<h1>|</h1>'], ['h2', '<h2>|</h2>'], ['h3', '<h3>|</h3>'],
+    ['div', '<div>|</div>'], ['doc', PAGE_SNIP, 'doc  whole page'], ['html', PAGE_SNIP, 'html  whole page'], ['p', '<p>|</p>'], ['h1', '<h1>|</h1>'], ['h2', '<h2>|</h2>'], ['h3', '<h3>|</h3>'],
     ['a', '<a href="|"></a>'], ['img', '<img src="|" alt="">'], ['button', '<button>|</button>'],
     ['ul', '<ul>\n  <li>|</li>\n</ul>'], ['ol', '<ol>\n  <li>|</li>\n</ol>'], ['li', '<li>|</li>'], ['span', '<span>|</span>'],
     ['section', BLOCK('section')], ['header', BLOCK('header')], ['footer', BLOCK('footer')], ['nav', BLOCK('nav')], ['main', BLOCK('main')],
@@ -150,7 +152,6 @@
     ['meta', '<meta charset="UTF-8">|'], ['title', '<title>|</title>'], ['head', BLOCK('head')], ['body', BLOCK('body')],
     ['h4', '<h4>|</h4>'], ['h5', '<h5>|</h5>'], ['h6', '<h6>|</h6>']
   ];
-  var PAGE_SNIP = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>My page</title>\n</head>\n<body>\n  |\n</body>\n</html>';
   /* Writes a snippet over the typed word, indented like its line, with the cursor at |. */
   function putSnippet(cm, from, to, snip) {
     var indent = /^\s*/.exec(cm.getLine(from.line))[0];
@@ -179,7 +180,7 @@
     if (word.charAt(0) === '!') list = word === '!' ? [item('!', PAGE_SNIP, '! whole page')] : [];
     else {
       var w = word.toLowerCase();
-      list = TAG_SNIPS.filter(function (t) { return t[0].indexOf(w) === 0; }).map(function (t) { return item(t[0], t[1]); });
+      list = TAG_SNIPS.filter(function (t) { return t[0].indexOf(w) === 0; }).map(function (t) { return item(t[0], t[1], t[2]); });
     }
     return list.length ? { list: list, from: from, to: to } : null;
   }
