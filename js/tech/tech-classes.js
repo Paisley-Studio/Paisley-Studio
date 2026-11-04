@@ -247,7 +247,7 @@
       '.tc-upnext{position:absolute;right:14px;bottom:14px;z-index:2;display:flex;align-items:center;gap:.7rem;max-width:calc(100% - 28px);padding:.7rem .8rem .7rem 1rem;border-radius:14px;background:rgba(15,26,20,.88);color:#fff;font-size:.84rem;box-shadow:0 10px 30px rgba(0,0,0,.35)}',
       '.tc-upnext small{display:block;opacity:.75;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}',
       /* the lesson video floating over the practice tool: drag it, resize it, close it */
-      '.tc-mini{position:fixed;z-index:700;width:340px;min-width:220px;max-width:calc(100vw - 16px);background:#0F1A14;border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column}',
+      '.tc-mini{position:fixed;z-index:2500;width:340px;min-width:220px;max-width:calc(100vw - 16px);background:#0F1A14;border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column}',
       '.tc-mini.big{width:min(720px,calc(100vw - 16px))}',
       '.tc-mini-bar{display:flex;align-items:center;gap:.35rem;padding:.35rem .4rem .35rem .7rem;background:#1C2B26;color:#E6F2EF;cursor:grab;touch-action:none;user-select:none}',
       '.tc-mini.dragging .tc-mini-bar{cursor:grabbing}',
@@ -656,7 +656,10 @@
       });
     }
     var live = item && item.status === 'published';
-    m.foot.innerHTML = '<span class="cr-err" id="tcErr"></span><button type="button" class="cr-btn" data-e="x">Cancel</button><button type="button" class="cr-btn" data-e="draft"><i class="fas fa-floppy-disk"></i> ' + (live ? 'Take down, keep as draft' : 'Save draft') + '</button><button type="button" class="cr-btn primary" data-e="post"><i class="fas fa-paper-plane"></i> ' + (live ? 'Save changes' : 'Post to ' + esc(trackName(cls.track))) + '</button>';
+    /* Lessons are prepared as drafts and go out together with Publish the class (one bell and one email). */
+    m.foot.innerHTML = '<span class="cr-err" id="tcErr"></span><button type="button" class="cr-btn" data-e="x">Cancel</button>' + (live
+      ? '<button type="button" class="cr-btn" data-e="draft"><i class="fas fa-eye-slash"></i> Take down, keep as draft</button><button type="button" class="cr-btn primary" data-e="post"><i class="fas fa-floppy-disk"></i> Save changes</button>'
+      : '<span class="cr-note" style="margin-right:auto">Builders see it when you publish the class.</span><button type="button" class="cr-btn primary" data-e="draft"><i class="fas fa-floppy-disk"></i> Save to the class</button>');
     var err = function (t) { m.foot.querySelector('#tcErr').textContent = t || ''; };
     m.foot.querySelector('[data-e="x"]').onclick = function () { m.close(); };
     async function save(status) {
@@ -715,7 +718,7 @@
       }
     }
     m.foot.querySelector('[data-e="draft"]').onclick = function () { save('draft'); };
-    m.foot.querySelector('[data-e="post"]').onclick = function () { save('published'); };
+    var postBtn = m.foot.querySelector('[data-e="post"]'); if (postBtn) postBtn.onclick = function () { save('published'); };
   }
 
   /* =========================================================
@@ -760,7 +763,7 @@
     /* The classes of one level tab in learning order: Level 1, 2, 3… */
     function ladderOf(track) { return S.courses.filter(function (c) { return onTrack(c, track); }).sort(byCourse); }
     function nextOrder(track) { return ladderOf(track).reduce(function (m, c) { return Math.max(m, c.order || 0); }, 0) + 1; }
-    function statusBadge(l) { return '<span class="cr-badge ' + (l.status === 'published' ? 'published' : 'draft') + '">' + (l.status === 'published' ? 'Posted' : 'Draft') + '</span>'; }
+    function statusBadge(l) { return '<span class="cr-badge ' + (l.status === 'published' ? 'published' : 'draft') + '">' + (l.status === 'published' ? 'Published' : 'Not published yet') + '</span>'; }
     function itemMeta(l) {
       var bits = [];
       var nv = videosOf(l).length; if (nv) bits.push(nv === 1 ? 'Video' : nv + ' videos');
@@ -774,14 +777,16 @@
     }
     function paintCourse() {
       var c = S.course, canC = canEdit(c), lvList = ladderOf(S.track), lvIdx = lvList.findIndex(function (x) { return x.id === c.id; });
+      var nDraft = S.items.filter(function (x) { return x.status !== 'published'; }).length, nPub = S.items.length - nDraft;
       var h = '<div class="cr-crumb"><a data-a="back">Classes</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(c.name) + '</span></div>' +
-        '<div class="cr-bar"><div><h3>' + (lvIdx > -1 ? '<span style="color:var(--brand,#55BFB3)">Level ' + (lvIdx + 1) + ' · </span>' : '') + esc(c.name) + '</h3><div style="margin:.3rem 0">' + levelBadge(c.track) + '</div><div class="cr-sub">' + esc(T.disciplineLabel(c.discipline)) + '. Topics and lessons appear to builders in this order and are always open. ' + (lvIdx === 0 ? '<b>Level 1: open to every builder on this level.</b>' : '<b>Level ' + (lvIdx + 1) + ': locked for each builder until they finish every lesson of Level ' + lvIdx + ', ' + esc(lvList[lvIdx - 1].name) + '.</b>') + '</div></div><div class="cr-actions">' +
+        '<div class="cr-bar"><div><h3>' + (lvIdx > -1 ? '<span style="color:var(--brand,#55BFB3)">Level ' + (lvIdx + 1) + ' · </span>' : '') + esc(c.name) + '</h3><div style="margin:.3rem 0">' + levelBadge(c.track) + '</div><div class="cr-sub">' + esc(T.disciplineLabel(c.discipline)) + '. Topics and lessons appear to builders in this order; each lesson opens when the one before it is finished. Prepare the lessons, then publish the class once: builders and families get one bell and one email for it. ' + (lvIdx === 0 ? '<b>Level 1: open to every builder on this level.</b>' : '<b>Level ' + (lvIdx + 1) + ': locked for each builder until they finish every lesson of Level ' + lvIdx + ', ' + esc(lvList[lvIdx - 1].name) + '.</b>') + '</div></div><div class="cr-actions">' +
         '<button type="button" class="cr-btn" data-a="class-up" data-id="' + esc(c.id) + '"' + (lvIdx <= 0 ? ' disabled' : '') + ' title="Move earlier in the order"><i class="fas fa-arrow-left"></i> Move earlier</button>' +
         '<button type="button" class="cr-btn" data-a="class-down" data-id="' + esc(c.id) + '"' + (lvIdx < 0 || lvIdx >= lvList.length - 1 ? ' disabled' : '') + ' title="Move later in the order"><i class="fas fa-arrow-right"></i> Move later</button>' +
         (isAdmin ? '<button type="button" class="cr-btn" data-a="open-for"><i class="fas fa-lock-open"></i> Open for a builder</button>' : '') +
         (canC ? '<button type="button" class="cr-btn" data-a="rename"><i class="fas fa-gear"></i> Settings</button><button type="button" class="cr-btn danger" data-a="del-class" aria-label="Delete class" title="Delete class"><i class="fas fa-trash"></i></button>' : '') +
-        (S.items.some(function (x) { return x.status !== 'published'; }) ? '<button type="button" class="cr-btn" data-a="post-class"><i class="fas fa-paper-plane"></i> Post the whole class</button>' : '') +
-        '<button type="button" class="cr-btn primary" data-a="add-topic"><i class="fas fa-plus"></i> Add topic</button></div></div>';
+        '<button type="button" class="cr-btn' + (nDraft ? '' : ' primary') + '" data-a="add-topic"><i class="fas fa-plus"></i> Add topic</button>' +
+        (nDraft ? '<button type="button" class="cr-btn primary" data-a="post-class"><i class="fas fa-paper-plane"></i> Publish the class' + (nPub ? ' (' + nDraft + ' new)' : '') + '</button>' : '') + '</div></div>' +
+        (nDraft ? '<div class="cr-panel" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.8rem 1rem;margin-bottom:1rem"><i class="fas fa-circle-info" style="color:var(--brand,#55BFB3)"></i><div style="flex:1;min-width:220px"><b>' + nDraft + ' lesson' + (nDraft === 1 ? '' : 's') + ' not published yet.</b><div class="cr-note">' + (nPub ? 'Builders already have the published lessons. ' : 'Builders and families see nothing of this class yet. ') + 'Prepare everything, then press Publish the class: it all goes out together, with one bell and one email.</div></div><button type="button" class="cr-btn primary" data-a="post-class"><i class="fas fa-paper-plane"></i> Publish the class</button></div>' : '');
       if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">No topics yet. Add a topic (for example “Flow”), then add lessons inside it.</div></div>';
       S.topics.forEach(function (t, ti) {
         var ls = S.items.filter(function (l) { return l.topicId === t.id; }).sort(byOrder), open = !S.collapsed[t.id];
@@ -801,7 +806,6 @@
               (l.questionCount ? '<button type="button" class="cr-btn sm" data-a="item-results" data-id="' + esc(l.id) + '"><i class="fas fa-square-poll-vertical"></i> Results</button>' : '') +
               (l.task && g.TechWork ? '<button type="button" class="cr-btn sm" data-a="item-work" data-id="' + esc(l.id) + '"><i class="fas fa-inbox"></i> Hand-ins</button>' : '') +
               (canEdit(l) ? '<button type="button" class="cr-btn sm" data-a="edit-item" data-id="' + esc(l.id) + '"><i class="fas fa-pen"></i> Edit</button>' +
-                (l.status === 'published' ? '' : '<button type="button" class="cr-btn sm primary" data-a="post-item" data-id="' + esc(l.id) + '"><i class="fas fa-paper-plane"></i> Post</button>') +
                 '<button type="button" class="cr-btn sm danger" aria-label="Delete" title="Delete" data-a="del-item" data-id="' + esc(l.id) + '"><i class="fas fa-trash"></i></button>' : '') +
               '</div></div>';
           });
@@ -869,14 +873,14 @@
       if (!mine.length) { note('These drafts were made by another coach, so only they or an admin can post them.', true); return; }
       if (empty.length) { note('Some drafts are still empty (no video, notes, file, quiz or practice). Fill them in or delete them first.', true); return; }
       var skipped = drafts.length - mine.length;
-      if (!confirm('Post ' + mine.length + ' lesson' + (mine.length === 1 ? '' : 's') + ' in “' + S.course.name + '” to every ' + trackName(S.course.track) + ' builder and their parents? They get one bell and one email for the whole class.' + (skipped ? ' (' + skipped + ' made by another coach stay as drafts.)' : ''))) return;
+      if (!confirm('Publish ' + mine.length + ' lesson' + (mine.length === 1 ? '' : 's') + ' in “' + S.course.name + '” to every ' + trackName(S.course.track) + ' builder and their parents? They get one bell and one email for the whole class.' + (skipped ? ' (' + skipped + ' made by another coach stay as drafts.)' : ''))) return;
       var bt = db.batch(), now = FV().serverTimestamp(), batchId = Date.now().toString(36) + shortId();
       mine.forEach(function (x) {
         var up = { status: 'published', updatedAt: now, classPost: batchId, classPostCount: mine.length };
         if (!x.publishedAt) up.publishedAt = now;
         bt.update(LESSONS().doc(x.id), up);
       });
-      bt.commit().then(function () { note('Posted ' + mine.length + ' lesson' + (mine.length === 1 ? '' : 's') + '. Builders on this level and their parents are being told once.'); }).catch(fail);
+      bt.commit().then(function () { note('Published ' + mine.length + ' lesson' + (mine.length === 1 ? '' : 's') + '. Builders on this level and their parents get one bell and one email.'); }).catch(fail);
     }
     /* Admin: open this class for one builder, at any level. */
     function openFor() {
@@ -988,7 +992,7 @@
       }
       else if (a === 'add-lesson' || a === 'add-test') {
         var next = S.items.filter(function (x) { return x.topicId === id; }).reduce(function (m, x) { return Math.max(m, x.order || 0); }, 0) + 1;
-        openEditor({ me: me, course: S.course, topics: S.topics, topicId: id, type: a === 'add-test' ? 'test' : 'lesson', nextOrder: next, onSaved: function (st) { note(st === 'published' ? 'Posted. Builders on this level and their parents are being told.' : 'Saved as a draft.'); } });
+        openEditor({ me: me, course: S.course, topics: S.topics, topicId: id, type: a === 'add-test' ? 'test' : 'lesson', nextOrder: next, onSaved: function (st) { note(st === 'published' ? 'Saved.' : 'Saved to the class. Press Publish the class when every lesson is ready.'); } });
       }
       else if (a === 'edit-item') { var ed = it(); if (ed) openEditor({ me: me, course: S.course, topics: S.topics, item: ed, onSaved: function () { note('Saved.'); } }); }
       else if (a === 'post-item') {

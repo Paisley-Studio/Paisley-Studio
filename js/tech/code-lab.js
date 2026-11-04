@@ -289,6 +289,7 @@
   /* ---------------------------------------------------------
      The IDE
      --------------------------------------------------------- */
+  var FULL = { key: '', at: 0 };   /* the last full-screen IDE, so a re-draw keeps it full screen */
   function mount(hostEl, opts) {
     if (!hostEl) throw new Error('CodeLab.mount: missing host element');
     injectStyle();
@@ -324,7 +325,7 @@
           '<div class="cl-people" aria-label="Who is here"></div>' +
           '<div class="cl-actions">' +
             (docMode ? '' : '<button type="button" class="cl-btn" data-clcmd="layout" title="Side by side / stacked" aria-label="Change layout"><i class="fas fa-table-columns"></i></button>') +
-            '<button type="button" class="cl-btn cl-fullbtn" data-clcmd="full" title="Full screen (Esc to leave)" aria-label="Full screen" aria-pressed="false"><i class="fas fa-expand"></i></button>' +
+            '<button type="button" class="cl-btn cl-fullbtn" data-clcmd="full" title="Full screen" aria-label="Full screen" aria-pressed="false"><i class="fas fa-expand"></i></button>' +
             (canEdit && !collab ? '<button type="button" class="cl-btn cl-save" data-clcmd="save"><i class="fas fa-floppy-disk"></i> Save</button>' : '') +
             '<button type="button" class="cl-btn cl-run" data-clcmd="run" title="Run" aria-label="Run"><i class="fas fa-play"></i> Run</button>' +
           '</div>' +
@@ -707,11 +708,32 @@
     window.addEventListener('message', onMessage);
 
     /* ---------- files, folders, uploads ---------- */
-    function askName(msg, start) { var n = prompt(msg, start || ''); return n == null ? null : cleanName(n); }
+    /* Questions are asked inside the IDE, not with prompt()/confirm(): those boxes make the browser leave full screen. */
+    function dialog(msg, value, okLabel) {
+      return new Promise(function (done) {
+        var box = document.createElement('div'), ask = value != null;
+        box.className = 'cl-dlg'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+        box.innerHTML = '<form class="cl-dlg-box"><p>' + esc(msg) + '</p>' + (ask ? '<input type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="' + esc(msg) + '">' : '') +
+          '<div class="cl-dlg-acts"><button type="button" class="cl-btn" data-dlg="no">Cancel</button><button type="submit" class="cl-btn cl-save">' + esc(okLabel || 'OK') + '</button></div></form>';
+        (q('.cl-shell') || document.body).appendChild(box);
+        var inp = box.querySelector('input'), form = box.querySelector('form');
+        function end(v) { box.remove(); document.removeEventListener('keydown', onKey, true); done(v); if (cm && ask) cm.focus(); }
+        function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); end(ask ? null : false); } }
+        document.addEventListener('keydown', onKey, true);
+        form.addEventListener('submit', function (e) { e.preventDefault(); end(ask ? inp.value : true); });
+        box.querySelector('[data-dlg=no]').addEventListener('click', function () { end(ask ? null : false); });
+        box.addEventListener('mousedown', function (e) { if (e.target === box) end(ask ? null : false); });
+        setTimeout(function () { if (inp) { inp.value = value || ''; inp.focus(); inp.select(); } else form.querySelector('[type=submit]').focus(); }, 0);
+      });
+    }
+    function askName(msg, start) { return dialog(msg, start || '').then(function (n) { return n == null ? null : cleanName(n); }); }
+    function sure(msg) { return dialog(msg, null, 'Delete'); }
     function taken(n, except) { var low = n.toLowerCase(); return files.some(function (f) { return f !== except && f.name.toLowerCase() === low; }) || assets.some(function (a) { return a !== except && a.name.toLowerCase() === low; }); }
     function addFile(dir) {
       if (files.length >= MAX_FILES) { setStatus('A project can hold ' + MAX_FILES + ' files.', 'err'); return; }
-      var n = askName('New file name, for example about.html, game.js or style.css' + (dir ? ' (it goes in ' + dir + '/)' : ''), ''); if (!n) return;
+      askName('New file name, for example about.html, game.js or style.css' + (dir ? ' (it goes in ' + dir + '/)' : ''), '').then(function (n) { if (n) makeFile(n, dir); });
+    }
+    function makeFile(n, dir) {
       if (dir && n.indexOf('/') === -1) n = dir + '/' + n;
       if (!/\.\w+$/.test(n)) n += '.html';
       if (taken(n)) { setStatus('There is already a file called ' + n, 'err'); return; }
@@ -722,7 +744,9 @@
       if (cm) cm.focus();
     }
     function addFolder() {
-      var n = askName('Folder name, for example images or pages' + (curFolder ? ' (inside ' + curFolder + '/)' : ''), ''); if (!n) return;
+      askName('Folder name, for example images or pages' + (curFolder ? ' (inside ' + curFolder + '/)' : ''), '').then(function (n) { if (n) makeFolder(n); });
+    }
+    function makeFolder(n) {
       if (curFolder && n.indexOf('/') === -1) n = curFolder + '/' + n;
       if (allFolders().indexOf(n) !== -1) { setStatus('That folder already exists.', 'err'); return; }
       folders.push(n); delete deleted[n]; openFolder[n] = true; curFolder = n; structural();
@@ -750,7 +774,9 @@
     }
     function renameFile(name) {
       var f = file(name); if (!f) return;
-      var n = askName('Rename or move. Use a folder name to move it, for example pages/' + baseOf(f.name), f.name); if (!n || n === f.name) return;
+      askName('Rename or move. Use a folder name to move it, for example pages/' + baseOf(f.name), f.name).then(function (n) { if (n && n !== f.name) moveFile(f, name, n); });
+    }
+    function moveFile(f, name, n) {
       if (taken(n, f)) { setStatus('That name is taken.', 'err'); return; }
       deleted[f.name] = true; if (docs[f.name]) { docs[n] = docs[f.name]; delete docs[f.name]; }
       f.name = n; f.lang = langOf(n); delete deleted[n];
@@ -759,14 +785,18 @@
     }
     function deleteFile(name) {
       if (files.length <= 1) { setStatus('Keep at least one file.', 'err'); return; }
-      if (!confirm('Delete ' + name + '?')) return;
-      files = files.filter(function (x) { return x.name !== name; }); delete docs[name]; deleted[name] = true;
-      if (activeName === name) activeName = files[0].name;
-      loadActive(); structural();
+      sure('Delete ' + name + '?').then(function (ok) {
+        if (!ok) return;
+        files = files.filter(function (x) { return x.name !== name; }); delete docs[name]; deleted[name] = true;
+        if (activeName === name) activeName = files[0].name;
+        loadActive(); structural();
+      });
     }
     function deleteFolder(dir) {
       var inside = files.filter(function (f) { return f.name.indexOf(dir + '/') === 0; }).length + assets.filter(function (a) { return a.name.indexOf(dir + '/') === 0; }).length;
-      if (inside && !confirm('Delete the folder ' + dir + ' and the ' + inside + ' thing' + (inside === 1 ? '' : 's') + ' in it?')) return;
+      (inside ? sure('Delete the folder ' + dir + ' and the ' + inside + ' thing' + (inside === 1 ? '' : 's') + ' in it?') : Promise.resolve(true)).then(function (ok) { if (ok) dropFolder(dir); });
+    }
+    function dropFolder(dir) {
       files.filter(function (f) { return f.name.indexOf(dir + '/') === 0; }).forEach(function (f) { deleted[f.name] = true; delete docs[f.name]; });
       assets.filter(function (a) { return a.name.indexOf(dir + '/') === 0; }).forEach(function (a) { deleted[a.name] = true; });
       files = files.filter(function (f) { return f.name.indexOf(dir + '/') !== 0; });
@@ -798,8 +828,10 @@
       else setStatus(text);
     }
     function deleteAsset(name) {
-      if (!confirm('Delete ' + name + '? Code that uses it will show a broken picture.')) return;
-      assets = assets.filter(function (a) { return a.name !== name; }); deleted[name] = true; structural();
+      sure('Delete ' + name + '? Code that uses it will show a broken picture.').then(function (ok) {
+        if (!ok) return;
+        assets = assets.filter(function (a) { return a.name !== name; }); deleted[name] = true; structural();
+      });
     }
     var upIn = q('.cl-upin');
     /* The toolbar's upload goes to the folder that is selected; a folder's own Upload button goes there. */
@@ -875,20 +907,23 @@
       shellEl.classList.toggle('cl-full', on);
       document.documentElement.classList.toggle('cl-noscroll', on);
       var b = hostEl.querySelector('.cl-fullbtn');
-      if (b) { b.setAttribute('aria-pressed', on); b.title = on ? 'Leave full screen (Esc)' : 'Full screen (Esc to leave)'; b.innerHTML = '<i class="fas fa-' + (on ? 'compress' : 'expand') + '"></i>'; }
+      if (b) { b.setAttribute('aria-pressed', on); b.title = on ? 'Leave full screen' : 'Full screen'; b.innerHTML = '<i class="fas fa-' + (on ? 'compress' : 'expand') + '"></i>'; }
       setTimeout(function () { if (cm) cm.refresh(); }, 60);
     }
     function toggleFull() {
-      var want = !isFull();
+      var want = !isFull(), root = document.documentElement;
       setFull(want);
       try {
-        if (want && shellEl.requestFullscreen && !document.fullscreenElement) shellEl.requestFullscreen().catch(function () { });
-        else if (!want && document.fullscreenElement === shellEl && document.exitFullscreen) document.exitFullscreen().catch(function () { });
+        if (want && root.requestFullscreen && !document.fullscreenElement) root.requestFullscreen().catch(function () { });
+        else if (!want && document.fullscreenElement === root && document.exitFullscreen) document.exitFullscreen().catch(function () { });
       } catch (e) { }
     }
-    /* Leaving the browser's full screen with Esc also leaves ours. */
-    function onFsChange() { if (!document.fullscreenElement && isFull() && shellEl._wasFs) setFull(false); shellEl._wasFs = document.fullscreenElement === shellEl; }
+    /* The browser can drop its own full screen (Esc, a file picker); the IDE stays big until its button is pressed. */
+    function onFsChange() { }
     document.addEventListener('fullscreenchange', onFsChange);
+    /* The same work mounted again straight away (the page re-drew it) comes back full screen. */
+    var fullKey = (collab && collab.ref && collab.ref.path) || build.id || opts.title || '';
+    if (FULL.key && FULL.key === fullKey && Date.now() - FULL.at < 2500) { FULL.key = ''; setFull(true); }
 
     function onLeave(e) { if (dirty && canEdit) { flushSave(); e.preventDefault(); e.returnValue = ''; } }
     window.addEventListener('beforeunload', onLeave);
@@ -915,7 +950,12 @@
         window.removeEventListener('message', onMessage);
         window.removeEventListener('beforeunload', onLeave);
         document.removeEventListener('fullscreenchange', onFsChange);
-        if (isFull()) { document.documentElement.classList.remove('cl-noscroll'); try { if (document.fullscreenElement === shellEl) document.exitFullscreen(); } catch (e) { } }
+        if (isFull()) {
+          document.documentElement.classList.remove('cl-noscroll');
+          FULL.key = fullKey; FULL.at = Date.now();
+          /* Leave the browser's full screen only if no IDE took it back. */
+          setTimeout(function () { if (FULL.key === fullKey && !document.querySelector('.cl-shell.cl-full')) { FULL.key = ''; try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); } catch (e) { } } }, 600);
+        }
         try { frame.srcdoc = ''; } catch (e) { }
         hostEl.innerHTML = '';
       }
@@ -942,6 +982,12 @@
       '.cl-btn.cl-run{background:var(--brand,#55BFB3);border-color:var(--brand,#55BFB3);color:#04231f}',
       '.cl-treebtn{display:none}',
       '.cl-shell.cl-full{position:fixed;inset:0;z-index:2000;border-radius:0;border:0}',
+      '.cl-dlg{position:fixed;inset:0;z-index:3200;background:rgba(15,26,20,.35);display:grid;place-items:center;padding:16px}',
+      '.cl-dlg-box{width:min(420px,100%);background:#fff;border:1px solid #D5E3DF;border-radius:14px;padding:1rem 1.1rem;box-shadow:0 18px 50px rgba(0,0,0,.2);font-family:inherit}',
+      '.cl-dlg-box p{margin:0 0 .7rem;font-size:.9rem;font-weight:600;color:#263331;line-height:1.4}',
+      '.cl-dlg-box input{width:100%;box-sizing:border-box;padding:.55rem .7rem;border:1px solid #D5E3DF;border-radius:9px;font:13px ui-monospace,Menlo,Consolas,monospace;color:#263331;outline:none}',
+      '.cl-dlg-box input:focus{border-color:#55BFB3;box-shadow:0 0 0 3px rgba(85,191,179,.2)}',
+      '.cl-dlg-acts{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.8rem}',
       '.cl-shell.cl-full .cl-body,.cl-shell.cl-full .cl-body.cl-stacked{height:auto;flex:1;min-height:0}',
       '.cl-shell:fullscreen{width:100vw;height:100vh;background:#fff}',
       'html.cl-noscroll,html.cl-noscroll body{overflow:hidden}',
