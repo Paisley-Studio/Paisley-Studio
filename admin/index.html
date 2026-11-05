@@ -67,20 +67,20 @@
 <script src="../js/classroom/publish-ui.js?v=restore2"></script>
 <script src="../js/classroom/ink-grader.js?v=tech1"></script>
 <script src="../js/admin/remote-students.js"></script>
-<script src="../js/tuition/tuition-helpers.js"></script>
-<script src="../js/admin/tuition.js"></script>
-<script src="../js/ui/fast-video.js?v=3"></script>
+<script src="../js/tuition/tuition-helpers.js?v=icons1"></script>
+<script src="../js/admin/tuition.js?v=icons1"></script>
+<script src="../js/ui/fast-video.js?v=4"></script>
 <script src="../js/parent/parent-ads.js?v=4"></script>
 <script src="../js/admin/parent-ads.js?v=5"></script>
-<script src="../js/tech/tech-helpers.js?v=tech15"></script>
-<script src="../js/tech/tech-manage.js?v=tech8"></script>
-<script src="../js/tech/tech-work.js?v=8"></script>
+<script src="../js/tech/tech-helpers.js?v=tech18"></script>
+<script src="../js/tech/tech-manage.js?v=tech9"></script>
+<script src="../js/tech/tech-work.js?v=9"></script>
 <script src="../js/tech/tech-groups.js?v=3"></script>
-<script src="../js/tech/tech-classes.js?v=13"></script>
-<script src="../js/tech/writing-studio.js?v=tech12"></script>
+<script src="../js/tech/tech-classes.js?v=14"></script>
+<script src="../js/tech/writing-studio.js?v=tech13"></script>
 <script src="../js/tech/code-lab.js?v=tech17"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
-<script src="../js/admin/tech.js?v=tech16"></script>
+<script src="../js/admin/tech.js?v=tech17"></script>
 <link rel="stylesheet" href="../js/parent/parent-ads.css?v=4" />
 
 <style>
@@ -2027,7 +2027,7 @@ function renderEditSubjects(){
   const chips = document.getElementById('editSubjectChips');
   chips.innerHTML = editSubjectKeys.length ? editSubjectKeys.map(k=>{
     const bad = allowed.indexOf(k) === -1;
-    return `<span class="badge ${bad?'b-pending':'b-plain'}" style="display:inline-flex; align-items:center; gap:.35rem;" title="${bad?'Not offered at this Key Stage':''}">${escapeHtml(lmzSubjectLabel(k))}${bad?' ⚠':''}
+    return `<span class="badge ${bad?'b-pending':'b-plain'}" style="display:inline-flex; align-items:center; gap:.35rem;" title="${bad?'Not offered at this Key Stage':''}">${escapeHtml(lmzSubjectLabel(k))}${bad?' <i class="fas fa-triangle-exclamation"></i>':''}
       <button type="button" data-rm="${escapeHtml(k)}" style="border:none; background:none; cursor:pointer; color:inherit; font-weight:800;" aria-label="Remove ${escapeHtml(lmzSubjectLabel(k))}">×</button></span>`;
   }).join('') : '<span style="color:var(--muted); font-size:.82rem;">No subjects recorded yet — this student currently sees every timetable session for their Key Stage.</span>';
     chips.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click', ()=>{
@@ -2278,7 +2278,7 @@ function renderSubjectTutors(s){
       options += `<option value="${escapeHtml(cur.tutorId)}" selected>${escapeHtml(cur.tutorName||cur.tutorId)} (no longer eligible)</option>`;
     }
     return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:.6rem; align-items:center; margin-bottom:.5rem;">
-      <div style="font-size:.82rem; font-weight:700; color:var(--ink);">${escapeHtml(lmzSubjectLabel(k))}${bad?' <span style="color:#B8362A;">⚠</span>':''}</div>
+      <div style="font-size:.82rem; font-weight:700; color:var(--ink);">${escapeHtml(lmzSubjectLabel(k))}${bad?' <span style="color:#B8362A;"><i class="fas fa-triangle-exclamation"></i></span>':''}</div>
       <select id="editSubjTutor-${escapeHtml(k)}" style="width:100%; padding:.55rem .7rem; border:1.5px solid var(--line); border-radius:9px; font-family:var(--font); font-size:.82rem;">${options}</select>
     </div>`;
   }).join('');
@@ -3474,7 +3474,7 @@ function attemptAnswerHtml(q, i, answers){
     for(let w=0; w<words.length; w++){
       annotated.push(`<span>${escapeHtml(words[w])}</span>`);
       const slot = w+1;
-      annotated.push(`<span class="qb-gap ${pickedSlot===slot?'active':''}" style="cursor:default; ${slot===correctSlot && !isRight ? 'border-color:#1d8b57;' : ''}">${pickedSlot===slot?escapeHtml(q.punctuation||','):(slot===correctSlot && !isRight ? '✓' : '·')}</span>`);
+      annotated.push(`<span class="qb-gap ${pickedSlot===slot?'active':''}" style="cursor:default; ${slot===correctSlot && !isRight ? 'border-color:#1d8b57;' : ''}">${pickedSlot===slot?escapeHtml(q.punctuation||','):(slot===correctSlot && !isRight ? '<i class="fas fa-check"></i>' : '·')}</span>`);
     }
 
     return `<div class="detail-block" style="border-left:3px solid ${isRight?'#2EB872':'#E74C3C'}; padding-left:.9rem;">
@@ -3484,7 +3484,7 @@ function attemptAnswerHtml(q, i, answers){
         ${imgHtml}
         <div class="qb-gap-sentence">${annotated.join('')}</div>
         <div style="margin-top:.55rem; font-size:.82rem; color:${isRight?'#1d8b57':'#b8362a'};">
-          ${isRight ? '<i class="fas fa-circle-check"></i> Correct.' : '<i class="fas fa-circle-xmark"></i> Wrong position. The correct spot is marked with ✓ above.'}
+          ${isRight ? '<i class="fas fa-circle-check"></i> Correct.' : '<i class="fas fa-circle-xmark"></i> Wrong position. The correct spot is marked with <i class="fas fa-check"></i> above.'}
         </div>
       </div>
     </div>`;

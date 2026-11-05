@@ -109,8 +109,7 @@
 </script>
 <script type="module">
   import HandRaise from 'https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui-addons@latest/hand-raise/index.js';
-  import ReactionsManagerAddon from 'https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui-addons@latest/reactions-manager/index.js';
-  window.RTKAddons = { HandRaise, ReactionsManagerAddon };
+  window.RTKAddons = { HandRaise };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit@latest/dist/browser.js"></script>
 
@@ -264,7 +263,7 @@ async function joinMeeting(){
     // Initialize addons BEFORE handing meeting to rtk-meeting.
     // These register hand-raise and reactions UI into the meeting.
     try {
-      const { HandRaise, ReactionsManagerAddon } = window.RTKAddons;
+      const { HandRaise } = window.RTKAddons;
       if (HandRaise) {
         await HandRaise.init({
           meeting,
@@ -272,20 +271,7 @@ async function joinMeeting(){
           canManageRaisedHand: true
         });
       }
-      if (ReactionsManagerAddon) {
-        await ReactionsManagerAddon.init({
-          meeting,
-          reactions: [
-            { emoji: "🔥", label: "fire" },
-            { emoji: "👍", label: "thumbs up" },
-            { emoji: "❤️", label: "heart" },
-            { emoji: "😂", label: "laugh" },
-            { emoji: "👏", label: "clap" },
-            { emoji: "🎉", label: "celebrate" }
-          ],
-          canSendReactions: true
-        });
-      }
+      // No reactions addon: it can only show emoji, and Paisley uses icons, never emoji.
     } catch(addonErr) {
       console.error('Addon init failed (non-fatal):', addonErr);
     }

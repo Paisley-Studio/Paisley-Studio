@@ -2003,13 +2003,14 @@ function selectQuizAnswer(qIndex, selected, correct) {
   if (isCorrect) {
     labels[selected].classList.add('correct');
     feedback.className = 'feedback show correct';
-    feedback.textContent = '✓ Correct! ' + questionEl.querySelector('.q-text').textContent.split('?')[0] + '? ' + (questionEl.querySelector('.q-text').textContent.includes('?') ? '' : '');
+    let okText = 'Correct! ' + questionEl.querySelector('.q-text').textContent.split('?')[0] + '? ' + (questionEl.querySelector('.q-text').textContent.includes('?') ? '' : '');
     // Get explanation from stored data
     const questions = subjectQuestions[document.getElementById('primarySubject').value] || defaultQuestions;
     // Find the question
     const qText = questionEl.querySelector('.q-text').textContent;
     const foundQ = questions.find(q => q.question === qText);
-    if (foundQ) feedback.textContent += ' ' + foundQ.explanation;
+    if (foundQ) okText += ' ' + foundQ.explanation;
+    iconText(feedback, 'fa-circle-check', okText);
   } else {
     labels[selected].classList.add('incorrect');
     feedback.className = 'feedback show incorrect';
@@ -2017,9 +2018,9 @@ function selectQuizAnswer(qIndex, selected, correct) {
     const qText = questionEl.querySelector('.q-text').textContent;
     const foundQ = questions.find(q => q.question === qText);
     if (foundQ) {
-      feedback.textContent = '✗ Incorrect. The correct answer was: ' + foundQ.options[foundQ.correct] + '. ' + foundQ.explanation;
+      iconText(feedback, 'fa-circle-xmark', 'Incorrect. The correct answer was: ' + foundQ.options[foundQ.correct] + '. ' + foundQ.explanation);
     } else {
-      feedback.textContent = '✗ Incorrect. Please review the question.';
+      iconText(feedback, 'fa-circle-xmark', 'Incorrect. Please review the question.');
     }
   }
 
@@ -2074,6 +2075,12 @@ function renderPsychologyQuiz() {
   psychScore = 0;
 }
 
+/* Status text with a Font Awesome icon in front (Paisley uses icons, never emoji). */
+function iconText(el, icon, text) {
+  el.innerHTML = '<i class="fas ' + icon + '" aria-hidden="true"></i> ';
+  el.appendChild(document.createTextNode(text));
+}
+
 function selectPsychAnswer(qIndex, selected, correct) {
   const questionEl = document.querySelector(`.quiz-question[data-psych="${qIndex}"]`);
   const labels = questionEl.querySelectorAll('.options label');
@@ -2089,11 +2096,11 @@ function selectPsychAnswer(qIndex, selected, correct) {
   if (isCorrect) {
     labels[selected].classList.add('correct');
     feedback.className = 'feedback show correct';
-    feedback.textContent = '✓ Good judgement! ' + (psychologyQuestions[qIndex]?.explanation || '');
+    iconText(feedback, 'fa-circle-check', 'Good judgement! ' + (psychologyQuestions[qIndex]?.explanation || ''));
   } else {
     labels[selected].classList.add('incorrect');
     feedback.className = 'feedback show incorrect';
-    feedback.textContent = '✗ Consider this approach: ' + (psychologyQuestions[qIndex]?.explanation || '');
+    iconText(feedback, 'fa-circle-xmark', 'Consider this approach: ' + (psychologyQuestions[qIndex]?.explanation || ''));
   }
 
   psychAnswers[qIndex] = selected;
@@ -2140,14 +2147,14 @@ function renderReview() {
   document.getElementById('finalScoreNum').textContent = finalScore + '%';
   const resultEl = document.getElementById('finalScoreResult');
   if (finalScore >= 70) {
-    resultEl.textContent = '✅ Pass — Strong candidate';
+    iconText(resultEl, 'fa-circle-check', 'Pass — Strong candidate');
     resultEl.className = 'score-result pass';
   } else if (finalScore >= 50) {
-    resultEl.textContent = '⚠️ Review — Needs improvement in some areas';
+    iconText(resultEl, 'fa-triangle-exclamation', 'Review — Needs improvement in some areas');
     resultEl.className = 'score-result';
     resultEl.style.color = '#F39C12';
   } else {
-    resultEl.textContent = '❌ Needs significant improvement';
+    iconText(resultEl, 'fa-circle-xmark', 'Needs significant improvement');
     resultEl.className = 'score-result fail';
   }
 

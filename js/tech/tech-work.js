@@ -104,7 +104,8 @@
   /* Published work, one row each, with the link to copy or open. */
   function shareRowsHtml(items) {
     return (items || []).map(function (x) {
-      return '<div class="tw-srow"><div class="t"><b>' + esc(x.title || 'Untitled') + '</b>' + (x.sub ? '<span>' + esc(x.sub) + '</span>' : '') + '</div>' + linkBox(x.url) + '</div>';
+      return '<div class="tw-srow"><div class="t"><b>' + esc(x.title || 'Untitled') + '</b>' + (x.sub ? '<span>' + esc(x.sub) + '</span>' : '') + '</div>' + linkBox(x.url) +
+        (x.editLesson ? '<button type="button" class="tc-btn sm" data-twedit="' + esc(x.editLesson) + '" style="margin-top:.4rem"><i class="fas fa-pen"></i> Edit and update</button>' : '') + '</div>';
     }).join('');
   }
   function copyText(t, btn) {
@@ -526,6 +527,15 @@
     var data = null, loaded = false, editor = null, editorEditable = null, dead = false, busy = false;
     var label = o.label || l.title || 'Lesson';
     function editable() { return isBuilder && (!data || data.status === 'Draft' || data.status === 'Corrections'); }
+    /* Published work the builder can no longer change as a hand-in: they edit its published
+       version (live*), and functions refresh the public link on every save. */
+    function liveEdit() { return isBuilder && !!data && data.publishState === 'approved' && !editable(); }
+    var LIVE_MAP = { codeFiles: 'liveCodeFiles', codeFolders: 'liveCodeFolders', codeAssets: 'liveCodeAssets', codeActive: 'liveCodeActive', codeAt: 'liveCodeAt', writingHtml: 'liveWritingHtml', writingAt: 'liveWritingAt' };
+    function saveLive(p) {
+      var up = { liveAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
+      Object.keys(p || {}).forEach(function (k) { if (LIVE_MAP[k]) up[LIVE_MAP[k]] = p[k]; });
+      return ref.update(up);
+    }
     function baseFields() {
       return {
         studentId: student.id, studentName: student.name || '', coachId: student.coachId || '',
@@ -589,17 +599,19 @@
       var right = '';
       if (isBuilder) {
         if (editable()) right = '<button type="button" class="tc-btn" data-tw="submit"><i class="fas fa-paper-plane"></i> ' + (st === 'Corrections' ? 'Hand in again' : 'Hand in for marking') + '</button>';
+        else if (liveEdit()) right = '<span class="tw-note"><i class="fas fa-globe"></i> Editing your published version</span>';
         else if (st === 'Submitted') right = '<span class="tw-note"><i class="fas fa-hourglass-half"></i> With your coach for marking. You can look, but not change it now.</span>';
       }
       headEl.innerHTML = '<div class="tw-bar">' + statePill(st) + (data && data.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(data.submittedAt)) + '</span>' : '') + '<span class="grow"></span>' + right + '</div>' +
         '<div class="tw-msg" id="twMsg" role="status"' + (carriedNote && !data ? ' style="color:var(--brand-deep,#245F5A);margin:.5rem 0">Your code from the lesson before is here. Carry on from where you stopped.' : '>') + '</div>' +
         feedbackHtml(data, isBuilder ? 'You' : first) + publishHtml(data, isBuilder, first) +
         (!isBuilder && !data ? '<div class="tc-empty">' + esc(first) + ' has not started this yet.</div>' : '') +
+        (liveEdit() ? '<p class="tw-note" style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)"><i class="fas fa-rotate"></i> Your work is published. Keep improving it here: it saves as you ' + (kind === 'writing' ? 'write' : 'type') + ' and your link shows the new version within a few seconds. The work your coach marked stays as it was.</p>' : '') +
         (isBuilder && editable() ? '<p class="tw-note" style="margin:0 0 .6rem">' + (kind === 'writing' ? 'It saves as you write.' : 'It saves as you type. Press Run to see your page. Make a folder such as images or videos, press its Upload button to add files from your computer, then click a file to use it.') + '</p>' : '');
     }
     function mountEditor() {
-      var want = editable();
-      if (editor && editorEditable === want) return;
+      var live = liveEdit(), want = editable() || live, mode = live ? 'live' : (want ? 'work' : 'look');
+      if (editor && editorEditable === mode) return;
       if (editor) { try { editor.destroy(); } catch (e) { } editor = null; }
       if (!isBuilder && !data) { edEl.innerHTML = ''; return; }
       /* A new code practice opens with the builder's code from the lesson before, or the lesson's starting code. */
@@ -610,18 +622,24 @@
         }
         return;
       }
-      editorEditable = want;
+      editorEditable = mode;
       var build = Object.assign({ id: ref.id, studentId: student.id }, data || {});
+      if (live && data.liveAt) Object.assign(build, {
+        codeFiles: data.liveCodeFiles || data.codeFiles || [], codeFolders: data.liveCodeFolders || data.codeFolders || [],
+        codeAssets: data.liveCodeAssets || data.codeAssets || [], codeActive: data.liveCodeActive || data.codeActive || 'index.html',
+        writingHtml: data.liveWritingHtml != null ? data.liveWritingHtml : data.writingHtml
+      });
+      var onSave = live ? saveLive : save;
       var carried = false;
       if (kind !== 'writing' && want && !data && seed) { carried = !!seed.carried; Object.assign(build, { codeFiles: seed.codeFiles, codeFolders: seed.codeFolders || [], codeAssets: seed.codeAssets || [], codeActive: seed.codeActive || 'index.html' }); }
       if (kind === 'writing') {
         if (!want) { edEl.innerHTML = data && data.writingHtml ? '<div class="tw-article">' + T.cleanHtml(data.writingHtml) + '</div>' : ''; return; }
         if (!g.WritingStudio) { edEl.innerHTML = '<div class="tc-empty">The writing pad is not loaded on this page.</div>'; return; }
-        editor = g.WritingStudio.mount(edEl, { build: build, me: me, canEdit: want, files: [], onSave: save, imagePath: function (fn) { return 'techWork/' + student.id + '/' + l.id + '/' + fn; } });
+        editor = g.WritingStudio.mount(edEl, { build: build, me: me, canEdit: want, files: [], onSave: onSave, imagePath: function (fn) { return 'techWork/' + student.id + '/' + l.id + '/' + fn; } });
       } else {
         if (!g.CodeLab) { edEl.innerHTML = '<div class="tc-empty">Paisley VS Code is not loaded on this page.</div>'; return; }
         editor = g.CodeLab.mount(edEl, {
-          build: build, me: me, canEdit: want, title: label, onSave: save,
+          build: build, me: me, canEdit: want, title: label, onSave: onSave,
           uploadAsset: want ? function (f) {
             var path = 'techWork/' + student.id + '/' + l.id + '/' + Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
             var r = firebase.storage().ref(path);
@@ -747,7 +765,8 @@
         (url ? '<a class="tc-btn light sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> Marked copy</a><button type="button" class="tc-btn light sm" data-twdl="' + esc(url) + '" data-name="' + esc(pdfName(d)) + '"><i class="fas fa-download"></i> Download</button>' : '') +
         '<button type="button" class="tc-btn light sm" data-twlesson="' + esc(d.lessonId) + '"><i class="fas fa-eye"></i> ' + (isBuilder ? 'Open the lesson' : 'See the work') + '</button>' +
       '</div>' +
-      (share ? '<div class="tw-res-share"><span class="tw-note"><i class="fas fa-globe"></i> Published' + (isBuilder ? ', in My projects' : '') + '</span>' + linkBox(share) + '</div>' : '') +
+      (share ? '<div class="tw-res-share"><span class="tw-note"><i class="fas fa-globe"></i> Published' + (isBuilder ? ', in My projects' : '') + '</span>' + linkBox(share) +
+        (isBuilder && !redo ? '<button type="button" class="tc-btn sm" data-twfix="' + esc(d.lessonId) + '" style="margin-top:.4rem"><i class="fas fa-pen"></i> Edit published version</button>' : '') + '</div>' : '') +
       (hist.length ? '<details class="tw-res-hist"><summary>Earlier rounds (' + hist.length + ')</summary>' + hist.map(function (h) {
         var hu = T.safeUrl(h.markedFileUrl);
         return '<p><b>Round ' + esc(h.round || '') + '</b>' + (h.gradedByName ? ' · ' + esc(h.gradedByName) : '') + (h.feedback ? ': ' + esc(h.feedback) : '') +

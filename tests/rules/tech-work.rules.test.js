@@ -96,6 +96,20 @@ test("publishing: the builder asks, their coach or an admin decides", async () =
   await assertSucceeds(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "unpublished" }));
 });
 
+test("published class work: the builder edits only its published version", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc("techLessonWork/kid1_pub").set(work({ lessonId: "pub", status: "Graded", grade: 8, publishState: "approved", shareUrl: "https://x/tech/p/cw_kid1_pub" }));
+    await ctx.firestore().doc("techLessonWork/kid1_nopub").set(work({ lessonId: "nopub", status: "Graded", grade: 8 }));
+  });
+  const live = { liveCodeFiles: [{ name: "index.html", lang: "html", content: "<h1>Better</h1>" }], liveCodeActive: "index.html", liveCodeAt: new Date(), liveAt: new Date(), updatedAt: new Date() };
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_pub").update(live));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_pub").update({ codeFiles: [] }));                 // the marked hand-in stays
+  await assertFails(as("kid1").doc("techLessonWork/kid1_pub").update(Object.assign({ grade: 10 }, live)));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_pub").update(Object.assign({ shareUrl: "https://evil" }, live)));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_nopub").update(live));                           // not published
+  await assertFails(as("kid3").doc("techLessonWork/kid1_pub").update(live));                             // not theirs
+});
+
 test("coaches and admins make groups; members see only their own", async () => {
   const grp = (by, ids) => ({ name: "Crew", memberIds: ids || ["kid1", "kid2"], members: [], createdBy: by });
   await assertSucceeds(as("coach2").collection("techGroups").add(grp("coach2")));

@@ -462,6 +462,11 @@ exports.onTechBuildUpdated = onDocumentUpdated(
     const act = { studentName: a.studentName || "", buildId: pid, missionId: a.missionId || "", origin: isSelfLed(a) ? "self" : "mission" };
     const n = Number(a.submissionCount) || 0;
 
+    /* A published project the builder saved: its public link shows the new version. */
+    if (a.showcase === "approved" && b.showcase === "approved" && changedAny(b, a, BUILD_CONTENT_KEYS)) {
+      await refreshShowcase(pid, buildShowcaseContent(a)).catch((e) => console.warn("showcase refresh:", e.message || e));
+    }
+
     /* Builder asked for something — the coach (or the desk, if there's no coach yet) decides. */
     const asked = [];
     if (b.reviewState !== "requested" && a.reviewState === "requested") asked.push(n > 1 ? "a review of their revision" : "a review");
@@ -535,7 +540,7 @@ exports.onTechBuildUpdated = onDocumentUpdated(
       const lvl = top ? TECH_LEVELS[levels[top] - 1] : "";
       const line = lvl ? `You're now ${lvl} in ${disciplineLabel(top)}.` : "Keep building.";
       await logActivity(sid, "mastered", `Mastered: ${title}`, act);
-      const fresh = await techNotify(sid, "student", "tech_mastery", "Mastery approved 🎉", `${title} was approved. ${line}`, Object.assign({ id: `build_${pid}_mastery_${sha(String(a.masteryAt && a.masteryAt.seconds || "")).slice(0, 8)}` }, extra));
+      const fresh = await techNotify(sid, "student", "tech_mastery", "Mastery approved", `${title} was approved. ${line}`, Object.assign({ id: `build_${pid}_mastery_${sha(String(a.masteryAt && a.masteryAt.seconds || "")).slice(0, 8)}` }, extra));
       /* Next level unlocked — only for disciplines whose level actually went up. */
       const ups = levels ? TECH_DISCIPLINES.filter((d) => (levels[d] || 1) > ((res.before && res.before[d]) || 1)) : [];
       for (const d of ups) {
@@ -1012,6 +1017,12 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
     if (!a) return;
     /* Publishing is its own conversation, beside marking. */
     if (((b && b.publishState) || "") !== (a.publishState || "")) await publishEvent(event.params.wid, b, a);
+    /* The builder saved published work: the public link shows the new version. */
+    else if (b && a.publishState === "approved" && changedAny(b, a, WORK_CONTENT_KEYS)) {
+      const w = workShowcase(liveWork(a), null);
+      await refreshShowcase(showcaseIdOf(event.params.wid), { codeFiles: w.codeFiles, codeActive: w.codeActive, codeAssets: w.codeAssets, writingHtml: w.writingHtml, contentUpdatedAt: FV().serverTimestamp() })
+        .catch((e) => console.warn("class work showcase refresh:", e.message || e));
+    }
     const ev = workEvent(b, a);
     if (!ev) return;
     const wid = event.params.wid, sid = a.studentId, s = await techStudent(sid);
@@ -1087,6 +1098,54 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
    with only the builder's first name; declined or taken down removes it.
 --------------------------------------------------------- */
 const showcaseIdOf = (wid) => "cw_" + String(wid).replace(/[^\w-]/g, "_").slice(0, 200);
+
+/* Published work stays live: when the builder saves, the public copy's content is refreshed
+   (the approval, first name, featured flag and publish date stay as they were). The public
+   page sanitises writing and runs code in a sandbox, as it does for the first copy. */
+const sameVal = (x, y) => JSON.stringify(x === undefined ? null : x) === JSON.stringify(y === undefined ? null : y);
+const changedAny = (b, a, keys) => keys.some((k) => !sameVal(b && b[k], a && a[k]));
+const httpsOnly = (u) => (/^https:\/\//i.test(String(u || "").trim()) ? String(u).trim() : "");
+/* Mirrors TechUI.showcaseSnapshot (js/tech/tech-helpers.js) for the parts a builder can change. */
+const BUILD_CONTENT_KEYS = ["title", "brief", "writingHtml", "workText", "codeFiles", "codeActive", "codeAssets", "files", "aiReflection", "workUrl"];
+function buildShowcaseContent(b) {
+  const files = (b.files || []).filter((f) => f && httpsOnly(f.url));
+  const isType = (re) => (f) => re.test(f.type || "") || re.test(f.name || f.url || "");
+  const images = files.filter(isType(/image\/|\.(png|jpe?g|gif|webp)(\?|$)/i)).slice(0, 12).map((f) => ({ url: f.url, name: f.name || "" }));
+  const media = files.filter(isType(/video\/|audio\/|\.(mp4|webm|mov|mp3|wav|m4a|ogg)(\?|$)/i)).slice(0, 6).map((f) => ({ url: f.url, name: f.name || "", type: f.type || "" }));
+  let size = 0;
+  const code = (b.codeFiles || []).filter((f) => f && String(f.content || "").trim())
+    .filter((f) => (size += String(f.content).length) < 400000)
+    .map((f) => ({ name: String(f.name || ""), lang: f.lang || "", content: String(f.content) }));
+  const r = b.aiReflection || {};
+  return {
+    title: String(b.title || "Untitled project").slice(0, 160), description: String(b.brief || "").slice(0, 1200),
+    writingHtml: String(b.writingHtml || "").slice(0, 300000), workText: String(b.workText || "").slice(0, 4000),
+    codeFiles: code, codeActive: b.codeActive || "",
+    codeAssets: (b.codeAssets || []).slice(0, 60).map((x) => ({ name: (x && x.name) || "", url: httpsOnly(x && x.url), type: (x && x.type) || "" })),
+    images, media, coverUrl: images[0] ? images[0].url : "", previewUrl: httpsOnly(b.workUrl),
+    toolsUsed: (r.tools || []).slice(0, 12), contribution: String(r.contribution || r.kept || "").slice(0, 800),
+    reflection: { purpose: String(r.purpose || "").slice(0, 600), learned: String(r.learned || "").slice(0, 600) },
+    contentUpdatedAt: FV().serverTimestamp()
+  };
+}
+async function refreshShowcase(id, content) {
+  const ref = admin.firestore().collection("techShowcase").doc(id);
+  const s = await ref.get();
+  if (!s.exists) return false;
+  await ref.update(content);
+  return true;
+}
+/* Class work: once published, the builder edits a published version (live*) so the marked
+   hand-in stays as it was. The public copy shows the published version when there is one. */
+const WORK_CONTENT_KEYS = ["codeFiles", "codeAssets", "codeActive", "writingHtml",
+  "liveCodeFiles", "liveCodeFolders", "liveCodeAssets", "liveCodeActive", "liveWritingHtml"];
+function liveWork(a) {
+  if (!a || !a.liveAt) return a;
+  return Object.assign({}, a, {
+    codeFiles: a.liveCodeFiles || a.codeFiles, codeAssets: a.liveCodeAssets || a.codeAssets,
+    codeActive: a.liveCodeActive || a.codeActive, writingHtml: a.liveWritingHtml != null ? a.liveWritingHtml : a.writingHtml
+  });
+}
 function workShowcase(a, s) {
   const writing = a.kind === "writing";
   const where = [a.courseName, a.topicTitle].filter(Boolean).join(" · ");
@@ -1117,7 +1176,7 @@ async function publishEvent(wid, b, a) {
     return;
   }
   if (st === "approved") {
-    await db.collection("techShowcase").doc(scId).set(workShowcase(a, s));
+    await db.collection("techShowcase").doc(scId).set(workShowcase(liveWork(a), s));
     const url = APP + "/tech/p/" + encodeURIComponent(scId);
     await db.collection("techLessonWork").doc(wid).update({ shareId: scId, shareUrl: url, publishedAt: FV().serverTimestamp() });
     const by = a.publishDecidedByName || "Your coach";
@@ -1676,4 +1735,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf };
+exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf, buildShowcaseContent, liveWork, changedAny, BUILD_CONTENT_KEYS, WORK_CONTENT_KEYS };

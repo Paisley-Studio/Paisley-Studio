@@ -11,7 +11,7 @@ window.ActivityTemplates['open-box'] = {
       <div class="tpl-openbox">
         <p class="tpl-matchup-hint">Pick a box to reveal the next question.</p>
         <div class="tpl-openbox-grid" id="tplBoxGrid">
-          ${boxes.map(i => `<button class="tpl-openbox-box" data-i="${i}">📦</button>`).join('')}
+          ${boxes.map(i => `<button class="tpl-openbox-box" data-i="${i}" aria-label="Box ${i + 1}"><i class="fas fa-box" aria-hidden="true"></i></button>`).join('')}
         </div>
         <div id="tplBoxReveal" style="display:none;"></div>
       </div>`;
@@ -22,7 +22,7 @@ window.ActivityTemplates['open-box'] = {
     [...grid.children].forEach(btn => {
       btn.onclick = () => {
         [...grid.children].forEach(b => b.disabled = true);
-        btn.textContent = '✨';
+        btn.innerHTML = '<i class="fas fa-box-open" aria-hidden="true"></i>';
         btn.classList.add('is-opened');
         setTimeout(() => {
           grid.style.display = 'none';

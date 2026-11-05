@@ -92,22 +92,22 @@
       '<div class="ws-toolbar" role="toolbar" aria-label="Formatting">' +
         btn('h2', 'H2', 'Heading 2') +
         btn('h3', 'H3', 'Heading 3') +
-        btn('p', '¶', 'Paragraph') +
+        btn('p', '<i class="fas fa-paragraph"></i>', 'Paragraph') +
         sep() +
         btn('bold', '<b>B</b>', 'Bold') +
         btn('italic', '<i>I</i>', 'Italic') +
         btn('underline', '<u>U</u>', 'Underline') +
         sep() +
-        btn('ul', '•', 'Bullet list') +
-        btn('ol', '1.', 'Numbered list') +
-        btn('quote', '❝', 'Quote') +
+        btn('ul', '<i class="fas fa-list-ul"></i>', 'Bullet list') +
+        btn('ol', '<i class="fas fa-list-ol"></i>', 'Numbered list') +
+        btn('quote', '<i class="fas fa-quote-left"></i>', 'Quote') +
         sep() +
-        btn('link', '🔗', 'Link') +
-        btn('image', '🖼️', 'Image') +
+        btn('link', '<i class="fas fa-link"></i>', 'Link') +
+        btn('image', '<i class="fas fa-image"></i>', 'Image') +
         sep() +
-        btn('undo', '↺', 'Undo') +
-        btn('redo', '↻', 'Redo') +
-        btn('clear', '⌫', 'Clear formatting') +
+        btn('undo', '<i class="fas fa-rotate-left"></i>', 'Undo') +
+        btn('redo', '<i class="fas fa-rotate-right"></i>', 'Redo') +
+        btn('clear', '<i class="fas fa-text-slash"></i>', 'Clear formatting') +
         '<span class="ws-spacer"></span>' +
         '<button type="button" class="ws-btn ws-preview-btn" data-wscmd="preview"><i class="fas fa-eye"></i> Preview</button>' +
         '<button type="button" class="ws-btn ws-save-btn" data-wscmd="save"><i class="fas fa-floppy-disk"></i> Save</button>' +
@@ -407,7 +407,7 @@
     ov.setAttribute('role', 'dialog');
     ov.setAttribute('aria-modal', 'true');
     ov.innerHTML = '<div class="ws-modal-inner">' +
-      '<div class="ws-modal-head"><h3>' + esc(title) + '</h3><button type="button" class="ws-modal-x" aria-label="Close">✕</button></div>' +
+      '<div class="ws-modal-head"><h3>' + esc(title) + '</h3><button type="button" class="ws-modal-x" aria-label="Close"><i class="fas fa-xmark"></i></button></div>' +
       '<div class="ws-modal-body"></div>' +
       '<div class="ws-modal-foot"></div></div>';
     document.body.appendChild(ov);

@@ -40,7 +40,7 @@ const ActivityResults = (function () {
   function renderHtml(summary) {
     return `
       <div class="activity-results">
-        <h2>Completed! 🎉</h2>
+        <h2><i class="fas fa-trophy"></i> Completed!</h2>
         <div class="activity-results-score">${summary.score}/${summary.maxScore}</div>
         <div class="activity-results-percent">${summary.percent}%</div>
         <div class="activity-results-stats">

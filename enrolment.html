@@ -1367,22 +1367,22 @@ const subjectData = {
   'Key Stage 2 (Years 3-6)': {
     subjects: ['English', 'Mathematics', 'Science', 'Computing'],
     selectable: false,
-    note: '✅ All core subjects are included. No selection needed.'
+    note: 'All core subjects are included. No selection needed.', icon: 'fa-circle-check'
   },
   'Key Stage 3 (Years 7-9)': {
     subjects: ['English', 'Mathematics', 'Science', 'Computing'],
     selectable: false,
-    note: '✅ All core subjects are included. No selection needed.'
+    note: 'All core subjects are included. No selection needed.', icon: 'fa-circle-check'
   },
   'Key Stage 4 (Years 10-11) — IGCSE': {
     subjects: ['English', 'Mathematics', 'Physics', 'Chemistry', 'Biology', 'Computer Science', 'History', 'Geography', 'Business Studies', 'Economics', 'Accounting'],
     selectable: true,
-    note: '📌 Select the IGCSE subjects your child will study.'
+    note: 'Select the IGCSE subjects your child will study.', icon: 'fa-thumbtack'
   },
   'Key Stage 5 (Years 12-13) — A-Level': {
     subjects: ['Mathematics (A-Level)', 'Physics (A-Level)', 'Chemistry (A-Level)', 'Biology (A-Level)', 'English (A-Level)', 'Psychology (A-Level)', 'Sociology (A-Level)'],
     selectable: true,
-    note: '📌 Select the A-Level subjects your child will study.'
+    note: 'Select the A-Level subjects your child will study.', icon: 'fa-thumbtack'
   }
 };
 
@@ -1422,7 +1422,8 @@ function updateSubjectsAndFees() {
   
   html += '</div>';
   container.innerHTML = html;
-  note.textContent = data.note;
+  note.innerHTML = '<i class="fas ' + (data.icon || 'fa-circle-info') + '" aria-hidden="true"></i> ';
+  note.appendChild(document.createTextNode(data.note));
   
   // Show/hide required asterisk
   if (data.selectable) {
@@ -1635,7 +1636,7 @@ document.getElementById('enrolmentSubmitBtn').addEventListener('click', function
   if (!learningModel) missing.push('Learning Model');
   
   if (missing.length > 0) {
-    alert('⚠️ Please fill in all required fields:\n\n- ' + missing.join('\n- '));
+    alert('Please fill in all required fields:\n\n- ' + missing.join('\n- '));
     return;
   }
   
@@ -1654,7 +1655,7 @@ document.getElementById('enrolmentSubmitBtn').addEventListener('click', function
   if (subjectDataEntry && subjectDataEntry.selectable) {
     const checkedSubjects = document.querySelectorAll('#subjectContainer input:checked');
     if (checkedSubjects.length === 0) {
-      alert('⚠️ Please select at least one subject for your child.');
+      alert('Please select at least one subject for your child.');
       return;
     }
   }

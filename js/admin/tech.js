@@ -261,7 +261,7 @@
     function applications(b) {
       var list = pending().sort(function (a, c) { return ts(a.createdAt) - ts(c.createdAt); });
       var h = '<div class="cr-bar"><div><h3>Applications</h3><div class="cr-sub">New Tech Studio sign-ups waiting for approval. Approving unlocks their studio, emails them and (optionally) pairs a coach.</div></div></div>';
-      if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No applications waiting. 🎉</div></div>'; return; }
+      if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty"><i class="fas fa-circle-check"></i> No applications waiting.</div></div>'; return; }
       b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Applicant</th><th>Level</th><th>Age</th><th>Interests</th><th>Guardian</th><th>Applied</th><th></th></tr></thead><tbody>' + list.map(function (s) {
         var tp = s.techProfile || {}, gs = (s.guardians || []).length ? s.guardians : (s.guardianEmail ? [{ name: s.guardianName, email: s.guardianEmail, phone: s.guardianPhone }] : []);
         return '<tr><td><b>' + esc(s.name) + '</b><div class="cr-note">' + esc(s.email) + (s.phone ? ' · ' + esc(s.phone) : '') + '</div>' +

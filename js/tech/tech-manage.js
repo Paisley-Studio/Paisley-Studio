@@ -231,7 +231,7 @@
           type: /^video\//.test(f.type) ? 'video' : /^image\//.test(f.type) ? 'image' : (mats[i].type === 'example' ? 'example' : 'document') });
         paintLists();
         await db.collection('techContent').doc(id).update({ materials: mats.slice(0, 30), updatedAt: FV().serverTimestamp() });
-        var st2 = m.body.querySelector('[data-mst="' + i + '"]'); if (st2) st2.textContent = 'Uploaded ✓ ' + f.name;
+        var st2 = m.body.querySelector('[data-mst="' + i + '"]'); if (st2) st2.textContent = 'Uploaded: ' + f.name;
       } catch (er) { st.textContent = 'Upload failed: ' + T.errMsg(er); }
     });
     m.foot.innerHTML = '<span id="tmErr" style="color:#b8362a;font-weight:700;font-size:.82rem;margin-right:auto"></span>' +
@@ -359,7 +359,7 @@
       var id = t.dataset.psave, note = host.querySelector('[data-pnote="' + id + '"]').value.trim().slice(0, 1500);
       t.disabled = true;
       db.collection('techPractice').doc(id).update({ coachNote: note, coachNoteBy: o.me.name || '', coachNoteAt: FV().serverTimestamp(), helpRequested: false, updatedAt: FV().serverTimestamp() })
-        .then(function () { t.textContent = 'Saved ✓'; }).catch(function (er) { t.disabled = false; alert(T.errMsg(er)); });
+        .then(function () { t.innerHTML = '<i class="fas fa-circle-check"></i> Saved'; }).catch(function (er) { t.disabled = false; alert(T.errMsg(er)); });
     });
     var targets = o.studentId ? [o.studentId] : students.map(function (s) { return s.id; });
     if (o.me.role === 'admin' && !o.studentId) {

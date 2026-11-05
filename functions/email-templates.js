@@ -212,15 +212,26 @@ function render({ preheader, heading, intro, body, cta, footer, programme, flat 
 /* ---------------------------------------------------------
    Small helpers used by templates
 --------------------------------------------------------- */
-const SYMBOLS = {
-  'fa-book': '📘', 'fa-book-open': '📖', 'fa-layer-group': '📚', 'fa-file-lines': '📄', 'fa-file-pen': '📝',
-  'fa-star': '⭐', 'fa-user-check': '✅', 'fa-circle-check': '✅', 'fa-calendar-day': '📅', 'fa-calendar-xmark': '📅',
-  'fa-clock': '⏰', 'fa-hourglass-half': '⏳', 'fa-rotate-left': '🔁', 'fa-triangle-exclamation': '⚠️',
-  'fa-clipboard-list': '📋', 'fa-tag': '🏷️', 'fa-align-left': '📝', 'fa-chalkboard-user': '👩‍🏫'
+/* Emails use icons, never emoji. Email apps cannot load Font Awesome, so each icon is a
+   small PNG rendered from it, hosted at img/email-icons/<icon>-<colour>.png. Only the
+   pairs listed here exist; anything else falls back to the muted grey version, or nothing. */
+const ICON_BASE = `${APP_URL}/img/email-icons/`;
+const ICON_GREY = '5a6e6a';
+const ICONS = {
+  'book': [], 'book-open': ['55bfb3'], 'layer-group': [], 'file-lines': [], 'file-pen': ['55bfb3'], 'star': [],
+  'user-check': [], 'circle-check': ['2eb872'], 'calendar-day': [], 'calendar-xmark': [], 'clock': ['f39c12'],
+  'hourglass-half': [], 'rotate-left': ['f39c12'], 'triangle-exclamation': ['e74c3c'], 'clipboard-list': ['e74c3c'],
+  'tag': [], 'align-left': [], 'chalkboard-user': [], 'trophy': ['f5c842'], 'play': ['245f5a']
 };
-function fa(name) {
-  const sym = SYMBOLS[name];
-  return sym ? `<span style="margin-right:6px;">${sym}</span>` : '';
+function iconUrl(name, color) {
+  const key = String(name || '').replace(/^fa-/, '');
+  if (!ICONS[key]) return '';
+  const want = String(color || '').replace('#', '').toLowerCase();
+  return `${ICON_BASE}${key}-${ICONS[key].includes(want) ? want : ICON_GREY}.png`;
+}
+function fa(name, color) {
+  const src = iconUrl(name, color);
+  return src ? `<img src="${src}" width="15" height="15" alt="" style="display:inline-block;width:15px;height:15px;border:0;outline:none;vertical-align:-2px;margin-right:7px;" />` : '';
 }
 function fmtWhen(d) {
   if (!d) return '—';
@@ -335,7 +346,7 @@ function techStudentApproved({ student, coachName }) {
     html: render({
       programme: 'tech',
       preheader: 'Your application is approved and your studio is open. Your sign-in details are inside.',
-      heading: `Congratulations, ${first}! 🎉`,
+      heading: `Congratulations, ${first}!`,
       intro: "You've been accepted into Paisley Tech Studio.",
       body: `
         <p style="margin:0 0 16px;">The Studio Desk has approved your application, so your studio is open and ready for your first idea${coachName ? `. <strong>${esc(coachName)}</strong> is your coach and will review your work` : ''}.</p>
@@ -954,7 +965,7 @@ function parentNewsletter({ newsletter, parentName, unsubUrl }) {
   const pic = image ? `<img src="${esc(image)}" width="528" alt="${esc(subject)}" style="display:block;width:100%;max-width:528px;height:auto;border:0;border-radius:12px;" />` : '';
   const picLink = video || cta;
   const pictureBlock = pic ? `<div style="margin:0 0 16px;">${picLink ? `<a href="${esc(picLink)}" target="_blank">${pic}</a>` : pic}</div>` : '';
-  const videoBlock = video ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr><td bgcolor="${BRAND.sage}" style="background:${BRAND.sage};border-radius:12px;"><a href="${esc(video)}" target="_blank" style="display:inline-block;padding:13px 22px;font-family:${FONT};font-size:15px;font-weight:800;color:${BRAND.deep};text-decoration:none;">&#9654; Watch the video</a></td></tr></table>` : '';
+  const videoBlock = video ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr><td bgcolor="${BRAND.sage}" style="background:${BRAND.sage};border-radius:12px;"><a href="${esc(video)}" target="_blank" style="display:inline-block;padding:13px 22px;font-family:${FONT};font-size:15px;font-weight:800;color:${BRAND.deep};text-decoration:none;">${fa('fa-play', BRAND.deep)}Watch the video</a></td></tr></table>` : '';
   const hello = parentName ? `<p style="margin:0 0 14px;">Hi ${esc(firstName(parentName))},</p>` : '';
   return {
     subject,

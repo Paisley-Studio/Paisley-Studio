@@ -9,7 +9,7 @@
    Behaviour:
      • Tap a left item — it lifts and pulses to show it's selected.
      • Tap a right item — the pair snaps together. If correct, both
-       go green with a ✓ badge and a chime. If wrong, both flash
+       go green with a tick badge and a chime. If wrong, both flash
        red briefly, then still lock in place so the student can move
        on (matches the "did I know it" feel of Wordwall).
      • A per-match sound plays. When all pairs are locked, the engine

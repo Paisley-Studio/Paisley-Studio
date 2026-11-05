@@ -436,14 +436,14 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../js/tech/writing-studio.js?v=tech12"></script>
+<script src="../js/tech/writing-studio.js?v=tech13"></script>
 <script src="../js/tech/code-lab.js?v=tech17"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
-<script src="../js/ui/fast-video.js?v=3"></script>
-<script src="../js/tech/tech-helpers.js?v=tech16"></script>
-<script src="../js/tech/tech-work.js?v=8"></script>
+<script src="../js/ui/fast-video.js?v=4"></script>
+<script src="../js/tech/tech-helpers.js?v=tech18"></script>
+<script src="../js/tech/tech-work.js?v=9"></script>
 <script src="../js/tech/tech-groups.js?v=3"></script>
-<script src="../js/tech/tech-classes.js?v=13"></script>
+<script src="../js/tech/tech-classes.js?v=14"></script>
 <script>
 (function(){
 'use strict';
@@ -710,7 +710,9 @@ function mountResults(){
 }
 /* Class work that was approved for publishing, as share rows. */
 const pubWork=()=>S.work.filter(d=>TechWork.shareLink(d)).sort((a,b)=>(T.toDate(b.publishedAt||b.publishDecidedAt)||0)-(T.toDate(a.publishedAt||a.publishDecidedAt)||0));
-const workShare=d=>({title:d.lessonTitle||'Class work',sub:['Class work',d.courseName,d.topicTitle].filter(Boolean).join(' · '),url:TechWork.shareLink(d)});
+const workShare=d=>({title:d.lessonTitle||'Class work',sub:['Class work',d.courseName,d.topicTitle].filter(Boolean).join(' · '),url:TechWork.shareLink(d),editLesson:d.lessonId||''});
+/* Edit and update: opens the lesson's practice on the published version; every save updates the link. */
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-twedit]'); if(!b) return; S.classLesson=b.dataset.twedit; S.classPractise=true; go('classes'); });
 /* Groups: teammates and shared tasks, coded together live. */
 function mountGroups(){
   $('view').innerHTML='<div id="groupHost"></div>';
@@ -1104,7 +1106,7 @@ function openPractice(id){
   el.innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Practice</button><div id="prHost"><div class="empty">Opening…</div></div>';
   const host=$('prHost'), ref=db.collection('techPractice').doc(id);
   let p=null, mod=null, unsub=null, dead=false;
-  const save=patch=>{ patch.updatedAt=FV().serverTimestamp(); return ref.update(patch).then(()=>{ Object.assign(p,patch); log('practice_saved','Saved practice: '+(p.title||''),{practiceId:id}); const m=host.querySelector('#prMsg'); if(m) m.textContent='Saved ✓'; }); };
+  const save=patch=>{ patch.updatedAt=FV().serverTimestamp(); return ref.update(patch).then(()=>{ Object.assign(p,patch); log('practice_saved','Saved practice: '+(p.title||''),{practiceId:id}); const m=host.querySelector('#prMsg'); if(m) m.innerHTML='<i class="fas fa-circle-check"></i> Saved'; }); };
   function paint(){
     if(mod){ try{ mod.destroy(); }catch(e){} mod=null; }
     const tools=byKind('aiTool').filter(t=>T.safeUrl(t.url));

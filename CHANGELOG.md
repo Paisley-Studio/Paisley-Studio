@@ -1,3 +1,15 @@
+# Icons, never emoji (2026-11-05)
+
+- **Emails** show small icons instead of emoji: each is a PNG rendered from Font Awesome and hosted at `img/email-icons/<icon>-<colour>.png` (email apps cannot load icon fonts). `fa(name, colour)` in `functions/email-templates.js` picks the file; an icon or colour without a file falls back to the grey version or nothing. The Watch the video button uses the play icon. The Tech Studio approval heading and the "Mastery approved" bell lost their emoji.
+- **Pages** use Font Awesome icons where there were emoji or tick marks: Tech Studio save and upload messages, the level-up celebration and banner (trophy), the writing toolbar, the empty chat ("Say hello"), admin warnings and the punctuation answer tick, the video player's play button, activities (tick and cross badges, Open the box), and the enrolment, apply, teach-with-us and how-it-works pages. Pop-up alerts are plain text.
+- **Live class:** the emoji reactions add-on is removed (it can only show emoji). It was not loading anyway: its jsDelivr path, like the hand-raise one, no longer exists in `@cloudflare/realtimekit-ui-addons`.
+
+# Published work stays live (2026-11-04)
+
+- **Builders keep improving published work, and the link updates.** A published project (`techBuilds`, `showcase: 'approved'`): every save the builder makes refreshes its public copy `techShowcase/{buildId}` (`onTechBuildUpdated` → `buildShowcaseContent`, content only: title, brief, code, writing, pictures and media, notes; the approval, first name, featured flag and publish date stay). The project's Published box says so.
+- **Published class work** (`techLessonWork.publishState = 'approved'`) used to be locked after hand-in. The builder now edits its *published version* (`liveCodeFiles`, `liveCodeFolders`, `liveCodeAssets`, `liveCodeActive`, `liveWritingHtml`, `liveAt`) in the lesson's practice pop-up ("Editing your published version"), from Results ("Edit published version") or My projects ("Edit and update"). The marked hand-in and its PDF stay as they were. `onTechLessonWorkWritten` copies the published version to `techShowcase/cw_{workId}` on each save; approval uses it too. The rules allow the builder only those live fields, only on their own approved work.
+- The public page still sanitises writing and runs code in its sandbox; the picture taken at hand-in is not retaken.
+
 # Homework in number order, Renew, doc boilerplate (2026-11-04)
 
 - **Homework in number order.** Homework, classwork and exams are listed by the number in their title (Homework 1, 2, 3 … 10), then by title; work with no number comes after, oldest first (`lmzWorkOrder` in lms-helpers.js). This applies to the student homework pages and subject pages, the parent portal and tutor and admin Homework Management (which used to put work with marking waiting first); the bubbles still show what needs marking. On the student's homework page, topics follow the class's topic order.

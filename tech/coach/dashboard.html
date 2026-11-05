@@ -61,17 +61,17 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="/firebase-config.js"></script>
 <script src="/js/ui/paisley-ui.js?v=1"></script>
-<script src="/js/tech/writing-studio.js?v=tech12"></script>
+<script src="/js/tech/writing-studio.js?v=tech13"></script>
 <script src="/js/tech/code-lab.js?v=tech17"></script>
 <script src="/js/tech/upload-pad.js?v=tech7"></script>
-<script src="/js/ui/fast-video.js?v=3"></script>
+<script src="/js/ui/fast-video.js?v=4"></script>
 <script src="/js/classroom/classroom-helpers.js?v=boards5"></script>
 <script src="/js/classroom/ink-grader.js?v=tech1"></script>
-<script src="/js/tech/tech-helpers.js?v=tech16"></script>
-<script src="/js/tech/tech-work.js?v=8"></script>
+<script src="/js/tech/tech-helpers.js?v=tech18"></script>
+<script src="/js/tech/tech-work.js?v=9"></script>
 <script src="/js/tech/tech-groups.js?v=3"></script>
-<script src="/js/tech/tech-classes.js?v=13"></script>
-<script src="/js/tech/tech-manage.js?v=tech8"></script>
+<script src="/js/tech/tech-classes.js?v=14"></script>
+<script src="/js/tech/tech-manage.js?v=tech9"></script>
 <script src="/js/tech/coach-access.js?v=tech7"></script>
 <script>
 /* Paisley Tech Studio coach portal.
@@ -384,7 +384,7 @@ document.addEventListener('click',async e=>{
     const title=$('ccT').value.trim(), msg=$('ccM'); if(!title){ msg.textContent='Add a title.'; return; }
     const d={kind:$('ccK').value,title:title.slice(0,120),summary:$('ccS').value.trim().slice(0,300),body:$('ccB').value.trim().slice(0,8000),url:T.safeUrl($('ccU').value),level:Number($('ccL').value)||0,order:0,resources:[],status:t.dataset.cc,createdBy:S.uid,createdByName:S.me.name||'',createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
     t.disabled=true;
-    try{ await db.collection('techContent').add(d); ['ccT','ccS','ccB','ccU'].forEach(i=>{ $(i).value=''; }); msg.style.color='#1d8b57'; msg.textContent=t.dataset.cc==='published'?'Published ✓':'Saved as draft ✓'; }
+    try{ await db.collection('techContent').add(d); ['ccT','ccS','ccB','ccU'].forEach(i=>{ $(i).value=''; }); msg.style.color='#1d8b57'; msg.innerHTML='<i class="fas fa-circle-check"></i> '+(t.dataset.cc==='published'?'Published':'Saved as draft'); }
     catch(er){ msg.style.color='#b8362a'; msg.textContent='Could not save: '+T.errMsg(er); }
     t.disabled=false;
   }

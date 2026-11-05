@@ -130,7 +130,7 @@
     function renderApplications(body) {
       var list = pendingApps().sort(function (a, b) { return ts(a.createdAt) - ts(b.createdAt); });
       var h = '<div class="cr-bar"><div><h3>Applications</h3><div class="cr-sub">New CBC tuition sign-ups waiting for approval. Approving activates the account, links the parents they listed and sets how they learn.</div></div></div>';
-      if (!list.length) { body.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No applications waiting. 🎉</div></div>'; return; }
+      if (!list.length) { body.innerHTML = h + '<div class="cr-panel"><div class="cr-empty"><i class="fas fa-circle-check"></i> No applications waiting.</div></div>'; return; }
       h += '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Applicant</th><th>Band / Grade</th><th>Subjects</th><th>Parents / guardians</th><th>Applied</th><th></th></tr></thead><tbody>' + list.map(function (s) {
         return '<tr><td><b>' + esc(s.name) + '</b><div class="cr-note">' + esc(s.email || '') + (s.phone ? ' · ' + esc(s.phone) : '') + '</div></td>' +
           '<td>' + esc(bandShort(s.keyStage)) + '<div class="cr-note">' + esc(gradeText(s)) + '</div></td>' +

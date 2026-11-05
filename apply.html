@@ -1423,7 +1423,7 @@ function validateStep(step) {
     if (!acceptComp) missing.push('Accept Compensation');
     
     if (missing.length > 0) {
-      alert('⚠️ Please fill in all required fields:\n\n- ' + missing.join('\n- '));
+      alert('Please fill in all required fields:\n\n- ' + missing.join('\n- '));
       return false;
     }
     
@@ -1467,7 +1467,7 @@ document.getElementById('tutorSubmitBtn').addEventListener('click', function(e) 
   if (!primarySubject) missing.push('Primary Subject Specialism');
   
   if (missing.length > 0) {
-    alert('⚠️ Please complete all required fields:\n\n- ' + missing.join('\n- '));
+    alert('Please complete all required fields:\n\n- ' + missing.join('\n- '));
     return;
   }
   

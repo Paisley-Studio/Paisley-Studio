@@ -111,7 +111,7 @@
     var unsub = null, destroyed = false;
 
     function render(docs) {
-      if (!docs.length) { list.innerHTML = '<div class="tu-empty">No messages yet. Say hello 👋</div>'; return; }
+      if (!docs.length) { list.innerHTML = '<div class="tu-empty">No messages yet. Say hello <i class="fas fa-hand" aria-hidden="true"></i></div>'; return; }
       list.innerHTML = docs.map(function (m) {
         var mine = m.senderId === o.me.uid;
         return '<div class="tu-msg' + (mine ? ' me' : '') + '"><span class="who">' + esc(mine ? 'You' : (m.senderName || m.senderRole || '')) + '</span>' +

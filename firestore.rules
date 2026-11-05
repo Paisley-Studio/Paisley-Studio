@@ -1267,6 +1267,12 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['publishState', 'publishRequestedAt', 'updatedAt']) &&
           ((request.resource.data.publishState == 'requested' && resource.data.get('publishState', '') != 'approved') ||
             request.resource.data.publishState == 'unpublished')) ||
+        // Published work: the builder edits its published version (live*), never the marked hand-in;
+        // functions copy it to the public link (techShowcase/cw_{id}).
+        (techStudentActive() && resource.data.studentId == request.auth.uid &&
+          resource.data.get('publishState', '') == 'approved' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['liveCodeFiles', 'liveCodeFolders', 'liveCodeAssets', 'liveCodeActive',
+            'liveCodeAt', 'liveWritingHtml', 'liveWritingAt', 'liveAt', 'updatedAt'])) ||
         (isTechCoachOf(resource.data.studentId) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(techMarkKeys()) &&
           request.resource.data.status in ['Draft', 'Submitted', 'Graded', 'Corrections']);

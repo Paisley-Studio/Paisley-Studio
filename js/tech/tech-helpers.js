@@ -922,7 +922,7 @@
       (o.readOnly ? '' : '<div class="tk-chat-form"><textarea id="tkText" rows="1" maxlength="3000" placeholder="Write a message…"></textarea><button class="tk-btn primary" id="tkSend" type="button" aria-label="Send"><i class="fas fa-paper-plane"></i></button></div>') + '</div>';
     var list = host.querySelector('#tkList'), unsub = null, dead = false;
     function render(docs) {
-      if (!docs.length) { list.innerHTML = '<div class="tk-empty">No messages yet. Say hello 👋</div>'; return; }
+      if (!docs.length) { list.innerHTML = '<div class="tk-empty">No messages yet. Say hello <i class="fas fa-hand" aria-hidden="true"></i></div>'; return; }
       list.innerHTML = docs.map(function (m) { var mine = m.senderId === o.me.uid; return '<div class="tk-msg' + (mine ? ' me' : '') + '"><span class="who">' + esc(mine ? 'You' : (m.senderName || m.senderRole || '')) + '</span>' + esc(m.text) + '<span class="at">' + esc(fmt(m.createdAt)) + '</span></div>'; }).join('');
       list.scrollTop = list.scrollHeight;
     }
@@ -985,7 +985,7 @@
     var missionState = {}, settingsOpen = false;
 
     function editing() { var a = document.activeElement; return a && host.contains(a) && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); }
-    function say(t, bad) { var m = host.querySelector('#wsMsg'); if (m) { m.textContent = t; m.style.color = bad ? '#b8362a' : 'var(--brand-deep,#245F5A)'; } }
+    function say(t, bad) { var m = host.querySelector('#wsMsg'); if (m) { m.innerHTML = '<i class="fas ' + (bad ? 'fa-triangle-exclamation' : 'fa-circle-check') + '" aria-hidden="true"></i> '; m.appendChild(document.createTextNode(t)); m.style.color = bad ? '#b8362a' : 'var(--brand-deep,#245F5A)'; } }
     function act(type, label, extra) { return logActivity(me, type, label, Object.assign({ buildId: b && b.id, missionId: b && b.missionId, origin: isSelfLed(b) ? 'self' : 'mission' }, extra || {})); }
     /* quiet: the tab modules (Writing / Code / Upload) save without a full re-render, so typing never loses the cursor. */
     async function patch(p, okMsg, quiet) {
@@ -1013,7 +1013,7 @@
       if (mounted[kind]) { try { mounted[kind].destroy(); } catch (e) { } mounted[kind] = null; }
       try {
         mounted[kind] = lib.mount(hostEl, {
-          build: b, me: me, canEdit: canEdit, files: b.files || [], title: b.title, onSave: moduleSave(kind === 'code' ? 'Code saved ✓' : 'Saved ✓'),
+          build: b, me: me, canEdit: canEdit, files: b.files || [], title: b.title, onSave: moduleSave(kind === 'code' ? 'Code saved' : 'Saved'),
           /* Pictures, video and sound for the Code IDE's folders (same Storage folder as other project files). */
           uploadAsset: kind === 'code' && canEdit && firebase.storage ? function (f) {
             var path = 'techBuilds/' + b.studentId + '/' + b.id + '/code_' + Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
@@ -1103,6 +1103,7 @@
       if (b.showcase === 'approved') {
         return '<div class="tk-box"><h3>Published</h3><div class="tk-sub">Public at this Paisley Studio link (first name only):</div>' +
           '<div style="display:flex;gap:.4rem"><input class="tk-in" readonly value="' + esc(url) + '" onclick="this.select()"><button type="button" class="tk-btn sm" data-copy="' + esc(url) + '"><i class="fas fa-copy"></i> Copy</button><a class="tk-btn sm" href="' + esc(url) + '" target="_blank" rel="noopener">Open</a></div>' +
+          '<div class="tk-sub" style="margin-top:.5rem"><i class="fas fa-rotate"></i> ' + (isStu ? 'Keep improving it: every change you save shows on this link within a few seconds.' : 'Changes the builder saves show on this link.') + '</div>' +
           (isStu || canReview ? '<button class="tk-btn sm danger" id="wsUnpublish" type="button" style="margin-top:.5rem">Take it down</button>' : '') + '</div>';
       }
       if (canReview) {
@@ -1346,7 +1347,7 @@
           progress: Math.max(Number(b.progress) || 0, 80)
         });
         if (['IDEA', 'LEARNING', 'BUILDING'].indexOf(b.status) !== -1) p.status = 'TESTING';
-        await patch(p, n > 1 ? 'Revision submitted ✓' : 'Submitted for review ✓');
+        await patch(p, n > 1 ? 'Revision submitted' : 'Submitted for review');
         act(n > 1 ? 'resubmitted' : 'submitted', (n > 1 ? 'Resubmitted ' : 'Submitted ') + (b.title || 'a project') + ' (v' + n + ')');
       } catch (e) { if (btn) btn.disabled = false; say('Could not submit: ' + errMsg(e), true); }
     }
@@ -1368,14 +1369,14 @@
         if (decision === 'changes' && b.mastery === 'requested') bp.mastery = 'changes';
         batch.update(ref, bp);
         await batch.commit();
-        say(kind === 'changes' ? 'Revision requested. The builder and their family are told.' : kind === 'mastered' ? 'Approved and mastered ✓' : 'Approved ✓');
+        say(kind === 'changes' ? 'Revision requested. The builder and their family are told.' : kind === 'mastered' ? 'Approved and mastered' : 'Approved');
       } catch (e) { say('Could not save the review: ' + errMsg(e), true); host.querySelectorAll('[data-review]').forEach(function (x) { x.disabled = false; }); }
     }
 
     function wire() {
       host.querySelectorAll('[data-tab]').forEach(function (t) { t.addEventListener('click', function () { switchTab(t.dataset.tab); }); });
       host.querySelectorAll('[data-tabgo]').forEach(function (t) { t.addEventListener('click', function () { switchTab(t.dataset.tabgo); window.scrollTo(0, host.getBoundingClientRect().top + window.scrollY - 80); }); });
-      host.querySelectorAll('[data-copy]').forEach(function (t) { t.addEventListener('click', function () { var v = t.dataset.copy; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { say('Link copied ✓'); }, function () { say(v); }); }); });
+      host.querySelectorAll('[data-copy]').forEach(function (t) { t.addEventListener('click', function () { var v = t.dataset.copy; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { say('Link copied'); }, function () { say(v); }); }); });
       host.querySelectorAll('[data-st]').forEach(function (btn) { btn.addEventListener('click', function () {
         if (!canEdit) return; var st = btn.dataset.st; var p = { status: st }; if (st === 'READY') p.progress = 100;
         patch(p, 'Stage: ' + STATUS_LABEL[st]).catch(function () { });
@@ -1395,7 +1396,7 @@
 
       var set = host.querySelector('.ws-settings'); if (set) set.addEventListener('toggle', function () { settingsOpen = set.open; });
 
-      if (q('#wsSave')) q('#wsSave').addEventListener('click', function () { patch(collect(), 'Saved ✓').catch(function () { }); });
+      if (q('#wsSave')) q('#wsSave').addEventListener('click', function () { patch(collect(), 'Saved').catch(function () { }); });
       if (q('#rsAdd')) q('#rsAdd').addEventListener('click', function () { var u = safeUrl(q('#rsU').value); if (!u) return say('Enter a link starting with https://', true); var a = (b.resources || []).concat([{ title: q('#rsT').value.trim().slice(0, 80) || u, url: u }]); patch(Object.assign(collect(), { resources: a.slice(0, 30) })).catch(function () { }); });
       if (q('#flAdd')) q('#flAdd').addEventListener('click', function () { var u = safeUrl(q('#flU').value); if (!u) return say('Enter a link starting with https://', true); var a = (b.files || []).concat([{ name: u.replace(/^https?:\/\//, '').slice(0, 60), url: u, at: Date.now() }]); patch(Object.assign(collect(), { files: a.slice(0, 40) })).catch(function () { }); });
       if (q('#flUp')) q('#flUp').addEventListener('change', async function (e) {
@@ -1406,12 +1407,12 @@
           var path = 'techBuilds/' + b.studentId + '/' + b.id + '/' + Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
           var r = firebase.storage().ref(path); await r.put(f, { contentType: f.type || undefined }); var url = await r.getDownloadURL();
           var a = (b.files || []).concat([{ name: f.name.slice(0, 80), url: url, path: path, size: f.size, type: f.type || '', at: Date.now() }]);
-          await patch(Object.assign(collect(), { files: a.slice(0, 40) }), 'File added ✓');
+          await patch(Object.assign(collect(), { files: a.slice(0, 40) }), 'File added');
         } catch (er) { st.textContent = 'Upload failed: ' + errMsg(er); }
       });
-      if (q('#vAdd')) q('#vAdd').addEventListener('click', function () { var n = q('#vN').value.trim(); if (!n) return say('Say what changed in this version.', true); var u = safeUrl(q('#vU').value); var a = (b.versions || []).concat([{ note: n.slice(0, 200), url: u, at: Date.now() }]); patch(Object.assign(collect(), { versions: a.slice(0, 50) }), 'Version v' + a.length + ' saved ✓').catch(function () { }); });
+      if (q('#vAdd')) q('#vAdd').addEventListener('click', function () { var n = q('#vN').value.trim(); if (!n) return say('Say what changed in this version.', true); var u = safeUrl(q('#vU').value); var a = (b.versions || []).concat([{ note: n.slice(0, 200), url: u, at: Date.now() }]); patch(Object.assign(collect(), { versions: a.slice(0, 50) }), 'Version v' + a.length + ' saved').catch(function () { }); });
 
-      if (q('#aiSave')) q('#aiSave').addEventListener('click', function () { patch({ aiReflection: collectReflection() }, 'Reflection saved ✓').catch(function () { }); });
+      if (q('#aiSave')) q('#aiSave').addEventListener('click', function () { patch({ aiReflection: collectReflection() }, 'Reflection saved').catch(function () { }); });
       if (q('#wsSubmit')) q('#wsSubmit').addEventListener('click', submitWork);
       host.querySelectorAll('[data-review]').forEach(function (x) { x.addEventListener('click', function () { review(x.dataset.review); }); });
       if (q('#wsStartReview')) q('#wsStartReview').addEventListener('click', function () { patch({ reviewState: 'reviewing' }, 'Marked as under review.').catch(function () { }); });
@@ -1421,9 +1422,9 @@
         btn.addEventListener('click', async function () {
           var v = btn.dataset.vis; if (btn.disabled || v === b.visibility) return;
           if (v === 'family') {
-            try { var token = await mintShareToken(b.id); await patch({ visibility: 'family', shareToken: token }, 'Family link ready ✓'); }
+            try { var token = await mintShareToken(b.id); await patch({ visibility: 'family', shareToken: token }, 'Family link ready'); }
             catch (e) { say('Could not create family link: ' + errMsg(e), true); }
-          } else patch({ visibility: 'private' }, 'Now private ✓').catch(function () { });
+          } else patch({ visibility: 'private' }, 'Now private').catch(function () { });
         });
       });
       if (q('#wsRevokeToken')) q('#wsRevokeToken').addEventListener('click', async function () {
@@ -1432,11 +1433,11 @@
         catch (e) { say('Could not revoke: ' + errMsg(e), true); }
       });
 
-      if (q('#wsAsk')) q('#wsAsk').addEventListener('click', function () { patch({ showcase: 'requested' }, 'Publication requested ✓').catch(function () { }); });
+      if (q('#wsAsk')) q('#wsAsk').addEventListener('click', function () { patch({ showcase: 'requested' }, 'Publication requested').catch(function () { }); });
       if (q('#wsDecline')) q('#wsDecline').addEventListener('click', function () { patch({ showcase: 'none' }, 'Publication request declined.').catch(function () { }); });
       if (q('#wsPublish')) q('#wsPublish').addEventListener('click', async function () {
         if (!q('#wsConsent').checked) return say('Confirm consent before publishing.', true);
-        try { await approveShowcase(b, me, true); say('Published ✓ ' + shareUrl(b.id)); } catch (e) { say('Could not publish: ' + errMsg(e), true); }
+        try { await approveShowcase(b, me, true); say('Published: ' + shareUrl(b.id)); } catch (e) { say('Could not publish: ' + errMsg(e), true); }
       });
       if (q('#wsUnpublish')) q('#wsUnpublish').addEventListener('click', async function () { if (!confirm('Take this project off the public showcase? The link will stop working.')) return; try { await removeShowcase(b); say('Taken down.'); } catch (e) { say(errMsg(e), true); } });
       if (q('#wsDel')) q('#wsDel').addEventListener('click', async function () {
@@ -1447,7 +1448,7 @@
         var t = q('#fbText').value.trim(); if (!t) return; var btn = q('#fbSend'); btn.disabled = true;
         try {
           await ref.collection('feedback').add({ authorId: me.uid, authorName: me.name || '', role: role === 'student' ? 'student' : (role === 'admin' ? 'admin' : 'coach'), kind: 'comment', text: t.slice(0, 2000), createdAt: FV().serverTimestamp() });
-          q('#fbText').value = ''; say('Posted ✓');
+          q('#fbText').value = ''; say('Posted');
         } catch (e) { say('Could not post: ' + errMsg(e), true); }
         btn.disabled = false;
       });

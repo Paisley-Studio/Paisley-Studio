@@ -227,7 +227,7 @@ function ActivityEngine(container, activity, studentId) {
       const correct = given !== undefined && ActivityScoring.isCorrect(q, given);
       return `<div class="activity-review-row ${correct ? 'correct' : 'incorrect'}">
         <div class="activity-review-q">${escapeActivityHtml(q.text || '')}</div>
-        <div class="activity-review-verdict">${correct ? '✓ Correct' : '✗ Incorrect'}</div>
+        <div class="activity-review-verdict">${correct ? '<i class="fas fa-circle-check"></i> Correct' : '<i class="fas fa-circle-xmark"></i> Incorrect'}</div>
         ${q.explanation ? `<div class="activity-review-explanation">${escapeActivityHtml(q.explanation)}</div>` : ''}
       </div>`;
     }).join('');

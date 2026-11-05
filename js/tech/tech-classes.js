@@ -259,14 +259,14 @@
       '@media(max-width:640px){.tc-mini{width:min(280px,calc(100vw - 16px))}}',
       /* the class is done: unlock the next one */
       '.tc-claim{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;padding:.9rem 1.1rem;margin:0 0 1rem;border-radius:16px;background:linear-gradient(135deg,#FFF6D8,#E5F2EF);border:1px solid rgba(245,200,66,.55)}',
-      '.tc-claim .big{font-size:1.8rem;line-height:1}.tc-claim .t{flex:1;min-width:200px}.tc-claim b{display:block;color:var(--brand-deep,#245F5A);font-size:.98rem}.tc-claim small{color:var(--muted,#5A6E6A);font-weight:600;font-size:.8rem}',
+      '.tc-claim .big{font-size:1.8rem;line-height:1;color:var(--gold,#C9A227)}.tc-claim .t{flex:1;min-width:200px}.tc-claim b{display:block;color:var(--brand-deep,#245F5A);font-size:.98rem}.tc-claim small{color:var(--muted,#5A6E6A);font-weight:600;font-size:.8rem}',
       '.tc-claim.float{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1500;width:min(560px,calc(100vw - 24px));margin:0;box-shadow:0 18px 50px rgba(0,0,0,.28)}',
       '.tc-vrow{border:1px solid var(--line,rgba(38,51,49,.12));border-radius:12px;padding:.7rem;margin-bottom:.5rem;background:#fff}.tc-vrow-h{display:flex;gap:.6rem;align-items:center;margin-bottom:.45rem}.tc-vrow-h b{flex:none;font-size:.8rem;color:var(--brand-deep,#245F5A)}.tc-vrow-h input{flex:1;min-width:0}',
       /* the celebration */
       '.tc-cele{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:16px;background:rgba(15,26,20,.45);animation:tcFade .25s}',
       '.tc-cele canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}',
       '.tc-cele-card{position:relative;width:min(100%,400px);padding:1.6rem 1.4rem 1.3rem;border-radius:20px;background:#fff;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.3);animation:tcPop .45s cubic-bezier(.2,1.4,.4,1)}',
-      '.tc-cele-card .big{font-size:2.6rem;line-height:1;margin-bottom:.4rem}',
+      '.tc-cele-card .big{font-size:2.6rem;line-height:1;margin-bottom:.4rem;color:var(--gold,#C9A227)}',
       '.tc-cele-card .unl{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .7rem;border-radius:99px;background:rgba(46,184,114,.12);color:#1f8557;font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}',
       '.tc-cele-card h3{margin:.6rem 0 .35rem;font-size:1.25rem;font-weight:800;color:var(--brand-deep,#245F5A)}',
       '.tc-cele-card p{margin:0 0 1.1rem;font-size:.9rem;line-height:1.5;color:var(--muted,#5A6E6A)}',
@@ -348,7 +348,7 @@
     var old = document.querySelector('.tc-cele'); if (old) old.remove();
     var el = document.createElement('div');
     el.className = 'tc-cele'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', o.title);
-    el.innerHTML = '<canvas aria-hidden="true"></canvas><div class="tc-cele-card"><div class="big" aria-hidden="true">' + (o.emoji || '🎉') + '</div>' +
+    el.innerHTML = '<canvas aria-hidden="true"></canvas><div class="tc-cele-card"><div class="big" aria-hidden="true">' + '<i class="fas ' + esc(o.icon || 'fa-trophy') + '"></i></div>' +
       (o.badge ? '<span class="unl"><i class="fas fa-lock-open"></i> ' + esc(o.badge) + '</span>' : '') +
       '<h3>' + esc(o.title) + '</h3><p>' + esc(o.line) + '</p><div class="acts">' +
       (o.go ? '<button type="button" class="tc-btn" data-cele="go">' + esc(o.go[0]) + ' <i class="fas fa-arrow-right"></i></button>' : '') +
@@ -640,7 +640,7 @@
           if (v.path) dropStored(v.path);
           v.url = r.url; v.path = r.path; v.name = r.name; dirty = true;
           var inp = m.body.querySelector('[data-vi="' + i + '"] [data-vf="url"]'); if (inp) inp.value = r.url;
-          vNote(i, 'Uploaded ✓ ' + r.name);
+          vNote(i, 'Uploaded: ' + r.name);
         }).catch(function (er) { vNote(i, 'Upload failed: ' + T.errMsg(er)); }).then(function () { busy--; });
       });
       $('#tcFileIn').addEventListener('change', function (e) {
@@ -649,7 +649,7 @@
           if (f.size >= 50 * 1048576) { note.textContent = f.name + ' is over 50 MB.'; return; }
           if (files.length >= 20) { note.textContent = 'A lesson can hold up to 20 files.'; return; }
           busy++; note.textContent = 'Uploading ' + f.name + '…';
-          uploadFile(ref.id, f).then(function (r) { files.push(r); dirty = true; paintFiles(); note.textContent = 'Uploaded ✓ ' + f.name; })
+          uploadFile(ref.id, f).then(function (r) { files.push(r); dirty = true; paintFiles(); note.textContent = 'Uploaded: ' + f.name; })
             .catch(function (er) { note.textContent = 'Upload failed: ' + T.errMsg(er); }).then(function () { busy--; });
         });
         e.target.value = '';
@@ -1232,7 +1232,7 @@
     function claimable() { return (S.courses || []).filter(function (c) { return claimState(c); }); }
     function claimHtml(c, float) {
       var L = ladder()[c.id], st = claimState(c); if (!st) return '';
-      return '<div class="tc-claim' + (float ? ' float' : '') + '" role="status"><span class="big" aria-hidden="true">🎉</span><div class="t"><b>You finished every lesson in ' + esc(c.name) + '!</b><small>Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is waiting for you.</small></div>' +
+      return '<div class="tc-claim' + (float ? ' float' : '') + '" role="status"><span class="big" aria-hidden="true"><i class="fas fa-trophy"></i></span><div class="t"><b>You finished every lesson in ' + esc(c.name) + '!</b><small>Level ' + (L.n + 1) + ', ' + esc(L.next.name) + ', is waiting for you.</small></div>' +
         (st === 'ready' ? '<button type="button" class="tc-btn gold tc-pulse" data-tc="unlock" data-id="' + esc(c.id) + '"><i class="fas fa-lock-open"></i> Unlock Level ' + (L.n + 1) + '</button>' : '<span class="tc-pill"><i class="fas fa-spinner fa-spin"></i> Checking your work…</span>') +
         (float ? '<button type="button" class="tc-btn light sm" data-tc="later" data-id="' + esc(c.id) + '">Later</button>' : '') + '</div>';
     }
@@ -1253,7 +1253,7 @@
         var next = L.next;
         claimFloat(); if (S.screen !== 'lesson') paint(); else refreshLessonBits();
         T.logActivity(me, 'level_unlocked', 'Unlocked Level ' + (L.n + 1) + ': ' + next.name, { origin: 'class' });
-        celebrate({ emoji: '🎉', badge: 'Level ' + (L.n + 1) + ' unlocked', title: 'Hooray! You passed Level ' + L.n + ': ' + c.name + '!',
+        celebrate({ icon: 'fa-trophy',badge: 'Level ' + (L.n + 1) + ' unlocked', title: 'Hooray! You passed Level ' + L.n + ': ' + c.name + '!',
           line: 'Level ' + (L.n + 1) + ', ' + next.name + ', is open now, and your family has been told. Keep going!',
           shout: 'Hooray! Well done ' + first + '! Level ' + (L.n + 1) + ' unlocked!',
           go: ['Start ' + next.name, function () { closePractice(); openCourse(next); }], stay: 'Stay here' });
@@ -1269,7 +1269,7 @@
       var l = fresh[fresh.length - 1], cc = (S.courses || []).filter(function (x) { return x.id === l.courseId; })[0];
       if (!cc) return;
       var k = courseCount(cc), left = k.all - k.done;
-      if (left) toast('Lesson finished ✓ ' + k.done + ' of ' + k.all + ' done in ' + cc.name + '. ' + (left === 1 ? 'One more' : left + ' more') + ' to finish the class.');
+      if (left) toast('Lesson finished. ' + k.done + ' of ' + k.all + ' done in ' + cc.name + '. ' + (left === 1 ? 'One more' : left + ' more') + ' to finish the class.');
     }
     unsubs.push(query(db.collection('techNotifications').where('recipientId', '==', me.uid).where('read', '==', false).limit(300), function (s) {
       S.unread = docs(s).filter(function (n) { return n.lessonId && (!n.studentId || n.studentId === student.id); });

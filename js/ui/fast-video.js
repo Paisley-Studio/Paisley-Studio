@@ -113,6 +113,7 @@
       '.fv-err button{border:0;border-radius:10px;background:#F5C842;color:#3b2d00;font:inherit;font-weight:800;padding:.5rem 1.1rem;cursor:pointer}',
       '.fv-face{position:absolute;inset:0;width:100%;height:100%;border:0;padding:0;margin:0;background:#245F5A center/cover no-repeat;cursor:pointer;display:flex;align-items:center;justify-content:center}',
       '.fv-face b{width:76px;height:76px;border-radius:50%;background:#55BFB3;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.7rem;transition:transform .15s}',
+      '.fv-face b i{margin-left:.18em}',
       '.fv-face:hover b,.fv-face:focus-visible b{transform:scale(1.1)}',
       '@media (prefers-reduced-motion:reduce){.fv-wait span{animation-duration:2.4s}.fv-face b{transition:none}}'
     ].join('');
@@ -133,7 +134,7 @@
     var y = ytId(u), d = driveId(u), poster = o.poster || (y ? 'https://i.ytimg.com/vi/' + y + '/hqdefault.jpg' : (d ? 'https://drive.google.com/thumbnail?id=' + d + '&sz=w1280' : ''));
     preconnect(embed(u));
     return '<button type="button" class="fv-face" data-fv-embed="' + esc(embed(u)) + '" data-fv-title="' + esc(o.title || 'Video') + '" aria-label="Play ' + esc(o.title || 'video') + '"' +
-      (poster ? ' style="background-image:url(&quot;' + esc(poster) + '&quot;)"' : '') + '><b aria-hidden="true">&#9654;</b></button>';
+      (poster ? ' style="background-image:url(&quot;' + esc(poster) + '&quot;)"' : '') + '><b aria-hidden="true"><i class="fas fa-play"></i></b></button>';
   }
   /* Whichever of the two fits the link. Always needs a positioned parent. */
   function html(u, o) { return embed(u) ? embedHtml(u, o) : videoHtml(u, Object.assign({ attrs: 'controls preload="metadata"' }, o || {})); }
