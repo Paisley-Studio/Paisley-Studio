@@ -221,7 +221,8 @@ const ICONS = {
   'book': [], 'book-open': ['55bfb3'], 'layer-group': [], 'file-lines': [], 'file-pen': ['55bfb3'], 'star': [],
   'user-check': [], 'circle-check': ['2eb872'], 'calendar-day': [], 'calendar-xmark': [], 'clock': ['f39c12'],
   'hourglass-half': [], 'rotate-left': ['f39c12'], 'triangle-exclamation': ['e74c3c'], 'clipboard-list': ['e74c3c'],
-  'tag': [], 'align-left': [], 'chalkboard-user': [], 'trophy': ['f5c842'], 'play': ['245f5a']
+  'tag': [], 'align-left': [], 'chalkboard-user': [], 'trophy': ['f5c842'], 'play': ['245f5a'],
+  'user-clock': ['f39c12'], 'user-xmark': ['e74c3c'], 'scale-balanced': ['e74c3c']
 };
 function iconUrl(name, color) {
   const key = String(name || '').replace(/^fa-/, '');
@@ -981,6 +982,98 @@ function parentNewsletter({ newsletter, parentName, unsubUrl }) {
   };
 }
 
+/* Attendance and punctuality (functions/attendance.js). One template, one plain style.
+   kind: late | absent | strike4_student | strike4_parent | referral_parent | referral_admin | auto_submit_admin */
+function attendanceNotice({ kind, audience, recipientName, student, subjectName, tutorName, startAt, arrivedAt, minutesLate, strikes, academicYear, unresolved }) {
+  const who = esc((student && student.name) || 'your child');
+  const hi = recipientName ? `Hi ${esc(firstName(recipientName))},` : 'Hello,';
+  const when = startAt ? fmtWhen(startAt) : '—';
+  const timeOf = (d) => d ? new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' }) : '—';
+  const lessonRows = [
+    ['fa-book', 'Subject', subjectName || '—'],
+    ['fa-calendar-day', 'Lesson', when],
+    tutorName ? ['fa-chalkboard-user', 'Tutor', tutorName] : null
+  ];
+  const lateRows = lessonRows.concat([
+    ['fa-clock', 'Scheduled start', timeOf(startAt)],
+    ['fa-user-clock', 'Arrived', timeOf(arrivedAt)],
+    ['fa-hourglass-half', 'Minutes late', String(minutesLate == null ? '—' : minutesLate)],
+    strikes ? ['fa-triangle-exclamation', 'Late arrivals this year', `${strikes}${academicYear ? ` (${academicYear})` : ''}`] : null
+  ]);
+  const muted = (t) => `<p style="margin:0;font-size:13px;color:${BRAND.muted};">${t}</p>`;
+  const parentCta = { label: 'Open the Parent Portal', url: PORTALS.parent };
+  const K = {
+    late: {
+      subject: `Late arrival: ${subjectName || 'lesson'}`,
+      heading: 'Late arrival',
+      lead: `${fa('fa-user-clock', '#F39C12')}<strong>${who}</strong> registered late for today's lesson.`,
+      rows: lateRows,
+      tail: muted(`Lessons start on time and the first minutes often set up everything that follows, so arriving punctually matters. Every arrival 15 minutes or more after the start counts as one late-arrival strike. Four strikes bring a formal warning and a fifth is referred to the Studio Desk.`),
+      cta: parentCta
+    },
+    absent: {
+      subject: `Absent: ${subjectName || 'lesson'}`,
+      heading: 'Absence recorded',
+      lead: `${fa('fa-user-xmark', '#E74C3C')}<strong>${who}</strong> was recorded absent from this lesson by the tutor.`,
+      rows: lessonRows,
+      tail: muted('If this is not right, or there was a reason for the absence, reply through Messages in the Parent Portal and the Studio Desk will look into it.'),
+      cta: parentCta
+    },
+    strike4_student: {
+      subject: 'Formal warning: four late arrivals',
+      heading: 'Formal punctuality warning',
+      lead: `${fa('fa-triangle-exclamation', '#E74C3C')}You now have <strong>four late-arrival strikes</strong> this academic year.`,
+      rows: lateRows,
+      tail: muted('This is a formal warning. The next time you arrive 15 minutes or more after a lesson starts, it will be referred to the Studio Desk for disciplinary review. Join your lessons a few minutes early.'),
+      cta: { label: portalCta(student), url: studentPortal(student) }
+    },
+    strike4_parent: {
+      subject: `Formal warning: ${(student && student.name) || 'your child'} has four late arrivals`,
+      heading: 'Formal punctuality warning',
+      lead: `${fa('fa-triangle-exclamation', '#E74C3C')}<strong>${who}</strong> now has <strong>four late-arrival strikes</strong> this academic year.`,
+      rows: lateRows,
+      tail: muted('The next late arrival will be referred to the Studio Desk for disciplinary review. Please help them join lessons on time.'),
+      cta: parentCta
+    },
+    referral_parent: {
+      subject: `Disciplinary referral: ${(student && student.name) || 'your child'}`,
+      heading: 'Referred to the Studio Desk',
+      lead: `${fa('fa-scale-balanced', '#E74C3C')}<strong>${who}</strong> has reached <strong>${esc(strikes || 5)} late-arrival strikes</strong> this academic year, the disciplinary referral threshold.`,
+      rows: lateRows,
+      tail: muted('The case has been referred to the Studio Desk for review. No action has been taken yet; the Studio Desk will decide what happens next and will be in touch.'),
+      cta: parentCta
+    },
+    referral_admin: {
+      subject: `Disciplinary referral: ${(student && student.name) || 'a student'} (${strikes || 5} strikes)`,
+      heading: 'New disciplinary referral',
+      lead: `${fa('fa-scale-balanced', '#E74C3C')}<strong>${who}</strong> reached <strong>${esc(strikes || 5)} late-arrival strikes</strong> this academic year.`,
+      rows: lateRows,
+      tail: muted('Review the referral and record your decision in Attendance on the Studio Desk.'),
+      cta: { label: 'Open Attendance', url: PORTALS.admin + '#attendance' }
+    },
+    auto_submit_admin: {
+      subject: `Register auto-submitted: ${subjectName || 'lesson'}`,
+      heading: 'Register auto-submitted',
+      lead: `${fa('fa-clipboard-list', '#E74C3C')}The tutor did not submit this register, so the system submitted it automatically.`,
+      rows: lessonRows.concat([['fa-user-xmark', 'Students unaccounted for', String(unresolved || 0)]]),
+      tail: muted('Registrations already made were kept as they were. Students nobody accounted for are left unresolved, not marked absent. The tutor has been asked for an explanation.'),
+      cta: { label: 'Open Attendance', url: PORTALS.admin + '#attendance' }
+    }
+  };
+  const k = K[kind] || K.late;
+  return {
+    subject: k.subject,
+    html: render({
+      programme: audience === 'admin' ? 'staff' : programmeOf(student),
+      preheader: k.subject,
+      heading: k.heading,
+      intro: hi,
+      body: `<p style="margin:0 0 14px;">${k.lead}</p>${detailList(k.rows)}${k.tail}`,
+      cta: k.cta
+    })
+  };
+}
+
 module.exports = {
   render,
   programmeOf,
@@ -1015,6 +1108,7 @@ module.exports = {
     workPosted,
     examPostedParent,
     examPostedStudent,
-    examResultsReleased
+    examResultsReleased,
+    attendanceNotice
   }
 };

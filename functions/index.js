@@ -151,6 +151,22 @@ exports.techLinkGuardians             = tech.techLinkGuardians;
 exports.migrateTechArchitecture       = tech.migrateTechArchitecture;
 exports.techShare                     = tech.techShare;
 
+const attendance = require("./attendance");
+exports.attendanceToday               = attendance.attendanceToday;
+exports.attendanceCheckIn             = attendance.attendanceCheckIn;
+exports.attendanceResolve             = attendance.attendanceResolve;
+exports.attendanceSubmit              = attendance.attendanceSubmit;
+exports.attendanceExplain             = attendance.attendanceExplain;
+exports.attendanceRequest             = attendance.attendanceRequest;
+exports.attendanceAdmin               = attendance.attendanceAdmin;
+exports.attendanceSweep               = attendance.attendanceSweep;
+exports.onAttendanceStrikeCreated     = attendance.onAttendanceStrikeCreated;
+exports.onAttendanceRecordUpdated     = attendance.onAttendanceRecordUpdated;
+exports.onAttendanceNotificationCreated = attendance.onAttendanceNotificationCreated;
+
+const subjects = require("./subjects");
+exports.renameSubject                 = subjects.renameSubject;
+
 const work = require("./work");
 exports.onAssignmentPosted            = work.onAssignmentPosted;
 exports.onExamPostedOrPublished       = work.onExamPostedOrPublished;

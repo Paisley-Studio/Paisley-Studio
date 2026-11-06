@@ -75,6 +75,18 @@ user and denied access.
 | `activities`, `activityAttempts`, `activityAssignments` (new) | admin/tutor (activities), owner student (attempts) | admin, tutor, published-only for others; owner/linked-parent for attempts | admin, or owning tutor/student |
 | `parentAccounts`, `parentStudentLinks` (new) | admin only | the parent (own), admin | admin only |
 | `personalNotifications` (new) | admin/Cloud Functions only | the recipient, admin | recipient may only flip `read` |
+| `attendanceSessions` | Cloud Functions only | admin, the tutors on it (`tutorIds`), the students on it (`studentIds`) | Cloud Functions only |
+| `attendanceRecords` | Cloud Functions only | admin, the student, their linked parent, the register's tutors (query with `tutorIds array-contains`) | Cloud Functions only |
+| `attendanceSubmissions`, `attendanceAmendments` | Cloud Functions only | admin, the register's tutors | nobody (snapshots and amendments are permanent) |
+| `attendanceStrikes` | Cloud Functions only | admin, the student, their parent, their tutors | Cloud Functions only (a reversal is a status change, never a delete) |
+| `attendanceStudents` | Cloud Functions only | admin, the student, their parent, tutors | Cloud Functions only |
+| `attendanceReferrals` | Cloud Functions only | admin, the student's parent | Cloud Functions only |
+| `attendanceRequests` | Cloud Functions only (`attendanceRequest`) | admin, whoever asked | Cloud Functions only |
+| `attendanceNotifications` | Cloud Functions only | admin, the recipient, the student's parent (`audience == 'family'`) | Cloud Functions only |
+| `attendanceLocks` | Cloud Functions only | admin, the locked tutor | Cloud Functions only. While `{tutorId}_{subjectId}` exists, that tutor cannot mark or record work in that subject (`attendanceLocked`) |
+| `attendanceAudit` | Cloud Functions only | admin | nobody |
+| `lmsSettings` | Cloud Functions only (`renameSubject`) | get: anyone (subject names); list: signed in | Cloud Functions only |
+| `subjectRenames` | Cloud Functions only | admin | nobody |
 
 ## Why this matters
 

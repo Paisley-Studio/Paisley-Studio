@@ -1,0 +1,762 @@
+/* =========================================================
+   Paisley Studio — attendance screens (global `Attendance`)
+   -----------------------------------------------------------
+   Student:  get-ready banner 15 minutes before, registration pop-up at the
+             start (minimisable, never dismissed until registered), history.
+   Tutor:    live rollcall pop-up at the start, persistent Rollcall pill,
+             Attendance tab with today's registers, overdue ones, history,
+             explanations after an auto-submit, subject-lock banner.
+   Parent:   Attendance section per child (history, strikes, warnings,
+             referrals, notices and their delivery).
+   Admin:    Attendance command centre.
+   Everything that changes data calls functions/attendance.js; reads use
+   the rules in firestore.rules (ATTENDANCE). Times are Africa/Nairobi.
+========================================================= */
+var Attendance = (function () {
+  'use strict';
+  var TZ = 'Africa/Nairobi';
+  var STATUS = {
+    expected: ['Not registered yet', 'wait'], unaccounted: ['Unaccounted for', 'warn'], present: ['Present', 'ok'], late: ['Late', 'late'],
+    present_verified: ['Present (tutor verified)', 'ok'], connectivity: ['Connectivity issue', 'info'], absent: ['Absent', 'bad'],
+    excused: ['Excused', 'info'], other: ['Other reason', 'info'], cancelled: ['Lesson cancelled', 'wait']
+  };
+  var OUTCOMES = [
+    ['absent', 'Absent'], ['present_unable', 'Present but unable to check in'], ['connectivity', 'Connectivity / device issue'],
+    ['excused_admin', 'Excused by administration'], ['other', 'Other reason (explain)']
+  ];
+  var ATTENDED = ['present', 'late', 'present_verified', 'connectivity'];
+
+  /* ---------- small helpers ---------- */
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function msOf(t) { if (!t) return 0; if (typeof t === 'number') return t; if (t.toMillis) return t.toMillis(); if (t.seconds != null) return t.seconds * 1000; var d = new Date(t); return isNaN(d) ? 0 : d.getTime(); }
+  function hm(t) { var m = msOf(t); return m ? new Date(m).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: TZ }) : '—'; }
+  function dayLabel(t) { var m = msOf(t); return m ? new Date(m).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: TZ }) : '—'; }
+  function ymd(msv) { return new Date(msv + 3 * 3600000).toISOString().slice(0, 10); }
+  function call(name, data) { return firebase.functions().httpsCallable(name)(data || {}).then(function (r) { return r.data; }); }
+  function errMsg(e) { return (e && (e.message || e.code)) || 'Something went wrong.'; }
+  function pill(status) { var s = STATUS[status] || [status, 'wait']; return '<span class="att-pill ' + s[1] + '">' + esc(s[0]) + '</span>'; }
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } return null; }
+  function icon(n) { return '<i class="fas ' + n + '" aria-hidden="true"></i>'; }
+  function academicYearKey(msv) { var d = new Date(msv + 3 * 3600000), y = d.getUTCFullYear(); return 'y' + (d.getUTCMonth() + 1 >= 9 ? y : y - 1); }
+  function yearLabel(k) { var y = Number(String(k || '').slice(1)); return y ? y + '/' + String((y + 1) % 100).padStart(2, '0') : ''; }
+
+  var styled = false;
+  function style() {
+    if (styled) return; styled = true;
+    var css = [
+      '.att{font-family:var(--font,"Quicksand",sans-serif);color:var(--ink,#263331)}',
+      '.att-pill{display:inline-flex;align-items:center;gap:.3rem;padding:.16rem .55rem;border-radius:20px;font-size:.7rem;font-weight:800;white-space:nowrap}',
+      '.att-pill.ok{background:rgba(46,184,114,.13);color:#1d8b57}.att-pill.late{background:rgba(243,156,18,.15);color:#a86500}',
+      '.att-pill.bad{background:rgba(231,76,60,.12);color:#b8362a}.att-pill.warn{background:rgba(231,76,60,.08);color:#b8362a;border:1px dashed rgba(231,76,60,.5)}',
+      '.att-pill.info{background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A)}.att-pill.wait{background:#eef2f1;color:var(--muted,#5A6E6A)}',
+      '.att-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1rem;border-radius:10px;border:1.5px solid var(--line,#dfe7e5);background:var(--surface,#fff);color:var(--brand-deep,#245F5A);font-family:inherit;font-weight:800;font-size:.8rem;cursor:pointer;text-decoration:none}',
+      '.att-btn:hover{border-color:var(--brand,#55BFB3)}.att-btn:disabled{opacity:.55;cursor:not-allowed}',
+      '.att-btn.primary{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}.att-btn.primary:hover{background:var(--brand,#55BFB3);border-color:var(--brand,#55BFB3)}',
+      '.att-btn.big{padding:.85rem 1.4rem;font-size:.95rem;border-radius:12px}.att-btn.sm{padding:.35rem .7rem;font-size:.72rem;border-radius:8px}',
+      '.att-btn.danger{color:#b8362a}',
+      '.att-banner{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;padding:.85rem 1rem;border-radius:14px;margin:0 0 1rem;background:var(--sage,#E5F2EF);border:1.5px solid var(--brand-soft,#7BCBC2);font-weight:600}',
+      '.att-banner.urgent{background:#fff7e6;border-color:#f5c26b}.att-banner.lock{background:#fdecea;border-color:#f1b0a8}',
+      '.att-banner .ic{width:40px;height:40px;border-radius:12px;background:var(--brand-deep,#245F5A);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}',
+      '.att-banner.urgent .ic{background:#d98a00}.att-banner.lock .ic{background:#b8362a}',
+      '.att-banner .t{flex:1;min-width:200px}.att-banner b{color:var(--brand-deep,#245F5A);display:block;font-size:.95rem}.att-banner small{color:var(--muted,#5A6E6A);font-size:.8rem}',
+      '.att-ov{position:fixed;inset:0;background:rgba(15,30,28,.55);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px}',
+      '.att-card{background:#fff;border-radius:18px;max-width:560px;width:100%;min-width:0;max-height:92vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.25);font-family:var(--font,"Quicksand",sans-serif)}',
+      '.att-card.wide{max-width:980px}',
+      '.att-card .hd{display:flex;align-items:flex-start;gap:.8rem;padding:1.1rem 1.2rem;border-bottom:1px solid var(--line,#e3ecea)}',
+      '.att-card .hd h3{margin:0;font-size:1.08rem;color:var(--brand-deep,#245F5A)}.att-card .hd .sub{font-size:.78rem;color:var(--muted,#5A6E6A);font-weight:600;margin-top:.2rem}',
+      '.att-card .bd{padding:1.1rem 1.2rem}.att-card .ft{display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap;padding:.9rem 1.2rem;border-top:1px solid var(--line,#e3ecea)}',
+      '.att-x{margin-left:auto;background:none;border:0;font-size:1rem;color:var(--muted,#5A6E6A);cursor:pointer;padding:.3rem .45rem;border-radius:8px}.att-x:hover{background:var(--sage,#E5F2EF)}',
+      '.att-big-ic{width:64px;height:64px;border-radius:20px;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);display:flex;align-items:center;justify-content:center;font-size:1.7rem;margin:0 auto .8rem}',
+      '.att-big-ic.ok{background:rgba(46,184,114,.13);color:#1d8b57}.att-big-ic.late{background:rgba(243,156,18,.15);color:#a86500}',
+      '.att-center{text-align:center}.att-center p{margin:.35rem 0;color:var(--muted,#5A6E6A);font-weight:600;font-size:.86rem}',
+      '.att-kv{display:grid;grid-template-columns:auto 1fr;gap:.35rem .9rem;font-size:.84rem;margin:.6rem 0 1rem}.att-kv span{color:var(--muted,#5A6E6A);font-weight:700}.att-kv b{color:var(--ink,#263331)}',
+      '.att-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:2147482000;display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px)}',
+      '.att-chip{display:inline-flex;align-items:center;gap:.5rem;padding:.6rem 1rem;border-radius:30px;background:var(--brand-deep,#245F5A);color:#fff;font-family:var(--font,"Quicksand",sans-serif);font-weight:800;font-size:.8rem;border:0;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.2)}',
+      '.att-chip.urgent{background:#c0392b}.att-chip .n{background:rgba(255,255,255,.22);border-radius:12px;padding:.05rem .45rem}',
+      '.att-dot{width:8px;height:8px;border-radius:50%;background:#7CFFB2;box-shadow:0 0 0 0 rgba(124,255,178,.7);animation:attPulse 1.6s infinite}',
+      '@keyframes attPulse{70%{box-shadow:0 0 0 8px rgba(124,255,178,0)}100%{box-shadow:0 0 0 0 rgba(124,255,178,0)}}',
+      '@media (prefers-reduced-motion:reduce){.att-dot{animation:none}}',
+      '.att-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:.6rem;margin:0 0 1rem}',
+      '.att-stat{background:var(--surface,#fff);border:1px solid var(--line,#e3ecea);border-radius:12px;padding:.7rem .8rem}.att-stat b{display:block;font-size:1.35rem;color:var(--brand-deep,#245F5A);line-height:1.1}.att-stat span{font-size:.72rem;color:var(--muted,#5A6E6A);font-weight:700}',
+      '.att-stat.warn b{color:#b8362a}.att-stat.late b{color:#a86500}',
+      '.att-table{width:100%;border-collapse:collapse;font-size:.8rem}.att-table th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#5A6E6A);padding:.5rem .55rem;border-bottom:1px solid var(--line,#e3ecea);white-space:nowrap}',
+      '.att-table td{padding:.55rem;border-bottom:1px solid #eef3f2;vertical-align:top}.att-table tr.flag td{background:#fff8f7}',
+      '.att-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}',
+      '.att-panel{background:var(--surface,#fff);border:1px solid var(--line,#e3ecea);border-radius:14px;padding:1rem;margin:0 0 1rem}',
+      '.att-panel h4{margin:0 0 .7rem;font-size:.95rem;color:var(--brand-deep,#245F5A);display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}',
+      '.att-muted{color:var(--muted,#5A6E6A);font-size:.8rem;font-weight:600}',
+      '.att-tabs{display:flex;gap:.35rem;flex-wrap:wrap;margin:0 0 1rem}.att-tabs button{border:1.5px solid var(--line,#e3ecea);background:var(--surface,#fff);border-radius:30px;padding:.4rem .85rem;font-family:inherit;font-weight:800;font-size:.76rem;color:var(--muted,#5A6E6A);cursor:pointer}',
+      '.att-tabs button.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}.att-tabs .n{margin-left:.3rem;background:#e74c3c;color:#fff;border-radius:10px;padding:0 .4rem;font-size:.66rem}',
+      '.att-filters{display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin:0 0 1rem}.att-filters label{display:flex;flex-direction:column;font-size:.68rem;font-weight:800;color:var(--muted,#5A6E6A);gap:.2rem}',
+      '.att-filters input,.att-filters select,.att-field select,.att-field input,.att-field textarea{font-family:inherit;font-size:.8rem;padding:.45rem .55rem;border:1.5px solid var(--line,#dfe7e5);border-radius:9px;background:#fff;color:var(--ink,#263331);box-sizing:border-box;max-width:100%}',
+      '.att-field{display:flex;flex-direction:column;gap:.25rem;margin:0 0 .7rem;font-size:.74rem;font-weight:800;color:var(--brand-deep,#245F5A)}.att-field textarea{min-height:76px;width:100%;resize:vertical}',
+      '.att-resolve{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;margin-top:.35rem;min-width:220px}.att-resolve select{min-width:0;flex:1 1 180px}.att-resolve input{flex:2 1 180px;min-width:0}',
+      '.att-resolve select,.att-resolve input{font-family:inherit;font-size:.78rem;padding:.4rem .5rem;border:1.5px solid var(--line,#dfe7e5);border-radius:8px;background:#fff;color:var(--ink,#263331);box-sizing:border-box}',
+      '.att-resolve select:focus,.att-resolve input:focus,.att-field textarea:focus{outline:none;border-color:var(--brand,#55BFB3)}',
+      '.att-wrap{max-width:100%}',
+      '.att-row-actions{display:flex;gap:.3rem;flex-wrap:wrap}',
+      '.att-reg-tabs{display:flex;gap:.35rem;flex-wrap:wrap;padding:.6rem 1.2rem 0}',
+      '.att-msg{font-size:.8rem;font-weight:700;margin-top:.5rem}.att-msg.bad{color:#b8362a}.att-msg.ok{color:#1d8b57}',
+      '.att-empty{padding:1rem;text-align:center;color:var(--muted,#5A6E6A);font-weight:600;font-size:.84rem}',
+      '@media (max-width:640px){.att-card .hd,.att-card .bd,.att-card .ft{padding-left:16px;padding-right:16px}.att-table{font-size:.76rem}.att-banner{padding:.75rem}}'
+    ].join('');
+    var el = document.createElement('style'); el.id = 'attStyle'; el.textContent = css; document.head.appendChild(el);
+  }
+
+  /* ---------- pop-up shell ---------- */
+  function modal(o) {
+    style();
+    var ov = document.createElement('div');
+    ov.className = 'att-ov att'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.innerHTML = '<div class="att-card' + (o.wide ? ' wide' : '') + '"><div class="hd"><div><h3></h3><div class="sub"></div></div>' +
+      (o.closeLabel ? '<button type="button" class="att-x" data-x title="' + esc(o.closeLabel) + '" aria-label="' + esc(o.closeLabel) + '">' + icon(o.closeIcon || 'fa-xmark') + '</button>' : '') +
+      '</div><div class="bd"></div><div class="ft"></div></div>';
+    ov.querySelector('h3').textContent = o.title || '';
+    ov.querySelector('.sub').textContent = o.sub || '';
+    document.body.appendChild(ov);
+    var m = { el: ov, body: ov.querySelector('.bd'), foot: ov.querySelector('.ft'), head: ov.querySelector('.hd'), close: function () { ov.remove(); if (o.onClose) o.onClose(); } };
+    var x = ov.querySelector('[data-x]'); if (x) x.addEventListener('click', function () { if (o.onX) o.onX(); else m.close(); });
+    ov.setAttribute('aria-label', o.title || 'Attendance');
+    return m;
+  }
+  /* Ask for a reason (every admin decision needs one). Resolves to the text, or null when cancelled. */
+  function askReason(title, label, extraHtml) {
+    return new Promise(function (resolve) {
+      var m = modal({ title: title, closeLabel: 'Cancel', onX: function () { m.close(); resolve(null); } });
+      m.body.innerHTML = (extraHtml || '') + '<label class="att-field">' + esc(label || 'Reason (recorded with the decision)') + '<textarea data-r maxlength="1000"></textarea></label><div class="att-msg bad" data-m></div>';
+      m.foot.innerHTML = '<button type="button" class="att-btn" data-c>Cancel</button><button type="button" class="att-btn primary" data-ok>' + icon('fa-check') + ' Save</button>';
+      m.foot.querySelector('[data-c]').onclick = function () { m.close(); resolve(null); };
+      m.foot.querySelector('[data-ok]').onclick = function () {
+        var t = m.body.querySelector('[data-r]').value.trim();
+        if (t.length < 3) { m.body.querySelector('[data-m]').textContent = 'Write a reason first.'; return; }
+        var extra = {}; m.body.querySelectorAll('[data-extra]').forEach(function (x) { extra[x.dataset.extra] = x.value; });
+        m.close(); resolve({ reason: t, extra: extra });
+      };
+      setTimeout(function () { var t = m.body.querySelector('[data-r]'); if (t) t.focus(); }, 30);
+    });
+  }
+
+  /* =========================================================
+     STUDENT
+  ========================================================= */
+  function mountStudent(o) {
+    style();
+    var S = { lessons: [], skew: 0, open: null, minimised: {}, busy: false, recUnsub: {}, records: {}, policy: { noticeMin: 15, earlyMin: 10, graceMin: 15 } };
+    try { S.minimised = JSON.parse(sessionStorage.getItem('attMin') || '{}'); } catch (e) { }
+    var bannerHost = o.bannerEl || null;
+    var dock = document.createElement('div'); dock.className = 'att-dock att'; document.body.appendChild(dock);
+    function now() { return Date.now() + S.skew; }
+    function pendingLessons() {
+      var t = now();
+      return S.lessons.filter(function (l) {
+        var rec = S.records[l.sessionId] || l.record;
+        return l.status !== 'cancelled' && t >= l.startAt - S.policy.earlyMin * 60000 && t < l.endAt && !(rec && rec.checkIn) &&
+          !(rec && ['present_verified', 'connectivity', 'excused', 'other'].indexOf(rec.status) !== -1) &&
+          !(rec && rec.status === 'absent' && l.status !== 'open');
+      });
+    }
+    function refresh() {
+      return call('attendanceToday').then(function (d) {
+        S.skew = (d.now || Date.now()) - Date.now();
+        S.policy = d.policy || S.policy;
+        S.lessons = d.lessons || [];
+        S.lessons.forEach(function (l) { if (l.record) S.records[l.sessionId] = Object.assign({}, S.records[l.sessionId] || {}, l.record); watchRecord(l); });
+        paint();
+      }).catch(function (e) { console.warn('attendanceToday', e); });
+    }
+    function watchRecord(l) {
+      if (S.recUnsub[l.sessionId] || !l.record) return;
+      S.recUnsub[l.sessionId] = db.collection('attendanceRecords').doc(l.sessionId + '_' + o.uid).onSnapshot(function (s) {
+        if (!s.exists) return;
+        var r = s.data();
+        S.records[l.sessionId] = { status: r.status, checkIn: r.checkIn ? { at: msOf(r.checkIn.at), minutesLate: r.checkIn.minutesLate, classification: r.checkIn.classification } : null, needsVerification: !!r.needsVerification, strikeId: r.strikeId || null };
+        paint();
+      }, function () { });
+    }
+    function paint() {
+      var t = now();
+      // Get-ready banner, 15 minutes before.
+      if (bannerHost) {
+        var soon = S.lessons.filter(function (l) { return l.status !== 'cancelled' && t >= l.startAt - S.policy.noticeMin * 60000 && t < l.startAt - S.policy.earlyMin * 60000; });
+        var mins = function (l) { return Math.max(1, Math.ceil((l.startAt - t) / 60000)); };
+        bannerHost.innerHTML = soon.map(function (l) {
+          return '<div class="att-banner att" role="status"><div class="ic">' + icon('fa-bell') + '</div><div class="t"><b>' + esc(l.subjectName) + ' starts in ' + mins(l) + ' minute' + (mins(l) === 1 ? '' : 's') + '</b>' +
+            '<small>' + hm(l.startAt) + (l.tutorName ? ' with ' + esc(l.tutorName) : '') + '. Get your books, charger and headphones ready and be online on time. Registration opens ' + S.policy.earlyMin + ' minutes before the start.</small></div></div>';
+        }).join('') + pendingLessons().map(function (l) {
+          return '<div class="att-banner urgent att" role="alert"><div class="ic">' + icon('fa-user-check') + '</div><div class="t"><b>Register for ' + esc(l.subjectName) + ' now</b><small>' + (t >= l.startAt + S.policy.graceMin * 60000 ? 'You are late. Register now so your tutor knows you are here.' : 'Started at ' + hm(l.startAt) + '. Register within ' + S.policy.graceMin + ' minutes of the start to be on time.') + '</small></div>' +
+            '<button type="button" class="att-btn primary" data-att-open="' + esc(l.sessionId) + '">' + icon('fa-hand') + ' Register</button></div>';
+        }).join('');
+      }
+      var pend = pendingLessons();
+      dock.innerHTML = pend.filter(function (l) { return S.minimised[l.sessionId] && (!S.open || S.open.sessionId !== l.sessionId); }).map(function (l) {
+        return '<button type="button" class="att-chip urgent" data-att-open="' + esc(l.sessionId) + '"><span class="att-dot"></span>Register for ' + esc(l.subjectName) + '</button>';
+      }).join('');
+      // The registration pop-up opens by itself at the start and comes back until the student registers.
+      if (!S.open) {
+        var next = pend.filter(function (l) { return !S.minimised[l.sessionId]; })[0];
+        if (next) openRegister(next);
+      } else if (S.open.sessionId && pend.every(function (l) { return l.sessionId !== S.open.sessionId; }) && !S.open.done) {
+        S.open.modal.close();
+      }
+    }
+    function openRegister(l) {
+      if (S.open) S.open.modal.close();
+      var m = modal({ title: 'Register your attendance', sub: l.subjectName + ' · ' + hm(l.startAt) + ' to ' + hm(l.endAt), closeLabel: 'Minimise', closeIcon: 'fa-window-minimize',
+        onX: function () { minimise(l); }, onClose: function () { if (S.open && S.open.modal === m) S.open = null; } });
+      S.open = { modal: m, sessionId: l.sessionId };
+      var late = now() >= l.startAt + S.policy.graceMin * 60000;
+      m.body.innerHTML = '<div class="att-center"><div class="att-big-ic' + (late ? ' late' : '') + '">' + icon('fa-user-check') + '</div>' +
+        '<p>Your lesson has started. Tell your tutor you are here.</p></div>' +
+        '<div class="att-kv"><span>Subject</span><b>' + esc(l.subjectName) + '</b><span>Tutor</span><b>' + esc(l.tutorName || '—') + '</b><span>Starts</span><b>' + hm(l.startAt) + '</b>' +
+        (l.room ? '<span>Where</span><b>' + esc(/^https?:/i.test(l.room) ? 'Online link in your timetable' : l.room) + '</b>' : '') + '</div>' +
+        '<p class="att-muted">' + (late ? 'It is now ' + S.policy.graceMin + ' minutes or more after the start, so this registration will count as late.' : 'Register within ' + S.policy.graceMin + ' minutes of the start to be on time.') + ' The time is taken from Paisley\'s server, not your device.</p><div class="att-msg" data-m></div>';
+      m.foot.innerHTML = '<button type="button" class="att-btn" data-min>' + icon('fa-window-minimize') + ' Minimise</button><button type="button" class="att-btn primary big" data-go>' + icon('fa-hand') + ' I\'m Here: Register Attendance</button>';
+      m.foot.querySelector('[data-min]').onclick = function () { minimise(l); };
+      m.foot.querySelector('[data-go]').onclick = function () { register(l, m); };
+    }
+    function minimise(l) { S.minimised[l.sessionId] = 1; try { sessionStorage.setItem('attMin', JSON.stringify(S.minimised)); } catch (e) { } if (S.open) { var mm = S.open.modal; S.open = null; mm.close(); } paint(); }
+    function register(l, m) {
+      if (S.busy) return; S.busy = true;
+      var b = m.foot.querySelector('[data-go]'); b.disabled = true; b.innerHTML = icon('fa-spinner fa-spin') + ' Registering…';
+      call('attendanceCheckIn', { entryId: l.entryId }).then(function (r) {
+        S.busy = false;
+        var rec = r.record || {};
+        S.records[l.sessionId] = rec; l.record = rec; watchRecord(l);
+        var late = rec.checkIn && rec.checkIn.classification === 'late';
+        S.open.done = true;
+        m.el.querySelector('h3').textContent = late ? 'Registered, but late' : 'You are registered';
+        m.body.innerHTML = '<div class="att-center"><div class="att-big-ic ' + (late ? 'late' : 'ok') + '">' + icon(late ? 'fa-user-clock' : 'fa-circle-check') + '</div>' +
+          '<p><b>' + esc(l.subjectName) + '</b>: registered at ' + hm(rec.checkIn && rec.checkIn.at) + '.</p>' +
+          (late ? '<p>You arrived ' + rec.checkIn.minutesLate + ' minutes after the start. This counts as a late-arrival strike' + (r.strikeNumber ? ' (' + r.strikeNumber + ' this academic year)' : '') + ' and your parent has been told.' + (r.strikeNumber === 4 ? ' This is your formal warning: the next late arrival goes to the Studio Desk.' : '') + (r.strikeNumber >= 5 ? ' Your case has been referred to the Studio Desk.' : '') + '</p>' : '<p>You are on time. Enjoy the lesson!</p>') +
+          (rec.needsVerification ? '<p><span class="att-pill wait">Awaiting tutor verification</span> Your tutor had already sent the register, so they will check this registration.</p>' : '') + '</div>';
+        m.foot.innerHTML = '<button type="button" class="att-btn primary" data-ok>' + icon('fa-check') + ' Done</button>';
+        m.foot.querySelector('[data-ok]').onclick = function () { m.close(); paint(); };
+        delete S.minimised[l.sessionId];
+        paint();
+      }).catch(function (e) {
+        S.busy = false; b.disabled = false; b.innerHTML = icon('fa-hand') + ' I\'m Here: Register Attendance';
+        m.body.querySelector('[data-m]').className = 'att-msg bad';
+        m.body.querySelector('[data-m]').textContent = errMsg(e);
+        if (e && /ended|cancelled|already/i.test(errMsg(e))) refresh();
+      });
+    }
+    // Reopen (and refresh) when the student comes back to the page.
+    function onBack() { if (document.visibilityState === 'visible') { S.minimised = {}; try { sessionStorage.removeItem('attMin'); } catch (e) { } refresh(); } }
+    document.addEventListener('visibilitychange', onBack);
+    document.addEventListener('click', function (e) {
+      var opener = e.target.closest && e.target.closest('[data-att-open]');
+      if (opener) { var l = S.lessons.filter(function (x) { return x.sessionId === opener.dataset.attOpen; })[0]; if (l) { delete S.minimised[l.sessionId]; openRegister(l); } return; }
+      // Lesson workspace (live lesson links and the Classroom) waits for registration; account, results and help stay open.
+      if (!pendingLessons().length) return;
+      var a = e.target.closest && e.target.closest('a[href],[data-view="classroom"],[data-att-gate]');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      var gated = a.hasAttribute('data-att-gate') || a.dataset.view === 'classroom' || /meet\.google|zoom\.us|teams\.microsoft|jitsi|live-class|workers\.dev|whereby|meet\.jit/i.test(href);
+      if (!gated) return;
+      e.preventDefault(); e.stopPropagation();
+      var p = pendingLessons()[0]; delete S.minimised[p.sessionId]; openRegister(p);
+    }, true);
+    var tick = setInterval(paint, 15000), poll = setInterval(refresh, 60000);
+    refresh();
+    return { refresh: refresh, destroy: function () { clearInterval(tick); clearInterval(poll); document.removeEventListener('visibilitychange', onBack); dock.remove(); Object.keys(S.recUnsub).forEach(function (k) { S.recUnsub[k](); }); } };
+  }
+
+  /* A student's (or a parent's view of a child's) history. */
+  function historyHtml(records, summary, opts) {
+    opts = opts || {};
+    var ay = academicYearKey(Date.now());
+    var y = (summary && summary.years && summary.years[ay]) || {};
+    var rows = records.filter(function (r) { return r.status !== 'expected' || msOf(r.startAt) <= Date.now(); }).sort(function (a, b) { return msOf(b.startAt) - msOf(a.startAt); });
+    var done = rows.filter(function (r) { return ['expected', 'cancelled', 'excused'].indexOf(r.status) === -1; });
+    var att = done.filter(function (r) { return ATTENDED.indexOf(r.status) !== -1; }).length;
+    var pct = done.length ? Math.round(att * 100 / done.length) : null;
+    var count = function (s) { return rows.filter(function (r) { return r.status === s; }).length; };
+    var upcoming = records.filter(function (r) { return r.status === 'expected' && msOf(r.startAt) > Date.now(); });
+    return '<div class="att-stats">' +
+      '<div class="att-stat"><b>' + (pct == null ? '—' : pct + '%') + '</b><span>Attendance</span></div>' +
+      '<div class="att-stat"><b>' + (count('present') + count('present_verified') + count('connectivity')) + '</b><span>Present</span></div>' +
+      '<div class="att-stat late"><b>' + count('late') + '</b><span>Late</span></div>' +
+      '<div class="att-stat warn"><b>' + count('absent') + '</b><span>Absent</span></div>' +
+      '<div class="att-stat ' + ((y.active || 0) >= 4 ? 'warn' : '') + '"><b>' + (y.active || 0) + '</b><span>Active strikes ' + esc(yearLabel(ay)) + '</span></div></div>' +
+      ((y.active || 0) >= 5 ? '<div class="att-banner lock"><div class="ic">' + icon('fa-scale-balanced') + '</div><div class="t"><b>Referred to the Studio Desk</b><small>' + (y.active) + ' late arrivals this academic year. The Studio Desk reviews the case and decides what happens.</small></div></div>' :
+        (y.active || 0) === 4 ? '<div class="att-banner urgent"><div class="ic">' + icon('fa-triangle-exclamation') + '</div><div class="t"><b>Formal warning</b><small>4 late arrivals this academic year. The next one is referred to the Studio Desk.</small></div></div>' : '') +
+      (upcoming.length ? '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Scheduled</h4>' + upcoming.map(function (r) { return '<div class="att-muted">' + dayLabel(r.startAt) + ' ' + hm(r.startAt) + ' · ' + esc(r.subjectName) + '</div>'; }).join('') + '</div>' : '') +
+      '<div class="att-panel"><h4>' + icon('fa-list-check') + ' Attendance history</h4>' + (rows.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Subject</th><th>Start</th><th>Arrived</th><th>Status</th>' + (opts.requests ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        rows.map(function (r) {
+          return '<tr><td>' + dayLabel(r.startAt) + '</td><td>' + esc(r.subjectName) + '</td><td>' + hm(r.startAt) + '</td><td>' + (r.checkIn ? hm(r.checkIn.at) + (r.checkIn.minutesLate ? ' <span class="att-muted">(' + r.checkIn.minutesLate + ' min)</span>' : '') : '—') + '</td>' +
+            '<td>' + pill(r.status) + (r.strikeId ? ' <span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + (r.strikeReversed ? 'Strike reversed' : 'Strike') + '</span>' : '') + (r.lateExcused ? ' <span class="att-pill info">Lateness excused</span>' : '') + '</td>' +
+            (opts.requests ? '<td>' + (r.strikeId && !r.strikeReversed ? '<button type="button" class="att-btn sm" data-att-excuse="' + esc(r.id) + '">' + icon('fa-envelope-open-text') + ' Ask to excuse</button>' : '') + '</td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="att-empty">No lessons recorded yet.</div>') + '</div>';
+  }
+  function bindExcuse(host) {
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-att-excuse]'); if (!b) return;
+      askReason('Ask the Studio Desk to excuse this late arrival', 'Why was the arrival late? The Studio Desk decides.').then(function (r) {
+        if (!r) return;
+        call('attendanceRequest', { recordId: b.dataset.attExcuse, kind: 'excuse_lateness', reason: r.reason }).then(function () { b.outerHTML = '<span class="att-pill info">Request sent</span>'; }).catch(function (er) { alert(errMsg(er)); });
+      });
+    });
+  }
+  function mountStudentHistory(el, o) {
+    style(); el.classList.add('att');
+    el.innerHTML = '<div class="att-empty">' + icon('fa-spinner fa-spin') + ' Loading attendance…</div>';
+    var recs = [], sum = null;
+    var u1 = db.collection('attendanceRecords').where('studentId', '==', o.uid).onSnapshot(function (s) { recs = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, function (e) { el.innerHTML = '<div class="att-empty">Attendance could not be loaded.</div>'; console.warn(e); });
+    var u2 = db.collection('attendanceStudents').doc(o.uid).onSnapshot(function (s) { sum = s.exists ? s.data() : null; paint(); }, function () { });
+    function paint() { el.innerHTML = historyHtml(recs, sum, { requests: true }); }
+    bindExcuse(el);
+    return { destroy: function () { u1(); u2(); } };
+  }
+
+  /* =========================================================
+     TUTOR
+  ========================================================= */
+  function mountTutor(o) {
+    style();
+    var S = { lessons: [], pending: [], skew: 0, sessions: {}, records: {}, unsubs: {}, dismissed: {}, modal: null, active: null, locks: [], policy: { graceMin: 15, autoSubmitAfterEndMin: 15 } };
+    try { S.dismissed = JSON.parse(store('attDismissed') || '{}'); } catch (e) { }
+    var dock = document.createElement('div'); dock.className = 'att-dock att'; document.body.appendChild(dock);
+    function now() { return Date.now() + S.skew; }
+    function live() {
+      var t = now();
+      return Object.keys(S.sessions).map(function (k) { return S.sessions[k]; }).filter(function (s) {
+        return s.status === 'open' && t >= msOf(s.startAt) - 10 * 60000 && t < msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000;
+      }).sort(function (a, b) { return msOf(a.startAt) - msOf(b.startAt); });
+    }
+    function refresh() {
+      return call('attendanceToday').then(function (d) {
+        S.skew = (d.now || Date.now()) - Date.now(); S.policy = d.policy || S.policy;
+        S.lessons = d.lessons || []; S.pending = d.pending || [];
+        S.lessons.concat(S.pending).forEach(function (l) { if (l.sessionId && l.status !== 'upcoming') watch(l.sessionId); });
+        paint();
+      }).catch(function (e) { console.warn('attendanceToday', e); });
+    }
+    function watch(sid) {
+      if (S.unsubs[sid]) return;
+      var a = db.collection('attendanceSessions').doc(sid).onSnapshot(function (s) {
+        if (!s.exists) return;
+        S.sessions[sid] = Object.assign({ id: sid }, s.data()); paint();
+      }, function () { });
+      var b = db.collection('attendanceRecords').where('sessionId', '==', sid).where('tutorIds', 'array-contains', o.uid).onSnapshot(function (s) {
+        S.records[sid] = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (x, y) { return String(x.studentName).localeCompare(String(y.studentName)); });
+        paint();
+      }, function (e) { console.warn('register', e); });
+      S.unsubs[sid] = function () { a(); b(); };
+    }
+    function paint() {
+      var lv = live();
+      // Persistent Rollcall pill: collection continues while the pop-up is closed.
+      dock.innerHTML = lv.length ? '<button type="button" class="att-chip" data-att-roll><span class="att-dot"></span>Rollcall <span class="n">' + lv.length + ' live</span></button>' : '';
+      if (o.indicatorEl) { o.indicatorEl.style.display = lv.length ? '' : 'none'; o.indicatorEl.textContent = lv.length; }
+      // Opens by itself when a lesson starts, unless the tutor closed it for that lesson.
+      if (!S.modal) {
+        var fresh = lv.filter(function (s) { return now() >= msOf(s.startAt) && !S.dismissed[s.id]; })[0];
+        if (fresh) openRoll(fresh.id);
+      } else paintRoll();
+      if (o.viewEl && o.viewEl.isConnected !== false) paintView();
+    }
+    function counts(recs) {
+      var c = { total: recs.length, checked: 0, present: 0, late: 0, unresolved: 0, absent: 0, other: 0 };
+      recs.forEach(function (r) {
+        if (r.checkIn) c.checked++;
+        if (r.status === 'present' || r.status === 'present_verified' || r.status === 'connectivity') c.present++;
+        else if (r.status === 'late') c.late++;
+        else if (r.status === 'absent') c.absent++;
+        else if (r.status === 'expected' || r.status === 'unaccounted') c.unresolved++;
+        else c.other++;
+      });
+      return c;
+    }
+    function registerHtml(s, compact) {
+      var recs = S.records[s.id] || [], c = counts(recs), t = now();
+      var started = t >= msOf(s.startAt), afterGrace = t >= msOf(s.graceAt), submitted = s.status !== 'open';
+      var rows = recs.map(function (r) {
+        var unresolved = r.status === 'expected' || r.status === 'unaccounted';
+        var flag = (unresolved && afterGrace) || r.needsVerification || r.reviewState === 'pending';
+        var tutorMarked = !r.checkIn && ['absent', 'present_verified', 'connectivity', 'excused', 'other'].indexOf(r.status) !== -1;
+        var canResolve = started && !r.checkIn && (unresolved || (tutorMarked && !submitted)) && s.status !== 'cancelled';
+        return '<tr class="' + (flag ? 'flag' : '') + '"><td><b>' + esc(r.studentName) + '</b>' + (r.resolution ? '<div class="att-muted">' + esc(r.resolution.label || r.resolution.outcome) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName || '') + ' ' + hm(r.resolution.at) + '</div>' : '') + '</td>' +
+          '<td>' + pill(unresolved && !afterGrace ? 'expected' : r.status) + (unresolved && afterGrace ? ' <span class="att-pill bad">Account for</span>' : '') + (r.needsVerification ? ' <span class="att-pill wait">Registered after submission</span>' : '') + (r.reviewState === 'pending' ? ' <span class="att-pill wait">Studio Desk review</span>' : '') + '</td>' +
+          '<td>' + (r.checkIn ? hm(r.checkIn.at) : '—') + '</td>' +
+          '<td>' + (r.checkIn ? (r.checkIn.classification === 'late' ? '<span class="att-pill late">' + r.checkIn.minutesLate + ' min late</span>' : '<span class="att-pill ok">On time</span>') : '—') + '</td>' +
+          '<td>' + (r.strikeId ? '<span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + icon('fa-triangle-exclamation') + ' ' + (r.strikeReversed ? 'Reversed' : 'Strike') + '</span>' : '—') + '</td>' +
+          '<td>' + (canResolve ? '<div class="att-resolve"><select data-out="' + esc(r.studentId) + '" aria-label="Account for ' + esc(r.studentName) + '"><option value="">Account for…</option>' + OUTCOMES.map(function (x) { return '<option value="' + x[0] + '"' + (r.resolution && r.resolution.outcome === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select><input data-note="' + esc(r.studentId) + '" placeholder="Explanation" maxlength="1000" value="' + esc(r.resolution ? r.resolution.note || '' : '') + '"><button type="button" class="att-btn sm primary" data-resolve="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '">Save</button></div>' : '') +
+          (r.needsVerification ? '<button type="button" class="att-btn sm" data-verify="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '">' + icon('fa-check') + ' Verified</button>' : '') + '</td></tr>';
+      }).join('');
+      var head = '<div class="att-stats"><div class="att-stat"><b>' + c.total + '</b><span>Enrolled</span></div><div class="att-stat"><b>' + c.checked + '</b><span>Checked in</span></div>' +
+        '<div class="att-stat"><b>' + c.present + '</b><span>Present</span></div><div class="att-stat late"><b>' + c.late + '</b><span>Late</span></div>' +
+        '<div class="att-stat warn"><b>' + c.unresolved + '</b><span>' + (afterGrace ? 'Unaccounted for' : 'Not registered yet') + '</span></div><div class="att-stat"><b>' + c.absent + '</b><span>Absent</span></div></div>';
+      var state = s.status === 'cancelled' ? '<div class="att-banner"><div class="ic">' + icon('fa-ban') + '</div><div class="t"><b>Lesson cancelled</b><small>' + esc((s.cancelled && s.cancelled.reason) || '') + '</small></div></div>' :
+        submitted ? '<div class="att-banner"><div class="ic">' + icon('fa-circle-check') + '</div><div class="t"><b>' + (s.status === 'auto_submitted' ? 'AUTO-SUBMITTED' : 'Submitted') + ' ' + hm(s.submission && s.submission.at) + '</b><small>' + (s.status === 'auto_submitted' ? 'You did not submit this register, so the system did. Account for anyone still unresolved and add your explanation below.' : 'Submitted by ' + esc((s.submission && s.submission.byName) || '')) + '</small></div></div>' :
+        !started ? '<p class="att-muted">The register opens at ' + hm(s.startAt) + '. Students appear here as they register.</p>' :
+        !afterGrace ? '<p class="att-muted">Students are registering. Anyone not registered by ' + hm(s.graceAt) + ' is flagged for you to account for. Nobody is marked absent automatically.</p>' :
+        '<p class="att-muted">Account for every flagged student, then submit. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + ' and the Studio Desk is told.</p>';
+      var explain = s.status === 'auto_submitted' ? '<div class="att-panel"><h4>' + icon('fa-comment-dots') + ' Your explanation</h4>' + (s.tutorExplanation ? '<p class="att-muted">"' + esc(s.tutorExplanation.text) + '" (' + dayLabel(s.tutorExplanation.at) + ')' + (s.explanationReview ? ' · Studio Desk: ' + esc(s.explanationReview.decision) : '') + '</p>' : '') +
+        '<label class="att-field">Why was the register not submitted?<textarea data-explain="' + esc(s.id) + '" maxlength="2000"></textarea></label><button type="button" class="att-btn sm primary" data-explain-go="' + esc(s.id) + '">' + icon('fa-paper-plane') + ' Send explanation</button></div>' : '';
+      return state + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Checked in</th><th>On time</th><th>Strike</th><th>Account for</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
+        '<div class="att-msg" data-msg="' + esc(s.id) + '"></div>' + explain;
+    }
+    function openRoll(sid) {
+      if (S.modal) S.modal.m.close();
+      var m = modal({ title: 'Rollcall', wide: true, closeLabel: 'Close (attendance keeps collecting)', onX: function () { closeRoll(); } });
+      S.modal = { m: m, sid: sid };
+      paintRoll();
+    }
+    function closeRoll() {
+      if (!S.modal) return;
+      S.dismissed[S.modal.sid] = 1; store('attDismissed', JSON.stringify(S.dismissed));
+      var m = S.modal.m; S.modal = null; m.close(); paint();
+    }
+    function paintRoll() {
+      if (!S.modal) return;
+      var lv = live(), s = S.sessions[S.modal.sid];
+      if (!s) return;
+      // Keep the tutor's typing: only repaint the parts that are not being edited.
+      var active = document.activeElement, editing = active && S.modal.m.el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName);
+      if (editing) return;
+      var m = S.modal.m;
+      m.el.querySelector('h3').textContent = 'Rollcall: ' + s.subjectName;
+      m.el.querySelector('.sub').textContent = (s.keyStage || '').replace(/\s*\(.*/, '') + ' · ' + hm(s.startAt) + ' to ' + hm(s.endAt) + ' · ' + (s.tutorName || '') + (s.room && !/^https?:/i.test(s.room) ? ' · ' + s.room : '');
+      var tabs = lv.length > 1 ? '<div class="att-reg-tabs">' + lv.map(function (x) { return '<button type="button" class="att-btn sm' + (x.id === s.id ? ' primary' : '') + '" data-roll-tab="' + esc(x.id) + '">' + esc(x.subjectName) + ' ' + hm(x.startAt) + '</button>'; }).join('') + '</div>' : '';
+      var old = m.el.querySelector('.att-reg-tabs'); if (old) old.remove();
+      if (tabs) m.head.insertAdjacentHTML('afterend', tabs);
+      m.body.innerHTML = registerHtml(s);
+      var recs = S.records[s.id] || [], c = counts(recs), afterGrace = now() >= msOf(s.graceAt);
+      m.foot.innerHTML = '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' Closing this keeps collecting registrations. Reopen it from the Rollcall button.</span>' +
+        (s.status === 'open' ? '<button type="button" class="att-btn primary" data-submit="' + esc(s.id) + '"' + (!afterGrace || c.unresolved ? ' disabled title="' + (!afterGrace ? 'Available once the grace period ends' : 'Account for every flagged student first') + '"' : '') + '>' + icon('fa-paper-plane') + ' Submit register</button>' : '');
+    }
+    function act(e) {
+      var t = e.target.closest ? e.target : null; if (!t) return;
+      var roll = t.closest('[data-att-roll]'); if (roll) { var lv = live(); if (lv.length) { delete S.dismissed[lv[0].id]; openRoll(lv[0].id); } return; }
+      var tab = t.closest('[data-roll-tab]'); if (tab) { openRoll(tab.dataset.rollTab); return; }
+      var open = t.closest('[data-open-reg]'); if (open) { watch(open.dataset.openReg); delete S.dismissed[open.dataset.openReg]; openRoll(open.dataset.openReg); return; }
+      var host = t.closest('.att-card') || t.closest('.att');
+      var res = t.closest('[data-resolve]');
+      if (res) {
+        var sid = res.dataset.sid, st = res.dataset.resolve, scope = res.closest('tr');
+        var out = scope.querySelector('[data-out]').value, note = scope.querySelector('[data-note]').value.trim();
+        var msg = host && host.querySelector('[data-msg="' + sid + '"]');
+        if (!out) { if (msg) { msg.className = 'att-msg bad'; msg.textContent = 'Choose how the student is accounted for.'; } return; }
+        res.disabled = true;
+        call('attendanceResolve', { sessionId: sid, studentId: st, outcome: out, note: note }).then(function (r) {
+          if (msg) { msg.className = 'att-msg ok'; msg.textContent = r.reviewPending ? 'Saved. The Studio Desk reviews this explanation.' : 'Saved.'; }
+          if (document.activeElement) document.activeElement.blur(); paint();
+        }).catch(function (er) { res.disabled = false; if (msg) { msg.className = 'att-msg bad'; msg.textContent = errMsg(er); } });
+        return;
+      }
+      var ver = t.closest('[data-verify]');
+      if (ver) { ver.disabled = true; call('attendanceResolve', { sessionId: ver.dataset.sid, studentId: ver.dataset.verify, outcome: 'verify' }).catch(function (er) { ver.disabled = false; alert(errMsg(er)); }); return; }
+      var sub = t.closest('[data-submit]');
+      if (sub) {
+        sub.disabled = true; sub.innerHTML = icon('fa-spinner fa-spin') + ' Submitting…';
+        call('attendanceSubmit', { sessionId: sub.dataset.submit }).then(function () { refreshLocks(); paint(); }).catch(function (er) {
+          sub.disabled = false; sub.innerHTML = icon('fa-paper-plane') + ' Submit register';
+          var msg = host && host.querySelector('[data-msg="' + sub.dataset.submit + '"]'); if (msg) { msg.className = 'att-msg bad'; msg.textContent = errMsg(er); }
+        });
+        return;
+      }
+      var ex = t.closest('[data-explain-go]');
+      if (ex) {
+        var ta = host.querySelector('[data-explain="' + ex.dataset.explainGo + '"]'), text = ta ? ta.value.trim() : '';
+        if (text.length < 5) { alert('Write your explanation first.'); return; }
+        ex.disabled = true;
+        call('attendanceExplain', { sessionId: ex.dataset.explainGo, text: text }).then(function () { ta.value = ''; ex.disabled = false; ex.blur(); paint(); }).catch(function (er) { ex.disabled = false; alert(errMsg(er)); });
+      }
+    }
+    document.addEventListener('click', act);
+
+    /* Attendance tab: today's registers, overdue ones, history. */
+    var hist = [];
+    function loadHistory() {
+      db.collection('attendanceSessions').where('tutorIds', 'array-contains', o.uid).orderBy('date', 'desc').limit(60).get().then(function (s) {
+        hist = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paintView();
+      }).catch(function (e) { console.warn('attendance history', e); });
+    }
+    function paintView() {
+      var el = o.viewEl; if (!el) return;
+      if (el.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+      var t = now();
+      var lockHtml = S.locks.map(function (l) { return '<div class="att-banner lock"><div class="ic">' + icon('fa-lock') + '</div><div class="t"><b>' + esc(l.subjectName) + ': attendance register overdue</b><small>Marking and recording work in ' + esc(l.subjectName) + ' is paused until you submit it (it is auto-submitted at ' + hm(l.autoSubmitAt) + '). Your other subjects and all teaching materials stay open.</small></div>' + (l.sessionIds || []).map(function (sid) { return '<button type="button" class="att-btn primary" data-open-reg="' + esc(sid) + '">' + icon('fa-clipboard-list') + ' Open register</button>'; }).join('') + '</div>'; }).join('');
+      var today = S.lessons.map(function (l) {
+        var s = S.sessions[l.sessionId], st = s ? s.status : 'upcoming';
+        return '<tr><td><b>' + esc(l.subjectName) + '</b><div class="att-muted">' + esc((l.keyStage || '').replace(/\s*\(.*/, '')) + '</div></td><td>' + hm(l.startAt) + ' to ' + hm(l.endAt) + '</td>' +
+          '<td>' + (st === 'upcoming' ? '<span class="att-pill wait">Opens ' + hm(l.startAt - 20 * 60000) + '</span>' : st === 'open' ? (t < l.startAt ? '<span class="att-pill info">Ready</span>' : t < l.endAt ? '<span class="att-pill ok">Live</span>' : '<span class="att-pill bad">Submit now</span>') : st === 'auto_submitted' ? '<span class="att-pill bad">AUTO-SUBMITTED</span>' : st === 'cancelled' ? pill('cancelled') : '<span class="att-pill ok">Submitted</span>') + '</td>' +
+          '<td>' + (s ? counts(S.records[l.sessionId] || []).checked + ' / ' + (S.records[l.sessionId] || []).length : '—') + '</td>' +
+          '<td>' + (s ? '<button type="button" class="att-btn sm" data-open-reg="' + esc(l.sessionId) + '">' + icon('fa-clipboard-list') + ' Open register</button>' : '') + '</td></tr>';
+      }).join('');
+      var follow = hist.filter(function (s) { return s.status === 'auto_submitted' && (!s.tutorExplanation || (s.unresolvedCount || 0) > 0); });
+      el.innerHTML = '<div class="att">' + lockHtml +
+        '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Today\'s registers</h4>' + (S.lessons.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Lesson</th><th>Time</th><th>Register</th><th>Checked in</th><th></th></tr></thead><tbody>' + today + '</tbody></table></div>' : '<div class="att-empty">No timetabled lessons for you today.</div>') + '</div>' +
+        (follow.length ? '<div class="att-panel"><h4>' + icon('fa-triangle-exclamation') + ' Follow-up needed</h4>' + follow.map(function (s) { return '<div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.3rem 0"><span class="att-pill bad">AUTO-SUBMITTED</span><b>' + esc(s.subjectName) + '</b><span class="att-muted">' + dayLabel(s.startAt) + ' ' + hm(s.startAt) + (s.unresolvedCount ? ' · ' + s.unresolvedCount + ' unresolved' : '') + (s.tutorExplanation ? '' : ' · explanation needed') + '</span><button type="button" class="att-btn sm" data-open-reg="' + esc(s.id) + '">Open</button></div>'; }).join('') + '</div>' : '') +
+        '<div class="att-panel"><h4>' + icon('fa-clock-rotate-left') + ' Submission history</h4>' + (hist.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Status</th><th>Submitted</th><th></th></tr></thead><tbody>' + hist.map(function (s) {
+          return '<tr><td>' + dayLabel(s.startAt) + '</td><td>' + esc(s.subjectName) + ' ' + hm(s.startAt) + '</td><td>' + (s.status === 'auto_submitted' ? '<span class="att-pill bad">AUTO-SUBMITTED</span>' : s.status === 'submitted' ? '<span class="att-pill ok">Submitted</span>' : s.status === 'cancelled' ? pill('cancelled') : '<span class="att-pill info">Open</span>') + '</td><td>' + (s.submission ? hm(s.submission.at) : '—') + '</td><td><button type="button" class="att-btn sm" data-open-reg="' + esc(s.id) + '">View</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="att-empty">No registers yet.</div>') + '</div></div>';
+    }
+    var lockUnsub = null;
+    function refreshLocks() { }
+    lockUnsub = db.collection('attendanceLocks').where('tutorId', '==', o.uid).onSnapshot(function (s) {
+      S.locks = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      if (o.onLocks) o.onLocks(S.locks);
+      paintView();
+    }, function () { });
+    var tick = setInterval(paint, 15000), poll = setInterval(refresh, 60000);
+    refresh(); loadHistory();
+    return {
+      refresh: function () { refresh(); loadHistory(); },
+      locks: function () { return S.locks.slice(); },
+      destroy: function () { clearInterval(tick); clearInterval(poll); document.removeEventListener('click', act); dock.remove(); Object.keys(S.unsubs).forEach(function (k) { S.unsubs[k](); }); if (lockUnsub) lockUnsub(); }
+    };
+  }
+
+  /* =========================================================
+     PARENT
+  ========================================================= */
+  function mountParent(el, o) {
+    style(); el.classList.add('att');
+    if (!o.childId) { el.innerHTML = '<div class="att-empty">Choose a child first.</div>'; return { destroy: function () { } }; }
+    el.innerHTML = '<div class="att-empty">' + icon('fa-spinner fa-spin') + ' Loading attendance…</div>';
+    var recs = [], sum = null, refs = [], notes = [], unsubs = [];
+    var fail = function (e) { console.warn('attendance', e); };
+    unsubs.push(db.collection('attendanceRecords').where('studentId', '==', o.childId).onSnapshot(function (s) { recs = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, function (e) { fail(e); el.innerHTML = '<div class="att-empty">Attendance could not be loaded.</div>'; }));
+    unsubs.push(db.collection('attendanceStudents').doc(o.childId).onSnapshot(function (s) { sum = s.exists ? s.data() : null; paint(); }, fail));
+    unsubs.push(db.collection('attendanceReferrals').where('studentId', '==', o.childId).onSnapshot(function (s) { refs = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, fail));
+    unsubs.push(db.collection('attendanceNotifications').where('studentId', '==', o.childId).where('audience', '==', 'family').onSnapshot(function (s) { notes = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return msOf(b.createdAt) - msOf(a.createdAt); }); paint(); }, fail));
+    var DEL = { pending: ['Email sending', 'wait'], sending: ['Email sending', 'wait'], sent: ['Emailed', 'ok'], failed: ['Email failed (retrying)', 'bad'], skipped: ['In portal only', 'info'] };
+    function paint() {
+      var warn = notes.filter(function (n) { return n.kind === 'strike4_parent' || n.kind === 'strike4_student'; });
+      el.innerHTML = '<h2 style="margin:0 0 .3rem">' + icon('fa-user-check') + ' Attendance' + (o.childName ? ': ' + esc(o.childName) : '') + '</h2><p class="att-muted" style="margin:0 0 1rem">Registrations, late arrivals and absences for every lesson. Times are Kenya time.</p>' +
+        historyHtml(recs, sum, { requests: true }) +
+        (warn.length ? '<div class="att-panel"><h4>' + icon('fa-triangle-exclamation') + ' Formal warnings</h4>' + warn.map(function (n) { return '<div class="att-muted">' + dayLabel(n.createdAt) + ': ' + esc(n.message) + '</div>'; }).join('') + '</div>' : '') +
+        (refs.length ? '<div class="att-panel"><h4>' + icon('fa-scale-balanced') + ' Disciplinary referrals</h4>' + refs.map(function (r) { var last = (r.decisions || []).slice(-1)[0]; return '<div style="margin:.35rem 0"><b>' + esc(r.strikeNumber) + ' strikes</b> <span class="att-muted">' + dayLabel(r.createdAt) + ' · ' + esc(r.academicYearLabel || '') + '</span> <span class="att-pill ' + (r.status === 'closed' ? 'ok' : 'wait') + '">' + esc(String(r.status || 'open').replace('_', ' ')) + '</span>' + (last ? '<div class="att-muted">Studio Desk: ' + esc(last.decision || last.reason) + '</div>' : '') + '</div>'; }).join('') + '</div>' : '') +
+        '<div class="att-panel"><h4>' + icon('fa-bell') + ' Notices and delivery</h4>' + (notes.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Notice</th><th>Delivery</th></tr></thead><tbody>' + notes.map(function (n) {
+          var d = DEL[n.emailStatus] || [n.emailStatus, 'wait'];
+          return '<tr><td>' + dayLabel(n.createdAt) + ' ' + hm(n.createdAt) + '</td><td><b>' + esc(n.title) + '</b><div class="att-muted">' + esc(n.message) + '</div></td><td><span class="att-pill ' + d[1] + '">' + esc(d[0]) + '</span>' + (n.email ? '<div class="att-muted">' + esc(n.email) + '</div>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="att-empty">No attendance notices yet.</div>') + '</div>';
+    }
+    bindExcuse(el);
+    return { destroy: function () { unsubs.forEach(function (u) { u(); }); } };
+  }
+
+  /* =========================================================
+     ADMIN — command centre
+  ========================================================= */
+  function mountAdmin(el, o) {
+    style(); el.classList.add('att');
+    o = o || {};
+    var today = ymd(Date.now());
+    var F = { from: today, to: today, subject: '', tutor: '', student: '', status: '', keyStage: '' };
+    var D = { sessions: [], records: [], strikes: [], referrals: [], requests: [], locks: [], notes: [], summaries: {} };
+    var tab = 'daily', unsubs = [];
+    el.innerHTML = '<div class="att-filters">' +
+      '<label>From<input type="date" data-f="from" value="' + today + '"></label><label>To<input type="date" data-f="to" value="' + today + '"></label>' +
+      '<label>Subject<select data-f="subject"><option value="">All subjects</option></select></label>' +
+      '<label>Class<select data-f="keyStage"><option value="">All classes</option></select></label>' +
+      '<label>Tutor<select data-f="tutor"><option value="">All tutors</option></select></label>' +
+      '<label>Student<input data-f="student" placeholder="Name"></label>' +
+      '<label>Status<select data-f="status"><option value="">Any status</option>' + Object.keys(STATUS).map(function (k) { return '<option value="' + k + '">' + STATUS[k][0] + '</option>'; }).join('') + '</select></label>' +
+      '<button type="button" class="att-btn" data-load>' + icon('fa-rotate') + ' Load</button></div><div class="att-tabs" data-tabs></div><div data-body></div>';
+    var body = el.querySelector('[data-body]');
+    function load() {
+      unsubs.forEach(function (u) { u(); }); unsubs = [];
+      body.innerHTML = '<div class="att-empty">' + icon('fa-spinner fa-spin') + ' Loading…</div>';
+      unsubs.push(db.collection('attendanceSessions').where('date', '>=', F.from).where('date', '<=', F.to).onSnapshot(function (s) { D.sessions = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); options(); paint(); }, err));
+      unsubs.push(db.collection('attendanceRecords').where('date', '>=', F.from).where('date', '<=', F.to).onSnapshot(function (s) { D.records = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceReferrals').onSnapshot(function (s) { D.referrals = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceRequests').where('status', '==', 'pending').onSnapshot(function (s) { D.requests = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceLocks').onSnapshot(function (s) { D.locks = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceSessions').where('needsFollowUp', '==', true).onSnapshot(function (s) { D.follow = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceRecords').where('reviewState', '==', 'pending').onSnapshot(function (s) { D.reviews = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceNotifications').where('emailStatus', '==', 'failed').onSnapshot(function (s) { D.failed = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceStudents').onSnapshot(function (s) { D.summaries = {}; s.forEach(function (d) { D.summaries[d.id] = d.data(); }); paint(); }, err));
+    }
+    function err(e) { console.warn('attendance admin', e); }
+    function options() {
+      var fill = function (sel, vals) { var cur = sel.value; sel.innerHTML = sel.options[0].outerHTML + vals.map(function (v) { return '<option value="' + esc(v[0]) + '"' + (v[0] === cur ? ' selected' : '') + '>' + esc(v[1]) + '</option>'; }).join(''); };
+      var subs = {}, tut = {}, ks = {};
+      D.sessions.forEach(function (s) { subs[s.subjectId] = s.subjectName; ks[s.keyStage] = (s.keyStage || '').replace(/\s*\(.*/, ''); (s.tutorIds || []).forEach(function (t, i) { tut[t] = String(s.tutorName || '').split(', ')[i] || s.tutorName || t; }); });
+      fill(el.querySelector('[data-f="subject"]'), Object.keys(subs).map(function (k) { return [k, subs[k]]; }));
+      fill(el.querySelector('[data-f="keyStage"]'), Object.keys(ks).filter(Boolean).map(function (k) { return [k, ks[k]]; }));
+      fill(el.querySelector('[data-f="tutor"]'), Object.keys(tut).map(function (k) { return [k, tut[k]]; }));
+    }
+    function sessOk(s) { return (!F.subject || s.subjectId === F.subject) && (!F.tutor || (s.tutorIds || []).indexOf(F.tutor) !== -1) && (!F.keyStage || s.keyStage === F.keyStage); }
+    function recOk(r) {
+      var s = sessById[r.sessionId];
+      return (!s || sessOk(s)) && (!F.subject || r.subjectId === F.subject) && (!F.status || r.status === F.status) && (!F.keyStage || r.keyStage === F.keyStage) &&
+        (!F.student || String(r.studentName || '').toLowerCase().indexOf(F.student.toLowerCase()) !== -1);
+    }
+    var sessById = {};
+    function paint() {
+      if (el.contains(document.activeElement) && /TEXTAREA/.test(document.activeElement.tagName)) return;
+      sessById = {}; D.sessions.forEach(function (s) { sessById[s.id] = s; });
+      var sessions = D.sessions.filter(sessOk), records = D.records.filter(recOk);
+      var reviews = (D.reviews || []), follow = (D.follow || []), openRefs = D.referrals.filter(function (r) { return r.status !== 'closed'; });
+      var nReview = reviews.length + D.requests.length + follow.length + openRefs.length;
+      el.querySelector('[data-tabs]').innerHTML = [['daily', 'Daily attendance'], ['tutors', 'Tutor compliance'], ['students', 'Student punctuality'], ['review', 'Reviews and actions', nReview], ['notices', 'Notifications', (D.failed || []).length]].map(function (t) {
+        return '<button type="button" data-tab="' + t[0] + '" class="' + (tab === t[0] ? 'on' : '') + '">' + t[1] + (t[2] ? '<span class="n">' + t[2] + '</span>' : '') + '</button>';
+      }).join('');
+      body.innerHTML = tab === 'daily' ? dailyHtml(sessions, records) : tab === 'tutors' ? tutorsHtml(sessions) : tab === 'students' ? studentsHtml(records) : tab === 'review' ? reviewHtml(reviews, follow, openRefs) : noticesHtml();
+    }
+    function n(list, f) { return list.filter(f).length; }
+    function dailyHtml(sessions, records) {
+      var t = Date.now();
+      var st = function (s) { return s === 'present' || s === 'present_verified' || s === 'connectivity'; };
+      return '<div class="att-stats">' +
+        '<div class="att-stat"><b>' + n(sessions, function (s) { return s.status !== 'cancelled'; }) + '</b><span>Scheduled lessons</span></div>' +
+        '<div class="att-stat"><b>' + records.length + '</b><span>Enrolled (student lessons)</span></div>' +
+        '<div class="att-stat"><b>' + n(records, function (r) { return !!r.checkIn; }) + '</b><span>Checked in</span></div>' +
+        '<div class="att-stat"><b>' + n(records, function (r) { return st(r.status); }) + '</b><span>Present</span></div>' +
+        '<div class="att-stat late"><b>' + n(records, function (r) { return r.status === 'late'; }) + '</b><span>Late</span></div>' +
+        '<div class="att-stat warn"><b>' + n(records, function (r) { return r.status === 'absent'; }) + '</b><span>Absent</span></div>' +
+        '<div class="att-stat warn"><b>' + n(records, function (r) { return r.status === 'unaccounted' || (r.status === 'expected' && msOf(r.graceAt) <= t); }) + '</b><span>Unresolved</span></div></div>' +
+        '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Lessons</h4>' + (sessions.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Tutor</th><th>Register</th><th>In / enrolled</th><th>Late</th><th>Unresolved</th><th></th></tr></thead><tbody>' +
+          sessions.slice().sort(function (a, b) { return msOf(a.startAt) - msOf(b.startAt); }).map(function (s) {
+            var rs = D.records.filter(function (r) { return r.sessionId === s.id; });
+            return '<tr class="' + (s.status === 'auto_submitted' || (s.unresolvedCount || 0) ? 'flag' : '') + '"><td>' + dayLabel(s.startAt) + '</td><td><b>' + esc(s.subjectName) + '</b> ' + hm(s.startAt) + '<div class="att-muted">' + esc((s.keyStage || '').replace(/\s*\(.*/, '')) + '</div></td><td>' + esc(s.tutorName) + '</td><td>' + sessPill(s) + '</td>' +
+              '<td>' + n(rs, function (r) { return !!r.checkIn; }) + ' / ' + rs.length + '</td><td>' + n(rs, function (r) { return r.status === 'late'; }) + '</td><td>' + n(rs, function (r) { return r.status === 'unaccounted' || (r.status === 'expected' && msOf(r.graceAt) <= t); }) + '</td>' +
+              '<td><div class="att-row-actions"><button type="button" class="att-btn sm" data-a-sess="' + esc(s.id) + '">' + icon('fa-eye') + ' Register</button>' + (s.status !== 'cancelled' ? '<button type="button" class="att-btn sm danger" data-a-cancel="' + esc(s.id) + '">' + icon('fa-ban') + ' Cancel lesson</button>' : '') + '</div></td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="att-empty">No registers in this range. Registers are prepared 20 minutes before each timetabled lesson.</div>') + '</div>';
+    }
+    function sessPill(s) { return s.status === 'auto_submitted' ? '<span class="att-pill bad">AUTO-SUBMITTED</span>' : s.status === 'submitted' ? '<span class="att-pill ok">Submitted</span>' : s.status === 'cancelled' ? pill('cancelled') : (msOf(s.endAt) < Date.now() ? '<span class="att-pill bad">Outstanding</span>' : '<span class="att-pill info">Open</span>'); }
+    function tutorsHtml(sessions) {
+      var by = {};
+      sessions.forEach(function (s) {
+        (s.tutorIds || []).forEach(function (tid, i) {
+          var b = by[tid] = by[tid] || { name: String(s.tutorName || '').split(', ')[i] || tid, conducted: 0, manual: 0, auto: 0, outstanding: 0, explain: 0, list: [] };
+          if (s.status === 'cancelled') return;
+          b.conducted++; b.list.push(s);
+          if (s.status === 'submitted') b.manual++;
+          else if (s.status === 'auto_submitted') { b.auto++; if (s.explanationRequired !== false && !(s.explanationReview && s.explanationReview.decision === 'accepted')) b.explain++; }
+          else if (msOf(s.endAt) < Date.now()) b.outstanding++;
+        });
+      });
+      var ids = Object.keys(by);
+      return '<div class="att-panel"><h4>' + icon('fa-chalkboard-user') + ' Tutor compliance</h4>' + (ids.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Tutor</th><th>Lessons conducted</th><th>Submitted manually</th><th>Auto-submitted</th><th>Outstanding</th><th>Explanations required</th></tr></thead><tbody>' +
+        ids.map(function (id) { var b = by[id]; return '<tr class="' + (b.auto || b.outstanding ? 'flag' : '') + '"><td><b>' + esc(b.name) + '</b></td><td>' + b.conducted + '</td><td>' + b.manual + '</td><td>' + b.auto + '</td><td>' + b.outstanding + '</td><td>' + b.explain + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="att-empty">No registers in this range.</div>') + '</div>' +
+        '<div class="att-panel"><h4>' + icon('fa-lock') + ' Subject locks now</h4>' + (D.locks.length ? D.locks.map(function (l) { return '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.3rem 0"><b>' + esc(l.subjectName) + '</b><span class="att-muted">' + esc(l.tutorName || l.tutorId) + ' · since ' + hm(l.since) + '</span><button type="button" class="att-btn sm" data-a-lock="' + esc(l.id) + '">' + icon('fa-lock-open') + ' Override</button></div>'; }).join('') : '<div class="att-empty">No tutor is locked out of a subject.</div>') + '</div>' +
+        '<div class="att-panel"><h4>' + icon('fa-clock-rotate-left') + ' Submission history</h4>' + (sessions.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Tutor</th><th>Method</th><th>When</th><th>By</th></tr></thead><tbody>' +
+          sessions.filter(function (s) { return s.submission; }).sort(function (a, b) { return msOf(b.startAt) - msOf(a.startAt); }).map(function (s) { return '<tr><td>' + dayLabel(s.startAt) + '</td><td>' + esc(s.subjectName) + ' ' + hm(s.startAt) + '</td><td>' + esc(s.tutorName) + '</td><td>' + sessPill(s) + '</td><td>' + hm(s.submission.at) + '</td><td>' + esc(s.submission.byName || '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="att-empty">None yet.</div>') + '</div>';
+    }
+    function studentsHtml(records) {
+      var by = {};
+      records.forEach(function (r) {
+        var b = by[r.studentId] = by[r.studentId] || { name: r.studentName, total: 0, att: 0, late: 0, absent: 0, unresolved: 0 };
+        if (['expected', 'cancelled', 'excused'].indexOf(r.status) === -1) b.total++;
+        if (ATTENDED.indexOf(r.status) !== -1) b.att++;
+        if (r.status === 'late') b.late++;
+        if (r.status === 'absent') b.absent++;
+        if (r.status === 'unaccounted') b.unresolved++;
+      });
+      var ay = academicYearKey(Date.now());
+      Object.keys(D.summaries).forEach(function (id) { if (!by[id] && (!F.student || String(D.summaries[id].studentName || '').toLowerCase().indexOf(F.student.toLowerCase()) !== -1)) by[id] = { name: D.summaries[id].studentName, total: 0, att: 0, late: 0, absent: 0, unresolved: 0 }; });
+      var ids = Object.keys(by).sort(function (a, b) { var ya = ((D.summaries[a] || {}).years || {})[ay] || {}, yb = ((D.summaries[b] || {}).years || {})[ay] || {}; return (yb.active || 0) - (ya.active || 0) || String(by[a].name).localeCompare(String(by[b].name)); });
+      return '<div class="att-panel"><h4>' + icon('fa-user-clock') + ' Student punctuality <span class="att-muted">(active strikes are for ' + esc(yearLabel(ay)) + '; the rest for the dates chosen)</span></h4>' + (ids.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Attendance</th><th>Late</th><th>Absent</th><th>Unresolved</th><th>Active strikes</th><th>Warning / referral</th><th></th></tr></thead><tbody>' +
+        ids.map(function (id) {
+          var b = by[id], y = ((D.summaries[id] || {}).years || {})[ay] || {};
+          return '<tr class="' + ((y.active || 0) >= 4 ? 'flag' : '') + '"><td><b>' + esc(b.name) + '</b></td><td>' + (b.total ? Math.round(b.att * 100 / b.total) + '%' : '—') + '</td><td>' + b.late + '</td><td>' + b.absent + '</td><td>' + b.unresolved + '</td><td><b>' + (y.active || 0) + '</b>' + (y.reversed ? ' <span class="att-muted">(' + y.reversed + ' reversed)</span>' : '') + '</td>' +
+            '<td>' + ((y.active || 0) >= 5 ? '<span class="att-pill bad">Referral</span>' : (y.active || 0) === 4 ? '<span class="att-pill late">Final warning</span>' : '—') + '</td><td><button type="button" class="att-btn sm" data-a-student="' + esc(id) + '">' + icon('fa-folder-open') + ' Record</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="att-empty">No students in this range.</div>') + '</div>';
+    }
+    function reviewHtml(reviews, follow, refs) {
+      return '<div class="att-panel"><h4>' + icon('fa-comment-dots') + ' Tutor explanations to review (' + reviews.length + ')</h4>' + (reviews.length ? reviews.map(function (r) {
+        return '<div style="border-bottom:1px solid #eef3f2;padding:.5rem 0"><b>' + esc(r.studentName) + '</b> · ' + esc(r.subjectName) + ' ' + dayLabel(r.startAt) + ' ' + hm(r.startAt) + ' ' + pill(r.status) +
+          '<div class="att-muted">' + esc((r.resolution && (r.resolution.label + (r.resolution.note ? ': ' + r.resolution.note : ''))) || '') + ' · ' + esc((r.resolution && r.resolution.byName) || '') + '</div>' +
+          '<div class="att-row-actions" style="margin-top:.35rem"><button type="button" class="att-btn sm primary" data-a-rev="' + esc(r.id) + '" data-d="approve">' + icon('fa-check') + ' Approve</button><button type="button" class="att-btn sm danger" data-a-rev="' + esc(r.id) + '" data-d="reject">' + icon('fa-xmark') + ' Reject</button></div></div>';
+      }).join('') : '<div class="att-empty">Nothing to review.</div>') + '</div>' +
+        '<div class="att-panel"><h4>' + icon('fa-envelope-open-text') + ' Correction and excused-lateness requests (' + D.requests.length + ')</h4>' + (D.requests.length ? D.requests.map(function (q) {
+          return '<div style="border-bottom:1px solid #eef3f2;padding:.5rem 0"><b>' + esc(q.studentName) + '</b> · ' + esc(q.subjectName) + ' ' + esc(q.date) + ' <span class="att-pill info">' + (q.kind === 'excuse_lateness' ? 'Excuse lateness' : 'Correction' + (q.proposedStatus ? ' to ' + esc((STATUS[q.proposedStatus] || [q.proposedStatus])[0]) : '')) + '</span>' +
+            '<div class="att-muted">"' + esc(q.reason) + '" · ' + esc(q.requestedByName) + ' (' + esc(q.requestedByRole) + ')</div><div class="att-row-actions" style="margin-top:.35rem"><button type="button" class="att-btn sm primary" data-a-req="' + esc(q.id) + '" data-d="approve">' + icon('fa-check') + ' Approve</button><button type="button" class="att-btn sm danger" data-a-req="' + esc(q.id) + '" data-d="reject">' + icon('fa-xmark') + ' Reject</button></div></div>';
+        }).join('') : '<div class="att-empty">No requests waiting.</div>') + '</div>' +
+        '<div class="att-panel"><h4>' + icon('fa-clipboard-list') + ' Auto-submitted and unresolved registers (' + follow.length + ')</h4>' + (follow.length ? follow.sort(function (a, b) { return msOf(b.startAt) - msOf(a.startAt); }).map(function (s) {
+          return '<div style="border-bottom:1px solid #eef3f2;padding:.5rem 0">' + sessPill(s) + ' <b>' + esc(s.subjectName) + '</b> ' + dayLabel(s.startAt) + ' ' + hm(s.startAt) + ' · ' + esc(s.tutorName) + (s.unresolvedCount ? ' · <b>' + s.unresolvedCount + ' unresolved</b>' : '') +
+            '<div class="att-muted">' + (s.tutorExplanation ? 'Tutor: "' + esc(s.tutorExplanation.text) + '"' : 'No tutor explanation yet.') + (s.explanationReview ? ' · Reviewed: ' + esc(s.explanationReview.decision) : '') + '</div>' +
+            '<div class="att-row-actions" style="margin-top:.35rem"><button type="button" class="att-btn sm" data-a-sess="' + esc(s.id) + '">' + icon('fa-eye') + ' Inspect</button>' +
+            (s.tutorExplanation ? '<button type="button" class="att-btn sm primary" data-a-exp="' + esc(s.id) + '" data-d="accept">' + icon('fa-check') + ' Accept explanation</button><button type="button" class="att-btn sm danger" data-a-exp="' + esc(s.id) + '" data-d="reject">Reject explanation</button>' : '') +
+            '<button type="button" class="att-btn sm" data-a-close="' + esc(s.id) + '">' + icon('fa-flag-checkered') + ' Close follow-up</button></div></div>';
+        }).join('') : '<div class="att-empty">Every register is accounted for.</div>') + '</div>' +
+        '<div class="att-panel"><h4>' + icon('fa-scale-balanced') + ' Disciplinary referrals (' + refs.length + ' open)</h4>' + (D.referrals.length ? D.referrals.slice().sort(function (a, b) { return msOf(b.createdAt) - msOf(a.createdAt); }).map(function (r) {
+          return '<div style="border-bottom:1px solid #eef3f2;padding:.5rem 0"><b>' + esc(r.studentName) + '</b> · ' + r.strikeNumber + ' strikes (' + esc(r.academicYearLabel || '') + ') · ' + dayLabel(r.createdAt) + ' <span class="att-pill ' + (r.status === 'closed' ? 'ok' : 'bad') + '">' + esc(String(r.status).replace('_', ' ')) + '</span>' +
+            ((r.decisions || []).map(function (d) { return '<div class="att-muted">' + dayLabel(d.at) + ': ' + esc(d.decision || '') + ' (' + esc(d.reason) + ')</div>'; }).join('')) +
+            '<div class="att-row-actions" style="margin-top:.35rem"><button type="button" class="att-btn sm primary" data-a-ref="' + esc(r.id) + '">' + icon('fa-gavel') + ' Record decision</button><button type="button" class="att-btn sm" data-a-student="' + esc(r.studentId) + '">Student record</button></div></div>';
+        }).join('') : '<div class="att-empty">No referrals.</div>') + '</div>';
+    }
+    function noticesHtml() {
+      var f = D.failed || [];
+      return '<div class="att-panel"><h4>' + icon('fa-envelope') + ' Emails that failed (' + f.length + ')</h4><p class="att-muted">Failed emails are retried automatically, up to 5 times. Every notice also stays in the parent portal.</p>' + (f.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>When</th><th>To</th><th>Notice</th><th>Attempts</th><th>Error</th></tr></thead><tbody>' + f.map(function (x) {
+        return '<tr><td>' + dayLabel(x.createdAt) + ' ' + hm(x.createdAt) + '</td><td>' + esc(x.recipientName) + '<div class="att-muted">' + esc(x.email) + '</div></td><td>' + esc(x.title) + '</td><td>' + (x.attempts || 0) + '</td><td class="att-muted">' + esc(x.lastError) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="att-empty">No failed emails.</div>') + '</div>';
+    }
+    function sessionModal(sid) {
+      var s = sessById[sid] || (D.follow || []).filter(function (x) { return x.id === sid; })[0];
+      var m = modal({ title: s ? 'Register: ' + s.subjectName : 'Register', sub: s ? dayLabel(s.startAt) + ' ' + hm(s.startAt) + ' to ' + hm(s.endAt) + ' · ' + s.tutorName : '', wide: true, closeLabel: 'Close' });
+      m.body.innerHTML = '<div class="att-empty">' + icon('fa-spinner fa-spin') + '</div>';
+      Promise.all([
+        db.collection('attendanceRecords').where('sessionId', '==', sid).get(),
+        db.collection('attendanceSubmissions').doc(sid).get(),
+        db.collection('attendanceAmendments').where('sessionId', '==', sid).get()
+      ]).then(function (res) {
+        var recs = res[0].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return String(a.studentName).localeCompare(String(b.studentName)); });
+        var sub = res[1].exists ? res[1].data() : null, am = res[2].docs.map(function (d) { return d.data(); });
+        m.body.innerHTML = (sub ? '<div class="att-banner' + (sub.method === 'auto' ? ' lock' : '') + '"><div class="ic">' + icon('fa-clipboard-check') + '</div><div class="t"><b>' + (sub.method === 'auto' ? 'AUTO-SUBMITTED' : 'Submitted by ' + esc(sub.submittedByName)) + ' at ' + hm(sub.submittedAt) + '</b><small>' + (sub.manualSubmission ? 'Manual submission.' : 'No manual submission was made. Snapshot kept as submitted: ' + sub.rows.length + ' students, ' + (sub.unresolvedCount || 0) + ' unresolved.') + '</small></div></div>' : '') +
+          '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status now</th><th>As submitted</th><th>Checked in</th><th>Tutor record</th><th>Corrections</th><th></th></tr></thead><tbody>' + recs.map(function (r) {
+            var snap = sub && sub.rows.filter(function (x) { return x.studentId === r.studentId; })[0];
+            return '<tr><td><b>' + esc(r.studentName) + '</b></td><td>' + pill(r.status) + (r.strikeId ? ' <span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + (r.strikeReversed ? 'Strike reversed' : 'Strike') + '</span>' : '') + '</td><td>' + (snap ? pill(snap.status) : '—') + '</td>' +
+              '<td>' + (r.checkIn ? hm(r.checkIn.at) + ' (' + (r.checkIn.classification === 'late' ? r.checkIn.minutesLate + ' min late' : 'on time') + ')' : '—') + '</td>' +
+              '<td class="att-muted">' + (r.resolution ? esc(r.resolution.label) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName) + ' ' + hm(r.resolution.at) + (r.resolution.afterSubmission ? ' (after submission)' : '') : '') + '</td>' +
+              '<td class="att-muted">' + (r.corrections || []).map(function (c) { return esc((STATUS[c.from] || [c.from])[0]) + ' → ' + esc((STATUS[c.to] || [c.to])[0]) + ': ' + esc(c.reason); }).join('<br>') + '</td>' +
+              '<td><button type="button" class="att-btn sm" data-a-correct="' + esc(r.id) + '">' + icon('fa-pen') + ' Correct</button></td></tr>';
+          }).join('') + '</tbody></table></div>' +
+          (am.length ? '<div class="att-panel" style="margin-top:1rem"><h4>' + icon('fa-clock-rotate-left') + ' Amendments after submission</h4>' + am.map(function (a) { return '<div class="att-muted">' + dayLabel(a.at) + ' ' + hm(a.at) + ' · ' + esc(a.studentName) + ': ' + esc((STATUS[a.before.status] || [a.before.status])[0]) + ' → ' + esc((STATUS[a.after.status] || [a.after.status])[0]) + ' by ' + esc(a.byName) + (a.reason || (a.after && a.after.note) ? ' ("' + esc(a.reason || a.after.note) + '")' : '') + '</div>'; }).join('') + '</div>' : '');
+      }).catch(function (e) { m.body.innerHTML = '<div class="att-empty">' + esc(errMsg(e)) + '</div>'; });
+    }
+    function studentModal(uid) {
+      var m = modal({ title: 'Attendance record', wide: true, closeLabel: 'Close' });
+      m.body.innerHTML = '<div class="att-empty">' + icon('fa-spinner fa-spin') + '</div>';
+      Promise.all([db.collection('attendanceRecords').where('studentId', '==', uid).get(), db.collection('attendanceStrikes').where('studentId', '==', uid).get(), db.collection('attendanceStudents').doc(uid).get()]).then(function (res) {
+        var recs = res[0].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        var strikes = res[1].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return msOf(b.createdAt) - msOf(a.createdAt); });
+        m.el.querySelector('h3').textContent = 'Attendance record: ' + ((recs[0] && recs[0].studentName) || (res[2].exists && res[2].data().studentName) || '');
+        m.body.innerHTML = historyHtml(recs, res[2].exists ? res[2].data() : null) +
+          '<div class="att-panel"><h4>' + icon('fa-triangle-exclamation') + ' Strikes (all years)</h4>' + (strikes.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Minutes late</th><th>Number</th><th>Status</th><th></th></tr></thead><tbody>' + strikes.map(function (k) {
+            return '<tr><td>' + dayLabel(k.startAt) + '</td><td>' + esc(k.subjectName) + '</td><td>' + k.minutesLate + '</td><td>' + k.number + ' (' + esc(k.academicYearLabel) + ')</td><td>' + (k.status === 'active' ? '<span class="att-pill late">Active</span>' : '<span class="att-pill wait">Reversed</span><div class="att-muted">' + esc(k.reversal && k.reversal.reason) + '</div>') + '</td><td>' + (k.status === 'active' ? '<button type="button" class="att-btn sm" data-a-strike="' + esc(k.id) + '">' + icon('fa-rotate-left') + ' Reverse</button>' : '') + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="att-empty">No strikes.</div>') + '</div>';
+      }).catch(function (e) { m.body.innerHTML = '<div class="att-empty">' + esc(errMsg(e)) + '</div>'; });
+    }
+    function adminCall(data, okMsg) {
+      return call('attendanceAdmin', data).then(function () { if (okMsg) toast(okMsg); }).catch(function (e) { alert(errMsg(e)); });
+    }
+    function toast(t) { var d = document.createElement('div'); d.className = 'att-dock att'; d.innerHTML = '<span class="att-chip">' + icon('fa-circle-check') + ' ' + esc(t) + '</span>'; document.body.appendChild(d); setTimeout(function () { d.remove(); }, 2600); }
+    var statusSelect = '<label class="att-field">New status<select data-extra="status">' + ['present', 'late', 'present_verified', 'connectivity', 'absent', 'excused', 'other', 'unaccounted'].map(function (k) { return '<option value="' + k + '">' + STATUS[k][0] + '</option>'; }).join('') + '</select></label>';
+    el.addEventListener('click', function (e) {
+      var t = e.target; if (!t.closest) return;
+      var b;
+      if ((b = t.closest('[data-tab]'))) { tab = b.dataset.tab; paint(); return; }
+      if ((b = t.closest('[data-load]'))) { el.querySelectorAll('[data-f]').forEach(function (x) { F[x.dataset.f] = x.value; }); load(); return; }
+      if ((b = t.closest('[data-a-sess]'))) { sessionModal(b.dataset.aSess); return; }
+      if ((b = t.closest('[data-a-student]'))) { studentModal(b.dataset.aStudent); return; }
+      if ((b = t.closest('[data-a-cancel]'))) { var cid = b.dataset.aCancel; askReason('Cancel this lesson?', 'Why was it cancelled? Strikes from this lesson are reversed and the register closes.').then(function (r) { if (r) adminCall({ action: 'cancelSession', sessionId: cid, reason: r.reason }, 'Lesson cancelled'); }); return; }
+      if ((b = t.closest('[data-a-lock]'))) { var lid = b.dataset.aLock; askReason('Override the subject lock', 'Why may this tutor continue before the register is in?').then(function (r) { if (r) adminCall({ action: 'overrideLock', lockId: lid, reason: r.reason }, 'Lock lifted'); }); return; }
+      if ((b = t.closest('[data-a-rev]'))) { var rid = b.dataset.aRev, d = b.dataset.d; askReason(d === 'approve' ? 'Approve this explanation' : 'Reject this explanation', 'Reason for your decision', d === 'reject' ? statusSelect.replace('New status', 'Record the student as') : '').then(function (r) { if (r) adminCall({ action: 'reviewResolution', recordId: rid, decision: d, reason: r.reason, finalStatus: r.extra.status }, 'Decision recorded'); }); return; }
+      if ((b = t.closest('[data-a-req]'))) { var qid = b.dataset.aReq, d2 = b.dataset.d; askReason(d2 === 'approve' ? 'Approve the request' : 'Reject the request', 'Reason for your decision').then(function (r) { if (r) adminCall({ action: 'decideRequest', requestId: qid, decision: d2, reason: r.reason }, 'Decision recorded'); }); return; }
+      if ((b = t.closest('[data-a-exp]'))) { var sid = b.dataset.aExp, d3 = b.dataset.d; askReason(d3 === 'accept' ? 'Accept the tutor\'s explanation' : 'Reject the tutor\'s explanation', 'Reason for your decision').then(function (r) { if (r) adminCall({ action: 'reviewExplanation', sessionId: sid, decision: d3, reason: r.reason }, 'Decision recorded'); }); return; }
+      if ((b = t.closest('[data-a-close]'))) { var sid2 = b.dataset.aClose; askReason('Close the follow-up', 'What was done? Unresolved students stay unresolved unless you correct them.').then(function (r) { if (r) adminCall({ action: 'closeFollowUp', sessionId: sid2, reason: r.reason }, 'Follow-up closed'); }); return; }
+      if ((b = t.closest('[data-a-ref]'))) {
+        var fid = b.dataset.aRef;
+        askReason('Disciplinary referral decision', 'Reason (recorded with the decision)', '<label class="att-field">Status<select data-extra="status"><option value="under_review">Under review</option><option value="action_taken">Action taken</option><option value="closed">Closed</option></select></label><label class="att-field">Decision<input data-extra="decision" maxlength="500" placeholder="e.g. Meeting with parents on Friday"></label>')
+          .then(function (r) { if (r) adminCall({ action: 'decideReferral', referralId: fid, status: r.extra.status, decision: r.extra.decision, reason: r.reason }, 'Decision recorded'); });
+        return;
+      }
+    });
+    document.addEventListener('click', onDocClick);
+    function onDocClick(e) {
+      var t = e.target; if (!t.closest) return;
+      var b;
+      if ((b = t.closest('.att-ov [data-a-correct]'))) { var rid = b.dataset.aCorrect; askReason('Correct this record', 'Reason for the correction (the original stays in the history)', statusSelect).then(function (r) { if (r) adminCall({ action: 'correctRecord', recordId: rid, status: r.extra.status, reason: r.reason }, 'Record corrected').then(function () { var ov = b.closest('.att-ov'); if (ov) ov.remove(); }); }); return; }
+      if ((b = t.closest('.att-ov [data-a-strike]'))) { var kid = b.dataset.aStrike; askReason('Reverse this strike', 'Why is this strike reversed? The strike stays in the history as reversed.').then(function (r) { if (r) adminCall({ action: 'reverseStrike', strikeId: kid, reason: r.reason }, 'Strike reversed').then(function () { var ov = b.closest('.att-ov'); if (ov) ov.remove(); }); }); return; }
+      if ((b = t.closest('.att-ov [data-a-student]'))) { studentModal(b.dataset.aStudent); }
+    }
+    load();
+    return { destroy: function () { unsubs.forEach(function (u) { u(); }); document.removeEventListener('click', onDocClick); } };
+  }
+
+  return { mountStudent: mountStudent, mountStudentHistory: mountStudentHistory, mountTutor: mountTutor, mountParent: mountParent, mountAdmin: mountAdmin, STATUS: STATUS };
+})();

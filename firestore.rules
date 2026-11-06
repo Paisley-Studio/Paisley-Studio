@@ -252,12 +252,17 @@ service cloud.firestore {
     }
     // A paper hand-in: staff record it for a student who does not upload (see js/classroom/paper-handins.js).
     function staffPaperHandIn(cid, sid) {
-      return (isAdmin() || classTutorMay(classroomData(cid))) &&
+      return (isAdmin() || (classTutorMay(classroomData(cid)) && !attendanceLocked(classroomData(cid).subjectId))) &&
         request.resource.data.get('handIn', '') == 'physical' &&
         request.resource.data.studentId == sid;
     }
     function staffUndoPaperHandIn(cid) {
-      return (isAdmin() || classTutorMay(classroomData(cid))) && resource.data.get('handIn', '') == 'physical';
+      return (isAdmin() || (classTutorMay(classroomData(cid)) && !attendanceLocked(classroomData(cid).subjectId))) && resource.data.get('handIn', '') == 'physical';
+    }
+    // Attendance: a tutor whose register for this subject is overdue cannot mark or record work in
+    // that subject until it is submitted or auto-submitted (functions/attendance.js). Other subjects are unaffected.
+    function attendanceLocked(subjectId) {
+      return exists(/databases/$(database)/documents/attendanceLocks/$(request.auth.uid + '_' + subjectId));
     }
     function isLinkedParent(conversationId) {
       return isSignedIn() &&
@@ -858,7 +863,7 @@ service cloud.firestore {
               postedToMyType(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/lessons/$(lid)).data);
             allow create: if staffPaperHandIn(cid, sid);
             allow update: if isAdmin() ||
-              classTutorSubject(classroomData(cid).subjectId) ||
+              (classTutorSubject(classroomData(cid).subjectId) && !attendanceLocked(classroomData(cid).subjectId)) ||
               (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
             allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
           }
@@ -881,7 +886,7 @@ service cloud.firestore {
               forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/assignments/$(aid)).data);
             allow create: if staffPaperHandIn(cid, sid);
             allow update: if isAdmin() ||
-              classTutorSubject(classroomData(cid).subjectId) ||
+              (classTutorSubject(classroomData(cid).subjectId) && !attendanceLocked(classroomData(cid).subjectId)) ||
               activeGrant('homework', aid) ||
               (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
             allow delete: if isAdmin() || staffUndoPaperHandIn(cid);
@@ -907,7 +912,7 @@ service cloud.firestore {
               get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data.examMode == 'pdf' &&
               forMe(get(/databases/$(database)/documents/classrooms/$(cid)/topics/$(tid)/exams/$(eid)).data);
             allow update: if isAdmin() ||
-              classTutorSubject(classroomData(cid).subjectId) ||
+              (classTutorSubject(classroomData(cid).subjectId) && !attendanceLocked(classroomData(cid).subjectId)) ||
               activeGrant('exam', eid) ||
               (isOwner(sid) && resource.data.status != 'Graded' && studentWorkEdit());
             allow delete: if isAdmin();
@@ -950,7 +955,7 @@ service cloud.firestore {
 
           allow update: if
             isAdmin() ||
-            classTutorSubject(classroomData(cid).subjectId) ||
+            (classTutorSubject(classroomData(cid).subjectId) && !attendanceLocked(classroomData(cid).subjectId)) ||
             activeGrant('exam', eid) ||
             (isOwner(studentId) &&
               resource.data.status != 'Graded' &&
@@ -1606,6 +1611,75 @@ service cloud.firestore {
           studentHasTutorId(request.resource.data.studentId, request.auth.uid));
       allow update, delete: if isAdmin() ||
         (isTutor() && resource.data.tutorId == request.auth.uid);
+    }
+
+
+    // =====================================================
+    // ATTENDANCE (functions/attendance.js writes everything; no client writes)
+    // =====================================================
+    match /attendanceSessions/{sid} {
+      allow read: if isAdmin() ||
+        (isTutor() && request.auth.uid in resource.data.tutorIds) ||
+        (isSignedIn() && request.auth.uid in resource.data.studentIds);
+      allow write: if false;
+    }
+    match /attendanceRecords/{rid} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isParentOf(resource.data.studentId) ||
+        (isTutor() && request.auth.uid in resource.data.tutorIds);
+      allow write: if false;
+    }
+    match /attendanceSubmissions/{sid} {
+      allow read: if isAdmin() || (isTutor() && request.auth.uid in resource.data.tutorIds);
+      allow write: if false;
+    }
+    match /attendanceAmendments/{id} {
+      allow read: if isAdmin() || (isTutor() && request.auth.uid in resource.data.tutorIds);
+      allow write: if false;
+    }
+    match /attendanceStrikes/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        isParentOf(resource.data.studentId) ||
+        tutorTeachesStudent(resource.data.studentId);
+      allow write: if false;
+    }
+    match /attendanceStudents/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || isParentOf(uid) || isTutor();
+      allow write: if false;
+    }
+    match /attendanceReferrals/{id} {
+      allow read: if isAdmin() || isParentOf(resource.data.studentId);
+      allow write: if false;
+    }
+    match /attendanceRequests/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.requestedBy == request.auth.uid);
+      allow write: if false;
+    }
+    match /attendanceNotifications/{id} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.recipientId == request.auth.uid) ||
+        (resource.data.audience == 'family' && isParentOf(resource.data.studentId));
+      allow write: if false;
+    }
+    match /attendanceLocks/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.tutorId == request.auth.uid);
+      allow write: if false;
+    }
+    match /attendanceAudit/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // Subject display names (renameSubject callable). Public: the marketing pages show subjects too.
+    match /lmsSettings/{id} {
+      allow get: if true;
+      allow list: if isSignedIn();
+      allow write: if false;
+    }
+    match /subjectRenames/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // =====================================================

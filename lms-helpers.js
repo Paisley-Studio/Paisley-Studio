@@ -1272,6 +1272,36 @@ var LMZ_SUBJECTS = [
   { id: 'cbc-geography',          name: 'CBC Geography',                  keyStages: [24] }
 ];
 
+/* Subject names the Studio Desk renamed (lmsSettings/subjects, written by the renameSubject
+   callable, which also rewrites stored copies of the name). Ids never change, only names.
+   The previous name stays as an alias so older free-text records still match. The last
+   known names are cached in the browser so a renamed subject shows on the first paint. */
+function lmzApplySubjectNames(names) {
+  if (!names || typeof names !== 'object') return;
+  LMZ_SUBJECTS.forEach(function (s) {
+    var n = names[s.id];
+    if (typeof n !== 'string' || !n.trim() || n === s.name) return;
+    if (!s.originalName) s.originalName = s.name;
+    var al = (s.aliases || []).slice();
+    if (al.indexOf(s.name) === -1) al.push(s.name);
+    s.aliases = al;
+    s.name = n.trim();
+  });
+  _lmzSubjectLookup = null;
+}
+function lmzLoadSubjectNames() {
+  try { var c = window.localStorage && localStorage.getItem('lmzSubjectNames'); if (c) lmzApplySubjectNames(JSON.parse(c)); } catch (e) { }
+  try {
+    if (typeof db === 'undefined' || !db || !db.collection) return Promise.resolve();
+    return db.collection('lmsSettings').doc('subjects').get().then(function (d) {
+      var n = (d.exists && d.data().names) || {};
+      try { localStorage.setItem('lmzSubjectNames', JSON.stringify(n)); } catch (e) { }
+      lmzApplySubjectNames(n);
+      try { window.dispatchEvent(new Event('lmz-subjects')); } catch (e) { }
+    }).catch(function () { });
+  } catch (e) { return Promise.resolve(); }
+}
+
 function lmzKeyStageNumber(ks) {
   if (/^TECH\b/i.test(String(ks || ''))) return 31;
   var cbc = /^CBC\s+(Lower|Upper|Junior|Senior)/i.exec(String(ks || ''));
@@ -1892,3 +1922,6 @@ function watchMyStudentNotices(uid, cb, errCb) {
     cb(rows);
   }, errCb || function (e) { console.error('studentNotices listener:', e); });
 }
+
+// Renamed subject names: apply the cached ones now, then fetch the latest.
+lmzLoadSubjectNames();

@@ -455,6 +455,8 @@
     </div>
 
     <div class="content">
+      <!-- Attendance: get-ready banner 15 minutes before a lesson, and the register-now banner (js/attendance/attendance.js). -->
+      <div id="attBanner"></div>
 
       <!-- OVERVIEW -->
       <section class="view active" id="view-overview">
@@ -497,6 +499,11 @@
             <thead><tr><th>Type</th><th>Subject</th><th>Exam</th><th>Score</th><th>Trend</th><th>Date</th></tr></thead>
             <tbody id="recentResultsBody"><tr><td colspan="6" class="empty-row">Loading…</td></tr></tbody>
           </table></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h3><i class="fas fa-user-check"></i> My attendance</h3><div class="sub">Registrations, late arrivals and strikes this academic year</div></div></div>
+          <div id="attHistory"></div>
         </div>
       </section>
 
@@ -634,12 +641,14 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
-<script src="../lms-helpers.js?v=hand2"></script>
+<script src="../lms-helpers.js?v=att1"></script>
 <script src="../js/classroom/classroom-helpers.js?v=boards5"></script>
 <script src="../js/classroom/work-helpers.js?v=hand2"></script>
 <script src="../js/classroom/work-learner.js?v=boards2"></script>
+<script src="../js/attendance/attendance.js?v=1"></script>
 <script>
 const auth = firebase.auth();
 let currentUser = null;
@@ -917,6 +926,7 @@ auth.onAuthStateChanged(user=>{
     ensureStudentIdNumber().then(() => renderProfileIdCard());
     loadAllData();
     startWorkFeatures();
+    startAttendance();
     
     // Kick off the badge calculation in the background
     calculateClassroomBadges();
@@ -926,6 +936,16 @@ auth.onAuthStateChanged(user=>{
     window.location.href = 'index.html';
   });
 });
+
+/* Attendance: the registration pop-up opens at each lesson's start (server time) and the
+   get-ready banner 15 minutes before; lesson links and the Classroom wait for registration. */
+function startAttendance(){
+  if(typeof Attendance === 'undefined' || !currentUser) return;
+  try {
+    Attendance.mountStudent({ uid: currentUser.uid, student: profile, bannerEl: document.getElementById('attBanner') });
+    const h = document.getElementById('attHistory'); if(h) Attendance.mountStudentHistory(h, { uid: currentUser.uid });
+  } catch(e){ console.error('attendance', e); }
+}
 
 let workNotices = [];
 function startWorkFeatures(){

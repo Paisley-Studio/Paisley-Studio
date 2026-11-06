@@ -202,6 +202,10 @@ async function releaseWork(db, tutorUid, tutor, parsed0, studentIds, dueAtIso) {
   if (subjects.indexOf(cls.subjectId) === -1 || (stages.length && stages.indexOf(cls.keyStage) === -1)) throw new HttpsError("permission-denied", "This subject is not assigned to you.");
   if (!W.tutorTeachesBoard(tutor, cls)) throw new HttpsError("permission-denied", "This exam board is not assigned to you.");
   if ((parsed.type === "exam" || parsed.type === "flatExam") && item.status !== "Published") throw new HttpsError("failed-precondition", "Exam is not published.");
+  // Attendance: a register for this subject is overdue (functions/attendance.js). Other subjects are unaffected.
+  if (db.collection && (await db.collection("attendanceLocks").doc(tutorUid + "_" + cls.subjectId).get()).exists) {
+    throw new HttpsError("failed-precondition", "Submit your " + (cls.subjectName || "lesson") + " attendance register first. Open Attendance on your dashboard.");
+  }
 
   const ok = [], rejected = [];
   for (const sid of studentIds) {
