@@ -48,13 +48,15 @@
   var MAX_ASSET_BYTES = 50 * 1024 * 1024;
   var UP_ACCEPT = 'image/*,video/*,audio/*,font/*,.ttf,.otf,.woff,.woff2';
   var LANGS = {
-    html: { label: 'HTML', icon: 'fab fa-html5', mode: 'htmlmixed' },
-    css: { label: 'CSS', icon: 'fab fa-css3-alt', mode: 'css' },
-    js: { label: 'JavaScript', icon: 'fab fa-js', mode: 'javascript' },
-    json: { label: 'JSON', icon: 'fas fa-brackets-curly', mode: { name: 'javascript', json: true } },
-    md: { label: 'Markdown', icon: 'fab fa-markdown', mode: 'markdown' },
-    txt: { label: 'Text', icon: 'fas fa-file-lines', mode: 'text/plain' }
+    html: { label: 'HTML', icon: 'fab fa-html5', color: '#E34F26', mode: 'htmlmixed' },
+    css: { label: 'CSS', icon: 'fab fa-css3-alt', color: '#1572B6', mode: 'css' },
+    js: { label: 'JavaScript', icon: 'fab fa-js', color: '#E8B90C', mode: 'javascript' },
+    json: { label: 'JSON', icon: 'fas fa-code', color: '#8A6200', mode: { name: 'javascript', json: true } },
+    md: { label: 'Markdown', icon: 'fab fa-markdown', color: '#3D4A48', mode: 'markdown' },
+    txt: { label: 'Text', icon: 'fas fa-file-lines', color: '#5A6E6A', mode: 'text/plain' }
   };
+  /* The language's own icon in its usual colour: HTML orange-red, CSS blue, JavaScript yellow. */
+  function langIcon(lang) { var m = LANGS[lang] || LANGS.txt; return '<i class="' + m.icon + ' cl-li" style="color:' + m.color + '" aria-hidden="true"></i>'; }
   var COLORS = ['#E8590C', '#7048E8', '#1C7ED6', '#D6336C', '#2B8A3E', '#F59F00', '#0C8599', '#5F3DC4'];
 
   function langOf(name) {
@@ -163,24 +165,27 @@
   }
   /* The tag list for the word before the cursor, when that word stands on its own
      (start of a line, or just after a tag), never inside a tag or an Emmet abbreviation. */
-  function tagHint(ed) {
+  /* project(word) -> [{ name, snip, label, lang }]: the project's own files offered first
+     (link style.css, script game.js, a about.html, img images/cat.png), with their real paths. */
+  function tagHint(ed, project) {
     var cur = ed.getCursor(), line = ed.getLine(cur.line), end = cur.ch, start = end;
     while (start && /[\w!]/.test(line.charAt(start - 1))) start--;
     var word = line.slice(start, end), before = line.slice(0, start);
     if (!word || !(/^\s*$/.test(before) || /<[^<>]*>\s*$/.test(before))) return null;
     if (/\w/.test(line.charAt(end))) return null;   /* in the middle of a word */
     var CMg = g.CodeMirror, from = CMg.Pos(cur.line, start), to = CMg.Pos(cur.line, end), list;
-    function item(name, snip, label) {
+    function item(name, snip, label, lang) {
       return {
         text: name, snip: snip,
-        render: function (el) { el.innerHTML = '<b class="cl-h-tag">' + esc(label || name) + '</b><span class="cl-h-snip">' + esc(snip.replace('|', '').replace(/\n\s*/g, ' ')) + '</span>'; },
+        render: function (el) { el.innerHTML = (lang ? langIcon(lang).replace('cl-li', 'cl-li cl-h-ic') : '') + '<b class="cl-h-tag">' + esc(label || name) + '</b><span class="cl-h-snip">' + esc(snip.replace('|', '').replace(/\n\s*/g, ' ')) + '</span>'; },
         hint: function (cm, data, c) { putSnippet(cm, data.from, data.to, c.snip); }
       };
     }
     if (word.charAt(0) === '!') list = word === '!' ? [item('!', PAGE_SNIP, '! whole page')] : [];
     else {
       var w = word.toLowerCase();
-      list = TAG_SNIPS.filter(function (t) { return t[0].indexOf(w) === 0; }).map(function (t) { return item(t[0], t[1], t[2]); });
+      list = (project ? project(w) : []).map(function (p) { return item(p.name, p.snip, p.label, p.lang); })
+        .concat(TAG_SNIPS.filter(function (t) { return t[0].indexOf(w) === 0; }).map(function (t) { return item(t[0], t[1], t[2]); }));
     }
     return list.length ? { list: list, from: from, to: to } : null;
   }
@@ -204,7 +209,21 @@
     files = (files || []).map(function (f) { return { name: f.name, lang: f.lang || langOf(f.name), content: String(f.content || '') }; });
     var assetUrl = {};
     (assets || []).forEach(function (a) { if (a && a.name && /^https:\/\//.test(a.url || '')) assetUrl[a.name] = a.url; });
-    var byName = {}; files.forEach(function (f) { byName[f.name] = f; });
+    var byName = {}, byLower = {}, byBase = {};
+    files.forEach(function (f) {
+      byName[f.name] = f; byLower[f.name.toLowerCase()] = f;
+      var b = baseOf(f.name).toLowerCase(); byBase[b] = byBase[b] ? 'many' : f;
+    });
+    /* The file a link points to. Forgiving like a teacher, not a browser: a different
+       capital letter, or the file sitting in another folder (when only one has that name), still works. */
+    function find(p, lang) {
+      if (p == null) return null;
+      var f = byName[p] || byLower[p.toLowerCase()];
+      if (!f) { var b = byBase[baseOf(p).toLowerCase()]; if (b && b !== 'many') f = b; }
+      return f && (!lang || f.lang === lang) ? f : null;
+    }
+    var missing = [];
+    function local(u) { return !!u && !/^([a-z]+:|\/\/|#|data:|blob:)/i.test(String(u).trim()); }
     var html = byName[active] && byName[active].lang === 'html' ? byName[active] : (byName['index.html'] || files.filter(function (f) { return f.lang === 'html'; })[0]);
     if (!html) {
       if (files.length === 1 && files[0].lang === 'md') return mdPage(files[0].content);
@@ -223,13 +242,25 @@
       return String(text).replace(/(['"`])((?:\.{0,2}\/)?[\w\-./ ]+\.\w{2,5})\1/g, function (m, q, u) { var p = resolve(u, here); return p && assetUrl[p] ? q + assetUrl[p] + q : m; });
     }
     var out = html.content;
-    out = out.replace(/<link\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi, function (m, href) {
-      var p = resolve(href, here), f = p && byName[p];
-      return f && f.lang === 'css' ? '<style data-file="' + esc(p) + '">\n' + cssFix(f.content, dirOf(p)) + '\n</style>' : m;
+    out = out.replace(/<link\b[^>]*>/gi, function (m) {
+      var hm = /\bhref\s*=\s*["']([^"']+)["']/i.exec(m); if (!hm) return m;
+      var rel = /\brel\s*=\s*["']([^"']*)["']/i.exec(m), href = hm[1];
+      if (rel && !/stylesheet/i.test(rel[1])) return m;
+      var f = find(resolve(href, here), 'css');
+      if (f) return '<style data-file="' + esc(f.name) + '">\n' + cssFix(f.content, dirOf(f.name)) + '\n</style>';
+      if (local(href)) missing.push(href);
+      return m;
     });
-    out = out.replace(/<script\b([^>]*)\bsrc\s*=\s*["']([^"']+)["']([^>]*)>\s*<\/script>/gi, function (m, a, src, b) {
-      var p = resolve(src, here), f = p && byName[p];
-      return f && f.lang === 'js' ? '<script' + a.replace(/\s+$/, '') + b + '>\n' + jsFix(f.content).replace(/<\/script/gi, '<\\/script') + '\n<\/script>' : m;
+    /* A script linked in <head> would run before the page exists (getElementById finds nothing),
+       so it waits for the page, like defer. It loads from a data: link so that defer works. */
+    var headEnd = out.search(/<\/head>|<body[\s>]/i);
+    out = out.replace(/<script\b([^>]*)\bsrc\s*=\s*["']([^"']+)["']([^>]*)>\s*<\/script>/gi, function (m, a, src, b, at) {
+      var f = find(resolve(src, here), 'js');
+      if (!f) { if (local(src)) missing.push(src); return m; }
+      var attrs = (a + ' ' + b).replace(/\s+/g, ' ').trim(), code = jsFix(f.content);
+      var inHead = headEnd !== -1 && at < headEnd && !/\b(defer|async)\b|type\s*=\s*["']module/i.test(attrs);
+      if (inHead) return '<script' + (attrs ? ' ' + attrs : '') + ' defer data-file="' + esc(f.name) + '" src="data:text/javascript;charset=utf-8,' + encodeURIComponent(code + '\n//# sourceURL=' + f.name) + '"><\/script>';
+      return '<script' + (attrs ? ' ' + attrs : '') + ' data-file="' + esc(f.name) + '">\n' + code.replace(/<\/script/gi, '<\\/script') + '\n//# sourceURL=' + f.name + '\n<\/script>';
     });
     out = out.replace(/\b(src|href|poster|data)\s*=\s*(["'])([^"']+)\2/gi, function (m, attr, q, u) {
       var p = resolve(u, here); return p && assetUrl[p] ? attr + '=' + q + assetUrl[p] + q : m;
@@ -237,8 +268,9 @@
     out = out.replace(/<style([^>]*)>([\s\S]*?)<\/style>/gi, function (m, a, body) { return '<style' + a + '>' + cssFix(body, here) + '</style>'; });
     out = out.replace(/(<script(?![^>]*\bsrc=)[^>]*>)([\s\S]*?)(<\/script>)/gi, function (m, a, body, c) { return a + jsFix(body) + c; });
     out = out.replace(/\bstyle\s*=\s*"([^"]*url\([^"]*)"/gi, function (m, body) { return 'style="' + cssFix(body, here).replace(/"/g, "'") + '"'; });
-    if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, function (m) { return m + HARNESS; });
-    else out = HARNESS + out;
+    var warn = missing.length ? '<script>' + missing.map(function (h) { return 'console.warn(' + JSON.stringify('Could not find "' + h + '" in this project. Check the file name and its folder.').replace(/</g, '\\u003c') + ');'; }).join('') + '<\/script>' : '';
+    if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, function (m) { return m + HARNESS + warn; });
+    else out = HARNESS + warn + out;
     return out;
   }
   /* Runs inside the preview: forwards console output and errors, and turns links
@@ -337,7 +369,7 @@
               '<button type="button" class="cl-btn" data-clcmd="folder" title="New folder"><i class="fas fa-folder-plus"></i></button>' +
               (opts.uploadAsset ? '<label class="cl-btn cl-uplabel" title="Upload pictures, videos or sounds from your computer" style="margin:0"><i class="fas fa-upload"></i><input type="file" class="cl-upin" multiple hidden accept="' + UP_ACCEPT + '"></label>' : '') : '') +
             '</div><div class="cl-tree-list"></div><div class="cl-tree-note"></div></aside>') +
-          '<div class="cl-edit-wrap"><div class="cl-edit-host"><textarea class="cl-fallback" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"' + (canEdit ? '' : ' readonly') + ' aria-label="Code"></textarea></div>' +
+          '<div class="cl-edit-wrap"><div class="cl-suggest" role="status" hidden></div><div class="cl-edit-host"><textarea class="cl-fallback" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"' + (canEdit ? '' : ' readonly') + ' aria-label="Code"></textarea></div>' +
             '<div class="cl-meta"><span class="cl-lang"></span><span class="cl-status" role="status"></span></div></div>' +
           '<div class="cl-preview-wrap"><iframe class="cl-preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer" title="Live preview"></iframe>' +
             (docMode ? '' : '<details class="cl-console"><summary><i class="fas fa-terminal"></i> Console <span class="cl-count"></span></summary><div class="cl-log"></div></details>') + '</div>' +
@@ -380,17 +412,16 @@
           var open = openFolder[x] !== false;
           return '<div class="cl-node cl-dir' + (curFolder === x ? ' on' : '') + '" style="' + pad + '" data-dir="' + esc(x) + '"><i class="fas fa-folder' + (open ? '-open' : '') + '"></i> ' + esc(baseOf(x)) +
             (canEdit && opts.uploadAsset ? '<button type="button" class="cl-up" data-clnode="upto" data-p="' + esc(x) + '" title="Upload ' + esc(pickWord(x)) + ' from your computer into ' + esc(x) + '/" aria-label="Upload into ' + esc(x) + '"><i class="fas fa-upload"></i> Upload</button>' : '') +
-            (canEdit ? '<span class="cl-node-acts"><button type="button" data-clnode="newin" data-p="' + esc(x) + '" title="New file here" aria-label="New file in ' + esc(x) + '"><i class="fas fa-plus"></i></button><button type="button" data-clnode="deldir" data-p="' + esc(x) + '" title="Delete folder" aria-label="Delete folder ' + esc(x) + '"><i class="fas fa-trash"></i></button></span>' : '') + '</div>' +
+            (canEdit ? '<span class="cl-node-acts"><button type="button" data-clnode="newin" data-p="' + esc(x) + '" title="New file here" aria-label="New file in ' + esc(x) + '"><i class="fas fa-plus"></i></button><button type="button" data-clnode="renamedir" data-p="' + esc(x) + '" title="Rename folder" aria-label="Rename folder ' + esc(x) + '"><i class="fas fa-pen"></i></button><button type="button" data-clnode="deldir" data-p="' + esc(x) + '" title="Delete folder" aria-label="Delete folder ' + esc(x) + '"><i class="fas fa-trash"></i></button></span>' : '') + '</div>' +
             (open ? itemsIn(x) : '');
         }).join('') + fs.map(function (f) {
-          var meta = LANGS[f.lang] || LANGS.txt;
-          return '<div class="cl-node cl-file' + (f.name === activeName ? ' on' : '') + '" style="' + pad + '" data-file="' + esc(f.name) + '"><i class="' + meta.icon + '"></i> ' + esc(baseOf(f.name)) +
-            (canEdit ? '<span class="cl-node-acts"><button type="button" data-clnode="rename" data-p="' + esc(f.name) + '" title="Rename or move" aria-label="Rename ' + esc(f.name) + '"><i class="fas fa-i-cursor"></i></button><button type="button" data-clnode="del" data-p="' + esc(f.name) + '" title="Delete" aria-label="Delete ' + esc(f.name) + '"><i class="fas fa-trash"></i></button></span>' : '') + '</div>';
+          return '<div class="cl-node cl-file' + (f.name === activeName ? ' on' : '') + '" style="' + pad + '" data-file="' + esc(f.name) + '"' + (canEdit ? ' title="Double-click to rename"' : '') + '>' + langIcon(f.lang) + ' ' + esc(baseOf(f.name)) +
+            (canEdit ? '<span class="cl-node-acts"><button type="button" data-clnode="rename" data-p="' + esc(f.name) + '" title="Rename or move" aria-label="Rename ' + esc(f.name) + '"><i class="fas fa-pen"></i></button><button type="button" data-clnode="del" data-p="' + esc(f.name) + '" title="Delete" aria-label="Delete ' + esc(f.name) + '"><i class="fas fa-trash"></i></button></span>' : '') + '</div>';
         }).join('') + as.map(function (a) {
           var ic = /^image\//.test(a.type) ? 'fa-image' : /^video\//.test(a.type) ? 'fa-film' : /^audio\//.test(a.type) ? 'fa-music' : 'fa-file';
           return '<div class="cl-node cl-asset" style="' + pad + '" data-asset="' + esc(a.name) + '" title="Click to use it in your code"><i class="fas ' + ic + '"></i> ' + esc(baseOf(a.name)) +
             '<span class="cl-node-acts"><button type="button" data-clnode="useasset" data-p="' + esc(a.name) + '" title="Insert into code" aria-label="Insert ' + esc(a.name) + '"><i class="fas fa-code"></i></button>' +
-            (canEdit ? '<button type="button" data-clnode="delasset" data-p="' + esc(a.name) + '" title="Delete" aria-label="Delete ' + esc(a.name) + '"><i class="fas fa-trash"></i></button>' : '') + '</span></div>';
+            (canEdit ? '<button type="button" data-clnode="renameasset" data-p="' + esc(a.name) + '" title="Rename or move" aria-label="Rename ' + esc(a.name) + '"><i class="fas fa-pen"></i></button><button type="button" data-clnode="delasset" data-p="' + esc(a.name) + '" title="Delete" aria-label="Delete ' + esc(a.name) + '"><i class="fas fa-trash"></i></button>' : '') + '</span></div>';
         }).join('');
       }
       treeEl.innerHTML = '<div class="cl-node cl-dir cl-root' + (curFolder === '' ? ' on' : '') + '" data-dir=""><i class="fas fa-box-archive"></i> ' + esc(opts.title || 'My project') + '</div>' + itemsIn('');
@@ -398,7 +429,7 @@
     }
     function renderCrumb() {
       var f = activeFile();
-      crumbEl.innerHTML = f ? '<i class="' + (LANGS[f.lang] || LANGS.txt).icon + '"></i> ' + esc(f.name) : '';
+      crumbEl.innerHTML = f ? langIcon(f.lang) + ' ' + esc(f.name) : '';
       langEl.textContent = f ? (LANGS[f.lang] || LANGS.txt).label + (cm && canEdit ? (f.lang === 'html' ? ' · Type a tag (d → div), Enter or Tab writes it' : '') + ' · Ctrl+Space for suggestions' + (f.lang === 'html' || f.lang === 'css' ? ' · Emmet: ul>li*3 then Tab' : '') : '') : '';
     }
 
@@ -420,7 +451,8 @@
       var CMg = g.CodeMirror, cur = ed.getCursor(), tok = ed.getTokenAt(cur);
       var inner = CMg.innerMode(ed.getMode(), tok.state).mode.name, r = null;
       try {
-        if (inner === 'xml' && !/tag|attribute|string|comment/.test(tok.type || '') && (r = tagHint(ed))) return r;
+        if ((r = pathHint(ed))) return r;
+        if (inner === 'xml' && !/tag|attribute|string|comment/.test(tok.type || '') && (r = tagHint(ed, projectItems))) return r;
         if (inner === 'xml' && CMg.hint.html) r = CMg.hint.html(ed, o);
         else if (inner === 'css' && CMg.hint.css) r = CMg.hint.css(ed, o);
         else if (inner === 'javascript') r = jsHint(ed);
@@ -491,11 +523,13 @@
     }
     function maybeHint(ed, ch) {
       if (ed.state.completionActive) return;
-      var typed = ch.text.join(''); if (typed.length !== 1) return;
+      var typed = ch.text.join(''); if (typed.length !== 1 && typed !== '""' && typed !== "''" && typed !== '()') return;
+      if (/^[\w.\/\-"'()]+$/.test(typed) && pathHint(ed)) { ed.showHint({ hint: smartHint, container: hintBox(), completeSingle: false, closeCharacters: /["'()\s>]/ }); return; }
+      if (typed.length !== 1) return;
       var lang = (activeFile() || {}).lang;
       var tok = ed.getTokenAt(ed.getCursor()), inner = g.CodeMirror.innerMode(ed.getMode(), tok.state).mode.name;
       var go = false;
-      if (inner === 'xml') go = (/[\w!]/.test(typed) && !/tag|attribute|string|comment/.test(tok.type || '') && !!tagHint(ed)) || typed === '<' || (typed === ' ' && /^<\w/.test(ed.getLine(ed.getCursor().line).slice(0, ed.getCursor().ch).split('>').pop() || '')) || (/\w/.test(typed) && /tag|attribute/.test(tok.type || ''));
+      if (inner === 'xml') go = (/[\w!]/.test(typed) && !/tag|attribute|string|comment/.test(tok.type || '') && !!tagHint(ed, projectItems)) || typed === '<' || (typed === ' ' && /^<\w/.test(ed.getLine(ed.getCursor().line).slice(0, ed.getCursor().ch).split('>').pop() || '')) || (/\w/.test(typed) && /tag|attribute/.test(tok.type || ''));
       else if (inner === 'css') go = /[\w-]/.test(typed) && !/comment/.test(tok.type || '');
       else if (inner === 'javascript' || lang === 'js') go = /[\w.$]/.test(typed) && !/comment|string/.test(tok.type || '');
       if (go) ed.showHint({ hint: smartHint, container: hintBox(), completeSingle: false, closeCharacters: /[\s()\[\]{};:>,"']/ });
@@ -677,16 +711,23 @@
 
     /* ---------- preview + console ---------- */
     var previewTimer = null, logCount = 0;
-    function schedulePreview() { if (previewTimer) clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 600); }
-    function renderPreview() {
+    function schedulePreview() { if (previewTimer) clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 350); }
+    /* The preview follows the code by itself (a moment after each change); Run starts it again from scratch.
+       The same page is not re-loaded (that would only empty the console). */
+    var lastDoc = null, runs = 0;
+    function renderPreview(force) {
       if (dead) return;
-      if (logEl) { logEl.innerHTML = ''; logCount = 0; if (countEl) countEl.textContent = ''; }
+      var html;
       try {
         var page = previewPage && file(previewPage) ? previewPage : activeName;
-        frame.srcdoc = docMode ? mdPage((files[0] || {}).content || '') : buildPreview(files, page, assets);
+        html = docMode ? mdPage((files[0] || {}).content || '') : buildPreview(files, page, assets);
       } catch (e) {
-        frame.srcdoc = '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;color:#b8362a"><p>Preview failed: ' + esc(e.message || e) + '</p></body></html>';
+        html = '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;color:#b8362a"><p>Preview failed: ' + esc(e.message || e) + '</p></body></html>';
       }
+      if (force !== true && html === lastDoc) return;
+      lastDoc = html;
+      if (logEl) { logEl.innerHTML = ''; logCount = 0; if (countEl) countEl.textContent = ''; }
+      frame.srcdoc = force === true ? html + '\n<!-- run ' + (++runs) + ' -->' : html;
     }
     function onMessage(e) {
       if (dead || e.source !== frame.contentWindow || !e.data || !e.data.__cl) return;
@@ -742,6 +783,7 @@
       if (lang === 'html') f.content = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>' + baseOf(n).replace(/\.\w+$/, '') + '</title>\n</head>\n<body>\n  \n</body>\n</html>\n';
       if (lang === 'css' || lang === 'js') f.content = '';
       files.push(f); delete deleted[n]; activeName = n; loadActive(); structural();
+      suggestLinks(f);
       if (cm) cm.focus();
     }
     function addFolder() {
@@ -773,16 +815,91 @@
       upDir = dir; upIn.accept = acceptFor(dir);
       try { upIn.click(); } catch (e) { }
     }
+    /* A new name with no ending keeps the old one (style -> style.css). */
+    function keepExt(n, old) { var m = /\.\w+$/.exec(baseOf(old)); return /\.\w+$/.test(baseOf(n)) || !m ? n : n + m[0]; }
     function renameFile(name) {
       var f = file(name); if (!f) return;
-      askName('Rename or move. Use a folder name to move it, for example pages/' + baseOf(f.name), f.name).then(function (n) { if (n && n !== f.name) moveFile(f, name, n); });
+      askName('New name for ' + baseOf(f.name) + '. Put a folder in front to move it, for example pages/' + baseOf(f.name), f.name).then(function (n) {
+        if (n) n = keepExt(n, f.name);
+        if (n && n !== f.name) moveFile(f, name, n);
+      });
     }
     function moveFile(f, name, n) {
-      if (taken(n, f)) { setStatus('That name is taken.', 'err'); return; }
+      if (taken(n, f)) { setStatus('There is already something called ' + n, 'err'); return; }
+      var lang = langOf(n);
       deleted[f.name] = true; if (docs[f.name]) { docs[n] = docs[f.name]; delete docs[f.name]; }
-      f.name = n; f.lang = langOf(n); delete deleted[n];
+      if (lang !== f.lang && docs[n]) delete docs[n];
+      f.name = n; f.lang = lang; delete deleted[n];
       if (activeName === name) activeName = n;
-      loadActive(); if (cm && docs[n]) cm.setOption('mode', cmMode(f)); structural();
+      if (previewPage === name) previewPage = n;
+      var map = {}; map[name] = n; var fixed = relink(map);
+      loadActive(); structural();
+      setStatus('Renamed to ' + baseOf(n) + (fixed ? '. Links in ' + fixed + ' file' + (fixed === 1 ? '' : 's') + ' updated.' : ''), 'ok');
+    }
+    function renameFolder(dir) {
+      askName('New name for the folder ' + dir, dir).then(function (n) {
+        if (!n || n === dir) return;
+        if (n.indexOf(dir + '/') === 0) { setStatus('A folder cannot go inside itself.', 'err'); return; }
+        if (allFolders().indexOf(n) !== -1 || taken(n)) { setStatus('There is already something called ' + n, 'err'); return; }
+        var pre = dir + '/', map = {};
+        function moved(x) { return x === dir ? n : x.indexOf(pre) === 0 ? n + '/' + x.slice(pre.length) : x; }
+        files.forEach(function (f) {
+          var nn = moved(f.name); if (nn === f.name) return;
+          map[f.name] = nn; deleted[f.name] = true; delete deleted[nn];
+          if (docs[f.name]) { docs[nn] = docs[f.name]; delete docs[f.name]; }
+          if (activeName === f.name) activeName = nn;
+          if (previewPage === f.name) previewPage = nn;
+          f.name = nn;
+        });
+        assets.forEach(function (a) { var nn = moved(a.name); if (nn === a.name) return; map[a.name] = nn; deleted[a.name] = true; delete deleted[nn]; a.name = nn; });
+        folders = folders.map(function (d) { var nd = moved(d); if (nd !== d) { deleted[d] = true; delete deleted[nd]; } return nd; });
+        if (folders.indexOf(n) === -1) folders.push(n);
+        Object.keys(openFolder).forEach(function (k) { var nk = moved(k); if (nk !== k) { openFolder[nk] = openFolder[k]; delete openFolder[k]; } });
+        openFolder[n] = true; curFolder = n;
+        var fixed = relink(map);
+        loadActive(); structural();
+        setStatus('Folder renamed to ' + n + (fixed ? '. Links in ' + fixed + ' file' + (fixed === 1 ? '' : 's') + ' updated.' : ''), 'ok');
+      });
+    }
+    function renameAsset(name) {
+      var a = assets.filter(function (x) { return x.name === name; })[0]; if (!a) return;
+      askName('New name for ' + baseOf(a.name) + '. Put a folder in front to move it, for example images/' + baseOf(a.name), a.name).then(function (n) {
+        if (n) n = keepExt(n, a.name);
+        if (!n || n === a.name) return;
+        if (taken(n, a)) { setStatus('There is already something called ' + n, 'err'); return; }
+        var map = {}; map[a.name] = n; deleted[a.name] = true; delete deleted[n]; a.name = n;
+        var fixed = relink(map);
+        renderTree(); structural(); schedulePreview();
+        setStatus('Renamed to ' + baseOf(n) + (fixed ? '. Links in ' + fixed + ' file' + (fixed === 1 ? '' : 's') + ' updated.' : ''), 'ok');
+      });
+    }
+    /* Change a file's text from code (relinking, the Link it button) and keep its editor in step. */
+    function setText(f, text) {
+      if (f.content === text) return;
+      var d = docs[f.name];
+      if (d) { var r = region(d.getValue(), text); applying = true; d.replaceRange(r.text, d.posFromIndex(r.from), d.posFromIndex(r.to), 'link'); applying = false; }
+      else if (!cm && f.name === activeName) fallback.value = text;
+      f.content = text;
+    }
+    /* After renames ({ oldPath: newPath }) the links in pages, styles and scripts follow
+       the files, so a renamed style.css or a renamed folder never breaks the page. */
+    function relink(map) {
+      var back = {}; Object.keys(map).forEach(function (o) { back[map[o]] = o; });
+      var known = {}; files.concat(assets).forEach(function (x) { known[back[x.name] || x.name] = x.name; });
+      var changed = 0;
+      files.forEach(function (f) {
+        if (!/^(html|css|js)$/.test(f.lang)) return;
+        var oldName = back[f.name] || f.name;
+        var text = f.content.replace(/(["'(])([^"'()\s<>:?#]+\.\w{1,6})(?=["')])/g, function (m, q, ref) {
+          var target = joinPath(dirOf(oldName), ref); if (target == null) return m;
+          var now = known[target]; if (!now) return m;
+          if (now === target && oldName === f.name) return m;
+          var nr = ref.charAt(0) === '/' ? '/' + now : (/^\.\//.test(ref) ? './' : '') + relBetween(f.name, now);
+          return nr === ref ? m : q + nr;
+        });
+        if (text !== f.content) { setText(f, text); changed++; }
+      });
+      return changed;
     }
     function deleteFile(name) {
       if (files.length <= 1) { setStatus('Keep at least one file.', 'err'); return; }
@@ -816,10 +933,95 @@
       if (/^audio\//.test(a.type)) return '<audio src="' + rel + '" controls></audio>';
       return rel;
     }
-    function relFrom(target) {
-      var from = dirOf(activeName).split('/').filter(Boolean), to = target.split('/');
+    function relFrom(target) { return relBetween(activeName, target); }
+    /* The path to write in fromFile to reach target: "pages/a.html" -> "css/s.css" is "../css/s.css". */
+    function relBetween(fromFile, target) {
+      var from = dirOf(fromFile).split('/').filter(Boolean), to = target.split('/');
       while (from.length && to.length > 1 && from[0] === to[0]) { from.shift(); to.shift(); }
       return from.map(function () { return '..'; }).concat(to).join('/');
+    }
+
+    /* ---------- linking files: suggestions and the "Link it" bar ---------- */
+    function linkTag(lang, rel) { return lang === 'css' ? '<link rel="stylesheet" href="' + rel + '">' : '<script src="' + rel + '"></script>'; }
+    function linkedIn(page, rel) { var c = page.content; return c.indexOf('"' + rel + '"') !== -1 || c.indexOf("'" + rel + "'") !== -1 || c.indexOf('"./' + rel + '"') !== -1; }
+    /* Typing a word on its own in a page offers the project's own files, with their real paths. */
+    function projectItems(w) {
+      var page = activeFile(); if (!page || page.lang !== 'html') return [];
+      var out = [];
+      function hit(words, name) { return words.some(function (k) { return k.indexOf(w) === 0; }) || baseOf(name).toLowerCase().indexOf(w) === 0; }
+      files.forEach(function (f) {
+        if (f.name === page.name) return;
+        var rel = relFrom(f.name), done = linkedIn(page, rel);
+        if (f.lang === 'css' && hit(['link', 'css', 'style', 'stylesheet'], f.name)) out.push({ name: 'link', lang: 'css', label: 'link ' + rel + (done ? '  (linked)' : ''), snip: linkTag('css', rel), done: done });
+        else if (f.lang === 'js' && hit(['script', 'js', 'javascript'], f.name)) out.push({ name: 'script', lang: 'js', label: 'script ' + rel + (done ? '  (linked)' : ''), snip: linkTag('js', rel), done: done });
+        else if (f.lang === 'html' && hit(['a', 'page', 'link'], f.name)) out.push({ name: 'a', lang: 'html', label: 'a → ' + rel, snip: '<a href="' + rel + '">|' + baseOf(f.name).replace(/\.\w+$/, '') + '</a>', done: false });
+      });
+      assets.forEach(function (a) {
+        var rel = relFrom(a.name), t = a.type || '';
+        if (/^image\//.test(t) && hit(['img', 'image', 'picture'], a.name)) out.push({ name: 'img', lang: '', label: 'img ' + rel, snip: '<img src="' + rel + '" alt="">' });
+        else if (/^video\//.test(t) && hit(['video'], a.name)) out.push({ name: 'video', lang: '', label: 'video ' + rel, snip: '<video src="' + rel + '" controls width="480"></video>' });
+        else if (/^audio\//.test(t) && hit(['audio', 'sound'], a.name)) out.push({ name: 'audio', lang: '', label: 'audio ' + rel, snip: '<audio src="' + rel + '" controls></audio>' });
+      });
+      return out.sort(function (a, b) { return (a.done ? 1 : 0) - (b.done ? 1 : 0); });
+    }
+    /* Inside href="…" / src="…" (and CSS url(…)): the project's real file paths. */
+    function pathHint(ed) {
+      var f = activeFile(); if (!f || !/^(html|css)$/.test(f.lang)) return null;
+      var cur = ed.getCursor(), before = ed.getLine(cur.line).slice(0, cur.ch), tag = '', typed = null;
+      var m = f.lang === 'html' ? /<(\w+)\b[^<>]*?\b(href|src|poster)\s*=\s*["']([^"'<>]*)$/i.exec(before) : null;
+      if (m) { tag = m[1].toLowerCase(); typed = m[3]; }
+      else { var u = /url\(\s*["']?([^"')\s]*)$/i.exec(before); if (!u) return null; tag = 'url'; typed = u[1]; }
+      if (/^([a-z]+:|\/\/|#)/i.test(typed)) return null;
+      var onlyFiles = { link: ['css'], script: ['js'], a: ['html'] }[tag];
+      var media = { img: /^image\//, url: /^image\//, video: /^video\//, audio: /^(audio|video)\//, source: /^(audio|video)\// }[tag];
+      var t = typed.toLowerCase(), list = [];
+      function ok(name, rel) { return !t || rel.toLowerCase().indexOf(t) === 0 || baseOf(name).toLowerCase().indexOf(t) === 0; }
+      if (!media) files.forEach(function (x) {
+        if (x.name === f.name || (onlyFiles && onlyFiles.indexOf(x.lang) === -1)) return;
+        var rel = relFrom(x.name); if (ok(x.name, rel)) list.push({ text: rel, render: function (el) { el.innerHTML = langIcon(x.lang).replace('cl-li', 'cl-li cl-h-ic') + esc(rel); } });
+      });
+      if (!onlyFiles) assets.forEach(function (a) {
+        if (media && !media.test(a.type || '')) return;
+        var rel = relFrom(a.name); if (ok(a.name, rel)) list.push({ text: rel, render: function (el) { el.innerHTML = '<i class="fas fa-image cl-h-ic" style="color:#7048E8"></i>' + esc(rel); } });
+      });
+      if (!list.length) return null;
+      var CMg = g.CodeMirror;
+      return { list: list, from: CMg.Pos(cur.line, cur.ch - typed.length), to: cur };
+    }
+    /* After a new style / script / page is made: offer to link it in one press. */
+    function suggestLinks(made) {
+      var bar = q('.cl-suggest'); if (!bar || !canEdit || docMode) return;
+      var jobs = [];
+      if (made.lang === 'css' || made.lang === 'js') {
+        var page = file('index.html') || files.filter(function (x) { return x.lang === 'html'; })[0];
+        if (page && !linkedIn(page, relBetween(page.name, made.name))) jobs.push({ page: page, f: made });
+      } else if (made.lang === 'html') {
+        files.forEach(function (x) { if ((x.lang === 'css' || x.lang === 'js') && !linkedIn(made, relBetween(made.name, x.name))) jobs.push({ page: made, f: x }); });
+      }
+      if (!jobs.length) { bar.hidden = true; return; }
+      var names = jobs.map(function (j) { return baseOf(j.f.name); });
+      bar.innerHTML = '<span>' + langIcon(jobs[0].f.lang) + ' Link <b>' + esc(names.join(', ')) + '</b> to <b>' + esc(baseOf(jobs[0].page.name)) + '</b> so it works on the page?</span>' +
+        '<button type="button" class="cl-btn cl-save" data-sg="yes"><i class="fas fa-link"></i> Link it</button><button type="button" class="cl-btn" data-sg="no">Not now</button>';
+      bar.hidden = false;
+      bar.onclick = function (e) {
+        var b = e.target.closest('[data-sg]'); if (!b) return;
+        bar.hidden = true;
+        if (b.dataset.sg !== 'yes') return;
+        jobs.forEach(function (j) { addLink(j.page, j.f); });
+        markDirty();
+        setStatus('Linked ' + names.join(', ') + ' in ' + baseOf(jobs[0].page.name), 'ok');
+      };
+    }
+    /* Styles go just before </head>, scripts just before </body>. */
+    function addLink(page, f) {
+      var rel = relBetween(page.name, f.name), tag = linkTag(f.lang, rel), c = page.content, at;
+      if (linkedIn(page, rel)) return;
+      if (f.lang === 'css') at = c.search(/<\/head>/i); else at = c.search(/<\/body>/i);
+      if (at === -1) at = f.lang === 'css' ? (c.search(/<body[\s>]/i) === -1 ? 0 : c.search(/<body[\s>]/i)) : c.length;
+      var lineStart = at ? c.lastIndexOf('\n', at - 1) + 1 : 0, lead = c.slice(lineStart, at);
+      /* </head> on its own line: the tag goes on a new line above it, indented one step more. */
+      if (!lead.trim()) setText(page, c.slice(0, lineStart) + lead + '  ' + tag + '\n' + c.slice(lineStart));
+      else setText(page, c.slice(0, at) + '\n  ' + tag + '\n' + c.slice(at));
     }
     function useAsset(name) {
       var a = assets.filter(function (x) { return x.name === name; })[0]; if (!a) return;
@@ -865,7 +1067,7 @@
       if (b.dataset.clcmd) {
         var cmd = b.dataset.clcmd;
         if (cmd === 'save') flushSave();
-        else if (cmd === 'run') { previewPage = null; renderPreview(); setStatus('Running', 'ok'); }
+        else if (cmd === 'run') { previewPage = null; renderPreview(true); setStatus('Running', 'ok'); }
         else if (cmd === 'layout') bodyEl.classList.toggle('cl-stacked');
         else if (cmd === 'full') toggleFull();
         else if (cmd === 'tree') hostEl.querySelector('.cl-shell').classList.toggle('cl-tree-open');
@@ -880,6 +1082,8 @@
         if (a === 'useasset') useAsset(p);
         else if (!canEdit) return;
         else if (a === 'rename') renameFile(p);
+        else if (a === 'renamedir') renameFolder(p);
+        else if (a === 'renameasset') renameAsset(p);
         else if (a === 'del') deleteFile(p);
         else if (a === 'newin') addFile(p);
         else if (a === 'deldir') deleteFolder(p);
@@ -898,6 +1102,16 @@
         if (d && curFolder === d) openFolder[d] = openFolder[d] === false; else openFolder[d] = true;
         curFolder = d; renderTree();
       }
+    });
+
+    /* Double-click a file, folder or upload in the tree to rename it. */
+    hostEl.addEventListener('dblclick', function (e) {
+      if (!canEdit) return;
+      var n = e.target.closest('[data-file],[data-dir],[data-asset]'); if (!n || !hostEl.contains(n) || e.target.closest('.cl-node-acts,.cl-up')) return;
+      e.preventDefault();
+      if (n.dataset.file != null) renameFile(n.dataset.file);
+      else if (n.dataset.asset != null) renameAsset(n.dataset.asset);
+      else if (n.dataset.dir) renameFolder(n.dataset.dir);
     });
 
     /* Full screen: the whole IDE fills the screen. Uses the browser's full screen where it
@@ -1002,9 +1216,11 @@
       '.cl-tree-note{padding:.4rem .6rem;font-size:.68rem;color:var(--muted,#5A6E6A);font-weight:600;line-height:1.35}',
       '.cl-node{position:relative;display:flex;align-items:center;gap:.4rem;padding:.3rem .5rem;font-size:.78rem;font-weight:700;color:var(--ink,#263331);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-node i{width:14px;text-align:center;color:var(--brand-deep,#245F5A);opacity:.8;flex:none}.cl-dir i{color:#C08A00}.cl-asset i{color:#7048E8}',
+      '.cl-node i.cl-li,.cl-crumb i.cl-li{opacity:1;font-size:.95em}.CodeMirror-hint .cl-h-ic{width:1.1em;text-align:center;margin-right:.35em}',
       '.cl-node:hover{background:var(--sage,#E5F2EF)}.cl-node.on{background:#DDEFEA;color:var(--brand-deep,#245F5A)}',
       '.cl-node-acts{margin-left:auto;display:none;gap:.1rem}.cl-node:hover .cl-node-acts,.cl-node.on .cl-node-acts{display:inline-flex}',
       '.cl-node-acts button{border:0;background:transparent;padding:.1rem .25rem;cursor:pointer;color:var(--muted,#5A6E6A);font-size:.7rem}.cl-node-acts button:hover{color:var(--brand-deep,#245F5A)}',
+      '.cl-suggest{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.45rem .6rem;background:#FFF7E6;border-bottom:1px solid rgba(192,138,0,.3);font-size:.76rem;font-weight:700;color:#5c4300}.cl-suggest[hidden]{display:none}.cl-suggest>span{flex:1;min-width:180px}',
       '.cl-edit-wrap{display:flex;flex-direction:column;border-right:1px solid var(--line,rgba(38,51,49,.12));min-width:0;min-height:0}',
       '.cl-edit-host{flex:1;min-height:0;position:relative}',
       '.cl-edit-host .CodeMirror{height:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.55}',

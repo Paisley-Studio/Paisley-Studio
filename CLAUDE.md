@@ -87,7 +87,7 @@ Deploy functions and indexes first, wait until the indexes are Enabled, then run
 
 ## Notes
 
-- **Icons, never emoji**, anywhere in the system (pages, bells, emails, alerts). On pages use Font Awesome 6 (`<i class="fas fa-...">`); in emails use `fa(name, colour)` from `email-templates.js`, which points at the PNGs in `img/email-icons/` (add a new icon or colour there by rendering it from Font Awesome at 40x40 on a transparent background).
+- **Icons, never emoji**, anywhere in the system (pages, bells, emails, alerts). The one exception is what people type to each other: message boxes have an emoji picker (`js/ui/emoji-picker.js`, `PaisleyEmoji`), whose own button is still a Font Awesome icon. On pages use Font Awesome 6 (`<i class="fas fa-...">`); in emails use `fa(name, colour)` from `email-templates.js`, which points at the PNGs in `img/email-icons/` (add a new icon or colour there by rendering it from Font Awesome at 40x40 on a transparent background).
 - Line endings are mixed (CRLF and LF) and `core.autocrlf=true`. Preserve a file's existing endings when editing. `git stash` rewrites modified files as CRLF, which breaks `verify-project.js` (it matches `\n`). Baseline before the TECH work: 8 `verify-project.js` failures, 5 of 15 functions tests and 7 of 12 audience rules tests already failing.
 - `tuition/index.html` is the CBC tuition login (`/tuition/login`). Commit `eafbc1b` once overwrote it with a copy of the TECH studio; it was restored from `eafbc1b^`.
 - `CHANGELOG.md`, `REMOTE_UPGRADE.md` and `TECH_UPGRADE.md` record design decisions and known limitations. Read them before changing publishing, grading, or parent access.
