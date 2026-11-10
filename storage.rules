@@ -326,6 +326,38 @@ service firebase.storage {
       allow delete: if isSignedIn() && isAdmin();
     }
 
+    // Tech Studio chats: pictures, screenshots and files sent in builder <-> coach
+    // (techChats) and family <-> coach (techGuardianChats) conversations. Each sender
+    // uploads under their own uid; one Firestore doc (the chat) plus admins/ at most.
+    // Web pages, scripts and SVG are refused; everything is opened through the saved link.
+    function techChatFileOk() {
+      return request.resource.size < 25 * 1024 * 1024 &&
+        !request.resource.contentType.matches('(text/html|application/xhtml[+]xml|image/svg.*|text/xml|application/xml)') &&
+        !request.resource.contentType.matches('.*javascript.*');
+    }
+    match /techChats/{chatId}/{uid}/{fileName} {
+      allow read: if isSignedIn() && (
+        firestore.get(/databases/(default)/documents/techChats/$(chatId)).data.studentId == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/techChats/$(chatId)).data.get('coachId', '') == request.auth.uid ||
+        isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == uid && techChatFileOk() && (
+        firestore.get(/databases/(default)/documents/techChats/$(chatId)).data.studentId == uid ||
+        firestore.get(/databases/(default)/documents/techChats/$(chatId)).data.get('coachId', '') == uid ||
+        isAdmin());
+      allow delete: if isSignedIn() && isAdmin();
+    }
+    match /techGuardianChats/{chatId}/{uid}/{fileName} {
+      allow read: if isSignedIn() && (
+        firestore.get(/databases/(default)/documents/techGuardianChats/$(chatId)).data.parentUid == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == request.auth.uid ||
+        isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == uid && techChatFileOk() && (
+        firestore.get(/databases/(default)/documents/techGuardianChats/$(chatId)).data.parentUid == uid ||
+        firestore.get(/databases/(default)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == uid ||
+        isAdmin());
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
     // Parent ads and newsletters: admins upload; pictures and video only.
     // Signed-in parents and emails use the token download URL saved on the ad.
     match /parentMedia/{fileName} {

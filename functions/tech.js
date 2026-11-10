@@ -1471,6 +1471,33 @@ async function chatEmailDue(chatRef, chat, field) {
   await chatRef.set({ [field]: FV().serverTimestamp() }, { merge: true });
   return true;
 }
+/* Pictures and files sent with a chat message (only https download links are kept). */
+function chatAttachments(m) {
+  return (Array.isArray(m && m.attachments) ? m.attachments : [])
+    .filter((a) => a && /^https:\/\//.test(a.url || "")).slice(0, 10)
+    .map((a) => ({ name: String(a.name || "File").slice(0, 160), url: String(a.url), type: String(a.type || "") }));
+}
+function chatPreview(m) {
+  const text = String((m && m.text) || "").trim();
+  if (text) return text.slice(0, 200);
+  const atts = chatAttachments(m), pics = atts.filter((a) => /^image\//.test(a.type)).length, files = atts.length - pics;
+  const parts = [];
+  if (pics) parts.push(pics === 1 ? "a picture" : `${pics} pictures`);
+  if (files) parts.push(files === 1 ? "a file" : `${files} files`);
+  return parts.length ? `Sent ${parts.join(" and ")}` : "";
+}
+/* Email body for one chat message: the words, then each picture / file as a link. */
+function chatMessageBody(m) {
+  const text = String((m && m.text) || "").trim();
+  const atts = chatAttachments(m);
+  let html = text ? `<p style="margin:0;white-space:pre-wrap;">${esc(text.slice(0, 1500))}</p>` : "";
+  if (atts.length) {
+    html += `<p style="margin:${text ? "12px" : "0"} 0 0;">` + atts.map((a) => /^image\//.test(a.type)
+      ? `<a href="${esc(a.url)}" style="display:inline-block;margin:0 6px 6px 0;"><img src="${esc(a.url)}" alt="${esc(a.name)}" width="180" style="display:block;max-width:180px;border:1px solid #e3ebe9;border-radius:8px;"></a>`
+      : `<a href="${esc(a.url)}" style="display:inline-block;margin:0 6px 6px 0;color:#245F5A;font-weight:700;">${esc(a.name)}</a>`).join("") + "</p>";
+  }
+  return html || `<p style="margin:0;">(empty message)</p>`;
+}
 exports.onTechMessageCreated = onDocumentCreated(
   { document: "techChats/{chatId}/messages/{mid}", region: LOCATION, secrets: SMTP_SECRETS },
   async (event) => {
@@ -1479,13 +1506,13 @@ exports.onTechMessageCreated = onDocumentCreated(
     const c = (await chatRef.get()).data() || {};
     const coachId = c.coachId || c.tutorId, coachName = c.coachName || c.tutorName;
     const extra = { studentId: c.studentId, chatId: event.params.chatId, id: `chat_${event.params.mid}` };
-    const preview = String(m.text || "").slice(0, 200);
+    const preview = chatPreview(m);
     if (m.senderRole === "student") {
       const fresh = await techNotify(coachId, "coach", "tech_message", `Message from ${c.studentName || "a builder"}`, preview, extra);
       if (fresh && await chatEmailDue(chatRef, c, "emailedCoachAt")) {
         await email(await coachEmail(coachId), `Message from ${c.studentName || "a builder"}`, {
           preheader: preview, heading: "New message from a builder", intro: `${esc(c.studentName || "A builder")} wrote:`,
-          body: `<p style="margin:0;white-space:pre-wrap;">${esc(preview)}</p>`,
+          body: chatMessageBody(m),
           cta: { label: "Reply in the coach portal", url: APP + LINKS.coach + "#messages" }
         });
       }
@@ -1494,12 +1521,16 @@ exports.onTechMessageCreated = onDocumentCreated(
     const from = m.senderRole === "admin" ? "the Studio Desk" : (coachName || "your coach");
     const fresh = await techNotify(c.studentId, "student", "tech_message", `Message from ${from}`, preview, extra);
     if (m.senderRole === "admin") await techNotify(coachId, "coach", "tech_message", "Studio Desk joined a builder chat", preview, extra);
-    if (fresh && await chatEmailDue(chatRef, c, "emailedStudentAt")) {
+    /* "Also email this reply" (coach / Studio Desk): sent now, outside the once-per-burst limit.
+       `fresh` still guards it, so a retried trigger never emails twice. */
+    const asked = m.emailIt === true && (m.senderRole === "coach" || m.senderRole === "admin");
+    if (fresh && (asked || await chatEmailDue(chatRef, c, "emailedStudentAt"))) {
+      if (asked) await chatRef.set({ emailedStudentAt: FV().serverTimestamp() }, { merge: true });
       const st = await techStudent(c.studentId);
       if (st && st.email) {
         await email(st.email, `New message from ${from}`, {
           preheader: preview, heading: "You have a new message", intro: `Hi ${esc(first(st.name))}, ${esc(from)} wrote:`,
-          body: `<p style="margin:0;white-space:pre-wrap;">${esc(preview)}</p>`,
+          body: chatMessageBody(m),
           cta: { label: "Reply in Tech Studio", url: APP + LINKS.student + "#coach" }
         });
       }
@@ -1516,7 +1547,7 @@ exports.onTechGuardianMessageCreated = onDocumentCreated(
     const st = await techStudent(c.studentId);
     const coachId = (st && st.coachId) || c.coachId;
     const extra = { studentId: c.studentId, chatId: event.params.chatId };
-    const preview = String(m.text || "").slice(0, 200);
+    const preview = chatPreview(m);
     const child = first(c.studentName, "their child");
 
     if (m.senderRole === "guardian") {
@@ -1524,7 +1555,7 @@ exports.onTechGuardianMessageCreated = onDocumentCreated(
         await techNotify(coachId, "coach", "tech_guardian_message", `${c.parentName || "A guardian"} (${child}'s family)`, preview, extra);
         await email(await coachEmail(coachId), `Message from ${c.parentName || "a guardian"} about ${child}`, {
           preheader: preview, heading: "Message from a guardian", intro: `${esc(c.parentName || "A guardian")} wrote about ${esc(child)}:`,
-          body: `<p style="margin:0;white-space:pre-wrap;">${esc(preview)}</p>`,
+          body: chatMessageBody(m),
           cta: { label: "Reply in the coach dashboard", url: APP + LINKS.coach }
         });
       } else {
@@ -1538,7 +1569,7 @@ exports.onTechGuardianMessageCreated = onDocumentCreated(
     if (p.exists) {
       await email(p.data().email, `${from} replied about ${child}`, {
         preheader: preview, heading: "New message", intro: `${esc(from)} wrote about ${esc(child)}:`,
-        body: `<p style="margin:0;white-space:pre-wrap;">${esc(preview)}</p>`,
+        body: chatMessageBody(m),
         cta: { label: "Open the Tech Studio guardian portal", url: APP + LINKS.guardian }
       });
     }
@@ -1571,6 +1602,68 @@ async function requireAdmin(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "You must be signed in.");
   if (!(await admin.firestore().collection("admins").doc(request.auth.uid).get()).exists) throw new HttpsError("permission-denied", "Admins only.");
 }
+
+/* Studio Desk nudge: email one side of a chat (and ring their bell) that the conversation
+   is waiting, with the last few messages. Admins only; coaches and builders cannot nudge.
+   data: { kind: 'builder' | 'guardian', chatId, to: 'student' | 'guardian' | 'coach', note } */
+exports.nudgeTechChat = onCall(
+  { cors: true, region: LOCATION, secrets: SMTP_SECRETS },
+  async (request) => {
+    await requireAdmin(request);
+    const d = request.data || {};
+    const guardian = d.kind === "guardian", to = String(d.to || "");
+    const chatId = String(d.chatId || "");
+    if (!/^[\w-]+_[\w-]+$/.test(chatId)) throw new HttpsError("invalid-argument", "Which conversation?");
+    if (!(guardian ? ["guardian", "coach"] : ["student", "coach"]).includes(to)) throw new HttpsError("invalid-argument", "Who should be nudged?");
+    const db = admin.firestore();
+    const chatRef = db.collection(guardian ? "techGuardianChats" : "techChats").doc(chatId);
+    const snap = await chatRef.get();
+    if (!snap.exists) throw new HttpsError("not-found", "That conversation no longer exists.");
+    const c = snap.data();
+    const coachId = c.coachId || c.tutorId || "";
+    const note = String(d.note || "").trim().slice(0, 600);
+
+    let recipientId = "", recipientRole = to, mail = "", name = "", link = "";
+    if (to === "coach") {
+      if (!coachId) throw new HttpsError("failed-precondition", "This conversation has no coach yet.");
+      recipientId = coachId; mail = await coachEmail(coachId);
+      const cd = await db.collection("techCoaches").doc(coachId).get();
+      name = (cd.exists && cd.data().name) || c.coachName || "";
+      link = APP + LINKS.coach + "#messages";
+    } else if (to === "student") {
+      const st = await techStudent(c.studentId);
+      recipientId = c.studentId; mail = (st && st.email) || ""; name = (st && st.name) || c.studentName || "";
+      link = APP + LINKS.student + "#coach";
+    } else {
+      const p = await db.collection("parentAccounts").doc(c.parentUid).get();
+      recipientId = c.parentUid; mail = p.exists ? (p.data().email || "") : ""; name = (p.exists && p.data().name) || c.parentName || "";
+      link = APP + LINKS.guardian;
+    }
+
+    const recent = (await chatRef.collection("messages").orderBy("createdAt", "desc").limit(5).get()).docs.map((x) => x.data()).reverse();
+    const who = (m) => (m.senderRole === "admin" ? "Studio Desk" : (m.senderName || ({ student: c.studentName, coach: c.coachName, guardian: c.parentName })[m.senderRole] || "Someone"));
+    const about = guardian ? `${first(c.studentName, "your child")}'s Tech Studio` : (to === "coach" ? first(c.studentName, "a builder") : "your coach");
+    const title = to === "coach"
+      ? (guardian ? `${c.parentName || "A family"} is waiting for your reply` : `${c.studentName || "A builder"} is waiting for your reply`)
+      : `You have messages waiting about ${about}`;
+    const rows = recent.length
+      ? recent.map((m) => `<tr><td style="padding:8px 0;border-top:1px solid #e3ebe9;"><strong style="font-size:13px;">${esc(who(m))}</strong><div style="font-size:14px;white-space:pre-wrap;margin-top:2px;">${esc(chatPreview(m))}</div></td></tr>`).join("")
+      : `<tr><td style="padding:8px 0;">No messages yet.</td></tr>`;
+
+    await techNotify(recipientId, recipientRole, guardian ? "tech_guardian_message" : "tech_message", title,
+      note || "The Studio Desk asked you to look at this conversation.", { studentId: c.studentId, chatId, id: `nudge_${chatId}_${Date.now()}` });
+    const emailed = await email(mail, title, {
+      preheader: note || "Please open the conversation and reply.",
+      heading: "A conversation is waiting for you",
+      intro: `Hi ${esc(first(name))}, the Studio Desk would like you to read and reply to this conversation.`,
+      body: (note ? `<p style="margin:0 0 12px;white-space:pre-wrap;"><strong>Note from the Studio Desk:</strong> ${esc(note)}</p>` : "") +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`,
+      cta: { label: "Open the conversation", url: link }
+    });
+    await chatRef.set({ [`nudged_${to}At`]: FV().serverTimestamp() }, { merge: true });
+    return { emailed: !!emailed, to };
+  }
+);
 
 exports.createTechCoach = onCall(
   { cors: true, region: LOCATION, secrets: SMTP_SECRETS },

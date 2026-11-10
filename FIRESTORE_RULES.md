@@ -182,6 +182,7 @@ TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH
 | `techCoachSlugs/{slug}` (coach link `/tech/coach/{slug}`) | admin | anyone | admin |
 | `techGuardianLinks/{parentUid}_{studentUid}` | admin / Cloud Functions | the guardian, admin | admin |
 | `techGuardianChats/{parentUid}_{studentUid}` (+ `messages`) | the linked guardian (coachId must be the builder's current coach), or that coach | guardian, the chat's coach, admin | participants: last-message fields only. Message `senderRole` must match the sender |
+| `techChats/{id}/presence/{uid}`, `techGuardianChats/{id}/presence/{uid}` | that person only (their own uid, role matching their place in the chat; fields `uid, role, name, online, seenAt, typingAt`) | the chat's participants, admin | own doc only. Drives "typing…" and online / last seen in `TechUI.mountChat` |
 | `techCourses`, `techTopics` | admin, active coach (own `createdBy`) | admin, active coach, active builder, parent account | admin, or the coach who made it; any active coach may change only `order` on a class or topic |
 | `techLessons` | admin, active coach (own `createdBy`) | admin, active coach; active builder or parent account when `status == 'published'` | admin, or the coach who made it; any active coach may change only `order` |
 | `techLessons/{id}/private/key` (the answers) | admin, the lesson's coach | admin, active coach. Never builders or parents | admin, the lesson's coach |

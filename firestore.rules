@@ -1536,6 +1536,20 @@ service cloud.firestore {
             request.resource.data.senderRole == 'coach'));
         allow update, delete: if isAdmin();
       }
+
+      // Typing and last seen: each person in the chat writes only their own doc.
+      match /presence/{uid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techChats/$(chatId)).data.studentId == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techChats/$(chatId)).data.get('coachId', '') == request.auth.uid)));
+        allow create, update: if isSignedIn() && uid == request.auth.uid && request.resource.data.uid == uid &&
+          request.resource.data.keys().hasOnly(['uid', 'role', 'name', 'online', 'seenAt', 'typingAt']) && (
+          (isAdmin() && request.resource.data.role == 'admin') ||
+          (get(/databases/$(database)/documents/techChats/$(chatId)).data.studentId == uid && request.resource.data.role == 'student') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techChats/$(chatId)).data.get('coachId', '') == uid &&
+            request.resource.data.role == 'coach'));
+        allow delete: if isAdmin();
+      }
     }
 
     // Guardian <-> the builder's current coach. chatId = parentUid + '_' + studentId.
@@ -1569,6 +1583,20 @@ service cloud.firestore {
           (isTechCoach() && get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == request.auth.uid &&
             request.resource.data.senderRole == 'coach'));
         allow update, delete: if isAdmin();
+      }
+
+      // Typing and last seen: each person in the chat writes only their own doc.
+      match /presence/{uid} {
+        allow read: if isAdmin() || (isSignedIn() && (
+          get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.parentUid == request.auth.uid ||
+          (isTechCoach() && get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == request.auth.uid)));
+        allow create, update: if isSignedIn() && uid == request.auth.uid && request.resource.data.uid == uid &&
+          request.resource.data.keys().hasOnly(['uid', 'role', 'name', 'online', 'seenAt', 'typingAt']) && (
+          (isAdmin() && request.resource.data.role == 'admin') ||
+          (get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.parentUid == uid && request.resource.data.role == 'guardian') ||
+          (isTechCoach() && get(/databases/$(database)/documents/techGuardianChats/$(chatId)).data.get('coachId', '') == uid &&
+            request.resource.data.role == 'coach'));
+        allow delete: if isAdmin();
       }
     }
 

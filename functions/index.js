@@ -151,6 +151,7 @@ exports.onTechFamilyDeskMessage       = tech.onTechFamilyDeskMessage;
 exports.createTechCoach               = tech.createTechCoach;
 exports.onTechCoachApplied            = tech.onTechCoachApplied;
 exports.techLinkGuardians             = tech.techLinkGuardians;
+exports.nudgeTechChat                 = tech.nudgeTechChat;
 exports.migrateTechArchitecture       = tech.migrateTechArchitecture;
 exports.techShare                     = tech.techShare;
 

@@ -211,7 +211,7 @@
       '.ink-fab.open i{transform:rotate(45deg)}',
       '.ink-fab:focus-visible{outline:3px solid #F5C842;outline-offset:3px}',
       '.ink-pill{position:absolute;right:22px;bottom:88px;z-index:6;background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.12));border-radius:22px;box-shadow:0 18px 48px rgba(38,51,49,.24);padding:.75rem .85rem;display:flex;flex-wrap:wrap;gap:.7rem 1rem;max-width:min(780px,calc(100% - 44px));transform-origin:bottom right;animation:inkPop .18s ease-out}',
-      '.ink-pill[hidden]{display:none}',
+      '.ink-pill[hidden],.ink-cropbar[hidden],.ink-fab[hidden]{display:none}',
       '.ink-grp{display:flex;flex-direction:column;gap:.35rem;min-width:0}',
       '.ink-grp>small{font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#5A6E6A)}',
       '.ink-grp .row{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}',
@@ -233,7 +233,7 @@
       '.ink-banner .prevfb{flex:1;min-width:220px;white-space:pre-wrap}',
       '.ink-text{white-space:pre-wrap;background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;padding:1rem;max-width:760px;width:100%;line-height:1.6;font-size:.92rem}',
       '@media (max-width:700px){.ink-btn .lbl{display:none}.ink-top{padding:.5rem}.ink-stage{padding:.4rem .4rem 5rem}' +
-        '.ink-pill{left:10px;right:10px;bottom:84px;max-width:none;max-height:58vh;overflow:auto;border-radius:18px}.ink-fab{right:14px;bottom:14px}.ink-angle input{width:120px}}'
+        '.ink-pill{left:10px;right:10px;bottom:84px;max-width:none;max-height:58vh;overflow:auto;border-radius:18px}.ink-fab{right:14px;bottom:14px}.ink-cropbar{bottom:84px}.ink-angle input{width:120px}}'
     ].join('\n');
     document.head.appendChild(st);
   }
@@ -864,10 +864,11 @@
       var c = effView(pg.view).crop;
       S.cropping = { rect: fullCrop(c) ? { x: 0.06, y: 0.06, w: 0.88, h: 0.88 } : clone(c) };
       setPill(false);
-      cropBar.hidden = false; fabEl.hidden = true;
+      /* the + stays as the close button while cropping: pressing it cancels the crop */
+      cropBar.hidden = false; fabEl.classList.add('open'); fabEl.setAttribute('aria-expanded', 'true'); fabEl.title = 'Close the tools';
       renderPage();
     }
-    function closeCrop() { S.cropping = null; cropBar.hidden = true; fabEl.hidden = false; }
+    function closeCrop() { S.cropping = null; cropBar.hidden = true; setPill(S.pillOpen); }
     function applyCrop(whole) {
       if (!S.cropping) return;
       var r = S.cropping.rect, pg = pageInk(S.pageIdx);
@@ -1259,7 +1260,7 @@
       else if (a === 'clear') doClear();
       else if (a === 'prev') goto(S.pageIdx - 1);
       else if (a === 'next') goto(S.pageIdx + 1);
-      else if (a === 'pill') setPill(!S.pillOpen);
+      else if (a === 'pill') { if (S.cropping) { closeCrop(); renderPage(); setPill(false); } else setPill(!S.pillOpen); }
       else if (a === 'rot') rotateBy(Number(t.dataset.d) || 0);
       else if (a === 'rotreset') setAngle(0);
       else if (a === 'crop') startCrop();

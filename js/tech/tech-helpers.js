@@ -186,6 +186,28 @@
       '.tk-msg.me{align-self:flex-end;background:var(--brand,#55BFB3);color:#04231f;border-radius:14px;border-bottom-right-radius:4px}',
       '.tk-msg .who{display:block;font-size:.66rem;font-weight:800;opacity:.7;margin-bottom:.15rem}.tk-msg .at{display:block;font-size:.62rem;opacity:.6;margin-top:.2rem;text-align:right}',
       '.tk-chat-form{display:flex;gap:.5rem;padding-top:.7rem;border-top:1px solid var(--line,rgba(38,51,49,.12))}',
+      '.tk-chat-head{display:flex;gap:.6rem;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;padding-bottom:.7rem;border-bottom:1px solid var(--line,rgba(38,51,49,.12))}',
+      '.tk-chat-status{font-size:.72rem;font-weight:700;color:var(--muted,#5A6E6A);margin-top:.15rem;display:flex;gap:.35rem;align-items:center;flex-wrap:wrap}',
+      '.tk-chat-status .dot{width:8px;height:8px;border-radius:50%;background:#b9c4c2;display:inline-block}.tk-chat-status .dot.on{background:#2fa36b}',
+      '.tk-chat-status .typing{color:var(--brand-deep,#245F5A)}',
+      '.tk-chat-nudge{display:flex;gap:.35rem;flex-wrap:wrap}',
+      '.tk-typing{align-self:flex-start;background:var(--sage,#E5F2EF);border-radius:14px;border-bottom-left-radius:4px;padding:.45rem .75rem;font-size:.75rem;font-weight:700;color:var(--brand-deep,#245F5A);display:flex;gap:.4rem;align-items:center}',
+      '.tk-typing i{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.4;animation:tkDot 1.2s infinite}.tk-typing i:nth-child(2){animation-delay:.2s}.tk-typing i:nth-child(3){animation-delay:.4s}',
+      '@keyframes tkDot{0%,80%,100%{opacity:.25;transform:none}40%{opacity:1;transform:translateY(-2px)}}',
+      '.tk-msg .att{display:flex;flex-wrap:wrap;gap:.35rem;margin:.3rem 0 .1rem}',
+      '.tk-msg .att a.pic{display:block;border-radius:10px;overflow:hidden;border:1px solid rgba(0,0,0,.08);background:#fff}',
+      '.tk-msg .att a.pic img{display:block;max-width:240px;max-height:220px;object-fit:cover}',
+      '.tk-msg .att a.file{display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .6rem;border-radius:10px;background:rgba(255,255,255,.65);color:inherit;font-size:.78rem;font-weight:700;text-decoration:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.tk-msg .mailed{font-size:.62rem;opacity:.7;display:block;margin-top:.15rem}',
+      '.tk-chat-tray{display:flex;gap:.45rem;flex-wrap:wrap;padding-top:.55rem}.tk-chat-tray:empty{display:none}',
+      '.tk-chat-tray .it{position:relative;display:flex;align-items:center;gap:.35rem;border:1px solid var(--line,rgba(38,51,49,.12));border-radius:10px;padding:.25rem .5rem .25rem .25rem;font-size:.74rem;font-weight:700;background:var(--paper,#F1F9F7);max-width:200px}',
+      '.tk-chat-tray .it img{width:42px;height:42px;object-fit:cover;border-radius:7px}.tk-chat-tray .it span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.tk-chat-tray .it button{border:0;background:none;cursor:pointer;color:#b8362a;padding:0 .15rem}',
+      '.tk-chat-opts{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding-top:.45rem;font-size:.74rem;font-weight:700;color:var(--muted,#5A6E6A)}',
+      '.tk-chat-opts label{display:inline-flex;gap:.35rem;align-items:center;cursor:pointer}',
+      '.tk-chat-form .tk-btn.ghost{background:var(--paper,#F1F9F7);color:var(--brand-deep,#245F5A);border:1.5px solid var(--line,rgba(38,51,49,.12))}',
+      '.tk-typing[hidden]{display:none}',
+      '.tk-chat.drop .tk-chat-list{outline:2px dashed var(--brand,#55BFB3);outline-offset:-4px;border-radius:12px}',
       '.tk-chat-form textarea{flex:1;resize:none;border:1.5px solid var(--line,rgba(38,51,49,.12));border-radius:12px;padding:.6rem .75rem;font:inherit;font-size:.88rem;background:var(--paper,#F1F9F7)}',
       '.tk-modal{position:fixed;inset:0;background:rgba(15,26,20,.55);display:grid;place-items:center;z-index:9999;padding:1rem}',
       '.tk-modal>div{background:var(--surface,#fff);border-radius:18px;padding:1.3rem;width:min(560px,100%);max-height:90vh;overflow:auto}',
@@ -917,14 +939,114 @@
       other = role === 'student' ? (o.coachName || 'Your coach') : (o.studentName || 'Builder');
       sub = role === 'student' ? 'Your Tech Studio coach' : 'Tech Studio builder';
     }
-    host.innerHTML = '<div class="tk-box tk-chat"><div style="padding-bottom:.7rem;border-bottom:1px solid var(--line,rgba(38,51,49,.12))"><b>' + esc(other) + '</b><div class="tk-sub" style="margin:0">' + esc(sub) + (o.readOnly ? ' · read-only' : '') + '</div></div>' +
+    var COLL = guardian ? 'techGuardianChats' : 'techChats';
+    var staff = role === 'coach' || role === 'admin', canWrite = !o.readOnly;
+    /* Whose "online / last seen" the header shows: the other side of the conversation. */
+    var watchRoles = role === 'student' || role === 'guardian' ? ['coach']
+      : role === 'coach' ? [guardian ? 'guardian' : 'student']
+        : (guardian ? ['guardian', 'coach'] : ['student', 'coach']);
+    if (!o.coachId) watchRoles = watchRoles.filter(function (r) { return r !== 'coach'; });
+    var ROLE_WORD = { student: 'Builder', coach: 'Coach', guardian: 'Family', admin: 'Studio Desk' };
+    var ONLINE_MS = 75 * 1000, TYPING_MS = 6500, MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 6;
+    var nudgeHtml = '';
+    if (role === 'admin') {
+      var targets = (guardian ? [['guardian', 'family']] : [['student', 'builder']]).concat(o.coachId ? [['coach', 'coach']] : []);
+      nudgeHtml = '<div class="tk-chat-nudge">' + targets.map(function (t) { return '<button type="button" class="tk-btn sm" data-nudge="' + t[0] + '" title="Email the ' + t[1] + ' a reminder to read and reply"><i class="fas fa-bell"></i> Nudge ' + t[1] + '</button>'; }).join('') + '</div>';
+    }
+    /* In builder chats replies are emailed at most once per burst; this box sends this one by email straight away.
+       Family chats already email every message, so they do not need it. */
+    var mailLabel = !guardian && staff ? '<div class="tk-chat-opts"><label><input type="checkbox" id="tkMail"> <i class="fas fa-envelope" aria-hidden="true"></i> Also email this reply to ' + esc(o.studentName ? firstName(o.studentName) : 'the builder') + '</label></div>' : '';
+    host.innerHTML = '<div class="tk-box tk-chat"><div class="tk-chat-head"><div><b>' + esc(other) + '</b><div class="tk-sub" style="margin:0">' + esc(sub) + (o.readOnly ? ' · read-only' : '') + '</div><div class="tk-chat-status" id="tkStatus"></div></div>' + nudgeHtml + '</div>' +
       '<div class="tk-chat-list" id="tkList"><div class="tk-empty">Loading messages…</div></div>' +
-      (o.readOnly ? '' : '<div class="tk-chat-form"><textarea id="tkText" rows="1" maxlength="3000" placeholder="Write a message…"></textarea><button class="tk-btn primary" id="tkSend" type="button" aria-label="Send"><i class="fas fa-paper-plane"></i></button></div>') + '</div>';
-    var list = host.querySelector('#tkList'), unsub = null, dead = false;
-    function render(docs) {
-      if (!docs.length) { list.innerHTML = '<div class="tk-empty">No messages yet. Say hello <i class="fas fa-hand" aria-hidden="true"></i></div>'; return; }
-      list.innerHTML = docs.map(function (m) { var mine = m.senderId === o.me.uid; return '<div class="tk-msg' + (mine ? ' me' : '') + '"><span class="who">' + esc(mine ? 'You' : (m.senderName || m.senderRole || '')) + '</span>' + esc(m.text) + '<span class="at">' + esc(fmt(m.createdAt)) + '</span></div>'; }).join('');
-      list.scrollTop = list.scrollHeight;
+      '<div class="tk-typing" id="tkTyping" hidden></div>' +
+      (canWrite ? '<div class="tk-chat-tray" id="tkTray"></div><div class="tk-chat-form">' +
+        '<input type="file" id="tkFile" multiple hidden>' +
+        '<button class="tk-btn" id="tkAttach" type="button" aria-label="Attach files or pictures" title="Attach files or pictures. You can also paste a screenshot or drop files here."><i class="fas fa-paperclip"></i></button>' +
+        '<textarea id="tkText" rows="1" maxlength="3000" placeholder="Write a message… paste a screenshot with Ctrl+V"></textarea>' +
+        '<button class="tk-btn primary" id="tkSend" type="button" aria-label="Send"><i class="fas fa-paper-plane"></i></button></div>' + mailLabel : '') + '</div>';
+    var list = host.querySelector('#tkList'), unsub = null, presUnsub = null, dead = false, ready = false;
+    var msgs = [], people = {}, timers = [], firstPaint = true;
+    function ms(ts) { var d = toDate(ts); return d ? d.getTime() : 0; }
+    function sizeWord(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+    function fileIcon(t, n) {
+      t = String(t || ''); n = String(n || '').toLowerCase();
+      if (/^image\//.test(t)) return 'fa-image'; if (/^video\//.test(t)) return 'fa-file-video'; if (/^audio\//.test(t)) return 'fa-file-audio';
+      if (/pdf/.test(t) || /\.pdf$/.test(n)) return 'fa-file-pdf'; if (/zip/.test(t) || /\.(zip|rar|7z)$/.test(n)) return 'fa-file-zipper';
+      if (/word|\.docx?$/.test(t + n)) return 'fa-file-word'; if (/sheet|excel|csv|\.xlsx?$/.test(t + n)) return 'fa-file-excel';
+      if (/presentation|powerpoint|\.pptx?$/.test(t + n)) return 'fa-file-powerpoint';
+      if (/\.(py|js|ts|html|css|json|java|c|cpp|cs|rb|go|php|sql|ino|sh)$/.test(n)) return 'fa-file-code';
+      return 'fa-file';
+    }
+    function attHtml(arr) {
+      if (!Array.isArray(arr) || !arr.length) return '';
+      return '<div class="att">' + arr.map(function (a) {
+        var u = safeUrl(a && a.url); if (!u) return '';
+        if (/^image\//.test(a.type || '')) return '<a class="pic" href="' + esc(u) + '" target="_blank" rel="noopener" title="Open full size"><img src="' + esc(u) + '" alt="' + esc(a.name || 'Picture') + '" loading="lazy"></a>';
+        return '<a class="file" href="' + esc(u) + '" target="_blank" rel="noopener" title="' + esc(a.name || 'File') + '"><i class="fas ' + fileIcon(a.type, a.name) + '" aria-hidden="true"></i> ' + esc(a.name || 'File') + (a.size ? ' · ' + esc(sizeWord(a.size)) : '') + '</a>';
+      }).join('') + '</div>';
+    }
+    function attSummary(arr) {
+      if (!arr || !arr.length) return '';
+      var pics = arr.filter(function (a) { return /^image\//.test(a.type || ''); }).length, files = arr.length - pics, out = [];
+      if (pics) out.push(pics === 1 ? 'a picture' : pics + ' pictures'); if (files) out.push(files === 1 ? 'a file' : files + ' files');
+      return 'Sent ' + out.join(' and ');
+    }
+    function render() {
+      var stick = firstPaint || list.scrollHeight - list.scrollTop - list.clientHeight < 90;
+      if (!msgs.length) { list.innerHTML = '<div class="tk-empty">No messages yet. Say hello <i class="fas fa-hand" aria-hidden="true"></i></div>'; return; }
+      list.innerHTML = msgs.map(function (m) {
+        var mine = m.senderId === o.me.uid;
+        return '<div class="tk-msg' + (mine ? ' me' : '') + '"><span class="who">' + esc(mine ? 'You' : (m.senderName || ROLE_WORD[m.senderRole] || '')) + '</span>' + esc(m.text || '') + attHtml(m.attachments) +
+          (m.emailIt && (staff || mine) ? '<span class="mailed"><i class="fas fa-envelope" aria-hidden="true"></i> Also sent by email</span>' : '') +
+          '<span class="at">' + esc(fmt(m.createdAt)) + '</span></div>';
+      }).join('');
+      if (stick) list.scrollTop = list.scrollHeight;
+      if (firstPaint) { firstPaint = false; list.querySelectorAll('img').forEach(function (im) { im.addEventListener('load', function () { list.scrollTop = list.scrollHeight; }, { once: true }); }); }
+    }
+    /* ---- presence: chats/{id}/presence/{uid} = { uid, role, name, online, seenAt, typingAt } ---- */
+    var presRef = ref.collection('presence').doc(o.me.uid), lastTyping = 0;
+    function presence(p) {
+      if (!canWrite || !ready) return Promise.resolve();
+      return presRef.set(Object.assign({ uid: o.me.uid, role: role, name: o.me.name || '' }, p), { merge: true }).catch(function () { });
+    }
+    function here() { if (!dead && document.visibilityState === 'visible') presence({ online: true, seenAt: FV().serverTimestamp() }); }
+    function away() { presence({ online: false, typingAt: null, seenAt: FV().serverTimestamp() }); }
+    function onVis() { if (document.visibilityState === 'visible') here(); else away(); }
+    function typers() {
+      var now = Date.now();
+      return Object.keys(people).filter(function (k) { var p = people[k]; return k !== o.me.uid && p.typingAt && now - ms(p.typingAt) < TYPING_MS; })
+        .map(function (k) { var p = people[k]; return p.role === 'admin' ? 'Studio Desk' : firstName(p.name || ROLE_WORD[p.role]); });
+    }
+    function paintStatus() {
+      var el = host.querySelector('#tkStatus'), now = Date.now();
+      if (el) el.innerHTML = watchRoles.map(function (r) {
+        var best = 0, on = false;
+        Object.keys(people).forEach(function (k) {
+          var p = people[k]; if (k === o.me.uid || p.role !== r) return;
+          var t = ms(p.seenAt); if (t > best) best = t;
+          if (p.online !== false && now - t < ONLINE_MS) on = true;
+        });
+        var label = watchRoles.length > 1 ? ROLE_WORD[r] + ': ' : '';
+        return '<span><span class="dot' + (on ? ' on' : '') + '"></span> ' + esc(label + (on ? 'Online' : best ? 'Last seen ' + ago(new Date(best)).toLowerCase() : 'Not seen here yet')) + '</span>';
+      }).join('<span aria-hidden="true">·</span>');
+      var ty = typers(), tyEl = host.querySelector('#tkTyping');
+      if (tyEl) {
+        var was = !tyEl.hidden; tyEl.hidden = !ty.length;
+        if (ty.length) {
+          tyEl.innerHTML = esc(ty.join(', ') + (ty.length > 1 ? ' are' : ' is') + ' typing') + ' <i></i><i></i><i></i>';
+          if (!was && list.scrollHeight - list.scrollTop - list.clientHeight < 90) list.scrollTop = list.scrollHeight;
+        }
+      }
+    }
+    function startPresence() {
+      presUnsub = ref.collection('presence').onSnapshot(function (s) {
+        people = {}; s.docs.forEach(function (d) { people[d.id] = d.data({ serverTimestamps: 'estimate' }); });
+        paintStatus();
+      }, function () { /* presence is a nicety; the chat works without it */ });
+      here();
+      timers.push(setInterval(here, 30 * 1000), setInterval(paintStatus, 2000));
+      document.addEventListener('visibilitychange', onVis);
+      window.addEventListener('pagehide', away);
     }
     async function ensure() {
       try { var s = await ref.get(); if (s.exists) return true; } catch (e) { }
@@ -934,23 +1056,125 @@
     }
     ensure().then(function (ok) {
       if (!ok || dead) { if (!ok && o.readOnly) list.innerHTML = '<div class="tk-empty">No conversation yet.</div>'; return; }
-      unsub = ref.collection('messages').orderBy('createdAt').limitToLast(300).onSnapshot(function (s) { render(s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); })); },
+      ready = true;
+      unsub = ref.collection('messages').orderBy('createdAt').limitToLast(300).onSnapshot(function (s) { msgs = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); render(); },
         function (e) { list.innerHTML = '<div class="tk-empty">Could not load messages: ' + esc(errMsg(e)) + '</div>'; });
+      startPresence();
     });
-    if (!o.readOnly) {
+    var pending = [];
+    if (canWrite) {
       var ta = host.querySelector('#tkText'), btn = host.querySelector('#tkSend'), busy = false;
+      var fileIn = host.querySelector('#tkFile'), attachBtn = host.querySelector('#tkAttach'), tray = host.querySelector('#tkTray'), mailBox = host.querySelector('#tkMail');
+      var BLOCKED = /^(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/xml|application\/xml)$|javascript/i;
+      var paintTray = function () {
+        tray.innerHTML = pending.map(function (p, i) {
+          return '<div class="it">' + (p.preview ? '<img src="' + esc(p.preview) + '" alt="">' : '<i class="fas ' + fileIcon(p.file.type, p.file.name) + '" aria-hidden="true" style="font-size:1.2rem;padding:0 .3rem"></i>') +
+            '<span title="' + esc(p.file.name) + '">' + esc(p.file.name) + '</span><button type="button" data-rm="' + i + '" aria-label="Remove ' + esc(p.file.name) + '"><i class="fas fa-xmark"></i></button></div>';
+        }).join('');
+      };
+      var dropPending = function (i) { var p = pending.splice(i, 1)[0]; if (p && p.preview) URL.revokeObjectURL(p.preview); paintTray(); };
+      var addFiles = function (files) {
+        var skipped = [];
+        Array.prototype.forEach.call(files || [], function (f) {
+          if (!f) return;
+          if (pending.length >= MAX_FILES) { skipped.push(f.name + ' (at most ' + MAX_FILES + ' files per message)'); return; }
+          if (f.size > MAX_FILE) { skipped.push(f.name + ' (larger than 25 MB)'); return; }
+          if (BLOCKED.test(f.type || '')) { skipped.push(f.name + ' (web pages, scripts and SVG cannot be sent; zip them first)'); return; }
+          pending.push({ file: f, preview: /^image\//.test(f.type || '') ? URL.createObjectURL(f) : '' });
+        });
+        paintTray();
+        if (skipped.length) alert('Not attached:\n' + skipped.join('\n'));
+        ta.focus();
+      };
+      var upload = async function (p) {
+        if (p.done) return p.done;
+        var f = p.file, type = f.type || 'application/octet-stream';
+        var name = String(f.name || 'file').replace(/[^\w.\- ]+/g, '_').slice(-80) || 'file';
+        var path = COLL + '/' + chatId + '/' + o.me.uid + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + name;
+        var r = firebase.storage().ref(path);
+        await r.put(f, { contentType: type });
+        p.done = { name: String(f.name || name).slice(0, 160), url: await r.getDownloadURL(), type: type, size: f.size || 0, path: path };
+        return p.done;
+      };
+      var SEND_ICON = '<i class="fas fa-paper-plane"></i>';
       var send = async function () {
-        var text = ta.value.trim(); if (!text || busy) return; busy = true; btn.disabled = true;
+        var text = ta.value.trim(); if ((!text && !pending.length) || busy || !ready) return;
+        busy = true; btn.disabled = true; attachBtn.disabled = true;
         try {
-          await ref.collection('messages').add({ senderId: o.me.uid, senderRole: role, senderName: o.me.name || '', text: text.slice(0, 3000), createdAt: FV().serverTimestamp() });
-          ta.value = ''; ref.update({ lastMessage: text.slice(0, 120), lastSenderRole: role, lastAt: FV().serverTimestamp() }).catch(function () { });
+          var atts = [];
+          if (pending.length) {
+            if (typeof firebase.storage !== 'function') throw new Error('File sending is not available on this page.');
+            for (var i = 0; i < pending.length; i++) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; atts.push(await upload(pending[i])); }
+          }
+          var msg = { senderId: o.me.uid, senderRole: role, senderName: o.me.name || '', text: text.slice(0, 3000), createdAt: FV().serverTimestamp() };
+          if (atts.length) msg.attachments = atts;
+          if (mailBox && mailBox.checked) msg.emailIt = true;
+          await ref.collection('messages').add(msg);
+          ta.value = ''; pending.forEach(function (p) { if (p.preview) URL.revokeObjectURL(p.preview); }); pending = []; paintTray();
+          if (mailBox) mailBox.checked = false;
+          lastTyping = 0; presence({ typingAt: null, online: true, seenAt: FV().serverTimestamp() });
+          ref.update({ lastMessage: (text || attSummary(atts)).slice(0, 120), lastSenderRole: role, lastAt: FV().serverTimestamp() }).catch(function () { });
         } catch (e) { alert('Could not send: ' + errMsg(e)); }
-        busy = false; btn.disabled = false; ta.focus();
+        busy = false; btn.disabled = false; attachBtn.disabled = false; btn.innerHTML = SEND_ICON; ta.focus();
       };
       btn.addEventListener('click', send);
       ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+      ta.addEventListener('input', function () {
+        var now = Date.now();
+        if (!ta.value.trim()) { if (lastTyping) { lastTyping = 0; presence({ typingAt: null }); } return; }
+        if (now - lastTyping > 3000) { lastTyping = now; presence({ typingAt: FV().serverTimestamp(), online: true, seenAt: FV().serverTimestamp() }); }
+      });
+      /* A screenshot on the clipboard: Ctrl+V in the box attaches it. */
+      ta.addEventListener('paste', function (e) {
+        var cd = e.clipboardData; if (!cd) return;
+        var files = [], hasText = false;
+        Array.prototype.forEach.call(cd.items || [], function (it) {
+          if (it.kind === 'file') { var f = it.getAsFile(); if (f) files.push(f); }
+          else if (it.type === 'text/plain') hasText = true;
+        });
+        if (!files.length) return;
+        if (!hasText) e.preventDefault();
+        var stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+        addFiles(files.map(function (f, i) {
+          if (!/^image\//.test(f.type || '') || (f.name && !/^image\.\w+$/i.test(f.name))) return f;
+          var ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+          try { return new File([f], 'screenshot-' + stamp + (i ? '-' + (i + 1) : '') + '.' + ext, { type: f.type }); } catch (x) { return f; }
+        }));
+      });
+      attachBtn.addEventListener('click', function () { fileIn.click(); });
+      fileIn.addEventListener('change', function () { addFiles(fileIn.files); fileIn.value = ''; });
+      tray.addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (b) dropPending(+b.dataset.rm); });
+      var box = host.querySelector('.tk-chat'), depth = 0;
+      box.addEventListener('dragenter', function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') > -1) { depth++; box.classList.add('drop'); } });
+      box.addEventListener('dragleave', function () { if (--depth <= 0) { depth = 0; box.classList.remove('drop'); } });
+      box.addEventListener('dragover', function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') > -1) e.preventDefault(); });
+      box.addEventListener('drop', function (e) { depth = 0; box.classList.remove('drop'); if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } });
     }
-    return { destroy: function () { dead = true; if (unsub) unsub(); } };
+    /* Studio Desk only: email one side a reminder that the conversation is waiting (nudgeTechChat). */
+    host.querySelectorAll('[data-nudge]').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        var note = window.prompt('Nudge by email. Add a short note for them (optional):', '');
+        if (note === null) return;
+        var old = b.innerHTML; b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…';
+        try {
+          var r = await firebase.functions().httpsCallable('nudgeTechChat')({ kind: guardian ? 'guardian' : 'builder', chatId: chatId, to: b.dataset.nudge, note: String(note).slice(0, 600) });
+          var res = (r && r.data) || {};
+          b.innerHTML = res.emailed ? '<i class="fas fa-check"></i> Nudged' : '<i class="fas fa-bell"></i> Bell only';
+          if (!res.emailed) alert('They got a notification in their portal, but no email could be sent (no email address on file, or the mail server refused it).');
+        } catch (e) { alert('Could not send the nudge: ' + errMsg(e)); b.innerHTML = old; b.disabled = false; return; }
+        setTimeout(function () { if (!dead) { b.innerHTML = old; b.disabled = false; } }, 5000);
+      });
+    });
+    return {
+      destroy: function () {
+        if (dead) return;
+        away(); dead = true;
+        if (unsub) unsub(); if (presUnsub) presUnsub();
+        timers.forEach(clearInterval);
+        document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', away);
+        pending.forEach(function (p) { if (p.preview) URL.revokeObjectURL(p.preview); });
+      }
+    };
   }
 
   /* =========================================================
