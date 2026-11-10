@@ -336,12 +336,16 @@
       '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> Add files</button>' +
       '<input type="file" id="wkPdfIn" multiple style="display:none"></div>' +
       '<div class="cr-field"><label>Links <span class="cr-note" style="font-weight:600">(add as many as you need)</span></label><div id="wkLinkList"></div><button type="button" class="cr-btn sm" data-a="addlink"><i class="fas fa-plus"></i> Add link</button></div>' +
+      '<div class="cr-field" id="wkTools"></div>' +
       '<div class="cr-field" id="wkTutorPad"></div>' +
       '<div class="cr-note" style="margin-top:.6rem; background:var(--sage); padding:.6rem .8rem; border-radius:8px;">Nothing is visible to anyone yet. After saving, open <strong>Publish</strong> to send it to Tutors or Students.</div>';
       
     m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
       '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Save assignment') + '</button>';
     var errEl = m.foot.querySelector('#wkErr');
+    var toolsHost = m.body.querySelector('#wkTools');
+    var toolsUi = global.WorkTools ? global.WorkTools.toolsField(toolsHost, { tools: ex && ex.tools, subjectId: cls.subjectId, subjectName: U.displayName(cls), isNew: !ex, title: ex ? ex.title : '' }) : null;
+    if (!toolsUi && toolsHost) toolsHost.remove();
     var tutorPad = null, tutorPadHost = m.body.querySelector('#wkTutorPad');
     if (global.ResourcesUI && global.ResourcesUI.canPad && global.ResourcesUI.canPad()) {
       tutorPad = global.ResourcesUI.tutorPad(tutorPadHost, { cls: cls, workType: 'homework', sourceId: aid, getTopic: function () { var s = m.body.querySelector('#wkTopic'); return s && s.options[s.selectedIndex] ? s.options[s.selectedIndex].text : ''; } });
@@ -423,6 +427,7 @@
         recipients: [], audience: 'class',
         updatedAt: FV().serverTimestamp()
       };
+      if (toolsUi) data.tools = toolsUi.value();
       if (when) data.dueAt = firebase.firestore.Timestamp.fromDate(when);
       
       var cleanLinks = [];
@@ -1063,7 +1068,8 @@
               '<td>' + esc(deadline) + '</td>' +
               '<td><span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span></td>' +
               '<td><div class="cr-actions">' +
-                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
+                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
+                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
                 adminControls +
                 delBtnHtml(it) +
                 (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(it.id) + '"') : '') +
@@ -1098,11 +1104,12 @@
               var icon = isLesson ? 'fa-book-open' : 'fa-clipboard-check';
               var typeLabel = isLesson ? ' · Classwork' : '';
               h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + icon + '"></i></span>' +
-                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : typeLabel) + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + '</small></span>' +
+                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : typeLabel) + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + (global.WorkTools && global.WorkTools.ideOf(it) ? ' \u00b7 <i class="fas fa-code"></i> Paisley VS Code' : '') + '</small></span>' +
                 '<span class="wk-chips" title="Posted to">' + audChips(it) + '</span>' +
                 '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
                 itemPill(it) +
-                '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
+                '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
+                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
                 (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(it.id) + '"') : '') +
                 (!S.monitoringOnly ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(it.id) + '" title="Open hand-ins again so students can hand in more work (e.g. the next questions). Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
@@ -1124,8 +1131,11 @@
         (isAdmin && (kind === 'exam' || !it.isClasswork) ? '<button type="button" class="cr-btn danger" data-a="del-here" style="margin-right:auto;border-color:#E74C3C;color:#E74C3C;background:#fff"><i class="fas fa-trash"></i> Delete</button>' : (isAdmin ? '<span style="margin-right:auto"></span>' : '')) +
         (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release-here" style="margin-right:auto;"', U.releasedByMe(it, user.uid) ? ' ' : 'primary') : '') +
         (kind !== 'exam' && !S.monitoringOnly ? '<button type="button" class="cr-btn" data-a="renew-here" title="Open hand-ins again so students can hand in more work"><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
+        (global.WorkTools ? '<button type="button" class="cr-btn" data-a="preview-here" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
         '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      var pvHere = m.foot.querySelector('[data-a="preview-here"]');
+      if (pvHere) pvHere.onclick = function () { global.WorkTools.previewItem(it, { kind: kind === 'exam' ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment') }); };
       var renewHere = m.foot.querySelector('[data-a="renew-here"]');
       if (renewHere) renewHere.onclick = function () { renewItem(it, user, function () { paint(); refresh(); }); };
       var delHere = m.foot.querySelector('[data-a="del-here"]');
@@ -1218,6 +1228,7 @@
             '<td>' + whenCell + '</td>' +
             '<td>' +
               (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> ' + esc(upLabel) + '</a>' : '') +
+              (global.WorkTools && global.WorkTools.hasCode(sub) ? '<button type="button" class="cr-btn sm" data-a="code" data-s="' + esc(s.id) + '" title="Open and run the code"><i class="fas fa-code"></i> Code</button>' : '') +
               (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-circle-check"></i> ' + (st.k === 'submitted' && st.resub ? 'Last marked copy' : 'Graded copy') + '</a>' : '') +
               global.PaperHandIns.rowButtons(s, sub, subjectOf(it)) +
               (prevN ? '<button type="button" class="cr-btn sm" data-a="hist" data-s="' + esc(s.id) + '"><i class="fas fa-clock-rotate-left"></i> Previous attempts (' + prevN + ')</button>' : '') +
@@ -1261,17 +1272,32 @@
           };
         });
 
-        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-ink"]'), function (b) {
-          b.onclick = function () {
-            var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
-            if (!global.InkGrader) { alert('The grading workspace did not load. Refresh the page and try again.'); return; }
-            
-            var col = it.isClasswork ? 'lessons' : 'assignments';
+        function gradeInk(sid, btn) {
+          var sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
+          if (!global.InkGrader) { alert('The grading workspace did not load. Refresh the page and try again.'); return; }
+          var col = it.isClasswork ? 'lessons' : 'assignments';
+          var label = btn ? btn.innerHTML : '';
+          if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening'; }
+          /* Code with no uploaded file is marked as a PDF of the code. */
+          var srcP = global.WorkTools ? global.WorkTools.inkSource(sub, it, stu.name || sub.studentName) : Promise.resolve(null);
+          srcP.catch(function (e) { console.warn('code pdf:', e); return null; }).then(function (source) {
+            if (btn) { btn.disabled = false; btn.innerHTML = label; }
             global.InkGrader.open({
               docRef: U.clsRef(it.cid).collection('topics').doc(it.tid).collection(col).doc(it.id).collection('submissions').doc(sid),
               data: Object.assign({ studentName: stu.name || sub.studentName }, sub), item: it, cid: it.cid, itemId: it.id, user: user, kind: it.isClasswork ? 'lesson' : 'assignment',
+              source: source || undefined,
               onDone: async function () { await refresh(); paint(); }
             });
+          });
+        }
+        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-ink"]'), function (b) {
+          b.onclick = function () { gradeInk(b.dataset.s, b); };
+        });
+        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="code"]'), function (b) {
+          b.onclick = function () {
+            var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
+            var canMark = !!(sub && sub.status !== 'In progress' && !global.PaperHandIns.isPaperSub(sub) && kind !== 'exam' && global.InkGrader);
+            global.WorkTools.openCodeView({ sub: sub, item: it, studentName: stu.name || sub.studentName, onMark: canMark ? function () { gradeInk(sid); } : null });
           };
         });
       }
@@ -1633,6 +1659,7 @@
         else if (a === 'add-topic') { if (isAdmin) openTopicModal(); }
         else if (a === 'toggle') { S.collapsed[id] = !S.collapsed[id]; render(); }
         else if (a === 'detail' && item) openDetail(item);
+        else if (a === 'preview' && item && global.WorkTools) global.WorkTools.previewItem(item, { kind: kind === 'exam' ? 'exam' : (item.isClasswork ? 'lesson' : 'assignment') });
         else if (a === 'open-granted') {
           var g = S.granted[Number(el.dataset.i)];
           if (g) {
@@ -2030,7 +2057,8 @@
     if (kind !== 'exam') ref = ref.collection('topics').doc(tid).collection(collName(kind)).doc(id);
     else ref = ref.collection('exams').doc(id);
 
-    var m = U.openModal({ title: 'My work', wide: true });
+    var ide = null;   /* Paisley VS Code, when the work uses it (WorkTools) */
+    var m = U.openModal({ title: 'My work', wide: true, onClose: function () { if (ide) ide.destroy(); } });
     m.body.innerHTML = '<div class="cr-empty">Loading\u2026</div>';
     var me = firebase.auth().currentUser;
 
@@ -2049,8 +2077,12 @@
       var isRenew = renewedOpen(sub);
       var hardCopy = !!(meDoc && meDoc.exists) && lmzHandsInOnPaper(meDoc.data(), it.subjectId || String((String(cid).match(/^(.*?)_y\d+/) || [])[1] || ''));
       var canUpload = !isGraded && !(hardCopy && !isCorr);
+      var WT = global.WorkTools;
+      var tool = WT && kind !== 'exam' ? WT.ideOf(it) : null;
+      var codeIn = tool && canUpload;                       /* code in the IDE and hand it in */
+      var codeShow = WT && !codeIn && WT.hasCode(sub);      /* read-only: what they handed in */
 
-      var head = '<div class="cr-panel"><h3>' + esc(it.title) + '</h3>' +
+      var head ='<div class="cr-panel"><h3>' + esc(it.title) + '</h3>' +
         '<div class="cr-note">' + (it.description || it.requirements || 'No instructions provided.') + '</div>' +
         ((attLinksHtml(it) || okUrl(it.examPdfUrl)) ? '<div class="wk-box">' + attLinksHtml(it) + (!it.attachedPdfUrl && okUrl(it.examPdfUrl) ? '<a href="' + esc(it.examPdfUrl) + '" target="_blank" rel="noopener noreferrer" class="cr-btn sm"><i class="fas fa-file-pdf"></i> Download task / resource</a>' : '') + '</div>' : '') +
         '</div>';
@@ -2064,15 +2096,21 @@
         ? '<div class="wk-sec mine"><h4><i class="fas fa-school"></i> Physical hand-in</h4><div class="cr-note">' + (sub ? 'Your tutor has received your paper copy.' : 'You hand in your work on paper at school. Your tutor records it here, so there is nothing to upload.') + '</div></div>'
         : (sub && sub.handIn === 'physical' && !isGraded ? '<div class="wk-sec mine"><h4><i class="fas fa-school"></i> Physical hand-in received</h4><div class="cr-note">Your tutor has received your paper copy.</div></div>' : '');
       zones = paperNote + zones;
+      if (codeShow) zones += '<div class="wk-sec mine"><h4><i class="fas fa-code"></i> Your code (as handed in)</h4><div id="subIdeView"></div></div>';
 
       var form = '';
       if (canUpload) {
-        form = '<div class="cr-panel"><h4 style="margin:0 0 .5rem">' + (isRenew ? 'Hand in the next part' : (isCorr ? 'Upload your corrected work' : (sub ? 'Replace my upload' : 'Hand in my work'))) + '</h4>' +
-          '<div class="cr-field"><label>Your Answer (Optional)</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here...">' + esc(sub && sub.textAnswer || '') + '</textarea></div>' +
-          '<div class="cr-field"><label>Upload File (PDF/Image)</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none"></div>' +
+        form = '<div class="cr-panel"><h4 style="margin:0 0 .5rem">' + (isRenew ? 'Hand in the next part' : (isCorr ? (codeIn ? 'Fix your code and hand it in again' : 'Upload your corrected work') : (sub ? (codeIn ? 'Change my work' : 'Replace my upload') : 'Hand in my work'))) + '</h4>' +
+          (codeIn ? '<div class="cr-field"><label><i class="fas fa-code"></i> Your code in Paisley VS Code</label>' +
+            '<div class="wt-ide-note"><i class="fas fa-circle-info"></i><span>Your code saves as you type, so you can close this and carry on later. Press <b>Run</b> to try it, then <b>Submit</b> to hand it in.</span></div>' +
+            '<div id="subIde"></div></div>' : '') +
+          '<div class="cr-field"><label>' + (codeIn ? 'Anything to explain? (optional)' : 'Your Answer (Optional)') + '</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here...">' + esc(sub && sub.textAnswer || '') + '</textarea></div>' +
+          '<div class="cr-field"><label>' + (codeIn ? 'Upload a file too (optional)' : 'Upload File (PDF/Image)') + '</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none"></div>' +
           '<div class="cr-prog" id="subProg" style="display:none;height:4px;background:var(--line);margin-top:1rem;border-radius:2px"><div style="height:100%;background:var(--brand);width:0%;transition:width .2s"></div></div></div>';
       }
       m.body.innerHTML = head + zones + form;
+      if (codeIn) ide = WT.mountStudentIde(m.body.querySelector('#subIde'), { item: it, sub: sub, uid: me.uid, cid: cid, kind: kind });
+      else if (codeShow) ide = WT.mountStudentIde(m.body.querySelector('#subIdeView'), { item: it, sub: sub, uid: me.uid, cid: cid, kind: kind, readOnly: true });
 
       if (!canUpload) {
         m.foot.innerHTML = '<button class="cr-btn" data-a="cancel">Close</button>';
@@ -2094,10 +2132,16 @@
         var btn = this;
         var text = m.body.querySelector('#subText').value.trim();
         var err = m.foot.querySelector('#subErr');
-        if (!text && !file) { err.textContent = 'Please type an answer or upload a file.'; return; }
         btn.disabled = true;
         err.textContent = '';
+        var code = null;
+        if (codeIn && ide) {
+          try { code = await ide.payload(); } catch (ce) { code = null; }
+          if (code && !WT.hasCode(code)) code = null;
+        }
+        if (!text && !file && !code) { err.textContent = codeIn ? 'Write some code first (or type an answer or upload a file).' : 'Please type an answer or upload a file.'; btn.disabled = false; return; }
         try {
+          if (code) WT.checkCodeSize(code);
           var fileData = {};
           if (file) {
             var prog = m.body.querySelector('#subProg');
@@ -2123,6 +2167,7 @@
           var subRef = ref.collection('submissions').doc(meNow.uid);
           var prev = await subRef.get().catch(function () { return null; });
           var FVs = firebase.firestore.FieldValue;
+          if (code) fileData = Object.assign({ codeFiles: code.codeFiles, codeFolders: code.codeFolders || [], codeActive: code.codeActive || '', codeAt: FVs.serverTimestamp() }, fileData);
           if (prev && prev.exists) {
             if (prev.data().status === 'Graded') throw new Error('This work has already been graded and can no longer be changed.');
             var upd = Object.assign({ textAnswer: text, updatedAt: FVs.serverTimestamp() }, fileData);
@@ -2145,6 +2190,7 @@
               updatedAt: FVs.serverTimestamp()
             }, fileData)); } catch (we2) { throw wrapWriteErr(we2, 'create', subRef, ''); }
           }
+          if (code && ide) ide.clearDraft();
           m.close();
           try { global.__wkStudentCache = {}; } catch (e4) { /* ignore */ }
           try { global.dispatchEvent(new CustomEvent('wk:submitted', { detail: { cid: cid, id: id, kind: kind } })); } catch (e5) { /* ignore */ }
@@ -2294,7 +2340,7 @@
     var k = isExam ? 'exam' : 'assignment';
     return '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + (isExam ? 'fa-file-pen' : 'fa-clipboard-check') + '"></i></span>' +
       '<span class="tt">' + esc(it.title || (isExam ? 'Exam' : 'Homework')) + '<small>' + (isExam ? 'Exam' : 'Homework') +
-      (due ? ' \u00b7 Due: ' + esc(U.fmtDateTime(due)) : '') + '</small></span>' +
+      (due ? ' \u00b7 Due: ' + esc(U.fmtDateTime(due)) : '') + (!isExam && global.WorkTools && global.WorkTools.ideOf(it) ? ' \u00b7 <i class="fas fa-code"></i> Paisley VS Code' : '') + '</small></span>' +
       '<span class="cr-badge ' + st.cls + '">' + esc(st.text) + '</span>' +
       rowActionHtml(it, 'data-a="work-open" data-k="' + k + '" data-t="' + esc(it.tid || '') + '" data-id="' + esc(it.id) + '"') + '</div>';
   }

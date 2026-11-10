@@ -64,6 +64,7 @@ user and denied access.
 | `examResults` | admin/tutor | owner student, admin, tutor, linked parent | admin/tutor |
 | `homework` | admin, or authoring tutor | any signed-in user | admin, or authoring/granted tutor |
 | `submissions` | owner student | owner, admin, tutor, linked parent | admin, or authoring/granted tutor |
+| classroom `.../submissions/{sid}` (assignments, lessons, exam attempts) | owner student; may include `codeFiles`, `codeFolders`, `codeActive`, `codeAt` (at most 60 files each) | as before | owner student may also change those code fields until the work is Graded |
 | `exams` | admin, or authoring tutor | admin, tutor, or any signed-in user if `status == 'Published'` | admin, or authoring/granted tutor |
 | `examAttempts` | owner student | owner, admin, tutor, linked parent | owner student (autosave/submit), admin, or granted tutor |
 | `notes`, `notifications`, `timetables` | admin/tutor | any signed-in user | admin, or the posting tutor |
@@ -87,6 +88,9 @@ user and denied access.
 | `attendanceAudit` | Cloud Functions only | admin | nobody |
 | `lmsSettings` | Cloud Functions only (`renameSubject`) | get: anyone (subject names); list: signed in | Cloud Functions only |
 | `subjectRenames` | Cloud Functions only | admin | nobody |
+| `tutorChats/{studentId}_{tutorId}` | the student or the tutor, only when `students.tutorIds`/`tutorId` links them (student account must be OK); admin | the two members, admin | student: `studentReadAt` + `last*` only; tutor: `tutorReadAt` + `last*` only; admin. Delete: admin |
+| `tutorChats/{id}/messages` | a member writing as themselves (`senderRole` student/tutor, or admin), still linked, text 1–3000, `createdAt == request.time` | the two members, admin | admin only |
+| `codeDrafts/{uid}_{itemId}` | the student (own uid, id must match `itemId`, at most 60 files) | the student | the student |
 
 ## Why this matters
 

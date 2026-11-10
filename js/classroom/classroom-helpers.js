@@ -1197,10 +1197,16 @@
                 '</div>';
             }).join('') + '</div>'
           ) : '');
+        if (lesson && global.WorkTools && global.WorkTools.ideOf(lesson)) {
+          m.body.insertAdjacentHTML('beforeend', '<div class="cr-note" style="margin-top:.6rem;"><i class="fas fa-code"></i> Students code this classwork in <strong>Paisley VS Code</strong>. Press Preview to see their starting code.</div>');
+        }
         m.foot.innerHTML = '<span class="cr-err" id="crLErr"></span>' +
           '<button type="button" class="cr-btn" data-a="cancel">Close</button>' +
+          (lesson && global.WorkTools ? '<button type="button" class="cr-btn" data-a="preview" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
           (lesson ? '<button type="button" class="cr-btn primary" data-a="release"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '');
         m.foot.querySelector('[data-a="cancel"]').onclick = function () { m.close(true); };
+        var pvBtn = m.foot.querySelector('[data-a="preview"]');
+        if (pvBtn) pvBtn.onclick = function () { global.WorkTools.previewItem(Object.assign({}, lesson, { cid: cls.id, tid: lesson.topicId, subjectName: lesson.subjectName || displayName(cls) }), { kind: 'lesson' }); };
 
         var relBtn = m.foot.querySelector('[data-a="release"]');
         if (relBtn) relBtn.onclick = function() {
@@ -1227,6 +1233,7 @@
         '<input type="file" id="crFileIn" multiple style="display:none" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.mp3,.wav,.m4a,.ogg">' +
         '<input type="file" id="crImgIn" style="display:none" accept="image/jpeg,image/png,image/gif,image/webp">' +
         '<div class="cr-note" style="margin-top:.35rem;">PDF, Word, PowerPoint, Excel, images, video and audio up to 100 MB each.</div></div>' +
+        '<div class="cr-field" id="crTools"></div>' +
         '<div class="cr-field" id="crTutorPad"></div>' +
         '<div class="cr-field"><label>Release</label><div class="cr-actions"><span class="cr-note">Schedule for</span>' +
         '<input type="date" id="crSchDate" value="' + defDate + '"><input type="time" id="crSchTime" value="' + defTime + '"></div>' +
@@ -1258,6 +1265,11 @@
         tutorPad = global.ResourcesUI.tutorPad(tutorPadHost, { cls: cls, workType: 'classwork', sourceId: lid, getTopic: lessonTopicText });
         m.body.querySelector('#crLTopic').addEventListener('change', function () { if (tutorPad) tutorPad.retag(); });
       } else if (tutorPadHost) { tutorPadHost.remove(); }
+      /* Tools: Paisley VS Code for coding classwork (on by default in ICT subjects). */
+      var toolsHost = m.body.querySelector('#crTools');
+      var toolsUi = global.WorkTools ? global.WorkTools.toolsField(toolsHost, { tools: lesson && lesson.tools, subjectId: cls.subjectId, subjectName: displayName(cls), isNew: isNew, title: lesson ? lesson.title : '' }) : null;
+      if (!toolsUi && toolsHost) toolsHost.remove();
+      if (toolsHost && toolsUi) toolsHost.addEventListener('change', markDirty);
       var attsEl = m.body.querySelector('#crAtts');
 
       var audBtn = m.foot.querySelector('[data-a="set-audience"]');
@@ -1429,6 +1441,7 @@
           subjectId: cls.subjectId, subjectName: displayName(cls), keyStage: cls.keyStage, year: cls.year,
           updatedAt: FV.serverTimestamp(), updatedBy: user.uid
         };
+        if (toolsUi) data.tools = toolsUi.value();
         if (status === 'published' && !(lesson && lesson.publishedAt)) data.publishedAt = FV.serverTimestamp();
         if (isNew || (lesson && lesson.topicId !== topicId)) {
           data.order = siblings.reduce(function (a, l) { return Math.max(a, l.order || 0); }, 0) + 1;
@@ -1771,6 +1784,9 @@
       } else if (st) {
         h += '<div class="cr-note" style="color:#1d8b57; font-weight:700;"><i class="fas fa-circle-check"></i> Submitted \u2014 awaiting grading</div>' +
           '<div style="margin-top:.6rem">' + checkBtn.replace(' style="margin-left:.5rem"', '').replace('class="cr-btn"', 'class="cr-btn primary"') + '</div>';
+      } else if (global.WorkTools && global.WorkTools.ideOf(l)) {
+        h += '<div class="cr-note" style="margin-bottom:.6rem"><i class="fas fa-code"></i> This classwork is done in <strong>Paisley VS Code</strong>: write your code, press Run to try it, then hand it in.</div>' +
+          '<button type="button" class="cr-btn primary" data-a="upload-classwork"><i class="fas fa-code"></i> Open Paisley VS Code</button>';
       } else {
         h += '<button type="button" class="cr-btn primary" data-a="upload-classwork"><i class="fas fa-upload"></i> Submit Classwork Response</button>';
       }

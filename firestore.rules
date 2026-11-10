@@ -234,7 +234,8 @@ service cloud.firestore {
     function studentWorkEdit() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(
           ['fileUrl', 'fileName', 'fileType', 'storagePath', 'note', 'textAnswer', 'updatedAt', 'inkData', 'inkUpdatedAt',
-           'status', 'submittedAt']) &&
+           'status', 'submittedAt', 'codeFiles', 'codeFolders', 'codeActive', 'codeAt']) &&
+        studentCodeOk() &&
         (!('inkData' in request.resource.data.diff(resource.data).affectedKeys()) ||
           request.resource.data.inkData == null) &&
         // status may only move Corrections -> Submitted (re-hand-in); a student can never grade or release.
@@ -248,7 +249,14 @@ service cloud.firestore {
         request.resource.data.released == false &&
         request.resource.data.keys().hasOnly(
           ['studentId', 'studentName', 'studentEmail', 'fileUrl', 'fileName', 'fileType', 'storagePath',
-           'note', 'textAnswer', 'status', 'released', 'createdAt', 'updatedAt', 'submittedAt']);
+           'note', 'textAnswer', 'status', 'released', 'createdAt', 'updatedAt', 'submittedAt',
+           'codeFiles', 'codeFolders', 'codeActive', 'codeAt']) &&
+        studentCodeOk();
+    }
+    // Code handed in from Paisley VS Code (js/classroom/work-tools.js): at most 60 files.
+    function studentCodeOk() {
+      return (!('codeFiles' in request.resource.data) || (request.resource.data.codeFiles is list && request.resource.data.codeFiles.size() <= 60)) &&
+        (!('codeFolders' in request.resource.data) || (request.resource.data.codeFolders is list && request.resource.data.codeFolders.size() <= 60));
     }
     // A paper hand-in: staff record it for a student who does not upload (see js/classroom/paper-handins.js).
     function staffPaperHandIn(cid, sid) {
@@ -1577,6 +1585,72 @@ service cloud.firestore {
         (isSignedIn() && resource.data.studentId == request.auth.uid) ||
         isParentOf(resource.data.studentId);
       allow update, delete: if isAdmin();
+    }
+
+    // =====================================================
+    // CODE DRAFTS: a student's unsubmitted Paisley VS Code work on a homework or
+    // classwork item (codeDrafts/{uid}_{itemId}). Only the student reads or writes it.
+    // =====================================================
+    match /codeDrafts/{draftId} {
+      allow read, delete: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      allow create, update: if isStudentDoc() &&
+        request.resource.data.studentId == request.auth.uid &&
+        draftId == request.auth.uid + '_' + request.resource.data.itemId &&
+        request.resource.data.keys().hasOnly(['studentId', 'itemId', 'cid', 'kind', 'codeFiles', 'codeFolders', 'codeActive', 'codeAt']) &&
+        request.resource.data.codeFiles is list && request.resource.data.codeFiles.size() <= 60;
+    }
+
+    // =====================================================
+    // TUTOR <-> STUDENT MESSAGES (js/classroom/tutor-chat.js)
+    //   tutorChats/{studentId}_{tutorId} (+ messages)
+    // A tutor writes only to their own students and a student only to their own
+    // tutors (students.tutorIds / tutorId). Each side may only mark its own read time.
+    // =====================================================
+    function tutorChatMember(c) {
+      return isSignedIn() && (c.studentId == request.auth.uid || c.tutorId == request.auth.uid);
+    }
+    function tutorChatKeys() {
+      return request.resource.data.keys().hasOnly(['studentId', 'studentName', 'tutorId', 'tutorName',
+        'lastMessage', 'lastAt', 'lastBy', 'lastRole', 'studentReadAt', 'tutorReadAt', 'createdAt']);
+    }
+    function tutorChatDoc(chatId) {
+      return get(/databases/$(database)/documents/tutorChats/$(chatId)).data;
+    }
+    match /tutorChats/{chatId} {
+      allow read: if isAdmin() || tutorChatMember(resource.data);
+      allow create: if isAdmin() ||
+        (isStudentDoc() && studentAccountOk() && tutorChatKeys() &&
+          request.resource.data.studentId == request.auth.uid &&
+          chatId == request.auth.uid + '_' + request.resource.data.tutorId &&
+          studentHasTutorId(request.auth.uid, request.resource.data.tutorId)) ||
+        (isTutor() && tutorChatKeys() &&
+          request.resource.data.tutorId == request.auth.uid &&
+          chatId == request.resource.data.studentId + '_' + request.auth.uid &&
+          studentHasTutorId(request.resource.data.studentId, request.auth.uid));
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'lastBy', 'lastRole', 'studentReadAt'])) ||
+        (isTutor() && resource.data.tutorId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'lastBy', 'lastRole', 'tutorReadAt']));
+      allow delete: if isAdmin();
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || tutorChatMember(tutorChatDoc(chatId));
+        allow create: if isSignedIn() &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.keys().hasOnly(['senderId', 'senderRole', 'senderName', 'text', 'topic', 'createdAt']) &&
+          request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 3000 &&
+          (!('topic' in request.resource.data) || (request.resource.data.topic is string && request.resource.data.topic.size() <= 60)) &&
+          request.resource.data.createdAt == request.time &&
+          ((request.resource.data.senderRole == 'student' && studentAccountOk() &&
+              tutorChatDoc(chatId).studentId == request.auth.uid &&
+              studentHasTutorId(request.auth.uid, tutorChatDoc(chatId).tutorId)) ||
+           (request.resource.data.senderRole == 'tutor' && isTutor() &&
+              tutorChatDoc(chatId).tutorId == request.auth.uid &&
+              studentHasTutorId(tutorChatDoc(chatId).studentId, request.auth.uid)) ||
+           (request.resource.data.senderRole == 'admin' && isAdmin()));
+        allow update, delete: if isAdmin();
+      }
     }
 
     function chatMember(c) {

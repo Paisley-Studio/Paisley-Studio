@@ -412,6 +412,7 @@
       <button class="nav-item active" data-view="classroom" type="button"><i class="fas fa-chalkboard"></i> My Classroom <span class="nav-badge" id="navClassroomCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="homework" type="button"><i class="fas fa-book-open"></i> My Homework <span class="nav-badge" id="navHwCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="exams" type="button"><i class="fas fa-file-pen"></i> My Exams <span class="nav-badge" id="navExamCount" style="display:none;">0</span></button>
+      <button class="nav-item" data-view="messages" type="button"><i class="fas fa-comments"></i> Messages <span class="nav-badge" id="navMsgCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="tickets" type="button"><i class="fas fa-headset"></i> Support Tickets <span class="nav-badge" id="navTicketCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="profile" type="button"><i class="fas fa-id-card"></i> My Profile</button>
     </nav>
@@ -436,6 +437,7 @@
       <section class="view" id="view-homework"><div id="workHwHost"></div></section>
       <section class="view" id="view-exams"><div id="workExHost"></div></section>
 
+      <section class="view" id="view-messages"><div id="messagesHost"></div></section>
       <section class="view" id="view-tickets">
         <div class="panel">
           <div class="panel-head"><div><h3>Support tickets</h3><div class="sub">Ask the Paisley Studio team for help. Only you can see your tickets.</div></div>
@@ -480,8 +482,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
-<script src="../js/classroom/classroom-helpers.js?v=boards5"></script>
-<script src="../js/classroom/work-helpers.js?v=hand2"></script>
+<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
+<script src="../js/classroom/work-helpers.js?v=tools1"></script>
+<script src="../js/classroom/work-tools.js?v=tools1"></script>
+<script src="../js/classroom/tutor-chat.js?v=tools1"></script>
 <script src="../js/classroom/work-learner.js?v=boards2"></script>
 <script>
 const auth = firebase.auth();
@@ -573,6 +577,7 @@ auth.onAuthStateChanged(async user => {
 });
 
 const TITLES = {
+  messages: ['Messages', 'Chat with your tutors about your work'],
   classroom:['My Classroom','Lessons and resources for your subjects'],
   homework:['My Homework','Set work, deadlines, submissions and feedback'],
   exams:['My Exams','Exam papers and your results'],
@@ -590,6 +595,7 @@ document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('clic
   else if(v === 'homework') mountWork('homework');
   else if(v === 'exams') mountWork('exams');
   else if(v === 'tickets') loadTickets();
+  else if(v === 'messages') mountMessages();
 }));
 $('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
 $('signOutBtn').addEventListener('click', () => leave());
@@ -611,11 +617,20 @@ function mountWork(kind){
   });
 }
 
+/* Messages with tutors (js/classroom/tutor-chat.js). */
+let studentChat = null;
+function mountMessages(){
+  if(studentChat || !currentUser || !profile || typeof TutorChat === 'undefined') return;
+  studentChat = TutorChat.mountStudent($('messagesHost'), { me: { uid: currentUser.uid, name: profile.name || currentUser.displayName || '' }, profile: profile });
+}
 function startFeatures(){
+  if(typeof TutorChat !== 'undefined') TutorChat.watchUnread('student', currentUser.uid, n => {
+    const b = $('navMsgCount'); if(!b) return; b.textContent = n; b.style.display = n ? '' : 'none';
+  });
   if(typeof mountNotificationBell === 'function'){
     mountNotificationBell($('bellHost'), currentUser.uid, 'student', {
       navBadges: { classroom:'#navClassroomCount', homework:'#navHwCount', exams:'#navExamCount' },
-      navigate: cat => { const v = { homework:'homework', exams:'exams', classroom:'classroom', tickets:'tickets' }[cat];
+      navigate: cat => { const v = { homework:'homework', exams:'exams', classroom:'classroom', tickets:'tickets', messages:'messages' }[cat];
         const b = v && document.querySelector('.nav-item[data-view="'+v+'"]'); if(b) b.click(); }
     });
   }

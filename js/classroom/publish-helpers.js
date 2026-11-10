@@ -285,12 +285,16 @@
       '<button type="button" class="cr-btn sm" data-a="pdf"><i class="fas fa-upload"></i> Add files</button>' +
       '<input type="file" id="wkPdfIn" multiple style="display:none"></div>' +
       '<div class="cr-field"><label>Links <span class="cr-note" style="font-weight:600">(add as many as you need)</span></label><div id="wkLinkList"></div><button type="button" class="cr-btn sm" data-a="addlink"><i class="fas fa-plus"></i> Add link</button></div>' +
+      '<div class="cr-field" id="wkTools"></div>' +
       '<div class="cr-field" id="wkTutorPad"></div>' +
       recipientsHtml('wkR');
       
     m.foot.innerHTML = '<span class="cr-err" id="wkErr"></span><button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
       '<button type="button" class="cr-btn primary" data-a="save"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save changes' : 'Save assignment') + '</button>';
     var errEl = m.foot.querySelector('#wkErr');
+    var toolsHost = m.body.querySelector('#wkTools');
+    var toolsUi = global.WorkTools ? global.WorkTools.toolsField(toolsHost, { tools: ex && ex.tools, subjectId: cls.subjectId, subjectName: U.displayName(cls), isNew: !ex, title: ex ? ex.title : '' }) : null;
+    if (!toolsUi && toolsHost) toolsHost.remove();
     var tutorPad = null, tutorPadHost = m.body.querySelector('#wkTutorPad');
     if (global.ResourcesUI && global.ResourcesUI.canPad && global.ResourcesUI.canPad()) {
       tutorPad = global.ResourcesUI.tutorPad(tutorPadHost, { cls: cls, workType: 'homework', sourceId: aid, getTopic: function () { var s = m.body.querySelector('#wkTopic'); return s && s.options[s.selectedIndex] ? s.options[s.selectedIndex].text : ''; } });
@@ -390,6 +394,7 @@
         audiences: auds,
         updatedAt: FV().serverTimestamp()
       };
+      if (toolsUi) data.tools = toolsUi.value();
       if (when) data.dueAt = firebase.firestore.Timestamp.fromDate(when);
       
       var cleanLinks = [];
@@ -945,7 +950,8 @@
               '<td>' + esc(deadline) + '</td>' +
               '<td><span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span></td>' +
               '<td><div class="cr-actions">' +
-                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
+                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
+                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it"><i class="fas fa-eye"></i> Preview</button>' : '') +
                 adminControls +
                 delBtnHtml(it) +
                 '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
@@ -974,11 +980,12 @@
               var icon = isLesson ? 'fa-book-open' : 'fa-clipboard-check';
               var typeLabel = isLesson ? ' · Classwork' : '';
               h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + icon + '"></i></span>' +
-                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : typeLabel) + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + '</small></span>' +
+                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : typeLabel) + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + (global.WorkTools && global.WorkTools.ideOf(it) ? ' \u00b7 <i class="fas fa-code"></i> Paisley VS Code' : '') + '</small></span>' +
                 '<span class="wk-chips" title="Posted to">' + audChips(it) + '</span>' +
                 '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
                 itemPill(it) +
-                '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-eye"></i> Open</button>' +
+                '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
+                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it"><i class="fas fa-eye"></i> Preview</button>' : '') +
                 (!isAdmin && !isLesson ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
                 (!S.monitoringOnly && global.WorkUI.renewItem ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(it.id) + '" title="Open hand-ins again so students can hand in more work. Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
                 (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
@@ -995,8 +1002,11 @@
       var m = U.openModal({ title: it.title, wide: true });
       m.foot.innerHTML = (isAdmin ? '<button type="button" class="cr-btn" data-a="wd-here" style="margin-right:.4rem;border-color:#D98A00;color:#9A6200;background:#FFF8E6"><i class="fas fa-eye-slash"></i> Withdraw</button>' : '') +
         (isAdmin && (kind === 'exam' || !it.isClasswork) ? '<button type="button" class="cr-btn danger" data-a="del-here" style="margin-right:auto;border-color:#E74C3C;color:#E74C3C;background:#fff"><i class="fas fa-trash"></i> Delete</button>' : (isAdmin ? '<span style="margin-right:auto"></span>' : '')) +
+        (global.WorkTools ? '<button type="button" class="cr-btn" data-a="preview-here" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
         '<button type="button" class="cr-btn" data-a="close">Close</button>';
       m.foot.querySelector('[data-a="close"]').onclick = function () { m.close(); };
+      var pvHere = m.foot.querySelector('[data-a="preview-here"]');
+      if (pvHere) pvHere.onclick = function () { global.WorkTools.previewItem(it, { kind: kind === 'exam' ? 'exam' : (it.isClasswork ? 'lesson' : 'assignment') }); };
       var delHere = m.foot.querySelector('[data-a="del-here"]');
       if (delHere) delHere.onclick = async function () { var ok = await deleteItem(it); if (ok) m.close(); };
       var wdHere = m.foot.querySelector('[data-a="wd-here"]');
@@ -1044,6 +1054,7 @@
             '<td>' + (sub && (sub.submittedAt || sub.updatedAt) ? esc(U.fmtDateTime(sub.submittedAt || sub.updatedAt)) : '—') + '</td>' +
             '<td>' +
               (sub && sub.fileUrl ? '<a class="cr-btn sm" href="' + esc(sub.fileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file"></i> File</a>' : '') +
+              (global.WorkTools && global.WorkTools.hasCode(sub) ? '<button type="button" class="cr-btn sm" data-a="code" data-s="' + esc(s.id) + '" title="Open and run the code"><i class="fas fa-code"></i> Code</button>' : '') +
               (sub && sub.gradedFileUrl ? '<a class="cr-btn sm" href="' + esc(sub.gradedFileUrl) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Graded</a>' : '') +
               global.PaperHandIns.rowButtons(s, sub, subjectOf(it)) +
               (canGrade
@@ -1079,17 +1090,32 @@
           };
         });
 
-        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-ink"]'), function (b) {
-          b.onclick = function () {
-            var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
-            if (!global.InkGrader) { alert('The grading workspace did not load. Refresh the page and try again.'); return; }
-            
-            var col = it.isClasswork ? 'lessons' : 'assignments';
+        function gradeInk(sid, btn) {
+          var sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
+          if (!global.InkGrader) { alert('The grading workspace did not load. Refresh the page and try again.'); return; }
+          var col = it.isClasswork ? 'lessons' : 'assignments';
+          var label = btn ? btn.innerHTML : '';
+          if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening'; }
+          /* Code with no uploaded file is marked as a PDF of the code. */
+          var srcP = global.WorkTools ? global.WorkTools.inkSource(sub, it, stu.name || sub.studentName) : Promise.resolve(null);
+          srcP.catch(function (e) { console.warn('code pdf:', e); return null; }).then(function (source) {
+            if (btn) { btn.disabled = false; btn.innerHTML = label; }
             global.InkGrader.open({
               docRef: U.clsRef(it.cid).collection('topics').doc(it.tid).collection(col).doc(it.id).collection('submissions').doc(sid),
               data: Object.assign({ studentName: stu.name || sub.studentName }, sub), item: it, cid: it.cid, itemId: it.id, user: user, kind: it.isClasswork ? 'lesson' : 'assignment',
+              source: source || undefined,
               onDone: async function () { await refresh(); paint(); }
             });
+          });
+        }
+        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="grade-ink"]'), function (b) {
+          b.onclick = function () { gradeInk(b.dataset.s, b); };
+        });
+        Array.prototype.forEach.call(m.body.querySelectorAll('[data-a="code"]'), function (b) {
+          b.onclick = function () {
+            var sid = b.dataset.s, sub = subs[sid], stu = aud.filter(function (x) { return x.id === sid; })[0] || {};
+            var canMark = !!(sub && sub.status !== 'In progress' && !global.PaperHandIns.isPaperSub(sub) && kind !== 'exam' && global.InkGrader);
+            global.WorkTools.openCodeView({ sub: sub, item: it, studentName: stu.name || sub.studentName, onMark: canMark ? function () { gradeInk(sid); } : null });
           };
         });
       }
@@ -1454,6 +1480,7 @@
         else if (a === 'add-topic') { if (isAdmin) openTopicModal(); }
         else if (a === 'toggle') { S.collapsed[id] = !S.collapsed[id]; render(); }
         else if (a === 'detail' && item) openDetail(item);
+        else if (a === 'preview' && item && global.WorkTools) global.WorkTools.previewItem(item, { kind: kind === 'exam' ? 'exam' : (item.isClasswork ? 'lesson' : 'assignment') });
         else if (a === 'open-granted') {
           var g = S.granted[Number(el.dataset.i)];
           if (g) {

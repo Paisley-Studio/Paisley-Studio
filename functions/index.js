@@ -124,6 +124,9 @@ exports.onTuitionMessageCreated       = tuition.onTuitionMessageCreated;
 exports.onTuitionTimetableCreated     = tuition.onTuitionTimetableCreated;
 exports.onTuitionTicketCreated        = tuition.onTuitionTicketCreated;
 
+const tutorChat = require("./tutor-chat");
+exports.onTutorChatMessageCreated     = tutorChat.onTutorChatMessageCreated;
+
 const parentNewsletter = require("./parent-newsletter");
 exports.sendParentNewsletter          = parentNewsletter.sendParentNewsletter;
 exports.parentNewsletterUnsubscribe   = parentNewsletter.parentNewsletterUnsubscribe;

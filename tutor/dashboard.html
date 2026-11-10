@@ -153,6 +153,7 @@
     <nav class="sidebar-nav">
       <button class="nav-item active" data-view="overview" type="button"><i class="fas fa-chart-pie"></i> Overview</button>
       <button class="nav-item" data-view="students" type="button"><i class="fas fa-user-graduate"></i> My Students</button>
+      <button class="nav-item" data-view="messages" type="button"><i class="fas fa-comments"></i> Messages <span class="nav-badge" id="navMsgCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard"></i> Classroom <span class="nav-badge" id="navClassroomCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="resources" type="button"><i class="fas fa-folder-open"></i> Resources</button>
       <button class="nav-item" data-view="hwmgmt" type="button"><i class="fas fa-book-open"></i> Homework Management <span class="nav-badge" id="navHwCount" style="display:none;">0</span></button>
@@ -213,13 +214,14 @@
           <div class="panel-head"><div><h3>My students</h3><div class="sub">Students assigned to you by the Studio Desk</div></div></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Student</th><th>Subjects I teach them</th><th>Key Stage</th><th>Parent / Guardian</th><th>Status</th><th>Results</th><th>Signed up</th></tr></thead>
+              <thead><tr><th>Student</th><th>Subjects I teach them</th><th>Key Stage</th><th>Parent / Guardian</th><th>Status</th><th>Results</th><th>Signed up</th><th></th></tr></thead>
               <tbody id="studentBody"></tbody>
             </table>
           </div>
           <div class="pager"><span id="studentCount">0 records</span><span>Live from Firestore</span></div>
         </div>
       </section>
+      <section class="view" id="view-messages"><div id="messagesHost"></div></section>
       <section class="view" id="view-classroom"><div id="classroomHost"></div></section>
       <section class="view" id="view-resources"><div id="resourcesHost"></div></section>
       <section class="view" id="view-hwmgmt"><div id="hwHost"></div></section>
@@ -332,11 +334,13 @@
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=boards5"></script>
+<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
 <script src="../js/classroom/paper-handins.js?v=hand1"></script>
 <script src="../js/classroom/resources-folder.js?v=boards3"></script>
-<script src="../js/classroom/work-helpers.js?v=hand2"></script>
-<script src="../js/classroom/ink-grader.js?v=tech1"></script>
+<script src="../js/classroom/work-helpers.js?v=tools1"></script>
+<script src="../js/classroom/ink-grader.js?v=tools1"></script>
+<script src="../js/classroom/work-tools.js?v=tools1"></script>
+<script src="../js/classroom/tutor-chat.js?v=tools1"></script>
 <script src="../js/tuition/tuition-helpers.js?v=icons1"></script>
 <script src="../js/attendance/attendance.js?v=1"></script>
 <script>
@@ -468,6 +472,7 @@ auth.onAuthStateChanged(user=>{
     myKeyStages = tutor.keyStages || [];
     document.body.classList.add('ready');
     mountTutorBell();
+    watchMessageBubble();
     renderIdentity();
     buildKsBars();
     initFirestore();
@@ -527,6 +532,7 @@ const titles = {
   mytimetable:['My Timetable','Sessions for the subjects you teach'],
   attendance:['Attendance','Live rollcall for your lessons, overdue registers and your submission history'],
   tuition:['CBC Tuition','Chat with and schedule lessons for your CBC tuition students'],
+  messages:['Messages','Follow up with your students on missed work, corrections and topics they find hard'],
   tickets:['Student Tickets','Questions raised by your students']
 };
 document.querySelectorAll('.nav-item').forEach(btn=>{
@@ -562,6 +568,29 @@ document.querySelector('.nav-item[data-view="resources"]').addEventListener('cli
   ResourcesUI.mount(box, { role:'tutor', uid: tutor.id, name: tutor.name, subjects: tutor.subjects || [], keyStages: tutor.keyStages || [], teaching: tutor.teaching });
 });
 document.querySelector('.nav-item[data-view="hwmgmt"]').addEventListener('click', ()=> mountWorkManagement('homework','hwHost'));
+/* Messages: private follow-ups with each student (js/classroom/tutor-chat.js). */
+let tutorChat = null;
+function mountMessages(){
+  if(tutorChat || !tutor || typeof TutorChat === 'undefined') return tutorChat;
+  tutorChat = TutorChat.mountTutor(document.getElementById('messagesHost'), {
+    me: { uid: tutor.id, name: tutor.name || '' },
+    students: DB.students,
+    subjectsFor: s => mySubjectsForStudent(s)
+  });
+  return tutorChat;
+}
+function messageStudent(id){
+  const btn = document.querySelector('.nav-item[data-view="messages"]'); if(btn) btn.click();
+  const ui = mountMessages(); if(ui && id) ui.open(id);
+}
+document.querySelector('.nav-item[data-view="messages"]').addEventListener('click', ()=> mountMessages());
+function watchMessageBubble(){
+  if(typeof TutorChat === 'undefined' || !tutor) return;
+  TutorChat.watchUnread('tutor', tutor.id, n=>{
+    const b = document.getElementById('navMsgCount'); if(!b) return;
+    b.textContent = n; b.style.display = n ? '' : 'none';
+  });
+}
 document.querySelector('.nav-item[data-view="exmgmt"]').addEventListener('click', ()=> mountWorkManagement('exams','exHost'));
 let tutorBellMounted = false;
 function mountTutorBell(){
@@ -569,6 +598,7 @@ function mountTutorBell(){
   mountNotificationBell(document.getElementById('bellHost'), tutor.id, 'tutor', {
     navBadges: { classroom:'#navClassroomCount' },   // homework/exam bubbles are live "to mark" counts (renderOverview)
     navigate: (cat, n)=>{
+      if(cat === 'messages' && n && n.relatedEntity === 'tutorChats'){ messageStudent(n.relatedEntityId); return; }
       // "cid/tid/itemId" or "cid/flat/examId": go straight to that board's classroom.
       const path = String((n && n.relatedEntityId) || '').split('/');
       if(path.length === 3 && (cat === 'homework' || cat === 'exams')) window.__wkFocus = { cid: path[0], itemId: path[2] };
@@ -1142,9 +1172,11 @@ function renderStudents(){
   const list = DB.students.slice().sort((a,b)=>(b.date||0)-(a.date||0));
   document.getElementById('studentCount').textContent = list.length + ' record' + (list.length===1?'':'s');
   if(!list.length){
-    body.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:1.4rem;">No students assigned to you yet. The Studio Desk assigns students to tutors.</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:1.4rem;">No students assigned to you yet. The Studio Desk assigns students to tutors.</td></tr>';
+    if(tutorChat) tutorChat.setStudents(DB.students);
     return;
   }
+  if(tutorChat) tutorChat.setStudents(DB.students);
   body.innerHTML = list.map(s=>{
     const results = DB.examResults.filter(r=>r.studentId===s.id);
     // Subjects I teach this student, from subjectTutors
@@ -1160,6 +1192,7 @@ function renderStudents(){
       <td><span class="badge ${s.status==='Active'?'b-confirmed':'b-pending'}">${escapeHtml(s.status||'Pending')}</span></td>
       <td>${results.length}</td>
       <td>${fmtDate(s.date)}</td>
+      <td>${s.studentType==='tuition' ? '<span class="cell-sub">CBC Tuition chat</span>' : `<button class="mini-btn" type="button" title="Message ${escapeHtml(s.name||'this student')}" onclick="messageStudent('${escapeHtml(s.id)}')"><i class="fas fa-comment-dots"></i></button>`}</td>
     </tr>`;
   }).join('');
 }

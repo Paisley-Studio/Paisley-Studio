@@ -426,6 +426,7 @@
       <button class="nav-item" data-view="exams" type="button"><i class="fas fa-file-pen"></i> Exams <span class="nav-badge" id="navExamCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="notices" type="button"><i class="fas fa-bullhorn"></i> Notices <span class="nav-badge" id="navNoticeCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="timetable" type="button"><i class="fas fa-calendar-days"></i> Timetable</button>
+      <button class="nav-item" data-view="messages" type="button"><i class="fas fa-comments"></i> Messages <span class="nav-badge" id="navMsgCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="tickets" type="button"><i class="fas fa-headset"></i> Contact Tutor <span class="nav-badge" id="navTicketCount" style="display:none;">0</span></button>
       <button class="nav-item" data-view="profile" type="button"><i class="fas fa-id-card"></i> My Profile</button>
     </nav>
@@ -564,6 +565,9 @@
         </div>
       </section>
 
+      <!-- MESSAGES (tutor <-> student, js/classroom/tutor-chat.js) -->
+      <section class="view" id="view-messages"><div id="messagesHost"></div></section>
+
       <!-- CONTACT TUTOR / TICKETS -->
       <section class="view" id="view-tickets">
         <div class="panel">
@@ -645,8 +649,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
-<script src="../js/classroom/classroom-helpers.js?v=boards5"></script>
-<script src="../js/classroom/work-helpers.js?v=hand2"></script>
+<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
+<script src="../js/classroom/work-helpers.js?v=tools1"></script>
+<script src="../js/classroom/work-tools.js?v=tools1"></script>
+<script src="../js/classroom/tutor-chat.js?v=tools1"></script>
 <script src="../js/classroom/work-learner.js?v=boards2"></script>
 <script src="../js/attendance/attendance.js?v=1"></script>
 <script>
@@ -948,7 +954,23 @@ function startAttendance(){
 }
 
 let workNotices = [];
+/* Messages with tutors: mounted the first time the tab opens; the bubble is live from sign-in. */
+let studentChat = null;
+document.querySelector('.nav-item[data-view="messages"]').addEventListener('click', ()=>{
+  if(studentChat || !currentUser || typeof TutorChat === 'undefined') return;
+  studentChat = TutorChat.mountStudent(document.getElementById('messagesHost'), {
+    me: { uid: currentUser.uid, name: (profile && profile.name) || currentUser.displayName || '' }, profile: profile || {}
+  });
+});
+function watchMessageBubble(){
+  if(typeof TutorChat === 'undefined' || !currentUser) return;
+  TutorChat.watchUnread('student', currentUser.uid, n=>{
+    const b = document.getElementById('navMsgCount'); if(!b) return;
+    b.textContent = n; b.style.display = n ? '' : 'none';
+  });
+}
 function startWorkFeatures(){
+  watchMessageBubble();
   let lastNewCount = -1, badgeTimer = null;
   workBell = mountNotificationBell(document.getElementById('bellHost'), currentUser.uid, 'student', {
     // Work bubbles (Classroom / Homework / Exams) are driven by real submission state, see applyWorkCounts().
@@ -997,7 +1019,7 @@ function renderWorkNotices(){
 
 /* Jump to a notification's target. For homework / exams it opens the right SUBJECT and the item itself. */
 function goToWork(cat, n){
-  const view = { homework:'homework', exams:'exams', classroom:'classroom', notices:'notices', tickets:'tickets' }[cat];
+  const view = { homework:'homework', exams:'exams', classroom:'classroom', notices:'notices', tickets:'tickets', messages:'messages' }[cat];
   const hostId = cat === 'exams' ? 'workExHost' : (cat === 'homework' ? 'workHwHost' : null);
   const host = hostId && document.getElementById(hostId);
   if(host) host._wkBox = null;
@@ -1101,6 +1123,7 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
       notices:['Notices','Announcements for your Key Stage'],
       timetable:['Timetable','Your weekly schedule'],
       tickets:['Contact Tutor','Raise questions and support tickets'],
+      messages:['Messages','Chat with your tutors about your work'],
       profile:['My Profile','Your account details']
     };
     if(titles[btn.dataset.view]){
