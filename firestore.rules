@@ -1233,18 +1233,26 @@ service cloud.firestore {
     function techWorkKeys() {
       return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
         'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind', 'taskAnswers',
-        'snapshotUrl', 'snapshotPath', 'snapshotAt'];
+        'snapshotUrl', 'snapshotPath', 'snapshotAt', 'handedIn'];
     }
     function techWorkCreateKeys() {
       return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt',
         'status', 'submittedAt', 'submitCount', 'updatedAt', 'studentName', 'lessonTitle', 'kind', 'taskAnswers',
-        'snapshotUrl', 'snapshotPath', 'snapshotAt',
+        'snapshotUrl', 'snapshotPath', 'snapshotAt', 'handedIn',
         'studentId', 'coachId', 'lessonId', 'courseId', 'courseName', 'topicId', 'topicTitle', 'track', 'createdAt'];
     }
     function techMarkKeys() {
       return ['status', 'feedback', 'grade', 'maxScore', 'gradedBy', 'gradedByName', 'gradedAt', 'released', 'releasedAt',
         'inkData', 'inkUpdatedAt', 'gradedFileUrl', 'gradedFileName', 'gradedStoragePath', 'history', 'updatedAt',
-        'publishState', 'publishNote', 'publishDecidedBy', 'publishDecidedByName', 'publishDecidedAt'];
+        'publishState', 'publishNote', 'publishDecidedBy', 'publishDecidedByName', 'publishDecidedAt',
+        // Allow next lesson (the coach's OK finishes the lesson) and Renew (a fresh hand-in).
+        'nextAllowed', 'nextAllowedAt', 'nextAllowedBy', 'nextAllowedByName',
+        'renewedAt', 'renewedBy', 'renewedByName', 'renewNote'];
+    }
+    // What a builder may keep changing after hand-in: the IDE / writing pad only. The copy
+    // that was handed in (handedIn) is what the coach marks, and it never changes here.
+    function techWorkContentKeys() {
+      return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt', 'updatedAt'];
     }
     match /techLessonWork/{id} {
       // The id is {uid}_{lessonId}, so a builder can also open their own work before it exists.
@@ -1265,7 +1273,15 @@ service cloud.firestore {
         (techStudentActive() && resource.data.studentId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(techWorkKeys()) &&
           resource.data.status in ['Draft', 'Corrections'] &&
-          (request.resource.data.status == resource.data.status || request.resource.data.status == 'Submitted')) ||
+          (request.resource.data.status == resource.data.status || request.resource.data.status == 'Submitted') &&
+          // the hand-in copy is written only by handing in
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['handedIn']) || request.resource.data.status == 'Submitted')) ||
+        // After hand-in the IDE stays open: the builder keeps working, but cannot hand in again
+        // until the coach asks for corrections or a fresh hand-in (status Corrections).
+        (techStudentActive() && resource.data.studentId == request.auth.uid &&
+          resource.data.status in ['Submitted', 'Graded'] &&
+          resource.data.get('handedIn', null) != null &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(techWorkContentKeys())) ||
         // Handed-in work: the builder may ask to publish it, or withdraw it (shareUrl comes only from functions).
         (techStudentActive() && resource.data.studentId == request.auth.uid &&
           resource.data.status in ['Submitted', 'Graded', 'Corrections'] &&

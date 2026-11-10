@@ -31,6 +31,9 @@ test.before(async () => {
     await db.doc("techLessons/live").set({ type: "lesson", courseId: "c1", topicId: "t1", track: "beginner", status: "published", createdBy: "coach1", task: { brief: "Make a page", kind: "code" } });
     await db.doc("techLessonWork/kid1_sent").set(work({ lessonId: "sent", status: "Submitted", submitCount: 1 }));
     await db.doc("techLessonWork/kid1_redo").set(work({ lessonId: "redo", status: "Corrections" }));
+    await db.doc("techLessonWork/kid1_redo2").set(work({ lessonId: "redo2", status: "Corrections" }));
+    await db.doc("techLessonWork/kid1_copy").set(work({ lessonId: "copy", status: "Submitted", submitCount: 1, handedIn: { codeFiles: [], codeActive: "index.html" } }));
+    await db.doc("techLessonWork/kid1_okd").set(work({ lessonId: "okd", status: "Graded", submitCount: 1, grade: 8, maxScore: 10, handedIn: { codeFiles: [] } }));
     await db.doc("techGroups/g1").set({ name: "Team", memberIds: ["kid1", "kid3"], members: [{ id: "kid1", name: "Kid One" }, { id: "kid3", name: "Kid Three" }], createdBy: "coach1", coachId: "coach1" });
     await db.doc("techGroups/g1/tasks/t1").set({ title: "Build together", brief: "x", kind: "code", status: "Draft", createdBy: "coach1", codeFiles: [] });
     await db.doc("techGroups/g1/tasks/sent").set({ title: "Sent", brief: "x", kind: "code", status: "Submitted", createdBy: "coach1", codeFiles: [] });
@@ -62,6 +65,26 @@ test("a builder edits and hands in, but cannot mark or change handed-in work", a
   await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ codeFiles: [] }));
   await assertSucceeds(as("kid1").doc("techLessonWork/kid1_redo").update({ codeFiles: [] }));
   await assertSucceeds(as("kid1").doc("techLessonWork/kid1_redo").update({ status: "Submitted" }));
+});
+
+test("after hand-in the IDE stays open, but only the coach reopens hand-in or the next lesson", async () => {
+  // a hand-in with its frozen copy: the builder keeps working on the code
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_copy").update({ codeFiles: [{ name: "index.html", lang: "html", content: "<h2>more</h2>" }], codeAt: new Date(), updatedAt: new Date() }));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_okd").update({ codeFiles: [], updatedAt: new Date() }));
+  // ...but cannot change what was handed in, hand in again, answer again, or open the next lesson
+  await assertFails(as("kid1").doc("techLessonWork/kid1_copy").update({ handedIn: { codeFiles: [] } }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_copy").update({ status: "Submitted", submitCount: 2 }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_copy").update({ taskAnswers: { q1: "x" } }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_okd").update({ nextAllowed: true }));
+  await assertFails(as("kid1").doc("techLessonWork/kid1_okd").update({ status: "Corrections" }));
+  // the hand-in copy is written only by handing in
+  await assertFails(as("kid1").doc("techLessonWork/kid1_redo2").update({ handedIn: { codeFiles: [] } }));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_redo2").update({ status: "Submitted", handedIn: { codeFiles: [] } }));
+  // the coach allows the next lesson, or asks for a fresh hand-in; another coach cannot
+  await assertFails(as("coach2").doc("techLessonWork/kid1_okd").update({ nextAllowed: true }));
+  await assertSucceeds(as("coach1").doc("techLessonWork/kid1_okd").update({ nextAllowed: true, nextAllowedAt: new Date(), nextAllowedBy: "coach1", nextAllowedByName: "Coach One", updatedAt: new Date() }));
+  await assertSucceeds(as("coach1").doc("techLessonWork/kid1_okd").update({ status: "Corrections", renewedAt: new Date(), renewedBy: "coach1", renewedByName: "Coach One", renewNote: "Again", history: [{ round: 1, outcome: "Renewed" }], updatedAt: new Date() }));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_okd").update({ status: "Submitted", handedIn: { codeFiles: [] } }));
 });
 
 test("their coach and admins mark it; other coaches cannot see it; guardians read it", async () => {

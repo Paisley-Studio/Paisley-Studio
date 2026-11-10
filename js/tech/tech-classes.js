@@ -87,6 +87,17 @@
     return v.filter(function (x) { return x && T.safeUrl(x.url); });
   }
   function handedIn(w) { return !!w && ((w.submitCount || 0) > 0 || ['Submitted', 'Graded', 'Corrections'].indexOf(w.status) > -1); }
+  /* Class work finishes a lesson only once the coach has marked it and pressed Allow next lesson
+     (workCleared in functions/tech.js). Handing it in is not enough. */
+  function workCleared(w) { return !!w && w.nextAllowed === true; }
+  function workStepLabel(l, w) {
+    var writing = g.TechWork && g.TechWork.kindOf(l.task) === 'writing', thing = writing ? 'writing' : 'code';
+    if (workCleared(w)) return 'Your coach approved your ' + thing;
+    if (!handedIn(w) || w.status === 'Draft') return 'Hand in your ' + thing + ' for your coach to approve';
+    if (w.status === 'Corrections') return 'Make the corrections your coach asked for and hand it in again';
+    if (w.status === 'Graded') return 'Marked: waiting for your coach to open the next lesson';
+    return 'Handed in: waiting for your coach to mark it';
+  }
   /* The steps to pass one lesson, each done or not, for one builder. */
   function gateSteps(l, p, w) {
     var gt = gateOf(l), steps = [];
@@ -98,7 +109,7 @@
     if (gt.quiz) steps.push(gt.marked
       ? { k: 'quiz', icon: 'fa-circle-question', label: 'Score ' + gt.pass + '% or more in the quiz', done: p.bestPercent != null && p.bestPercent >= gt.pass }
       : { k: 'quiz', icon: 'fa-circle-question', label: 'Answer the quiz', done: !!p.lastAttemptAt || (p.attempts || 0) > 0 });
-    if (gt.work) steps.push({ k: 'work', icon: g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'fa-pen-nib' : 'fa-code', label: g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'Hand in your writing' : 'Hand in your code', done: handedIn(w) });
+    if (gt.work) steps.push({ k: 'work', icon: g.TechWork && g.TechWork.kindOf(l.task) === 'writing' ? 'fa-pen-nib' : 'fa-code', label: workStepLabel(l, w), done: workCleared(w) });
     if (!steps.length) steps.push({ k: 'open', icon: 'fa-door-open', label: 'Open this ' + wordOf(l), done: !!p.openedAt });
     return { steps: steps, passed: !!p.passedAt || steps.every(function (s) { return s.done; }) };
   }
@@ -106,7 +117,7 @@
     var gt = gateOf(l), bits = [];
     if (gt.watch) bits.push('watch');
     if (gt.quiz) bits.push(gt.marked ? 'quiz ' + gt.pass + '%' : 'answer quiz');
-    if (gt.work) bits.push('hand in work');
+    if (gt.work) bits.push('hand in work, approved by the coach');
     return bits.length ? 'To pass: ' + bits.join(', ') : 'Passes when opened';
   }
   /* Every lesson of a class in the order builders meet them (topic order, then lesson order). */

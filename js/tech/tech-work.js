@@ -18,7 +18,16 @@
                    approves (functions make techShowcase/cw_{workId}, a public /tech/p/ link,
                    saved as shareUrl) or declines with publishNote.
          status: Draft | Submitted | Graded | Corrections, submittedAt, submitCount,
-         feedback, grade, maxScore, gradedBy*, gradedAt, gradedFileUrl, inkData, history }
+         feedback, grade, maxScore, gradedBy*, gradedAt, gradedFileUrl, inkData, history,
+         handedIn: { codeFiles, codeFolders, codeAssets, codeActive, writingHtml, at }
+                   the copy handed in, frozen: the coach views and marks this one. The IDE
+                   stays open after hand-in (the builder keeps working in codeFiles), but
+                   Hand in comes back only when the coach asks for corrections or renews.
+         nextAllowed, nextAllowedAt, nextAllowedBy*   the coach's OK (Allow next lesson):
+                   the only thing that finishes a lesson's work step (gateSteps / gateMet)
+         renewedAt, renewedBy*, renewNote   a fresh hand-in asked of marked work (renewWork),
+                   like WorkUI.renewItem: status Corrections, the round kept in history
+                   with outcome 'Renewed'. Check it with renewedOpen, never by status alone. }
 
    Coaches and admins see hand-ins per class or per lesson, run the code,
    and mark it with ink like classroom homework: the work is turned into a
@@ -35,6 +44,7 @@
      TechWork.workPdf({ title, who, kind, files, writingHtml, assets }) -> Uint8Array
      TechWork.mountResults(host, { me, studentId, who })   the builder's Results (guardians read-only)
      TechWork.openHandIn({ me, row, who })                 staff viewer for one techLessonWork row
+     TechWork.allowNext(ref, data, me) / renewWork(ref, data, me, note)   coach decisions on marked work
      TechWork.decidePublish(ref, data, 'approve' | 'decline' | 'unpublish', me, who) -> Promise(update | null)
      TechWork.shareRowsHtml([{ title, sub, url }])         published work with Copy / Open
 ========================================================= */
@@ -134,6 +144,39 @@
       var b = e.target && e.target.closest && e.target.closest('.tw-share [data-tw="copy"]'); if (!b) return;
       e.preventDefault(); copyText(b.dataset.url, b);
     });
+  }
+  /* The copy that was handed in, laid over the doc (the coach marks it, the family sees it).
+     Old hand-ins have no copy: the work itself is what was handed in. */
+  function handedInView(d) {
+    if (!d || !d.handedIn) return d;
+    var h = d.handedIn;
+    return Object.assign({}, d, { codeFiles: h.codeFiles || [], codeFolders: h.codeFolders || [], codeAssets: h.codeAssets || [], codeActive: h.codeActive || d.codeActive || '', writingHtml: h.writingHtml != null ? h.writingHtml : d.writingHtml });
+  }
+  function msOf(t) { var x = T.toDate(t); return x ? x.getTime() : 0; }
+  /* Reopened for a fresh hand-in (Renew), as opposed to corrections after a marking. */
+  function renewedOpen(d) { return !!d && d.status === 'Corrections' && !!d.renewedAt && msOf(d.renewedAt) >= msOf(d.gradedAt); }
+  /* Allow next lesson: the coach is pleased; the server finishes the lesson and tells the builder and family. */
+  function allowNext(ref, d, me) {
+    if (!d || d.status !== 'Graded') return Promise.reject(new Error('Mark the work first.'));
+    var up = { nextAllowed: true, nextAllowedAt: FV().serverTimestamp(), nextAllowedBy: me.uid, nextAllowedByName: me.name || '', updatedAt: FV().serverTimestamp() };
+    return ref.update(up).then(function () { return up; });
+  }
+  /* Ask for a fresh hand-in of marked work (mirrors WorkUI.renewItem): the round so far goes into history. */
+  function renewWork(ref, d, me, note) {
+    var round = ((d && d.history) || []).length + 1;
+    var up = {
+      status: 'Corrections', renewedAt: FV().serverTimestamp(), renewedBy: me.uid, renewedByName: me.name || '', renewNote: String(note || '').trim().slice(0, 600),
+      history: FV().arrayUnion({
+        round: round, outcome: 'Renewed', feedback: (d && d.feedback) || '', grade: d && d.grade != null ? d.grade : null, maxScore: d && d.maxScore != null ? d.maxScore : null,
+        markedFileUrl: (d && d.gradedFileUrl) || '', markedFileName: (d && d.gradedFileName) || '', submittedAtMs: msOf(d && d.submittedAt), gradedByName: (d && d.gradedByName) || '', at: Date.now()
+      }),
+      updatedAt: FV().serverTimestamp()
+    };
+    return ref.update(up).then(function () { return up; });
+  }
+  function nextPill(d) {
+    if (!d || d.status !== 'Graded' && !d.nextAllowed) return '';
+    return d.nextAllowed ? '<span class="tc-pill good"><i class="fas fa-lock-open"></i> Next lesson open</span>' : '<span class="tc-pill mid"><i class="fas fa-lock"></i> Next lesson not open yet</span>';
   }
   function hasWork(d, kind) {
     if (!d) return false;
@@ -300,12 +343,21 @@
   /* The coach's verdict, for the builder, their family and the staff viewer. */
   function feedbackHtml(d, who) {
     if (!d || (d.status !== 'Graded' && d.status !== 'Corrections')) return '';
-    var redo = d.status === 'Corrections', sc = scoreText(d);
+    var redo = d.status === 'Corrections', sc = scoreText(d), renewed = renewedOpen(d);
     var hist = (d.history || []).filter(function (h) { return h && (h.feedback || h.markedFileUrl); });
+    if (renewed) return '<div class="tw-fb redo"><h4><i class="fas fa-rotate-right"></i> Fresh hand-in asked' + (d.renewedByName ? ' by ' + esc(d.renewedByName) : '') + (d.renewedAt ? ' · ' + esc(fmt(d.renewedAt)) : '') + '</h4>' +
+      (d.renewNote ? '<div class="txt">' + esc(d.renewNote) + '</div>' : '') +
+      '<p class="tw-note" style="margin:.6rem 0 0">' + (who ? esc(who) + ' can' : 'You can') + ' work on it again and hand it in afresh. The earlier marks are kept below.</p>' +
+      (hist.length ? '<details><summary>Earlier rounds (' + hist.length + ')</summary>' + hist.map(function (h) {
+        return '<p><b>Round ' + esc(h.round || '') + '</b>' + (h.outcome === 'Renewed' ? ' (renewed)' : '') + (h.grade != null && h.maxScore ? ' · ' + esc(h.grade + ' / ' + h.maxScore) : '') + (h.gradedByName ? ' · ' + esc(h.gradedByName) : '') + (h.feedback ? ': ' + esc(h.feedback) : '') +
+          (T.safeUrl(h.markedFileUrl) ? ' <a href="' + esc(T.safeUrl(h.markedFileUrl)) + '" target="_blank" rel="noopener noreferrer">marked copy</a>' : '') + '</p>';
+      }).join('') + '</details>' : '') + '</div>';
     return '<div class="tw-fb ' + (redo ? 'redo' : 'ok') + '"><h4><i class="fas ' + (redo ? 'fa-rotate-left' : 'fa-circle-check') + '"></i> ' +
       (redo ? 'Corrections asked' : 'Marked') + (d.gradedByName ? ' by ' + esc(d.gradedByName) : '') + (d.gradedAt ? ' · ' + esc(fmt(d.gradedAt)) : '') + '</h4>' +
       (sc ? '<div class="score">' + esc(sc) + '</div>' : '') +
       (d.feedback ? '<div class="txt">' + esc(d.feedback) + '</div>' : '') +
+      (!redo && d.nextAllowed ? '<p class="tw-note" style="margin:.6rem 0 0;color:#1d7a4c"><i class="fas fa-lock-open"></i> ' + esc(d.nextAllowedByName || 'The coach') + ' opened the next lesson.</p>' : '') +
+      (!redo && !d.nextAllowed && d.status === 'Graded' ? '<p class="tw-note" style="margin:.6rem 0 0"><i class="fas fa-lock"></i> The next lesson opens when the coach approves this work.</p>' : '') +
       (T.safeUrl(d.gradedFileUrl) ? '<p style="margin:.6rem 0 0"><a class="tc-btn light sm" href="' + esc(T.safeUrl(d.gradedFileUrl)) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> See the marked copy</a></p>' : '') +
       (redo ? '<p class="tw-note" style="margin:.6rem 0 0">' + esc(who || 'Fix it') + (who ? ' can fix it' : '') + ' below, then hand it in again.</p>' : '') +
       (hist.length ? '<details><summary>Earlier rounds (' + hist.length + ')</summary>' + hist.map(function (h) {
@@ -448,7 +500,7 @@
      --------------------------------------------------------- */
   async function openMarking(o) {
     if (!g.InkGrader) { alert('The marking screen did not load. Refresh the page and try again.'); return; }
-    var d = o.data || {};
+    var d = handedInView(o.data || {});
     var bytes;
     try {
       bytes = await workPdf({ title: o.title, who: o.who, kind: o.kind, brief: o.brief, questions: o.questions || [], answers: d.taskAnswers || {}, files: d.codeFiles || [], writingHtml: o.kind === 'doc' ? g.CodeLab.mdHtml(((d.codeFiles || [])[0] || {}).content || '') : d.writingHtml, assets: d.codeAssets || [] });
@@ -471,7 +523,7 @@
      --------------------------------------------------------- */
   function openWorkView(o) {
     style();
-    var CU = g.ClassroomUI.util, d = o.data || {}, lab = null, unsub = null;
+    var CU = g.ClassroomUI.util, d = o.data || {}, lab = null, unsub = null, shown = o.live ? d : handedInView(d);
     var m = CU.openModal({ title: (o.who ? o.who + ' · ' : '') + (o.title || 'Work'), wide: true, onClose: function () { if (lab) lab.destroy(); if (unsub) unsub(); } });
     function head() {
       return '<div id="twPubInfo" style="margin-bottom:.6rem"></div><div class="tw-bar">' + statePill(d.status) + (d.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(d.submittedAt)) + (d.submittedByName ? ' by ' + esc(d.submittedByName) : '') + (d.submitCount > 1 ? ' · round ' + d.submitCount : '') + '</span>' : '') +
@@ -483,9 +535,9 @@
     }
     m.body.innerHTML = '<div id="twHead">' + head() + '</div><div id="twWork"></div>';
     var hostW = m.body.querySelector('#twWork');
-    if (o.kind === 'writing') hostW.innerHTML = d.writingHtml ? '<div class="tw-article">' + T.cleanHtml(d.writingHtml) + '</div>' : '<div class="tc-empty">Nothing written yet.</div>';
+    if (o.kind === 'writing') hostW.innerHTML = shown.writingHtml ? '<div class="tw-article">' + T.cleanHtml(shown.writingHtml) + '</div>' : '<div class="tc-empty">Nothing written yet.</div>';
     else if (!g.CodeLab) hostW.innerHTML = '<div class="tc-empty">Paisley VS Code is not loaded on this page.</div>';
-    else lab = g.CodeLab.mount(hostW, { build: d, canEdit: false, mode: o.kind === 'doc' ? 'doc' : 'code', title: o.who, collab: o.live ? { ref: o.ref, presence: o.presence, me: { uid: o.me.uid, name: o.me.name } } : null });
+    else lab = g.CodeLab.mount(hostW, { build: shown, canEdit: false, mode: o.kind === 'doc' ? 'doc' : 'code', title: o.who, collab: o.live ? { ref: o.ref, presence: o.presence, me: { uid: o.me.uid, name: o.me.name } } : null });
     if (o.live) unsub = o.ref.onSnapshot(function (s) { if (s.exists) { d = s.data(); var h = m.body.querySelector('#twHead'); if (h) h.innerHTML = head(); paintFoot(); } }, function () { });
     function decide(k, btn) {
       if (k === 'copy') { copyText(shareLink(d), btn); return; }
@@ -493,14 +545,36 @@
       decidePublish(o.ref, d, k, o.me, o.who).then(function (up) { btn.disabled = false; if (up) { d = Object.assign({}, d, up, { publishDecidedAt: new Date() }); paintFoot(); } })
         .catch(function (e) { btn.disabled = false; alert('Could not save: ' + T.errMsg(e)); });
     }
+    function repaint() { var h = m.body.querySelector('#twHead'); if (h) h.innerHTML = head(); paintFoot(); }
+    /* Lesson work: once marked, the coach decides. Allow next lesson finishes the lesson;
+       Ask for a fresh hand-in reopens it (Renew). */
+    function coachDecide(k, btn) {
+      var run;
+      if (k === 'allow') {
+        if (!confirm('Open the next lesson for ' + (o.who ? T.firstName(o.who) : 'this builder') + '? They and their family are told by email.')) return;
+        run = allowNext(o.ref, d, o.me);
+      } else {
+        var note = prompt('Ask for a fresh hand-in. What should they do this time? (optional, the builder sees this)', '');
+        if (note === null) return;
+        run = renewWork(o.ref, d, o.me, note);
+      }
+      btn.disabled = true;
+      run.then(function () { return o.ref.get(); }).then(function (s) { if (s.exists) d = s.data(); repaint(); if (o.onDone) o.onDone(); })
+        .catch(function (e) { btn.disabled = false; alert('Could not save: ' + T.errMsg(e)); });
+    }
     function paintFoot() {
       var canMark = d.status && d.status !== 'Draft';
-      m.foot.innerHTML = '<span class="tw-note" style="margin-right:auto">' + (canMark ? 'Mark it with ink, give a score and feedback, or ask for corrections. ' + esc(o.familyNote || 'The builder and their family are told.') : 'Not handed in yet. You can watch it, and mark it once it is handed in.') + '</span>' +
+      var allowBtn = o.lessonWork && d.status === 'Graded' && !d.nextAllowed;
+      var renewBtn = o.lessonWork && d.status === 'Graded';
+      m.foot.innerHTML = '<span class="tw-note" style="margin-right:auto">' + (canMark ? (o.lessonWork ? (d.status === 'Graded' ? (d.nextAllowed ? 'The next lesson is open. You can still review the marks or ask for a fresh hand-in.' : 'Marked. When you are pleased with it, press Allow next lesson: the builder and their family are told by email and the next lesson unlocks.') : d.status === 'Corrections' ? 'Waiting for the builder to hand it in again.' : 'Mark it with ink, give a score and feedback, or ask for corrections. The next lesson stays locked until you allow it.') : 'Mark it with ink, give a score and feedback, or ask for corrections. ' + esc(o.familyNote || 'The builder and their family are told.')) : 'Not handed in yet. You can watch it, and mark it once it is handed in.') + '</span>' +
         '<button type="button" class="cr-btn" data-x>Close</button>' +
+        (renewBtn ? '<button type="button" class="cr-btn" data-cd="renew"><i class="fas fa-rotate-right"></i> Ask for a fresh hand-in</button>' : '') +
+        (allowBtn ? '<button type="button" class="cr-btn primary" data-cd="allow"><i class="fas fa-lock-open"></i> Allow next lesson</button>' : '') +
         (d.publishState === 'requested' ? '<button type="button" class="cr-btn" data-pub="decline"><i class="fas fa-rotate-left"></i> Decline publishing</button><button type="button" class="cr-btn primary" data-pub="approve"><i class="fas fa-globe"></i> Approve publishing</button>' : '') +
         (d.publishState === 'approved' ? (shareLink(d) ? '<button type="button" class="cr-btn" data-pub="copy"><i class="fas fa-copy"></i> Copy share link</button>' : '') + '<button type="button" class="cr-btn" data-pub="unpublish"><i class="fas fa-eye-slash"></i> Unpublish</button>' : '') +
         (canMark ? '<button type="button" class="cr-btn primary" data-mark><i class="fas fa-pen-nib"></i> ' + (d.status === 'Graded' ? 'Review the marks' : 'Mark with ink') + '</button>' : '');
       [].forEach.call(m.foot.querySelectorAll('[data-pub]'), function (pb) { pb.onclick = function () { decide(pb.dataset.pub, pb); }; });
+      [].forEach.call(m.foot.querySelectorAll('[data-cd]'), function (cb) { cb.onclick = function () { coachDecide(cb.dataset.cd, cb); }; });
       m.foot.querySelector('[data-x]').onclick = function () { m.close(); };
       var mk = m.foot.querySelector('[data-mark]');
       var pubInfo = m.body.querySelector('#twPubInfo');
@@ -510,7 +584,12 @@
       if (mk) mk.onclick = function () {
         mk.disabled = true;
         openMarking({ me: o.me, ref: o.ref, data: d, title: o.title, subtitle: o.subtitle, who: o.who, kind: o.kind, brief: o.brief, questions: o.questions, folder: o.folder, key: o.key,
-          onDone: function () { m.close(); if (o.onDone) o.onDone(); } }).then(function () { mk.disabled = false; });
+          onDone: function () {
+            /* Lesson work stays open after marking, so the coach can press Allow next lesson. */
+            if (!o.lessonWork) { m.close(); if (o.onDone) o.onDone(); return; }
+            o.ref.get().then(function (s) { if (s.exists) d = s.data(); repaint(); }).catch(function () { });
+            if (o.onDone) o.onDone();
+          } }).then(function () { mk.disabled = false; });
       };
     }
     paintFoot();
@@ -530,6 +609,9 @@
     /* Published work the builder can no longer change as a hand-in: they edit its published
        version (live*), and functions refresh the public link on every save. */
     function liveEdit() { return isBuilder && !!data && data.publishState === 'approved' && !editable(); }
+    /* Handed in (with a hand-in copy): the IDE stays open, only Hand in is off until the coach
+       asks for corrections or a fresh hand-in. The coach marks the copy, so changes here are safe. */
+    function keepWorking() { return isBuilder && !!data && !!data.handedIn && (data.status === 'Submitted' || data.status === 'Graded') && !liveEdit(); }
     var LIVE_MAP = { codeFiles: 'liveCodeFiles', codeFolders: 'liveCodeFolders', codeAssets: 'liveCodeAssets', codeActive: 'liveCodeActive', codeAt: 'liveCodeAt', writingHtml: 'liveWritingHtml', writingAt: 'liveWritingAt' };
     function saveLive(p) {
       var up = { liveAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() };
@@ -600,17 +682,22 @@
       if (isBuilder) {
         if (editable()) right = '<button type="button" class="tc-btn" data-tw="submit"><i class="fas fa-paper-plane"></i> ' + (st === 'Corrections' ? 'Hand in again' : 'Hand in for marking') + '</button>';
         else if (liveEdit()) right = '<span class="tw-note"><i class="fas fa-globe"></i> Editing your published version</span>';
-        else if (st === 'Submitted') right = '<span class="tw-note"><i class="fas fa-hourglass-half"></i> With your coach for marking. You can look, but not change it now.</span>';
+        else if (st === 'Submitted' || st === 'Graded') right = '<button type="button" class="tc-btn" disabled title="You can hand in again if your coach asks for corrections or a fresh hand-in"><i class="fas fa-lock"></i> Handed in</button>';
       }
       headEl.innerHTML = '<div class="tw-bar">' + statePill(st) + (data && data.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(data.submittedAt)) + '</span>' : '') + '<span class="grow"></span>' + right + '</div>' +
         '<div class="tw-msg" id="twMsg" role="status"' + (carriedNote && !data ? ' style="color:var(--brand-deep,#245F5A);margin:.5rem 0">Your code from the lesson before is here. Carry on from where you stopped.' : '>') + '</div>' +
         feedbackHtml(data, isBuilder ? 'You' : first) + publishHtml(data, isBuilder, first) +
         (!isBuilder && !data ? '<div class="tc-empty">' + esc(first) + ' has not started this yet.</div>' : '') +
         (liveEdit() ? '<p class="tw-note" style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)"><i class="fas fa-rotate"></i> Your work is published. Keep improving it here: it saves as you ' + (kind === 'writing' ? 'write' : 'type') + ' and your link shows the new version within a few seconds. The work your coach marked stays as it was.</p>' : '') +
+        (keepWorking() ? '<p class="tw-note" style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)"><i class="fas fa-circle-info"></i> ' +
+          (st === 'Submitted' ? 'Handed in. Your coach is marking the copy you handed in. You can keep working here, it saves as you go; you can hand in again only if your coach asks for corrections.'
+            : data.nextAllowed ? 'Marked, and your coach opened the next lesson. You can keep working here; it saves as you go.'
+            : 'Marked. Your coach opens the next lesson when they are happy with it. You can keep working here; it saves as you go.') + '</p>' : '') +
+        (!isBuilder && data && data.handedIn ? '<p class="tw-note" style="margin:0 0 .6rem">Showing the work as it was handed in.</p>' : '') +
         (isBuilder && editable() ? '<p class="tw-note" style="margin:0 0 .6rem">' + (kind === 'writing' ? 'It saves as you write.' : 'It saves as you type. Press Run to see your page. Make a folder such as images or videos, press its Upload button to add files from your computer, then click a file to use it.') + '</p>' : '');
     }
     function mountEditor() {
-      var live = liveEdit(), want = editable() || live, mode = live ? 'live' : (want ? 'work' : 'look');
+      var live = liveEdit(), keep = keepWorking(), want = editable() || live || keep, mode = live ? 'live' : (editable() || keep ? 'work' : 'look');   /* handing in keeps the same editor open */
       if (editor && editorEditable === mode) return;
       if (editor) { try { editor.destroy(); } catch (e) { } editor = null; }
       if (!isBuilder && !data) { edEl.innerHTML = ''; return; }
@@ -623,7 +710,8 @@
         return;
       }
       editorEditable = mode;
-      var build = Object.assign({ id: ref.id, studentId: student.id }, data || {});
+      /* Guardians and staff see the copy that was handed in; the builder sees their own latest work. */
+      var build = Object.assign({ id: ref.id, studentId: student.id }, (isBuilder ? data : handedInView(data)) || {});
       if (live && data.liveAt) Object.assign(build, {
         codeFiles: data.liveCodeFiles || data.codeFiles || [], codeFolders: data.liveCodeFolders || data.codeFolders || [],
         codeAssets: data.liveCodeAssets || data.codeAssets || [], codeActive: data.liveCodeActive || data.codeActive || 'index.html',
@@ -633,7 +721,7 @@
       var carried = false;
       if (kind !== 'writing' && want && !data && seed) { carried = !!seed.carried; Object.assign(build, { codeFiles: seed.codeFiles, codeFolders: seed.codeFolders || [], codeAssets: seed.codeAssets || [], codeActive: seed.codeActive || 'index.html' }); }
       if (kind === 'writing') {
-        if (!want) { edEl.innerHTML = data && data.writingHtml ? '<div class="tw-article">' + T.cleanHtml(data.writingHtml) + '</div>' : ''; return; }
+        if (!want) { edEl.innerHTML = build.writingHtml ? '<div class="tw-article">' + T.cleanHtml(build.writingHtml) + '</div>' : ''; return; }
         if (!g.WritingStudio) { edEl.innerHTML = '<div class="tc-empty">The writing pad is not loaded on this page.</div>'; return; }
         editor = g.WritingStudio.mount(edEl, { build: build, me: me, canEdit: want, files: [], onSave: onSave, imagePath: function (fn) { return 'techWork/' + student.id + '/' + l.id + '/' + fn; } });
       } else {
@@ -672,7 +760,7 @@
         var cur = snap.exists ? snap.data() : null;
         if (!hasWork(cur, kind) && !answered(cur)) { msg.textContent = kind === 'writing' ? 'Write something first.' : 'Write some code first.'; msg.style.color = '#b8362a'; busy = false; btn.disabled = false; return; }
         var left = qs.length - qs.filter(function (q) { return String(((cur && cur.taskAnswers) || {})[q.id] || '').trim(); }).length;
-        if (!confirm((left ? 'You have not answered ' + left + ' of the ' + qs.length + ' questions. ' : '') + 'Hand this in for marking? You cannot change it until your coach has looked at it.')) { busy = false; btn.disabled = false; return; }
+        if (!confirm((left ? 'You have not answered ' + left + ' of the ' + qs.length + ' questions. ' : '') + 'Hand this in for marking? You can keep working on it afterwards, but you can hand in again only if your coach asks for corrections.')) { busy = false; btn.disabled = false; return; }
         /* A picture of the work goes with it, for the coach, the admins and the family. */
         msg.textContent = 'Taking a picture of your work…'; msg.style.color = 'var(--brand-deep,#245F5A)';
         var shot = null;
@@ -682,6 +770,10 @@
         } catch (e) { console.warn('work snapshot:', e); }
         msg.textContent = 'Handing it in…';
         var up = { status: 'Submitted', submittedAt: FV().serverTimestamp(), submitCount: FV().increment(1), updatedAt: FV().serverTimestamp() };
+        /* The copy the coach marks. The builder keeps working on codeFiles / writingHtml afterwards. */
+        up.handedIn = kind === 'writing' ? { writingHtml: String(cur.writingHtml || ''), at: FV().serverTimestamp() }
+          : { codeFiles: (cur.codeFiles || []).map(function (f) { return { name: f.name || '', lang: f.lang || '', content: String(f.content || '') }; }),
+            codeFolders: (cur.codeFolders || []).slice(), codeAssets: (cur.codeAssets || []).slice(), codeActive: cur.codeActive || 'index.html', at: FV().serverTimestamp() };
         if (shot) Object.assign(up, { snapshotUrl: shot.url, snapshotPath: shot.path, snapshotAt: FV().serverTimestamp() });
         await ref.update(up);
         T.logActivity(me, 'project_saved', 'Handed in ' + label, { origin: 'class' });
@@ -722,7 +814,7 @@
   /* Staff viewer for one hand-in row ({ id, ref?, ...techLessonWork }), with its lesson's brief and questions. */
   function openHandIn(o) {
     var r = o.row, ref = r.ref || WORK().doc(r.id), who = o.who || r.studentName;
-    var base = { me: o.me, ref: ref, data: r, title: r.lessonTitle, subtitle: (r.courseName || '') + (r.topicTitle ? ' · ' + r.topicTitle : ''), who: who, folder: r.studentId, key: r.lessonId, onDone: o.onDone };
+    var base = { me: o.me, ref: ref, data: r, lessonWork: true, title: r.lessonTitle, subtitle: (r.courseName || '') + (r.topicTitle ? ' · ' + r.topicTitle : ''), who: who, folder: r.studentId, key: r.lessonId, onDone: o.onDone };
     return db.collection('techLessons').doc(r.lessonId).get().then(function (ls) {
       var lesson = ls.exists ? ls.data() : {};
       return openWorkView(Object.assign(base, { kind: r.kind || kindOf(lesson.task), brief: lesson.task && lesson.task.brief, questions: taskQs(lesson.task) }));
@@ -756,10 +848,12 @@
     var when = marked ? (d.gradedByName ? 'Marked by ' + d.gradedByName : 'Marked') + (d.gradedAt ? ' · ' + fmt(d.gradedAt) : '') : 'Handed in ' + fmt(d.submittedAt) + ' · waiting for the coach';
     return '<article class="tw-res' + (redo ? ' redo' : '') + '">' +
       '<div class="tw-res-top"><div class="tw-res-t">' + (where ? '<span class="tw-eyebrow">' + esc(where) + '</span>' : '') + '<h4>' + esc(d.lessonTitle || 'Class work') + '</h4><span class="tw-note">' + esc(when) + '</span></div>' +
-        '<div class="tw-res-r">' + (sc ? '<b class="tw-res-sc">' + esc(sc) + '</b>' : '') + statePill(d.status) + '</div></div>' +
+        '<div class="tw-res-r">' + (sc ? '<b class="tw-res-sc">' + esc(sc) + '</b>' : '') + statePill(d.status) + nextPill(d) + '</div></div>' +
       (T.safeUrl(d.snapshotUrl) ? '<img class="tw-res-pic" src="' + esc(T.safeUrl(d.snapshotUrl)) + '" alt="" loading="lazy">' : '') +
       (d.feedback ? '<div class="tw-res-fb">' + esc(d.feedback) + '</div>' : '') +
-      (redo ? '<p class="tw-res-redo"><i class="fas fa-rotate-left"></i> ' + (isBuilder ? 'Your coach asked for corrections. Fix it, then hand it in again.' : 'The coach asked ' + esc(who) + ' for corrections.') + '</p>' : '') +
+      (redo ? '<p class="tw-res-redo"><i class="fas ' + (renewedOpen(d) ? 'fa-rotate-right' : 'fa-rotate-left') + '"></i> ' + (renewedOpen(d)
+        ? (isBuilder ? 'Your coach asked you to hand it in afresh.' + (d.renewNote ? ' ' + esc(d.renewNote) : '') : 'The coach asked ' + esc(who) + ' for a fresh hand-in.')
+        : (isBuilder ? 'Your coach asked for corrections. Fix it, then hand it in again.' : 'The coach asked ' + esc(who) + ' for corrections.')) + '</p>' : '') +
       '<div class="tw-res-act">' +
         (redo && isBuilder ? '<button type="button" class="tc-btn sm" data-twfix="' + esc(d.lessonId) + '"><i class="fas fa-pen"></i> Make corrections</button>' : '') +
         (url ? '<a class="tc-btn light sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-file-pdf"></i> Marked copy</a><button type="button" class="tc-btn light sm" data-twdl="' + esc(url) + '" data-name="' + esc(pdfName(d)) + '"><i class="fas fa-download"></i> Download</button>' : '') +
@@ -824,24 +918,25 @@
         .sort(function (a, b) { return (T.toDate(b.submittedAt || b.updatedAt) || 0) - (T.toDate(a.submittedAt || a.updatedAt) || 0); });
       paint();
     }, function (e) { if (!dead) host.innerHTML = '<div class="cr-empty">Could not load hand-ins: ' + esc(T.errMsg(e)) + '</div>'; });
-    var FILTERS = [['todo', 'To mark'], ['publish', 'Publish requests'], ['all', 'All'], ['Graded', 'Marked'], ['Corrections', 'Corrections asked'], ['Draft', 'Still working']];
+    var FILTERS = [['todo', 'To mark'], ['allow', 'Next lesson to open'], ['publish', 'Publish requests'], ['all', 'All'], ['Graded', 'Marked'], ['Corrections', 'Corrections asked'], ['Draft', 'Still working']];
     function paint() {
       if (S.rows === null) { host.innerHTML = '<div class="cr-empty">Loading hand-ins…</div>'; return; }
       var qq = S.q.trim().toLowerCase();
       var list = S.rows.filter(function (r) {
-        var okF = S.f === 'all' || (S.f === 'todo' ? r.status === 'Submitted' : S.f === 'publish' ? r.publishState === 'requested' : r.status === S.f);
+        var okF = S.f === 'all' || (S.f === 'todo' ? r.status === 'Submitted' : S.f === 'allow' ? r.status === 'Graded' && !r.nextAllowed : S.f === 'publish' ? r.publishState === 'requested' : r.status === S.f);
         return okF && (!qq || (String(r.studentName) + ' ' + r.lessonTitle + ' ' + r.courseName).toLowerCase().indexOf(qq) !== -1);
       });
+      var allowN = S.rows.filter(function (r) { return r.status === 'Graded' && !r.nextAllowed; }).length;
       var todo = S.rows.filter(function (r) { return r.status === 'Submitted'; }).length, pubs = S.rows.filter(function (r) { return r.publishState === 'requested'; }).length;
-      host.innerHTML = '<div class="cr-filters">' + FILTERS.map(function (f) { return '<button type="button" class="cr-btn sm' + (S.f === f[0] ? ' primary' : '') + '" data-hf="' + f[0] + '">' + esc(f[1]) + (f[0] === 'todo' && todo ? ' (' + todo + ')' : '') + (f[0] === 'publish' && pubs ? ' (' + pubs + ')' : '') + '</button>'; }).join('') +
+      host.innerHTML = '<div class="cr-filters">' + FILTERS.map(function (f) { return '<button type="button" class="cr-btn sm' + (S.f === f[0] ? ' primary' : '') + '" data-hf="' + f[0] + '">' + esc(f[1]) + (f[0] === 'todo' && todo ? ' (' + todo + ')' : '') + (f[0] === 'allow' && allowN ? ' (' + allowN + ')' : '') + (f[0] === 'publish' && pubs ? ' (' + pubs + ')' : '') + '</button>'; }).join('') +
         '<input type="search" data-hq placeholder="Search builder or lesson…" aria-label="Search" value="' + esc(S.q) + '"></div>' +
         (list.length ? '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Builder</th><th>Lesson</th><th>Class</th><th>State</th><th>Handed in</th><th>Score</th><th></th></tr></thead><tbody>' + list.map(function (r) {
           var s = byId[r.studentId], name = (s && s.name) || r.studentName || 'Builder';
           return '<tr><td><b>' + esc(name) + '</b></td><td>' + esc(r.lessonTitle || '') + '<div class="cr-note">' + (r.kind === 'writing' ? 'Writing' : 'Code') + '</div></td><td class="cr-note">' + esc(r.courseName || '') + (r.topicTitle ? ' · ' + esc(r.topicTitle) : '') + '</td>' +
-            '<td>' + statePill(r.status) + (r.publishState === 'requested' ? ' <span class="tc-pill mid"><i class="fas fa-globe"></i> Wants to publish</span>' : r.publishState === 'approved' ? ' <span class="tc-pill good"><i class="fas fa-globe"></i> Published</span>' : '') + '</td><td class="cr-note">' + esc(fmt(r.submittedAt)) + '</td><td>' + esc(scoreText(r) || '–') + '</td>' +
+            '<td>' + statePill(r.status) + (r.lessonId ? ' ' + nextPill(r) : '') + (r.publishState === 'requested' ? ' <span class="tc-pill mid"><i class="fas fa-globe"></i> Wants to publish</span>' : r.publishState === 'approved' ? ' <span class="tc-pill good"><i class="fas fa-globe"></i> Published</span>' : '') + '</td><td class="cr-note">' + esc(fmt(r.submittedAt)) + '</td><td>' + esc(scoreText(r) || '–') + '</td>' +
             '<td><button type="button" class="cr-btn sm' + (r.status === 'Submitted' ? ' primary' : '') + '" data-open="' + esc(r.id) + '"><i class="fas ' + (r.status === 'Submitted' ? 'fa-pen-nib' : 'fa-eye') + '"></i> ' + (r.status === 'Submitted' ? 'Open and mark' : 'Open') + '</button></td></tr>';
         }).join('') + '</tbody></table></div>' :
-          '<div class="cr-panel"><div class="cr-empty">' + (S.f === 'todo' ? 'Nothing waiting to be marked.' : S.f === 'publish' ? 'Nobody is asking to publish right now.' : 'No class work here yet.') + ' Builders hand in from the lesson’s “Make it” step.</div></div>');
+          '<div class="cr-panel"><div class="cr-empty">' + (S.f === 'todo' ? 'Nothing waiting to be marked.' : S.f === 'allow' ? 'Every marked piece of work has its next lesson open.' : S.f === 'publish' ? 'Nobody is asking to publish right now.' : 'No class work here yet.') + ' Builders hand in from the lesson’s “Make it” step.</div></div>');
     }
     host.addEventListener('click', function (e) {
       var f = e.target.closest('[data-hf]'); if (f) { S.f = f.dataset.hf; paint(); return; }
@@ -861,6 +956,6 @@
 
   g.TechWork = {
     kindOf: kindOf, workId: workId, taskQs: taskQs, answersHtml: answersHtml, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
-    takeSnapshot: takeSnapshot, publishHtml: publishHtml, shareLink: shareLink, copyText: copyText, shareRowsHtml: shareRowsHtml, decidePublish: decidePublish, openHandIn: openHandIn, mountResults: mountResults, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
+    takeSnapshot: takeSnapshot, publishHtml: publishHtml, shareLink: shareLink, copyText: copyText, shareRowsHtml: shareRowsHtml, decidePublish: decidePublish, allowNext: allowNext, renewWork: renewWork, renewedOpen: renewedOpen, handedInView: handedInView, openHandIn: openHandIn, mountResults: mountResults, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
   };
 })(window);

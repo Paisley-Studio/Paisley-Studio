@@ -773,6 +773,9 @@ function lessonGate(l) {
   };
 }
 const handedIn = (w) => !!w && ((w.submitCount || 0) > 0 || ["Submitted", "Graded", "Corrections"].indexOf(w.status) !== -1);
+/* Class work finishes a lesson only when the coach has marked it and pressed Allow next lesson
+   (nextAllowed, coach/admin only in the rules). Handing it in is not enough. */
+const workCleared = (w) => !!w && w.nextAllowed === true;
 function gateMet(l, p, w) {
   const g = lessonGate(l), pr = p || {};
   let any = false;
@@ -781,7 +784,7 @@ function gateMet(l, p, w) {
     any = true;
     if (g.marked ? !(pr.bestPercent != null && pr.bestPercent >= g.pass) : !(pr.lastAttemptAt || (pr.attempts || 0) > 0)) return false;
   }
-  if (g.work) { any = true; if (!handedIn(w)) return false; }
+  if (g.work) { any = true; if (!workCleared(w)) return false; }
   return any || !!pr.openedAt;
 }
 /* The classes of a builder's level, in learning order: Level 1, 2, 3… Must match
@@ -988,6 +991,8 @@ function workEvent(before, after) {
   const b = before || {}, a = after || {};
   if (WORK_STATES.indexOf(a.status) === -1) return "";
   if (a.status === "Submitted" && (b.status !== "Submitted" || (a.submitCount || 0) > (b.submitCount || 0))) return "submitted";
+  /* Renew: the coach asked for a fresh hand-in of marked work (TechWork.renewWork). */
+  if (a.status === "Corrections" && !!a.renewedAt && tsMs(a.renewedAt) !== tsMs(b.renewedAt)) return "renewed";
   const gradedNow = !!a.gradedAt && tsMs(a.gradedAt) !== tsMs(b.gradedAt);
   if (a.status === "Graded" && (b.status !== "Graded" || gradedNow)) return "graded";
   if (a.status === "Corrections" && (b.status !== "Corrections" || gradedNow)) return "corrections";
@@ -1007,7 +1012,64 @@ function workSnapshotHtml(pic, kid) {
   if (!/^https:\/\//.test(pic || "")) return "";
   return `<p style="margin:0 0 14px;"><img src="${esc(pic)}" width="496" alt="What ${esc(kid)} built" style="display:block;width:100%;max-width:496px;height:auto;max-height:300px;object-fit:cover;object-position:top;border:1px solid #E3ECEA;border-radius:8px;"></p>`;
 }
-function workRound(a, ev) { return ev === "submitted" ? String(a.submitCount || 1) : String(tsMs(a.gradedAt) || (a.history || []).length); }
+function workRound(a, ev) {
+  if (ev === "submitted") return String(a.submitCount || 1);
+  if (ev === "renewed") return "r" + String(tsMs(a.renewedAt) || (a.history || []).length);
+  return String(tsMs(a.gradedAt) || (a.history || []).length);
+}
+/* The lesson after this one in its class (topic order, then lesson order; mirrors inOrder in tech-classes.js). */
+async function nextLessonAfter(l) {
+  if (!l || !l.courseId) return null;
+  const db = admin.firestore();
+  const byOrd = (x, y) => (x.order || 0) - (y.order || 0) || String(x.title || "").localeCompare(String(y.title || ""));
+  const [ts, ls] = await Promise.all([
+    db.collection("techTopics").where("courseId", "==", l.courseId).get(),
+    db.collection("techLessons").where("courseId", "==", l.courseId).where("status", "==", "published").get()
+  ]);
+  const lessons = ls.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  const all = [];
+  ts.docs.map((d) => Object.assign({ id: d.id }, d.data())).sort(byOrd)
+    .forEach((t) => lessons.filter((x) => x.topicId === t.id).sort(byOrd).forEach((x) => all.push(x)));
+  const i = all.findIndex((x) => x.id === l.id);
+  return i > -1 ? all[i + 1] || null : null;
+}
+/* The coach was pleased with the marked work and pressed Allow next lesson: the lesson is
+   finished (checkLessonPass writes passedAt, which opens the next lesson on the dashboard),
+   and the builder and their family hear about it by bell and email. Once per piece of work. */
+async function announceNextAllowed(wid, a) {
+  const sid = a.studentId, s = await techStudent(sid);
+  if (!s) return;
+  await checkLessonPass(sid, a.lessonId);
+  const ld = await admin.firestore().collection("techLessons").doc(a.lessonId).get();
+  const l = ld.exists ? Object.assign({ id: ld.id }, ld.data()) : null;
+  const next = l ? await nextLessonAfter(l).catch(() => null) : null;
+  const what = a.lessonTitle || (l ? lessonTitle(l) : "class work"), by = a.nextAllowedByName || "Your coach";
+  const nextName = next ? lessonTitle(next) : "";
+  const line = `${by} was happy with ${what}` + (next ? ` and opened the next lesson, “${nextName}”.` : ". That lesson is finished.");
+  const fresh = await techNotify(sid, "student", "tech_unlock", next ? "Next lesson open" : "Lesson finished", line,
+    { studentId: sid, id: `work_${wid}_next`, section: "classes", courseId: a.courseId || "", lessonId: next ? next.id : "", link: LINKS.student + "#classes" });
+  if (fresh) {
+    await email(s.email, next ? `Next lesson open: ${nextName}` : `Lesson finished: ${what}`, {
+      preheader: line, heading: next ? "Your next lesson is open." : "Lesson finished.",
+      intro: `Hi ${esc(first(s.name))}, ${esc(by)} marked ${esc(what)} and was happy with it.`,
+      body: workEmailBody(a) + `<p style="margin:12px 0 0;">${next ? `Open Classes in your studio to start <b>${esc(nextName)}</b>.` : "Open Classes in your studio to see what is next."}</p>`,
+      cta: { label: "Open Classes", url: APP + LINKS.student + "#classes" }
+    });
+    await logActivity(sid, "work_cleared", `Coach opened the next lesson after ${what}`, { studentName: s.name || "", by: "coach", origin: "class" });
+  }
+  const kid = first(s.name, "Your child");
+  const famLine = `${by} was happy with ${kid}'s ${what}` + (next ? ` and opened the next lesson, “${nextName}”.` : ".");
+  for (const g of await guardiansOf(sid)) {
+    const gFresh = await techNotify(g.parentUid, "guardian", "tech_unlock", next ? `${kid} can move on` : `${kid} finished a lesson`, famLine,
+      { studentId: sid, courseId: a.courseId || "", id: `work_${wid}_next_${g.parentUid}`, section: "classes", link: LINKS.guardian + "#classes" });
+    if (gFresh) await email(g.email, next ? `${kid} can move on to the next lesson` : `${kid} finished ${what}`, {
+      preheader: famLine, heading: next ? `${kid} can move on to the next lesson.` : `${kid} finished a lesson.`,
+      intro: `Hi ${esc(first(g.name))}, ${esc(famLine)}`,
+      body: workEmailBody(a) + `<p style="margin:12px 0 0;">Each lesson opens only when the coach is happy with the work before it, so this one was earned.</p>`,
+      cta: { label: "See their progress", url: APP + LINKS.guardian + "#classes" }
+    });
+  }
+}
 
 exports.onTechLessonWorkWritten = onDocumentWritten(
   { document: "techLessonWork/{wid}", region: LOCATION, secrets: SMTP_SECRETS },
@@ -1023,6 +1085,8 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
       await refreshShowcase(showcaseIdOf(event.params.wid), { codeFiles: w.codeFiles, codeActive: w.codeActive, codeAssets: w.codeAssets, writingHtml: w.writingHtml, contentUpdatedAt: FV().serverTimestamp() })
         .catch((e) => console.warn("class work showcase refresh:", e.message || e));
     }
+    /* Allow next lesson: the coach's OK is what finishes a lesson with class work. */
+    if (a.nextAllowed === true && !(b && b.nextAllowed === true) && a.studentId && a.lessonId) await announceNextAllowed(event.params.wid, a);
     const ev = workEvent(b, a);
     if (!ev) return;
     const wid = event.params.wid, sid = a.studentId, s = await techStudent(sid);
@@ -1064,6 +1128,22 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
       await checkLessonPass(sid, a.lessonId);
       return;
     }
+    if (ev === "renewed") {
+      const by = a.renewedByName || "Your coach";
+      const rTitle = `Hand it in again: ${what}`, rLine = `${by} asked you to hand in ${what} afresh.` + (a.renewNote ? " " + String(a.renewNote).slice(0, 220) : "");
+      const rFresh = await techNotify(sid, "student", "tech_work_corrections", rTitle, rLine, Object.assign({ id: `work_${wid}_${round}`, section: "results", link: LINKS.student + "#results" }, extra, { lessonId: "" }));
+      if (rFresh) {
+        await email(s.email, rTitle, {
+          preheader: rLine, heading: "Your coach asked for a fresh hand-in.",
+          intro: `Hi ${esc(first(s.name))}, ${esc(by)} opened ${esc(what)} (${esc(where)}) again so you can hand it in afresh.`,
+          body: (a.renewNote ? `<p style="margin:0 0 8px;padding:10px 12px;background:#F4F8F7;border-radius:8px;white-space:pre-wrap;">${esc(String(a.renewNote).slice(0, 2000))}</p>` : "") +
+            `<p style="margin:0;">Open Results in your studio, press Make corrections, then hand it in again. Your earlier marks stay in the history.</p>`,
+          cta: { label: "Open Results", url: APP + LINKS.student + "#results" }
+        });
+        await logActivity(sid, "work_renewed", "Fresh hand-in asked: " + what, { studentName: s.name || "", by: "coach", origin: "class" });
+      }
+      return;
+    }
     const graded = ev === "graded";
     const title = graded ? `Your work was marked: ${what}` : `Corrections asked: ${what}`;
     const line = (graded ? `${a.gradedByName || "Your coach"} marked ${what}.` : `${a.gradedByName || "Your coach"} asked for corrections on ${what}.`) + " " + markLine(a);
@@ -1073,7 +1153,7 @@ exports.onTechLessonWorkWritten = onDocumentWritten(
       await email(s.email, title, {
         preheader: line, heading: graded ? "Your work is marked." : "Your coach asked for corrections.",
         intro: `Hi ${esc(first(s.name))}, ${esc(a.gradedByName || "your coach")} ${graded ? "marked" : "looked at"} ${esc(what)} (${esc(where)}).`,
-        body: workEmailBody(a) + (graded ? `<p style="margin:12px 0 0;">It is in Results in your studio, with the marked copy.</p>` : `<p style="margin:12px 0 0;">Open Results in your studio and press Make corrections, then hand it in again.</p>`),
+        body: workEmailBody(a) + (graded ? `<p style="margin:12px 0 0;">It is in Results in your studio, with the marked copy.${a.nextAllowed ? "" : " When your coach is happy with it, they open the next lesson and we will let you know."}</p>` : `<p style="margin:12px 0 0;">Open Results in your studio and press Make corrections, then hand it in again.</p>`),
         cta: { label: "Open Results", url: APP + LINKS.student + "#results" }
       });
       await logActivity(sid, graded ? "work_marked" : "work_corrections", (graded ? "Work marked: " : "Corrections asked: ") + what, { studentName: s.name || "", by: "coach", origin: "class" });
@@ -1735,4 +1815,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf, buildShowcaseContent, liveWork, changedAny, BUILD_CONTENT_KEYS, WORK_CONTENT_KEYS };
+exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workCleared, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf, buildShowcaseContent, liveWork, changedAny, BUILD_CONTENT_KEYS, WORK_CONTENT_KEYS };

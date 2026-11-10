@@ -67,9 +67,12 @@ test("a level passes only when every step it asks for is done", () => {
   const full = { type: "lesson", video: { url: "https://x/v.mp4" }, questions: QUESTIONS, task: { kind: "code" } };
   assert.equal(gateMet(full, {}, null), false);
   assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 67 }, null), false);                        // no hand-in yet
-  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 40 }, { status: "Submitted" }), false);     // under 50%
-  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 50 }, { status: "Submitted" }), true);
-  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 90 }, { status: "Corrections", submitCount: 1 }), true);
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 40 }, { status: "Graded", nextAllowed: true }), false);   // under 50%
+  // handing in, or even a mark, is not enough: the coach must press Allow next lesson
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 50 }, { status: "Submitted" }), false);
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 90 }, { status: "Graded", submitCount: 1 }), false);
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 90 }, { status: "Corrections", submitCount: 1 }), false);
+  assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 50 }, { status: "Graded", nextAllowed: true }), true);
   assert.equal(gateMet(full, { watchedAt: ts, bestPercent: 90 }, { status: "Draft" }), false);
   // the admin's choice: only the quiz, at 80%
   const quizOnly = Object.assign({}, full, { gate: { watch: false, quiz: true, work: false, pass: 80 } });
@@ -88,8 +91,10 @@ test("a class is passed when every posted lesson in it is finished; classes go i
   const a = { id: "a", type: "lesson", notes: "x" }, b = { id: "b", type: "lesson", task: { kind: "code" } };
   assert.equal(classPassed([], {}, {}), false);                                         // nothing posted yet: not passed
   assert.equal(classPassed([a, b], { a: { openedAt: ts } }, {}), false);                 // one lesson left
-  assert.equal(classPassed([a, b], { a: { openedAt: ts } }, { b: { status: "Submitted" } }), true);
-  assert.equal(classPassed([a, b], { a: { passedAt: ts } }, { b: { status: "Graded", submitCount: 1 } }), true);
+  assert.equal(classPassed([a, b], { a: { openedAt: ts } }, { b: { status: "Submitted" } }), false);   // waiting for the coach
+  assert.equal(classPassed([a, b], { a: { passedAt: ts } }, { b: { status: "Graded", submitCount: 1 } }), false);
+  assert.equal(classPassed([a, b], { a: { passedAt: ts } }, { b: { status: "Graded", submitCount: 1, nextAllowed: true } }), true);
+  assert.equal(classPassed([a, b], { a: { passedAt: ts }, b: { passedAt: ts } }, {}), true);            // passed before stays passed
   const order = [{ name: "Web", order: 2 }, { name: "Scratch", order: 1 }, { name: "Art" }, { name: "AI", order: 2 }].sort(byCourse).map((c) => c.name);
   assert.deepEqual(order, ["Art", "Scratch", "AI", "Web"]);
 });
@@ -111,6 +116,11 @@ test("class work: a hand-in, a mark and a correction are each told once", () => 
   assert.equal(workEvent({ status: "Submitted" }, { status: "Corrections", gradedAt: t1 }), "corrections");
   assert.equal(workEvent({ status: "Corrections", submitCount: 1 }, { status: "Submitted", submitCount: 2 }), "submitted");
   assert.equal(workEvent(null, { status: "Draft" }), "");
+  // Renew: a fresh hand-in asked of marked work is its own event, once per renewal
+  assert.equal(workEvent({ status: "Graded", gradedAt: t1 }, { status: "Corrections", gradedAt: t1, renewedAt: t2 }), "renewed");
+  assert.equal(workEvent({ status: "Corrections", gradedAt: t1, renewedAt: t2 }, { status: "Corrections", gradedAt: t1, renewedAt: t2, codeFiles: [] }), "");
+  // Allow next lesson is not a marking event (it is announced on its own)
+  assert.equal(workEvent({ status: "Graded", gradedAt: t1 }, { status: "Graded", gradedAt: t1, nextAllowed: true }), "");
   assert.equal(workEvent(null, { status: "Nonsense" }), "");
 });
 
