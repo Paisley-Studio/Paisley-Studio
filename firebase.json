@@ -24,6 +24,7 @@
       "functions/**",
       "vertex-key.json",
       "FIRESTORE_RULES.md",
+      "ATTENDANCE_RECOGNITION.md",
       "paisley-ad/**",
       "**/*.zip",
       "**/*.mp4"

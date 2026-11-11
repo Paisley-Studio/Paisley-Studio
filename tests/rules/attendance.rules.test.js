@@ -91,3 +91,28 @@ test("subject names are public to read and written only by the renameSubject fun
   await assertFails(as("desk").doc("lmsSettings/subjects").set({ names: { mathematics: "Maths" } }));
   await assertFails(as("t1").doc("lmsSettings/subjects").set({ names: {} }));
 });
+
+test("facial recognition: settings, profiles, attempts and engine keys are Studio Desk only; nobody writes them", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc("attendanceSettings/policy").set({ strikeReset: "academic_year" });
+    await db.doc("attendanceSettings/recognition").set({ status: "enabled", threshold: 0.9 });
+    await db.doc("faceProfiles/ann").set({ personType: "student", status: "enrolled" });
+    await db.doc("faceAttempts/x").set({ personId: "ann", result: "matched" });
+    await db.doc("privateConfig/faceRecognition").set({ apiKey: "secret" });
+  });
+  await assertSucceeds(as("ann").doc("attendanceSettings/policy").get());
+  await assertFails(anon().doc("attendanceSettings/policy").get());
+  for (const who of ["ann", "t1", "pa"]) {
+    await assertFails(as(who).doc("attendanceSettings/recognition").get());
+    await assertFails(as(who).doc("faceProfiles/ann").get());
+    await assertFails(as(who).doc("faceAttempts/x").get());
+    await assertFails(as(who).doc("attendanceSettings/recognition").set({ status: "enabled" }));
+  }
+  await assertSucceeds(as("desk").doc("attendanceSettings/recognition").get());
+  await assertSucceeds(as("desk").doc("faceProfiles/ann").get());
+  await assertFails(as("desk").doc("attendanceSettings/recognition").set({ status: "disabled" }));
+  await assertFails(as("desk").doc("faceProfiles/ann").set({ status: "enrolled" }));
+  await assertFails(as("desk").doc("privateConfig/faceRecognition").get());
+  await assertFails(as("ann").doc("privateConfig/faceRecognition").get());
+});

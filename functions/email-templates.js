@@ -984,7 +984,8 @@ function parentNewsletter({ newsletter, parentName, unsubUrl }) {
 
 /* Attendance and punctuality (functions/attendance.js). One template, one plain style.
    kind: late | absent | strike4_student | strike4_parent | referral_parent | referral_admin | auto_submit_admin */
-function attendanceNotice({ kind, audience, recipientName, student, subjectName, tutorName, startAt, arrivedAt, minutesLate, strikes, academicYear, unresolved }) {
+function attendanceNotice({ kind, audience, recipientName, student, subjectName, tutorName, startAt, arrivedAt, minutesLate, strikes, academicYear, periodPhrase, unresolved }) {
+  const per = esc(periodPhrase || "this academic year");
   const who = esc((student && student.name) || 'your child');
   const hi = recipientName ? `Hi ${esc(firstName(recipientName))},` : 'Hello,';
   const when = startAt ? fmtWhen(startAt) : '—';
@@ -998,7 +999,7 @@ function attendanceNotice({ kind, audience, recipientName, student, subjectName,
     ['fa-clock', 'Scheduled start', timeOf(startAt)],
     ['fa-user-clock', 'Arrived', timeOf(arrivedAt)],
     ['fa-hourglass-half', 'Minutes late', String(minutesLate == null ? '—' : minutesLate)],
-    strikes ? ['fa-triangle-exclamation', 'Late arrivals this year', `${strikes}${academicYear ? ` (${academicYear})` : ''}`] : null
+    strikes ? ['fa-triangle-exclamation', 'Late-arrival strikes', `${strikes}${academicYear ? ` (${academicYear})` : ''}`] : null
   ]);
   const muted = (t) => `<p style="margin:0;font-size:13px;color:${BRAND.muted};">${t}</p>`;
   const parentCta = { label: 'Open the Parent Portal', url: PORTALS.parent };
@@ -1022,7 +1023,7 @@ function attendanceNotice({ kind, audience, recipientName, student, subjectName,
     strike4_student: {
       subject: 'Formal warning: four late arrivals',
       heading: 'Formal punctuality warning',
-      lead: `${fa('fa-triangle-exclamation', '#E74C3C')}You now have <strong>four late-arrival strikes</strong> this academic year.`,
+      lead: `${fa('fa-triangle-exclamation', '#E74C3C')}You now have <strong>four late-arrival strikes</strong> ${per}.`,
       rows: lateRows,
       tail: muted('This is a formal warning. The next time you arrive 15 minutes or more after a lesson starts, it will be referred to the Studio Desk for disciplinary review. Join your lessons a few minutes early.'),
       cta: { label: portalCta(student), url: studentPortal(student) }
@@ -1030,7 +1031,7 @@ function attendanceNotice({ kind, audience, recipientName, student, subjectName,
     strike4_parent: {
       subject: `Formal warning: ${(student && student.name) || 'your child'} has four late arrivals`,
       heading: 'Formal punctuality warning',
-      lead: `${fa('fa-triangle-exclamation', '#E74C3C')}<strong>${who}</strong> now has <strong>four late-arrival strikes</strong> this academic year.`,
+      lead: `${fa('fa-triangle-exclamation', '#E74C3C')}<strong>${who}</strong> now has <strong>four late-arrival strikes</strong> ${per}.`,
       rows: lateRows,
       tail: muted('The next late arrival will be referred to the Studio Desk for disciplinary review. Please help them join lessons on time.'),
       cta: parentCta
@@ -1038,7 +1039,7 @@ function attendanceNotice({ kind, audience, recipientName, student, subjectName,
     referral_parent: {
       subject: `Disciplinary referral: ${(student && student.name) || 'your child'}`,
       heading: 'Referred to the Studio Desk',
-      lead: `${fa('fa-scale-balanced', '#E74C3C')}<strong>${who}</strong> has reached <strong>${esc(strikes || 5)} late-arrival strikes</strong> this academic year, the disciplinary referral threshold.`,
+      lead: `${fa('fa-scale-balanced', '#E74C3C')}<strong>${who}</strong> has reached <strong>${esc(strikes || 5)} late-arrival strikes</strong> ${per}, the disciplinary referral threshold.`,
       rows: lateRows,
       tail: muted('The case has been referred to the Studio Desk for review. No action has been taken yet; the Studio Desk will decide what happens next and will be in touch.'),
       cta: parentCta
@@ -1046,7 +1047,7 @@ function attendanceNotice({ kind, audience, recipientName, student, subjectName,
     referral_admin: {
       subject: `Disciplinary referral: ${(student && student.name) || 'a student'} (${strikes || 5} strikes)`,
       heading: 'New disciplinary referral',
-      lead: `${fa('fa-scale-balanced', '#E74C3C')}<strong>${who}</strong> reached <strong>${esc(strikes || 5)} late-arrival strikes</strong> this academic year.`,
+      lead: `${fa('fa-scale-balanced', '#E74C3C')}<strong>${who}</strong> reached <strong>${esc(strikes || 5)} late-arrival strikes</strong> ${per}.`,
       rows: lateRows,
       tail: muted('Review the referral and record your decision in Attendance on the Studio Desk.'),
       cta: { label: 'Open Attendance', url: PORTALS.admin + '#attendance' }

@@ -170,6 +170,15 @@ exports.attendanceSweep               = attendance.attendanceSweep;
 exports.onAttendanceStrikeCreated     = attendance.onAttendanceStrikeCreated;
 exports.onAttendanceRecordUpdated     = attendance.onAttendanceRecordUpdated;
 exports.onAttendanceNotificationCreated = attendance.onAttendanceNotificationCreated;
+exports.attendanceTutorCheckIn        = attendance.attendanceTutorCheckIn;
+
+// Optional facial recognition for attendance (Admin > Attendance > Facial recognition).
+const face = require("./face-recognition");
+exports.faceAdmin                     = face.faceAdmin;
+exports.faceCheckIn                   = face.faceCheckIn;
+exports.faceTutorVerify               = face.faceTutorVerify;
+exports.faceConsent                   = face.faceConsent;
+exports.faceRetention                 = face.faceRetention;
 
 const subjects = require("./subjects");
 exports.renameSubject                 = subjects.renameSubject;

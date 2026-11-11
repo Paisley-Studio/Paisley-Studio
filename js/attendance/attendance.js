@@ -37,8 +37,28 @@ var Attendance = (function () {
   function pill(status) { var s = STATUS[status] || [status, 'wait']; return '<span class="att-pill ' + s[1] + '">' + esc(s[0]) + '</span>'; }
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } return null; }
   function icon(n) { return '<i class="fas ' + n + '" aria-hidden="true"></i>'; }
-  function academicYearKey(msv) { var d = new Date(msv + 3 * 3600000), y = d.getUTCFullYear(); return 'y' + (d.getUTCMonth() + 1 >= 9 ? y : y - 1); }
-  function yearLabel(k) { var y = Number(String(k || '').slice(1)); return y ? y + '/' + String((y + 1) % 100).padStart(2, '0') : ''; }
+  /* Strike counts reset as the Studio Desk chose (attendanceSettings/policy, Admin > Attendance > Settings).
+     Mirrors strikePeriod() in functions/attendance.js. */
+  var POLICY = { strikeReset: 'academic_year', yearStartMonth: 9, manualEpoch: 0 }, policyP = null;
+  function loadPolicy(fresh) {
+    if (!policyP || fresh) policyP = db.collection('attendanceSettings').doc('policy').get().then(function (d) { if (d.exists) POLICY = Object.assign({}, POLICY, d.data()); return POLICY; }).catch(function () { return POLICY; });
+    return policyP;
+  }
+  function period(msv) {
+    var d = new Date(msv + 3 * 3600000), y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1;
+    if (POLICY.strikeReset === 'calendar_year') return { key: 'c' + y, label: String(y), phrase: 'this calendar year' };
+    if (POLICY.strikeReset === 'never') return { key: 'all', label: 'all time', phrase: 'in total' };
+    if (POLICY.strikeReset === 'manual') { var since = POLICY.manualResetAt ? 'since ' + dayLabel(POLICY.manualResetAt) : 'so far'; return { key: 'm' + (POLICY.manualEpoch || 0), label: since, phrase: since }; }
+    var sm = Number(POLICY.yearStartMonth) || 9, st = mo >= sm ? y : y - 1;
+    return { key: 'y' + st, label: st + '/' + String((st + 1) % 100).padStart(2, '0'), phrase: 'this academic year' };
+  }
+  function toast(t) { var d = document.createElement('div'); d.className = 'att-dock att'; d.innerHTML = '<span class="att-chip">' + icon('fa-circle-check') + ' ' + esc(t) + '</span>'; document.body.appendChild(d); setTimeout(function () { d.remove(); }, 2600); }
+  function errDetails(e) { return (e && e.details) || {}; }
+  function methodPill(r) {
+    if (r.checkIn) return r.checkIn.method === 'face' ? '<span class="att-pill info">' + icon('fa-face-smile') + ' Face</span>' : '<span class="att-pill wait">' + icon('fa-hand') + ' Online</span>';
+    if (r.resolution) return '<span class="att-pill wait">' + icon('fa-chalkboard-user') + ' Tutor</span>';
+    return '—';
+  }
 
   var styled = false;
   function style() {
@@ -103,6 +123,13 @@ var Attendance = (function () {
       '.att-row-actions{display:flex;gap:.3rem;flex-wrap:wrap}',
       '.att-reg-tabs{display:flex;gap:.35rem;flex-wrap:wrap;padding:.6rem 1.2rem 0}',
       '.att-msg{font-size:.8rem;font-weight:700;margin-top:.5rem}.att-msg.bad{color:#b8362a}.att-msg.ok{color:#1d8b57}',
+      '.att-cam{position:relative;max-width:360px;margin:0 auto;border-radius:16px;overflow:hidden;background:#0f1d1b;aspect-ratio:4/3}',
+      '.att-cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}',
+      '.att-cam-guide{position:absolute;left:50%;top:50%;width:46%;height:68%;transform:translate(-50%,-50%);border:3px dashed rgba(255,255,255,.8);border-radius:50%;pointer-events:none}',
+      '.att-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:1rem}.att-grid2>.att-panel{margin:0}',
+      '.att-or{display:flex;align-items:center;gap:.6rem;color:var(--muted,#5A6E6A);font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin:.9rem 0 .2rem}.att-or:before,.att-or:after{content:"";flex:1;height:1px;background:var(--line,#dfe7e5)}',
+      '.att-me{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.65rem .8rem;border:1.5px solid var(--line,#dfe7e5);border-radius:12px;margin:0 0 .8rem;font-size:.82rem}.att-me b{margin-right:auto}',
+      '.att-set{display:grid;gap:.8rem;max-width:560px}.att-set select{font-family:inherit;font-size:.85rem;padding:.5rem .6rem;border:1.5px solid var(--line,#dfe7e5);border-radius:10px;background:#fff;color:inherit}',
       '.att-empty{padding:1rem;text-align:center;color:var(--muted,#5A6E6A);font-weight:600;font-size:.84rem}',
       '@media (max-width:640px){.att-card .hd,.att-card .bd,.att-card .ft{padding-left:16px;padding-right:16px}.att-table{font-size:.76rem}.att-banner{padding:.75rem}}'
     ].join('');
@@ -147,7 +174,8 @@ var Attendance = (function () {
   ========================================================= */
   function mountStudent(o) {
     style();
-    var S = { lessons: [], skew: 0, open: null, minimised: {}, busy: false, recUnsub: {}, records: {}, policy: { noticeMin: 15, earlyMin: 10, graceMin: 15 } };
+    var S = { lessons: [], skew: 0, open: null, minimised: {}, busy: false, recUnsub: {}, records: {}, policy: { noticeMin: 15, earlyMin: 10, graceMin: 15 }, recognition: { available: false }, cam: null };
+    function stopCam() { if (S.cam) { S.cam.stop(); S.cam = null; } }
     try { S.minimised = JSON.parse(sessionStorage.getItem('attMin') || '{}'); } catch (e) { }
     var bannerHost = o.bannerEl || null;
     var dock = document.createElement('div'); dock.className = 'att-dock att'; document.body.appendChild(dock);
@@ -165,6 +193,9 @@ var Attendance = (function () {
       return call('attendanceToday').then(function (d) {
         S.skew = (d.now || Date.now()) - Date.now();
         S.policy = d.policy || S.policy;
+        // The face option exists only while the server says so (Studio Desk switch + enrollment + consent).
+        S.recognition = (d.recognition && d.recognition.available && typeof AttendanceFace !== 'undefined') ? d.recognition : { available: false };
+        if (!S.recognition.available && S.cam) { stopCam(); if (S.open && S.open.lesson) openRegister(S.open.lesson); }
         S.lessons = d.lessons || [];
         S.lessons.forEach(function (l) { if (l.record) S.records[l.sessionId] = Object.assign({}, S.records[l.sessionId] || {}, l.record); watchRecord(l); });
         paint();
@@ -208,43 +239,88 @@ var Attendance = (function () {
     function openRegister(l) {
       if (S.open) S.open.modal.close();
       var m = modal({ title: 'Register your attendance', sub: l.subjectName + ' · ' + hm(l.startAt) + ' to ' + hm(l.endAt), closeLabel: 'Minimise', closeIcon: 'fa-window-minimize',
-        onX: function () { minimise(l); }, onClose: function () { if (S.open && S.open.modal === m) S.open = null; } });
-      S.open = { modal: m, sessionId: l.sessionId };
+        onX: function () { minimise(l); }, onClose: function () { stopCam(); if (S.open && S.open.modal === m) S.open = null; } });
+      S.open = { modal: m, sessionId: l.sessionId, lesson: l };
+      registerBody(l, m);
+    }
+    function registerBody(l, m) {
+      stopCam();
+      m.el.querySelector('h3').textContent = 'Register your attendance';
       var late = now() >= l.startAt + S.policy.graceMin * 60000;
       m.body.innerHTML = '<div class="att-center"><div class="att-big-ic' + (late ? ' late' : '') + '">' + icon('fa-user-check') + '</div>' +
         '<p>Your lesson has started. Tell your tutor you are here.</p></div>' +
         '<div class="att-kv"><span>Subject</span><b>' + esc(l.subjectName) + '</b><span>Tutor</span><b>' + esc(l.tutorName || '—') + '</b><span>Starts</span><b>' + hm(l.startAt) + '</b>' +
         (l.room ? '<span>Where</span><b>' + esc(/^https?:/i.test(l.room) ? 'Online link in your timetable' : l.room) + '</b>' : '') + '</div>' +
         '<p class="att-muted">' + (late ? 'It is now ' + S.policy.graceMin + ' minutes or more after the start, so this registration will count as late.' : 'Register within ' + S.policy.graceMin + ' minutes of the start to be on time.') + ' The time is taken from Paisley\'s server, not your device.</p><div class="att-msg" data-m></div>';
-      m.foot.innerHTML = '<button type="button" class="att-btn" data-min>' + icon('fa-window-minimize') + ' Minimise</button><button type="button" class="att-btn primary big" data-go>' + icon('fa-hand') + ' I\'m Here: Register Attendance</button>';
+      var face = S.recognition.available;
+      m.foot.innerHTML = '<button type="button" class="att-btn" data-min>' + icon('fa-window-minimize') + ' Minimise</button>' +
+        (face ? '<button type="button" class="att-btn" data-face>' + icon('fa-face-smile') + ' Check in with my face</button>' : '') +
+        '<button type="button" class="att-btn primary big" data-go>' + icon('fa-hand') + ' I\'m Here: Register Attendance</button>';
       m.foot.querySelector('[data-min]').onclick = function () { minimise(l); };
       m.foot.querySelector('[data-go]').onclick = function () { register(l, m); };
+      if (face) m.foot.querySelector('[data-face]').onclick = function () { faceStart(l, m); };
     }
-    function minimise(l) { S.minimised[l.sessionId] = 1; try { sessionStorage.setItem('attMin', JSON.stringify(S.minimised)); } catch (e) { } if (S.open) { var mm = S.open.modal; S.open = null; mm.close(); } paint(); }
+    /* Face check-in: the camera starts only now; one picture is checked on the server and discarded. */
+    function faceStart(l, m) {
+      if (!S.recognition.available) { registerBody(l, m); return; }
+      m.el.querySelector('h3').textContent = 'Check in with your face';
+      m.body.innerHTML = '<div data-cam></div><div class="att-msg" data-m style="text-align:center"></div>';
+      m.foot.innerHTML = '<button type="button" class="att-btn" data-back>' + icon('fa-arrow-left') + ' Use the normal check-in</button><button type="button" class="att-btn primary big" data-shot disabled>' + icon('fa-camera') + ' Check me in</button>';
+      var msg = m.body.querySelector('[data-m]'), shot = m.foot.querySelector('[data-shot]');
+      m.foot.querySelector('[data-back]').onclick = function () { registerBody(l, m); };
+      S.cam = AttendanceFace.camera(m.body.querySelector('[data-cam]'));
+      S.cam.ready.then(function () { shot.disabled = false; msg.className = 'att-msg'; msg.textContent = 'Position your face inside the oval, then press Check me in.'; })
+        .catch(function (e) { stopCam(); msg.className = 'att-msg bad'; msg.textContent = errMsg(e); });
+      shot.onclick = function () {
+        if (S.busy || !S.cam) return;
+        var img = S.cam.capture();
+        if (!img) { msg.className = 'att-msg bad'; msg.textContent = 'The camera is not ready yet.'; return; }
+        S.busy = true; shot.disabled = true; shot.innerHTML = icon('fa-spinner fa-spin') + ' Checking…';
+        msg.className = 'att-msg'; msg.textContent = 'Checking…';
+        call('faceCheckIn', { entryId: l.entryId, image: img }).then(function (r) {
+          img = null; S.busy = false; stopCam();
+          showRegistered(l, m, r, 'Face recognised. ');
+        }).catch(function (e) {
+          img = null; S.busy = false; shot.disabled = false; shot.innerHTML = icon('fa-camera') + ' Try again';
+          var d = errDetails(e);
+          msg.className = 'att-msg bad'; msg.textContent = errMsg(e);
+          // Switched off, engine down, not enrolled or too many tries: go back to the normal check-in.
+          if (d.fallback && /disabled|engine_unavailable|not_enrolled|rate_limited|error/.test(d.reason || '')) {
+            if (d.reason !== 'engine_unavailable' && d.reason !== 'error') S.recognition = { available: false };
+            stopCam();
+            setTimeout(function () { if (S.open && S.open.modal === m) { registerBody(l, m); var mm = m.body.querySelector('[data-m]'); if (mm) { mm.className = 'att-msg bad'; mm.textContent = errMsg(e) + ' Manual check-in required.'; } } }, 50);
+          } else if (/already|ended|cancelled/i.test(errMsg(e))) { stopCam(); refresh(); }
+        });
+      };
+    }
+    function minimise(l) { stopCam(); S.minimised[l.sessionId] = 1; try { sessionStorage.setItem('attMin', JSON.stringify(S.minimised)); } catch (e) { } if (S.open) { var mm = S.open.modal; S.open = null; mm.close(); } paint(); }
     function register(l, m) {
       if (S.busy) return; S.busy = true;
       var b = m.foot.querySelector('[data-go]'); b.disabled = true; b.innerHTML = icon('fa-spinner fa-spin') + ' Registering…';
       call('attendanceCheckIn', { entryId: l.entryId }).then(function (r) {
         S.busy = false;
-        var rec = r.record || {};
-        S.records[l.sessionId] = rec; l.record = rec; watchRecord(l);
-        var late = rec.checkIn && rec.checkIn.classification === 'late';
-        S.open.done = true;
-        m.el.querySelector('h3').textContent = late ? 'Registered, but late' : 'You are registered';
-        m.body.innerHTML = '<div class="att-center"><div class="att-big-ic ' + (late ? 'late' : 'ok') + '">' + icon(late ? 'fa-user-clock' : 'fa-circle-check') + '</div>' +
-          '<p><b>' + esc(l.subjectName) + '</b>: registered at ' + hm(rec.checkIn && rec.checkIn.at) + '.</p>' +
-          (late ? '<p>You arrived ' + rec.checkIn.minutesLate + ' minutes after the start. This counts as a late-arrival strike' + (r.strikeNumber ? ' (' + r.strikeNumber + ' this academic year)' : '') + ' and your parent has been told.' + (r.strikeNumber === 4 ? ' This is your formal warning: the next late arrival goes to the Studio Desk.' : '') + (r.strikeNumber >= 5 ? ' Your case has been referred to the Studio Desk.' : '') + '</p>' : '<p>You are on time. Enjoy the lesson!</p>') +
-          (rec.needsVerification ? '<p><span class="att-pill wait">Awaiting tutor verification</span> Your tutor had already sent the register, so they will check this registration.</p>' : '') + '</div>';
-        m.foot.innerHTML = '<button type="button" class="att-btn primary" data-ok>' + icon('fa-check') + ' Done</button>';
-        m.foot.querySelector('[data-ok]').onclick = function () { m.close(); paint(); };
-        delete S.minimised[l.sessionId];
-        paint();
+        showRegistered(l, m, r, '');
       }).catch(function (e) {
         S.busy = false; b.disabled = false; b.innerHTML = icon('fa-hand') + ' I\'m Here: Register Attendance';
         m.body.querySelector('[data-m]').className = 'att-msg bad';
         m.body.querySelector('[data-m]').textContent = errMsg(e);
         if (e && /ended|cancelled|already/i.test(errMsg(e))) refresh();
       });
+    }
+    function showRegistered(l, m, r, lead) {
+        var rec = r.record || {};
+        S.records[l.sessionId] = rec; l.record = rec; watchRecord(l);
+        var late = rec.checkIn && rec.checkIn.classification === 'late';
+        S.open.done = true;
+        m.el.querySelector('h3').textContent = late ? 'Registered, but late' : 'You are registered';
+        m.body.innerHTML = '<div class="att-center"><div class="att-big-ic ' + (late ? 'late' : 'ok') + '">' + icon(late ? 'fa-user-clock' : 'fa-circle-check') + '</div>' +
+          '<p>' + esc(lead || '') + '<b>' + esc(l.subjectName) + '</b>: registered at ' + hm(rec.checkIn && rec.checkIn.at) + '.</p>' +
+          (late ? '<p>You arrived ' + rec.checkIn.minutesLate + ' minutes after the start. This counts as a late-arrival strike' + (r.strikeNumber ? ' (' + r.strikeNumber + ' this academic year)' : '') + ' and your parent has been told.' + (r.strikeNumber === 4 ? ' This is your formal warning: the next late arrival goes to the Studio Desk.' : '') + (r.strikeNumber >= 5 ? ' Your case has been referred to the Studio Desk.' : '') + '</p>' : '<p>You are on time. Enjoy the lesson!</p>') +
+          (rec.needsVerification ? '<p><span class="att-pill wait">Awaiting tutor verification</span> Your tutor had already sent the register, so they will check this registration.</p>' : '') + '</div>';
+        m.foot.innerHTML = '<button type="button" class="att-btn primary" data-ok>' + icon('fa-check') + ' Done</button>';
+        m.foot.querySelector('[data-ok]').onclick = function () { m.close(); paint(); };
+        delete S.minimised[l.sessionId];
+        paint();
     }
     // Reopen (and refresh) when the student comes back to the page.
     function onBack() { if (document.visibilityState === 'visible') { S.minimised = {}; try { sessionStorage.removeItem('attMin'); } catch (e) { } refresh(); } }
@@ -264,13 +340,13 @@ var Attendance = (function () {
     }, true);
     var tick = setInterval(paint, 15000), poll = setInterval(refresh, 60000);
     refresh();
-    return { refresh: refresh, destroy: function () { clearInterval(tick); clearInterval(poll); document.removeEventListener('visibilitychange', onBack); dock.remove(); Object.keys(S.recUnsub).forEach(function (k) { S.recUnsub[k](); }); } };
+    return { refresh: refresh, destroy: function () { stopCam(); clearInterval(tick); clearInterval(poll); document.removeEventListener('visibilitychange', onBack); dock.remove(); Object.keys(S.recUnsub).forEach(function (k) { S.recUnsub[k](); }); } };
   }
 
   /* A student's (or a parent's view of a child's) history. */
   function historyHtml(records, summary, opts) {
     opts = opts || {};
-    var ay = academicYearKey(Date.now());
+    var per = period(Date.now()), ay = per.key;
     var y = (summary && summary.years && summary.years[ay]) || {};
     var rows = records.filter(function (r) { return r.status !== 'expected' || msOf(r.startAt) <= Date.now(); }).sort(function (a, b) { return msOf(b.startAt) - msOf(a.startAt); });
     var done = rows.filter(function (r) { return ['expected', 'cancelled', 'excused'].indexOf(r.status) === -1; });
@@ -283,13 +359,13 @@ var Attendance = (function () {
       '<div class="att-stat"><b>' + (count('present') + count('present_verified') + count('connectivity')) + '</b><span>Present</span></div>' +
       '<div class="att-stat late"><b>' + count('late') + '</b><span>Late</span></div>' +
       '<div class="att-stat warn"><b>' + count('absent') + '</b><span>Absent</span></div>' +
-      '<div class="att-stat ' + ((y.active || 0) >= 4 ? 'warn' : '') + '"><b>' + (y.active || 0) + '</b><span>Active strikes ' + esc(yearLabel(ay)) + '</span></div></div>' +
-      ((y.active || 0) >= 5 ? '<div class="att-banner lock"><div class="ic">' + icon('fa-scale-balanced') + '</div><div class="t"><b>Referred to the Studio Desk</b><small>' + (y.active) + ' late arrivals this academic year. The Studio Desk reviews the case and decides what happens.</small></div></div>' :
-        (y.active || 0) === 4 ? '<div class="att-banner urgent"><div class="ic">' + icon('fa-triangle-exclamation') + '</div><div class="t"><b>Formal warning</b><small>4 late arrivals this academic year. The next one is referred to the Studio Desk.</small></div></div>' : '') +
+      '<div class="att-stat ' + ((y.active || 0) >= 4 ? 'warn' : '') + '"><b>' + (y.active || 0) + '</b><span>Active strikes (' + esc(per.label) + ')</span></div></div>' +
+      ((y.active || 0) >= 5 ? '<div class="att-banner lock"><div class="ic">' + icon('fa-scale-balanced') + '</div><div class="t"><b>Referred to the Studio Desk</b><small>' + (y.active) + ' late arrivals ' + esc(per.phrase) + '. The Studio Desk reviews the case and decides what happens.</small></div></div>' :
+        (y.active || 0) === 4 ? '<div class="att-banner urgent"><div class="ic">' + icon('fa-triangle-exclamation') + '</div><div class="t"><b>Formal warning</b><small>4 late arrivals ' + esc(per.phrase) + '. The next one is referred to the Studio Desk.</small></div></div>' : '') +
       (upcoming.length ? '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Scheduled</h4>' + upcoming.map(function (r) { return '<div class="att-muted">' + dayLabel(r.startAt) + ' ' + hm(r.startAt) + ' · ' + esc(r.subjectName) + '</div>'; }).join('') + '</div>' : '') +
       '<div class="att-panel"><h4>' + icon('fa-list-check') + ' Attendance history</h4>' + (rows.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Subject</th><th>Start</th><th>Arrived</th><th>Status</th>' + (opts.requests ? '<th></th>' : '') + '</tr></thead><tbody>' +
         rows.map(function (r) {
-          return '<tr><td>' + dayLabel(r.startAt) + '</td><td>' + esc(r.subjectName) + '</td><td>' + hm(r.startAt) + '</td><td>' + (r.checkIn ? hm(r.checkIn.at) + (r.checkIn.minutesLate ? ' <span class="att-muted">(' + r.checkIn.minutesLate + ' min)</span>' : '') : '—') + '</td>' +
+          return '<tr><td>' + dayLabel(r.startAt) + '</td><td>' + esc(r.subjectName) + '</td><td>' + hm(r.startAt) + '</td><td>' + (r.checkIn ? hm(r.checkIn.at) + (r.checkIn.minutesLate ? ' <span class="att-muted">(' + r.checkIn.minutesLate + ' min)</span>' : '') + (r.checkIn.method === 'face' ? ' <span class="att-muted">' + icon('fa-face-smile') + '</span>' : '') : '—') + '</td>' +
             '<td>' + pill(r.status) + (r.strikeId ? ' <span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + (r.strikeReversed ? 'Strike reversed' : 'Strike') + '</span>' : '') + (r.lateExcused ? ' <span class="att-pill info">Lateness excused</span>' : '') + '</td>' +
             (opts.requests ? '<td>' + (r.strikeId && !r.strikeReversed ? '<button type="button" class="att-btn sm" data-att-excuse="' + esc(r.id) + '">' + icon('fa-envelope-open-text') + ' Ask to excuse</button>' : '') + '</td>' : '') + '</tr>';
         }).join('') + '</tbody></table></div>' : '<div class="att-empty">No lessons recorded yet.</div>') + '</div>';
@@ -310,6 +386,7 @@ var Attendance = (function () {
     var u1 = db.collection('attendanceRecords').where('studentId', '==', o.uid).onSnapshot(function (s) { recs = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, function (e) { el.innerHTML = '<div class="att-empty">Attendance could not be loaded.</div>'; console.warn(e); });
     var u2 = db.collection('attendanceStudents').doc(o.uid).onSnapshot(function (s) { sum = s.exists ? s.data() : null; paint(); }, function () { });
     function paint() { el.innerHTML = historyHtml(recs, sum, { requests: true }); }
+    loadPolicy().then(paint);
     bindExcuse(el);
     return { destroy: function () { u1(); u2(); } };
   }
@@ -319,7 +396,8 @@ var Attendance = (function () {
   ========================================================= */
   function mountTutor(o) {
     style();
-    var S = { lessons: [], pending: [], skew: 0, sessions: {}, records: {}, unsubs: {}, dismissed: {}, modal: null, active: null, locks: [], policy: { graceMin: 15, autoSubmitAfterEndMin: 15 }, opt: {}, more: {} };
+    var S = { lessons: [], pending: [], skew: 0, sessions: {}, records: {}, unsubs: {}, dismissed: {}, modal: null, active: null, locks: [], policy: { graceMin: 15, autoSubmitAfterEndMin: 15 }, opt: {}, more: {}, recognition: { available: false }, cam: null };
+    function stopCam() { if (S.cam) { S.cam.stop(); S.cam = null; } }
     /* Optimistic marks: S.opt[sessionId_studentId] = { status, resolution, busy }. The row shows the
        tutor's choice the moment it is tapped; the live snapshot replaces it once the server has it. */
     function recsOf(sid) {
@@ -347,6 +425,7 @@ var Attendance = (function () {
       return call('attendanceToday').then(function (d) {
         S.skew = (d.now || Date.now()) - Date.now(); S.policy = d.policy || S.policy;
         S.lessons = d.lessons || []; S.pending = d.pending || [];
+        S.recognition = (d.recognition && d.recognition.available && typeof AttendanceFace !== 'undefined') ? d.recognition : { available: false };
         S.lessons.concat(S.pending).forEach(function (l) { if (l.sessionId && l.status !== 'upcoming') watch(l.sessionId); });
         paint();
       }).catch(function (e) { console.warn('attendanceToday', e); });
@@ -408,6 +487,41 @@ var Attendance = (function () {
       }
       return h;
     }
+    /* The tutor's own attendance for this lesson (attendanceTutorCheckIn / faceTutorVerify). */
+    function meHtml(s) {
+      var t = now(), me = (s.tutorPresence || {})[o.uid];
+      if (s.status === 'cancelled') return '';
+      var face = S.recognition.available;
+      if (me) {
+        return '<div class="att-me">' + icon('fa-chalkboard-user') + '<b>You confirmed you are teaching at ' + hm(me.at) + '</b>' +
+          (me.classification === 'late' ? '<span class="att-pill late">' + me.minutesLate + ' min after the start</span>' : '<span class="att-pill ok">On time</span>') +
+          (me.faceVerifiedAt ? '<span class="att-pill info">' + icon('fa-face-smile') + ' Face verified</span>' : face && t < msOf(s.endAt) ? '<button type="button" class="att-btn sm" data-tface="' + esc(s.id) + '">' + icon('fa-face-smile') + ' Verify with my face</button>' : '') + '</div>';
+      }
+      if (t < msOf(s.startAt) - 10 * 60000 || t >= msOf(s.endAt)) return '';
+      return '<div class="att-me">' + icon('fa-chalkboard-user') + '<b>Confirm you are teaching this lesson</b>' +
+        (face ? '<button type="button" class="att-btn sm" data-tface="' + esc(s.id) + '">' + icon('fa-face-smile') + ' Verify with my face</button>' : '') +
+        '<button type="button" class="att-btn sm primary" data-tpres="' + esc(s.id) + '">' + icon('fa-hand') + ' I\'m teaching</button></div>';
+    }
+    function tutorFace(sid) {
+      if (!S.recognition.available || typeof AttendanceFace === 'undefined') return;
+      var m = modal({ title: 'Verify it is you', sub: 'Only you, facing the camera. Nothing is saved.', closeLabel: 'Cancel', onClose: stopCam });
+      m.body.innerHTML = '<div data-cam></div><div class="att-msg" data-m style="text-align:center"></div>';
+      m.foot.innerHTML = '<button type="button" class="att-btn" data-c>Cancel</button><button type="button" class="att-btn primary" data-shot disabled>' + icon('fa-camera') + ' Verify</button>';
+      var msg = m.body.querySelector('[data-m]'), shot = m.foot.querySelector('[data-shot]');
+      m.foot.querySelector('[data-c]').onclick = function () { m.close(); };
+      stopCam(); S.cam = AttendanceFace.camera(m.body.querySelector('[data-cam]'));
+      S.cam.ready.then(function () { shot.disabled = false; }).catch(function (e) { msg.className = 'att-msg bad'; msg.textContent = errMsg(e); });
+      shot.onclick = function () {
+        var img = S.cam && S.cam.capture(); if (!img) return;
+        shot.disabled = true; shot.innerHTML = icon('fa-spinner fa-spin') + ' Checking…';
+        call('faceTutorVerify', { sessionId: sid, image: img }).then(function () { img = null; m.close(); toast('Face recognised. You are verified for this lesson.'); })
+          .catch(function (e) {
+            img = null; shot.disabled = false; shot.innerHTML = icon('fa-camera') + ' Try again';
+            var d = errDetails(e); msg.className = 'att-msg bad'; msg.textContent = errMsg(e);
+            if (d.fallback && /disabled|not_enrolled|rate_limited/.test(d.reason || '')) { S.recognition = { available: false }; stopCam(); shot.remove(); paint(); }
+          });
+      };
+    }
     function registerHtml(s, compact) {
       var recs = recsOf(s.id), c = counts(recs), t = now();
       var started = t >= msOf(s.startAt), afterGrace = t >= msOf(s.graceAt), submitted = s.status !== 'open';
@@ -418,7 +532,7 @@ var Attendance = (function () {
         var canResolve = started && !r.checkIn && (unresolved || (tutorMarked && !submitted)) && s.status !== 'cancelled';
         return '<tr class="' + (flag ? 'flag' : '') + (r._busy ? ' att-busy' : '') + '"><td><b>' + esc(r.studentName) + '</b>' + (r.resolution ? '<div class="att-muted">' + esc(r.resolution.label || r.resolution.outcome) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName || '') + ' ' + hm(r.resolution.at) + '</div>' : '') + '</td>' +
           '<td>' + pill(unresolved && !afterGrace ? 'expected' : r.status) + (unresolved && afterGrace ? ' <span class="att-pill bad">Account for</span>' : '') + (r.needsVerification ? ' <span class="att-pill wait">Registered after submission</span>' : '') + (r.reviewState === 'pending' ? ' <span class="att-pill wait">Studio Desk review</span>' : '') + '</td>' +
-          '<td>' + (r.checkIn ? hm(r.checkIn.at) : '—') + '</td>' +
+          '<td>' + (r.checkIn ? hm(r.checkIn.at) : '—') + '</td><td>' + methodPill(r) + '</td>' +
           '<td>' + (r.checkIn ? (r.checkIn.classification === 'late' ? '<span class="att-pill late">' + r.checkIn.minutesLate + ' min late</span>' : '<span class="att-pill ok">On time</span>') : '—') + '</td>' +
           '<td>' + (r.strikeId ? '<span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + icon('fa-triangle-exclamation') + ' ' + (r.strikeReversed ? 'Reversed' : 'Strike') + '</span>' : '—') + '</td>' +
           '<td>' + (canResolve ? quickHtml(s, r) : '') +
@@ -435,7 +549,7 @@ var Attendance = (function () {
         '<p class="att-muted">Mark every flagged student, then submit. Submit opens for everyone the moment the lesson ends at ' + hm(s.endAt) + '. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + ' and the Studio Desk is told.</p>';
       var explain = s.status === 'auto_submitted' ? '<div class="att-panel"><h4>' + icon('fa-comment-dots') + ' Your explanation</h4>' + (s.tutorExplanation ? '<p class="att-muted">"' + esc(s.tutorExplanation.text) + '" (' + dayLabel(s.tutorExplanation.at) + ')' + (s.explanationReview ? ' · Studio Desk: ' + esc(s.explanationReview.decision) : '') + '</p>' : '') +
         '<label class="att-field">Why was the register not submitted?<textarea data-explain="' + esc(s.id) + '" maxlength="2000"></textarea></label><button type="button" class="att-btn sm primary" data-explain-go="' + esc(s.id) + '">' + icon('fa-paper-plane') + ' Send explanation</button></div>' : '';
-      return state + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Checked in</th><th>On time</th><th>Strike</th><th>Mark</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
+      return meHtml(s) + state + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Checked in</th><th>Method</th><th>On time</th><th>Strike</th><th>Mark</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
         '<div class="att-msg" data-msg="' + esc(s.id) + '"></div>' + explain;
     }
     function openRoll(sid) {
@@ -509,6 +623,20 @@ var Attendance = (function () {
       var tab = t.closest('[data-roll-tab]'); if (tab) { openRoll(tab.dataset.rollTab); return; }
       var open = t.closest('[data-open-reg]'); if (open) { watch(open.dataset.openReg); delete S.dismissed[open.dataset.openReg]; openRoll(open.dataset.openReg); return; }
       var host = t.closest('.att-card') || t.closest('.att');
+      var tp = t.closest('[data-tpres]');
+      if (tp) {
+        tp.disabled = true; tp.innerHTML = icon('fa-spinner fa-spin') + ' Saving…';
+        call('attendanceTutorCheckIn', { sessionId: tp.dataset.tpres }).then(function (r) { toast(r && r.classification === 'late' ? 'Recorded: ' + r.minutesLate + ' min after the start' : 'Recorded. Thank you.'); })
+          .catch(function (er) { tp.disabled = false; tp.innerHTML = icon('fa-hand') + ' I\'m teaching'; alert(errMsg(er)); });
+        return;
+      }
+      var tf = t.closest('[data-tface]'); if (tf) { tutorFace(tf.dataset.tface); return; }
+      var wd = t.closest('[data-face-withdraw]');
+      if (wd) {
+        if (!confirm('Withdraw your consent for face verification? Your face data is deleted and you use the normal confirmation.')) return;
+        call('faceConsent', { action: 'withdraw' }).then(function () { S.recognition = { available: false }; toast('Consent withdrawn. Your face data is deleted.'); paint(); }).catch(function (er) { alert(errMsg(er)); });
+        return;
+      }
       var qk = t.closest('[data-quick]');
       if (qk) { if (!qk.disabled) mark(qk.dataset.sid, qk.dataset.st, qk.dataset.quick, '', host); return; }
       var mo = t.closest('[data-more]');
@@ -572,6 +700,7 @@ var Attendance = (function () {
       el.innerHTML = '<div class="att">' + lockHtml +
         '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Today\'s registers</h4>' + (S.lessons.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Lesson</th><th>Time</th><th>Register</th><th>Checked in</th><th></th></tr></thead><tbody>' + today + '</tbody></table></div>' : '<div class="att-empty">No timetabled lessons for you today.</div>') + '</div>' +
         (follow.length ? '<div class="att-panel"><h4>' + icon('fa-triangle-exclamation') + ' Follow-up needed</h4>' + follow.map(function (s) { return '<div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.3rem 0"><span class="att-pill bad">AUTO-SUBMITTED</span><b>' + esc(s.subjectName) + '</b><span class="att-muted">' + dayLabel(s.startAt) + ' ' + hm(s.startAt) + (s.unresolvedCount ? ' · ' + s.unresolvedCount + ' unresolved' : '') + (s.tutorExplanation ? '' : ' · explanation needed') + '</span><button type="button" class="att-btn sm" data-open-reg="' + esc(s.id) + '">Open</button></div>'; }).join('') + '</div>' : '') +
+        (S.recognition.available ? '<div class="att-panel"><h4>' + icon('fa-face-smile') + ' Face verification</h4><p class="att-muted">The Studio Desk has enrolled you, with your consent, so you can verify yourself with your face when a lesson opens. It is optional: I\'m teaching always works.</p><button type="button" class="att-btn sm danger" data-face-withdraw>' + icon('fa-user-xmark') + ' Withdraw consent and delete my face data</button></div>' : '') +
         '<div class="att-panel"><h4>' + icon('fa-clock-rotate-left') + ' Submission history</h4>' + (hist.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Status</th><th>Submitted</th><th></th></tr></thead><tbody>' + hist.map(function (s) {
           return '<tr><td>' + dayLabel(s.startAt) + '</td><td>' + esc(s.subjectName) + ' ' + hm(s.startAt) + '</td><td>' + (s.status === 'auto_submitted' ? '<span class="att-pill bad">AUTO-SUBMITTED</span>' : s.status === 'submitted' ? '<span class="att-pill ok">Submitted</span>' : s.status === 'cancelled' ? pill('cancelled') : '<span class="att-pill info">Open</span>') + '</td><td>' + (s.submission ? hm(s.submission.at) : '—') + '</td><td><button type="button" class="att-btn sm" data-open-reg="' + esc(s.id) + '">View</button></td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="att-empty">No registers yet.</div>') + '</div></div>';
@@ -623,12 +752,19 @@ var Attendance = (function () {
         historyHtml(recs, sum, { requests: true }) +
         (warn.length ? '<div class="att-panel"><h4>' + icon('fa-triangle-exclamation') + ' Formal warnings</h4>' + warn.map(function (n) { return '<div class="att-muted">' + dayLabel(n.createdAt) + ': ' + esc(n.message) + '</div>'; }).join('') + '</div>' : '') +
         (refs.length ? '<div class="att-panel"><h4>' + icon('fa-scale-balanced') + ' Disciplinary referrals</h4>' + refs.map(function (r) { var last = (r.decisions || []).slice(-1)[0]; return '<div style="margin:.35rem 0"><b>' + esc(r.strikeNumber) + ' strikes</b> <span class="att-muted">' + dayLabel(r.createdAt) + ' · ' + esc(r.academicYearLabel || '') + '</span> <span class="att-pill ' + (r.status === 'closed' ? 'ok' : 'wait') + '">' + esc(String(r.status || 'open').replace('_', ' ')) + '</span>' + (last ? '<div class="att-muted">Studio Desk: ' + esc(last.decision || last.reason) + '</div>' : '') + '</div>'; }).join('') + '</div>' : '') +
+        '<div data-face-consent></div>' +
         '<div class="att-panel"><h4>' + icon('fa-bell') + ' Notices and delivery</h4>' + (notes.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Notice</th><th>Delivery</th></tr></thead><tbody>' + notes.map(function (n) {
           var d = DEL[n.emailStatus] || [n.emailStatus, 'wait'];
           return '<tr><td>' + dayLabel(n.createdAt) + ' ' + hm(n.createdAt) + '</td><td><b>' + esc(n.title) + '</b><div class="att-muted">' + esc(n.message) + '</div></td><td><span class="att-pill ' + d[1] + '">' + esc(d[0]) + '</span>' + (n.email ? '<div class="att-muted">' + esc(n.email) + '</div>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="att-empty">No attendance notices yet.</div>') + '</div>';
     }
     bindExcuse(el);
+    loadPolicy().then(function () { paint(); });
+    // Face check-in consent (only shown when the Studio Desk offers it, or to withdraw an existing consent).
+    var faceCard = document.createElement('div');
+    if (typeof AttendanceFace !== 'undefined') AttendanceFace.mountConsent(faceCard, { childId: o.childId, childName: o.childName });
+    var _paint = paint;
+    paint = function () { _paint(); var slot = el.querySelector('[data-face-consent]'); if (slot) slot.appendChild(faceCard); };
     return { destroy: function () { unsubs.forEach(function (u) { u(); }); } };
   }
 
@@ -641,7 +777,8 @@ var Attendance = (function () {
     var today = ymd(Date.now());
     var F = { from: today, to: today, subject: '', tutor: '', student: '', status: '', keyStage: '' };
     var D = { sessions: [], records: [], strikes: [], referrals: [], requests: [], locks: [], notes: [], summaries: {} };
-    var tab = 'daily', unsubs = [];
+    var tab = 'overview', unsubs = [], sub = null;
+    try { var savedTab = localStorage.getItem('attAdminTab'); if (savedTab) tab = savedTab; } catch (e) { }
     el.innerHTML = '<div class="att-filters">' +
       '<label>From<input type="date" data-f="from" value="' + today + '"></label><label>To<input type="date" data-f="to" value="' + today + '"></label>' +
       '<label>Subject<select data-f="subject"><option value="">All subjects</option></select></label>' +
@@ -663,6 +800,10 @@ var Attendance = (function () {
       unsubs.push(db.collection('attendanceRecords').where('reviewState', '==', 'pending').onSnapshot(function (s) { D.reviews = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
       unsubs.push(db.collection('attendanceNotifications').where('emailStatus', '==', 'failed').onSnapshot(function (s) { D.failed = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
       unsubs.push(db.collection('attendanceStudents').onSnapshot(function (s) { D.summaries = {}; s.forEach(function (d) { D.summaries[d.id] = d.data(); }); paint(); }, err));
+      var fromTs = firebase.firestore.Timestamp.fromMillis(Date.parse(F.from + 'T00:00:00+03:00')), toTs = firebase.firestore.Timestamp.fromMillis(Date.parse(F.to + 'T23:59:59+03:00'));
+      unsubs.push(db.collection('attendanceStrikes').where('startAt', '>=', fromTs).where('startAt', '<=', toTs).onSnapshot(function (s) { D.strikes = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceAudit').orderBy('at', 'desc').limit(150).onSnapshot(function (s) { D.audit = s.docs.map(function (d) { return d.data(); }); paint(); }, err));
+      unsubs.push(db.collection('attendanceSettings').doc('policy').onSnapshot(function (s) { if (s.exists) POLICY = Object.assign({}, POLICY, s.data()); paint(); }, err));
     }
     function err(e) { console.warn('attendance admin', e); }
     function options() {
@@ -686,10 +827,100 @@ var Attendance = (function () {
       var sessions = D.sessions.filter(sessOk), records = D.records.filter(recOk);
       var reviews = (D.reviews || []), follow = (D.follow || []), openRefs = D.referrals.filter(function (r) { return r.status !== 'closed'; });
       var nReview = reviews.length + D.requests.length + follow.length + openRefs.length;
-      el.querySelector('[data-tabs]').innerHTML = [['daily', 'Daily attendance'], ['tutors', 'Tutor compliance'], ['students', 'Student punctuality'], ['review', 'Reviews and actions', nReview], ['notices', 'Notifications', (D.failed || []).length]].map(function (t) {
-        return '<button type="button" data-tab="' + t[0] + '" class="' + (tab === t[0] ? 'on' : '') + '">' + t[1] + (t[2] ? '<span class="n">' + t[2] + '</span>' : '') + '</button>';
+      // Attendance subsections (one Attendance item in the admin navigation).
+      var TABS = [['overview', 'Overview', 'fa-gauge'], ['students', 'Student attendance', 'fa-user-check'], ['tutors', 'Tutor attendance', 'fa-chalkboard-user'],
+        ['records', 'Records and history', 'fa-clock-rotate-left', reviews.length + D.requests.length + follow.length + (D.failed || []).length], ['strikes', 'Strikes and disciplinary', 'fa-scale-balanced', openRefs.length],
+        ['face', 'Facial recognition', 'fa-face-smile'], ['settings', 'Settings', 'fa-sliders']];
+      if (!TABS.some(function (x) { return x[0] === tab; })) tab = 'overview';
+      el.querySelector('[data-tabs]').innerHTML = TABS.map(function (t) {
+        return '<button type="button" data-tab="' + t[0] + '" class="' + (tab === t[0] ? 'on' : '') + '">' + icon(t[2]) + ' ' + t[1] + (t[3] ? '<span class="n">' + t[3] + '</span>' : '') + '</button>';
       }).join('');
-      body.innerHTML = tab === 'daily' ? dailyHtml(sessions, records) : tab === 'tutors' ? tutorsHtml(sessions) : tab === 'students' ? studentsHtml(records) : tab === 'review' ? reviewHtml(reviews, follow, openRefs) : noticesHtml();
+      el.querySelector('.att-filters').style.display = tab === 'face' || tab === 'settings' ? 'none' : '';
+      // Facial recognition and Settings keep their own live screens; mount them once.
+      if (tab === 'face' || tab === 'settings') {
+        if (body.dataset.mounted === tab) { if (tab === 'settings') settingsPaint(); return; }
+        if (sub) { sub.destroy(); sub = null; }
+        body.dataset.mounted = tab; body.innerHTML = '<div></div>';
+        if (tab === 'face') sub = typeof AttendanceFace !== 'undefined' ? AttendanceFace.mountAdmin(body.firstChild) : (body.innerHTML = '<div class="att-empty">js/attendance/face.js did not load.</div>', null);
+        else settingsPaint();
+        return;
+      }
+      if (sub) { sub.destroy(); sub = null; }
+      body.dataset.mounted = '';
+      body.innerHTML = tab === 'overview' ? overviewHtml(sessions, records) : tab === 'tutors' ? tutorsHtml(sessions) : tab === 'students' ? studentsHtml(records) :
+        tab === 'records' ? reviewHtml(reviews, follow, null) + noticesHtml() + auditHtml() : strikesHtml(openRefs);
+    }
+    /* Overview: today at a glance, then every lesson in the range. */
+    function overviewHtml(sessions, records) {
+      var t = Date.now(), per = period(t), live = sessions.filter(function (s) { return s.status !== 'cancelled' && msOf(s.startAt) <= t; });
+      var verified = live.filter(function (s) { return (s.tutorsPresent || []).length; }).length;
+      var awaiting = sessions.filter(function (s) { return s.status === 'open' && msOf(s.endAt) < t; });
+      var auto = sessions.filter(function (s) { return s.status === 'auto_submitted'; }).length;
+      var near = Object.keys(D.summaries).map(function (id) { var y = (D.summaries[id].years || {})[per.key] || {}; return { id: id, name: D.summaries[id].studentName, n: y.active || 0 }; })
+        .filter(function (x) { return x.n >= 3; }).sort(function (a, b) { return b.n - a.n; });
+      return dailyHtml(sessions, records) +
+        '<div class="att-stats"><div class="att-stat"><b>' + verified + ' / ' + live.length + '</b><span>Tutors confirmed (lessons started)</span></div>' +
+        '<div class="att-stat ' + (awaiting.length ? 'warn' : '') + '"><b>' + awaiting.length + '</b><span>Reports awaiting submission</span></div>' +
+        '<div class="att-stat ' + (auto ? 'warn' : '') + '"><b>' + auto + '</b><span>Auto-submitted reports</span></div>' +
+        '<div class="att-stat ' + (near.length ? 'late' : '') + '"><b>' + near.length + '</b><span>Students at 3+ strikes (' + esc(per.label) + ')</span></div></div>' +
+        (near.length ? '<div class="att-panel"><h4>' + icon('fa-triangle-exclamation') + ' Approaching disciplinary thresholds</h4>' + near.map(function (x) {
+          return '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.3rem 0"><b>' + esc(x.name) + '</b>' + (x.n >= 5 ? '<span class="att-pill bad">' + x.n + ' strikes: referral</span>' : x.n === 4 ? '<span class="att-pill late">4 strikes: final warning</span>' : '<span class="att-pill wait">3 strikes: next is the final warning</span>') +
+            '<button type="button" class="att-btn sm" data-a-student="' + esc(x.id) + '">' + icon('fa-folder-open') + ' Record</button></div>';
+        }).join('') + '</div>' : '');
+    }
+    function presencePill(s) {
+      var ids = s.tutorIds || [], pres = s.tutorPresence || {};
+      if (!ids.length) return '<span class="att-pill bad">No tutor</span>';
+      var any = ids.filter(function (id) { return pres[id]; }).map(function (id) { return pres[id]; });
+      if (!any.length) return msOf(s.startAt) > Date.now() || s.status === 'cancelled' ? '' : '<span class="att-pill warn">Not confirmed</span>';
+      return any.map(function (p) { return '<span class="att-pill ' + (p.classification === 'late' ? 'late' : 'ok') + '">' + (p.faceVerifiedAt ? icon('fa-face-smile') + ' ' : '') + hm(p.at) + (p.classification === 'late' ? ' (' + p.minutesLate + ' min)' : '') + '</span>'; }).join(' ');
+    }
+    /* Strikes in the chosen dates, and every disciplinary referral. */
+    function strikesHtml(openRefs) {
+      var per = period(Date.now()), list = (D.strikes || []).filter(function (k) { return (!F.subject || k.subjectId === F.subject) && (!F.student || String(k.studentName || '').toLowerCase().indexOf(F.student.toLowerCase()) !== -1); })
+        .sort(function (a, b) { return msOf(b.startAt) - msOf(a.startAt); });
+      var warnings = list.filter(function (k) { return k.number === 4; }).length;
+      return '<div class="att-stats"><div class="att-stat late"><b>' + list.filter(function (k) { return k.status === 'active'; }).length + '</b><span>Strikes in these dates</span></div>' +
+        '<div class="att-stat"><b>' + list.filter(function (k) { return k.status !== 'active'; }).length + '</b><span>Reversed</span></div>' +
+        '<div class="att-stat warn"><b>' + warnings + '</b><span>Final warnings issued</span></div>' +
+        '<div class="att-stat warn"><b>' + openRefs.length + '</b><span>Open referrals</span></div></div>' +
+        '<p class="att-muted">Strike counts reset: <b>' + esc(({ academic_year: 'every academic year', calendar_year: 'every calendar year', never: 'never', manual: 'only when the Studio Desk resets them' })[POLICY.strikeReset] || 'every academic year') + '</b> (current period: ' + esc(per.label) + '). Strike 4 is a formal final warning to the student and parent; strike 5 and later are referred here. Nothing happens automatically: the Studio Desk decides. Change the reset policy in Settings.</p>' +
+        '<div class="att-panel"><h4>' + icon('fa-triangle-exclamation') + ' Strikes</h4>' + (list.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Student</th><th>Lesson</th><th>Arrived</th><th>Strike</th><th>Status</th><th></th></tr></thead><tbody>' + list.map(function (k) {
+          return '<tr><td>' + dayLabel(k.startAt) + '</td><td><b>' + esc(k.studentName) + '</b></td><td>' + esc(k.subjectName) + ' ' + hm(k.startAt) + '</td><td>' + hm(k.checkInAt) + ' (' + k.minutesLate + ' min)</td>' +
+            '<td>' + k.number + ' <span class="att-muted">(' + esc(k.academicYearLabel || '') + ')</span>' + (k.number === 4 ? ' <span class="att-pill late">Final warning</span>' : k.number >= 5 ? ' <span class="att-pill bad">Referral</span>' : '') + '</td>' +
+            '<td>' + (k.status === 'active' ? '<span class="att-pill late">Active</span>' : '<span class="att-pill wait">Reversed</span><div class="att-muted">' + esc(k.reversal && k.reversal.reason) + '</div>') + '</td>' +
+            '<td><div class="att-row-actions"><button type="button" class="att-btn sm" data-a-student="' + esc(k.studentId) + '">' + icon('fa-folder-open') + ' Record</button></div></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="att-empty">No strikes in these dates.</div>') + '</div>' +
+        referralsHtml(openRefs);
+    }
+    var AUDIT = { check_in: 'Student registered', tutor_resolve: 'Tutor accounted for a student', tutor_follow_up: 'Tutor follow-up after submission', verify_late_registration: 'Tutor verified a late registration',
+      submit: 'Register submitted', auto_submit: 'Register AUTO-SUBMITTED', review_resolution: 'Explanation reviewed', correct_record: 'Record corrected', strike_reversed: 'Strike reversed', referral_created: 'Referral opened',
+      referral_decision: 'Referral decision', lock_override: 'Subject lock overridden', session_cancelled: 'Lesson cancelled', explanation_review: 'Tutor explanation reviewed', follow_up_closed: 'Follow-up closed',
+      request_made: 'Request made', request_decision: 'Request decided', tutor_explanation: 'Tutor explanation', tutor_present: 'Tutor confirmed teaching', tutor_face_verified: 'Tutor face-verified',
+      policy_changed: 'Strike policy changed', strikes_reset: 'Strike counts reset' };
+    function auditHtml() {
+      var a = (D.audit || []).filter(function (x) { return x.area !== 'recognition'; });
+      return '<div class="att-panel"><h4>' + icon('fa-list-ul') + ' Audit trail (latest ' + a.length + ')</h4><p class="att-muted">Append-only. Original registrations, submitted snapshots and earlier decisions are never overwritten; recognition changes are in Facial recognition > Change log.</p>' +
+        (a.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>When</th><th>Action</th><th>By</th><th>Detail</th></tr></thead><tbody>' + a.map(function (x) {
+          var det = [x.before && x.before.status ? (STATUS[x.before.status] || [x.before.status])[0] + ' → ' + ((x.after && STATUS[x.after.status]) || [x.after && x.after.status || ''])[0] : '', x.reason ? '"' + x.reason + '"' : '', x.after && x.after.method === 'face' ? 'by face' : ''].filter(Boolean).join(' · ');
+          return '<tr><td>' + dayLabel(x.at) + ' ' + hm(x.at) + '</td><td><b>' + esc(AUDIT[x.action] || x.action) + '</b><div class="att-muted">' + esc(x.sessionId || x.studentId || '') + '</div></td><td>' + esc(x.actorName || '') + ' <span class="att-muted">(' + esc(x.actorRole || '') + ')</span></td><td class="att-muted">' + esc(det) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="att-empty">Nothing recorded yet.</div>') + '</div>';
+    }
+    /* Settings: the strike reset policy (the rest of the rules are fixed and listed for reference). */
+    function settingsPaint() {
+      var host = body.firstChild; if (!host || (host.contains(document.activeElement) && /SELECT|INPUT/.test(document.activeElement.tagName))) return;
+      var per = period(Date.now()), hist = (POLICY.history || []).slice().reverse().slice(0, 20);
+      var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      host.innerHTML = '<div class="att-grid2"><div class="att-panel"><h4>' + icon('fa-rotate') + ' Strike reset policy</h4><div class="att-set">' +
+        '<label class="att-field">When do strike counts start again?<select data-pol="strikeReset">' + [['academic_year', 'Every academic year'], ['calendar_year', 'Every calendar year (January)'], ['never', 'Never (one running count)'], ['manual', 'Only when the Studio Desk resets them']].map(function (o2) { return '<option value="' + o2[0] + '"' + (POLICY.strikeReset === o2[0] ? ' selected' : '') + '>' + o2[1] + '</option>'; }).join('') + '</select></label>' +
+        '<label class="att-field">The academic year starts in<select data-pol="yearStartMonth">' + MONTHS.map(function (m2, i) { return '<option value="' + (i + 1) + '"' + (Number(POLICY.yearStartMonth || 9) === i + 1 ? ' selected' : '') + '>' + m2 + '</option>'; }).join('') + '</select></label>' +
+        '<div class="att-row-actions"><button type="button" class="att-btn primary" data-pol-save>' + icon('fa-floppy-disk') + ' Save policy</button>' + (POLICY.strikeReset === 'manual' ? '<button type="button" class="att-btn danger" data-pol-reset>' + icon('fa-rotate-left') + ' Reset all strike counts now</button>' : '') + '</div>' +
+        '<p class="att-muted">Current period: <b>' + esc(per.label) + '</b>. Changing the policy recounts every student\'s active strikes under the new periods. No strike is deleted: the history and audit trail stay complete. Strikes already issued keep their number, and warnings or referrals already sent are not repeated.</p></div></div>' +
+        '<div class="att-panel"><h4>' + icon('fa-scale-balanced') + ' Fixed attendance rules</h4><div class="att-kv">' +
+        '<span>On time</span><b>Registered less than 15 minutes after the start (server time, Africa/Nairobi)</b><span>Late</span><b>15:00 or more after the start: one strike, at most one per lesson</b>' +
+        '<span>Strikes 1 to 3</span><b>Normal monitoring; the parent is told of each late arrival</b><span>Strike 4</span><b>Formal final warning to the student and parent</b><span>Strike 5+</span><b>Referred to the Studio Desk for review; nothing automatic</b>' +
+        '<span>No registration</span><b>Flagged as unaccounted after the grace period, never absent until the tutor or the Studio Desk says so</b><span>Auto-submit</span><b>15 minutes after the lesson ends, marked AUTO-SUBMITTED; the tutor must explain</b></div></div></div>' +
+        '<div class="att-panel"><h4>' + icon('fa-clock-rotate-left') + ' Policy history</h4>' + (hist.length ? hist.map(function (h) { return '<div class="att-muted">' + dayLabel(h.at) + ' ' + hm(h.at) + ': ' + (h.reset ? 'Strike counts reset' : 'Reset policy set to ' + esc(h.strikeReset) + (h.strikeReset === 'academic_year' ? ' (starts ' + MONTHS[(h.yearStartMonth || 9) - 1] + ')' : '')) + ' · "' + esc(h.reason) + '"</div>'; }).join('') : '<div class="att-empty">Default policy: counts reset every academic year in September.</div>') + '</div>';
     }
     function n(list, f) { return list.filter(f).length; }
     function dailyHtml(sessions, records) {
@@ -706,7 +937,7 @@ var Attendance = (function () {
         '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Lessons</h4>' + (sessions.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Tutor</th><th>Register</th><th>In / enrolled</th><th>Late</th><th>Unresolved</th><th></th></tr></thead><tbody>' +
           sessions.slice().sort(function (a, b) { return msOf(a.startAt) - msOf(b.startAt); }).map(function (s) {
             var rs = D.records.filter(function (r) { return r.sessionId === s.id; });
-            return '<tr class="' + (s.status === 'auto_submitted' || (s.unresolvedCount || 0) ? 'flag' : '') + '"><td>' + dayLabel(s.startAt) + '</td><td><b>' + esc(s.subjectName) + '</b> ' + hm(s.startAt) + '<div class="att-muted">' + esc((s.keyStage || '').replace(/\s*\(.*/, '')) + '</div></td><td>' + esc(s.tutorName) + '</td><td>' + sessPill(s) + '</td>' +
+            return '<tr class="' + (s.status === 'auto_submitted' || (s.unresolvedCount || 0) ? 'flag' : '') + '"><td>' + dayLabel(s.startAt) + '</td><td><b>' + esc(s.subjectName) + '</b> ' + hm(s.startAt) + '<div class="att-muted">' + esc((s.keyStage || '').replace(/\s*\(.*/, '')) + '</div></td><td>' + esc(s.tutorName) + '<div>' + presencePill(s) + '</div></td><td>' + sessPill(s) + '</td>' +
               '<td>' + n(rs, function (r) { return !!r.checkIn; }) + ' / ' + rs.length + '</td><td>' + n(rs, function (r) { return r.status === 'late'; }) + '</td><td>' + n(rs, function (r) { return r.status === 'unaccounted' || (r.status === 'expected' && msOf(r.graceAt) <= t); }) + '</td>' +
               '<td><div class="att-row-actions"><button type="button" class="att-btn sm" data-a-sess="' + esc(s.id) + '">' + icon('fa-eye') + ' Register</button>' + (s.status !== 'cancelled' ? '<button type="button" class="att-btn sm danger" data-a-cancel="' + esc(s.id) + '">' + icon('fa-ban') + ' Cancel lesson</button>' : '') + '</div></td></tr>';
           }).join('') + '</tbody></table></div>' : '<div class="att-empty">No registers in this range. Registers are prepared 20 minutes before each timetabled lesson.</div>') + '</div>';
@@ -725,7 +956,14 @@ var Attendance = (function () {
         });
       });
       var ids = Object.keys(by);
-      return '<div class="att-panel"><h4>' + icon('fa-chalkboard-user') + ' Tutor compliance</h4>' + (ids.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Tutor</th><th>Lessons conducted</th><th>Submitted manually</th><th>Auto-submitted</th><th>Outstanding</th><th>Explanations required</th></tr></thead><tbody>' +
+      var started = sessions.filter(function (s) { return s.status !== 'cancelled' && msOf(s.startAt) <= Date.now(); }).sort(function (a, b) { return msOf(b.startAt) - msOf(a.startAt); });
+      var presence = '<div class="att-panel"><h4>' + icon('fa-user-check') + ' Tutor attendance and verification</h4><p class="att-muted">Tutors confirm they are teaching when the register opens (I\'m teaching, or face verification where enabled). Late is 15 minutes or more after the start.</p>' +
+        (started.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Tutor</th><th>Confirmed</th><th>Method</th></tr></thead><tbody>' + started.map(function (s) {
+          var pres = s.tutorPresence || {}, any = (s.tutorIds || []).some(function (id) { return pres[id]; });
+          return '<tr class="' + (any ? '' : 'flag') + '"><td>' + dayLabel(s.startAt) + '</td><td><b>' + esc(s.subjectName) + '</b> ' + hm(s.startAt) + '</td><td>' + esc(s.tutorName) + '</td><td>' + (presencePill(s) || '—') + '</td>' +
+            '<td>' + ((s.tutorIds || []).map(function (id) { var p = pres[id]; return p ? (p.faceVerifiedAt ? '<span class="att-pill info">' + icon('fa-face-smile') + ' Face</span>' : '<span class="att-pill wait">Online</span>') : ''; }).join(' ') || '—') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="att-empty">No lessons have started in these dates.</div>') + '</div>';
+      return presence + '<div class="att-panel"><h4>' + icon('fa-chalkboard-user') + ' Tutor compliance</h4>' + (ids.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Tutor</th><th>Lessons conducted</th><th>Submitted manually</th><th>Auto-submitted</th><th>Outstanding</th><th>Explanations required</th></tr></thead><tbody>' +
         ids.map(function (id) { var b = by[id]; return '<tr class="' + (b.auto || b.outstanding ? 'flag' : '') + '"><td><b>' + esc(b.name) + '</b></td><td>' + b.conducted + '</td><td>' + b.manual + '</td><td>' + b.auto + '</td><td>' + b.outstanding + '</td><td>' + b.explain + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="att-empty">No registers in this range.</div>') + '</div>' +
         '<div class="att-panel"><h4>' + icon('fa-lock') + ' Subject locks now</h4>' + (D.locks.length ? D.locks.map(function (l) { return '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.3rem 0"><b>' + esc(l.subjectName) + '</b><span class="att-muted">' + esc(l.tutorName || l.tutorId) + ' · since ' + hm(l.since) + '</span><button type="button" class="att-btn sm" data-a-lock="' + esc(l.id) + '">' + icon('fa-lock-open') + ' Override</button></div>'; }).join('') : '<div class="att-empty">No tutor is locked out of a subject.</div>') + '</div>' +
         '<div class="att-panel"><h4>' + icon('fa-clock-rotate-left') + ' Submission history</h4>' + (sessions.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Lesson</th><th>Tutor</th><th>Method</th><th>When</th><th>By</th></tr></thead><tbody>' +
@@ -741,10 +979,10 @@ var Attendance = (function () {
         if (r.status === 'absent') b.absent++;
         if (r.status === 'unaccounted') b.unresolved++;
       });
-      var ay = academicYearKey(Date.now());
+      var per = period(Date.now()), ay = per.key;
       Object.keys(D.summaries).forEach(function (id) { if (!by[id] && (!F.student || String(D.summaries[id].studentName || '').toLowerCase().indexOf(F.student.toLowerCase()) !== -1)) by[id] = { name: D.summaries[id].studentName, total: 0, att: 0, late: 0, absent: 0, unresolved: 0 }; });
       var ids = Object.keys(by).sort(function (a, b) { var ya = ((D.summaries[a] || {}).years || {})[ay] || {}, yb = ((D.summaries[b] || {}).years || {})[ay] || {}; return (yb.active || 0) - (ya.active || 0) || String(by[a].name).localeCompare(String(by[b].name)); });
-      return '<div class="att-panel"><h4>' + icon('fa-user-clock') + ' Student punctuality <span class="att-muted">(active strikes are for ' + esc(yearLabel(ay)) + '; the rest for the dates chosen)</span></h4>' + (ids.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Attendance</th><th>Late</th><th>Absent</th><th>Unresolved</th><th>Active strikes</th><th>Warning / referral</th><th></th></tr></thead><tbody>' +
+      return '<div class="att-panel"><h4>' + icon('fa-user-clock') + ' Student punctuality <span class="att-muted">(active strikes are for ' + esc(per.label) + '; the rest for the dates chosen)</span></h4>' + (ids.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Attendance</th><th>Late</th><th>Absent</th><th>Unresolved</th><th>Active strikes</th><th>Warning / referral</th><th></th></tr></thead><tbody>' +
         ids.map(function (id) {
           var b = by[id], y = ((D.summaries[id] || {}).years || {})[ay] || {};
           return '<tr class="' + ((y.active || 0) >= 4 ? 'flag' : '') + '"><td><b>' + esc(b.name) + '</b></td><td>' + (b.total ? Math.round(b.att * 100 / b.total) + '%' : '—') + '</td><td>' + b.late + '</td><td>' + b.absent + '</td><td>' + b.unresolved + '</td><td><b>' + (y.active || 0) + '</b>' + (y.reversed ? ' <span class="att-muted">(' + y.reversed + ' reversed)</span>' : '') + '</td>' +
@@ -768,7 +1006,10 @@ var Attendance = (function () {
             (s.tutorExplanation ? '<button type="button" class="att-btn sm primary" data-a-exp="' + esc(s.id) + '" data-d="accept">' + icon('fa-check') + ' Accept explanation</button><button type="button" class="att-btn sm danger" data-a-exp="' + esc(s.id) + '" data-d="reject">Reject explanation</button>' : '') +
             '<button type="button" class="att-btn sm" data-a-close="' + esc(s.id) + '">' + icon('fa-flag-checkered') + ' Close follow-up</button></div></div>';
         }).join('') : '<div class="att-empty">Every register is accounted for.</div>') + '</div>' +
-        '<div class="att-panel"><h4>' + icon('fa-scale-balanced') + ' Disciplinary referrals (' + refs.length + ' open)</h4>' + (D.referrals.length ? D.referrals.slice().sort(function (a, b) { return msOf(b.createdAt) - msOf(a.createdAt); }).map(function (r) {
+        (refs ? referralsHtml(refs) : '');
+    }
+    function referralsHtml(refs) {
+      return '<div class="att-panel"><h4>' + icon('fa-scale-balanced') + ' Disciplinary referrals (' + refs.length + ' open)</h4>' + (D.referrals.length ? D.referrals.slice().sort(function (a, b) { return msOf(b.createdAt) - msOf(a.createdAt); }).map(function (r) {
           return '<div style="border-bottom:1px solid #eef3f2;padding:.5rem 0"><b>' + esc(r.studentName) + '</b> · ' + r.strikeNumber + ' strikes (' + esc(r.academicYearLabel || '') + ') · ' + dayLabel(r.createdAt) + ' <span class="att-pill ' + (r.status === 'closed' ? 'ok' : 'bad') + '">' + esc(String(r.status).replace('_', ' ')) + '</span>' +
             ((r.decisions || []).map(function (d) { return '<div class="att-muted">' + dayLabel(d.at) + ': ' + esc(d.decision || '') + ' (' + esc(d.reason) + ')</div>'; }).join('')) +
             '<div class="att-row-actions" style="margin-top:.35rem"><button type="button" class="att-btn sm primary" data-a-ref="' + esc(r.id) + '">' + icon('fa-gavel') + ' Record decision</button><button type="button" class="att-btn sm" data-a-student="' + esc(r.studentId) + '">Student record</button></div></div>';
@@ -819,12 +1060,20 @@ var Attendance = (function () {
     function adminCall(data, okMsg) {
       return call('attendanceAdmin', data).then(function () { if (okMsg) toast(okMsg); }).catch(function (e) { alert(errMsg(e)); });
     }
-    function toast(t) { var d = document.createElement('div'); d.className = 'att-dock att'; d.innerHTML = '<span class="att-chip">' + icon('fa-circle-check') + ' ' + esc(t) + '</span>'; document.body.appendChild(d); setTimeout(function () { d.remove(); }, 2600); }
     var statusSelect = '<label class="att-field">New status<select data-extra="status">' + ['present', 'late', 'present_verified', 'connectivity', 'absent', 'excused', 'other', 'unaccounted'].map(function (k) { return '<option value="' + k + '">' + STATUS[k][0] + '</option>'; }).join('') + '</select></label>';
     el.addEventListener('click', function (e) {
       var t = e.target; if (!t.closest) return;
       var b;
-      if ((b = t.closest('[data-tab]'))) { tab = b.dataset.tab; paint(); return; }
+      if ((b = t.closest('[data-tab]'))) { tab = b.dataset.tab; try { localStorage.setItem('attAdminTab', tab); } catch (e2) { } paint(); return; }
+      if ((b = t.closest('[data-pol-save]'))) {
+        var mode = el.querySelector('[data-pol="strikeReset"]').value, month = Number(el.querySelector('[data-pol="yearStartMonth"]').value);
+        askReason('Change the strike reset policy', 'Why? Active strike counts are recounted under the new policy; no strike is deleted.').then(function (r) { if (r) adminCall({ action: 'setPolicy', strikeReset: mode, yearStartMonth: month, reason: r.reason }, 'Policy saved and counts recounted').then(function () { loadPolicy(true); }); });
+        return;
+      }
+      if ((b = t.closest('[data-pol-reset]'))) {
+        askReason('Reset every student\'s strike count', 'Why now? Counts start again from zero; the strike history stays.').then(function (r) { if (r) adminCall({ action: 'resetStrikes', reason: r.reason }, 'Strike counts reset'); });
+        return;
+      }
       if ((b = t.closest('[data-load]'))) { el.querySelectorAll('[data-f]').forEach(function (x) { F[x.dataset.f] = x.value; }); load(); return; }
       if ((b = t.closest('[data-a-sess]'))) { sessionModal(b.dataset.aSess); return; }
       if ((b = t.closest('[data-a-student]'))) { studentModal(b.dataset.aStudent); return; }
@@ -850,8 +1099,12 @@ var Attendance = (function () {
       if ((b = t.closest('.att-ov [data-a-student]'))) { studentModal(b.dataset.aStudent); }
     }
     load();
-    return { destroy: function () { unsubs.forEach(function (u) { u(); }); document.removeEventListener('click', onDocClick); } };
+    return { destroy: function () { if (sub) sub.destroy(); unsubs.forEach(function (u) { u(); }); document.removeEventListener('click', onDocClick); } };
   }
 
-  return { mountStudent: mountStudent, mountStudentHistory: mountStudentHistory, mountTutor: mountTutor, mountParent: mountParent, mountAdmin: mountAdmin, STATUS: STATUS };
+  return {
+    mountStudent: mountStudent, mountStudentHistory: mountStudentHistory, mountTutor: mountTutor, mountParent: mountParent, mountAdmin: mountAdmin, STATUS: STATUS,
+    // Shared with js/attendance/face.js
+    _ui: { esc: esc, hm: hm, dayLabel: dayLabel, icon: icon, call: call, errMsg: errMsg, modal: modal, askReason: askReason, msOf: msOf, toast: toast, style: style }
+  };
 })();

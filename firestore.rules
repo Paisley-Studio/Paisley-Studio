@@ -1848,6 +1848,26 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
+    // Attendance settings: the strike reset policy is readable by everyone signed in (screens
+    // show "strikes this academic year" etc.); the recognition switch is Studio Desk only.
+    // Students and tutors learn whether recognition is offered to them from attendanceToday.
+    match /attendanceSettings/{id} {
+      allow read: if isAdmin() || (isSignedIn() && id == 'policy');
+      allow write: if false;
+    }
+    // Facial recognition (functions/face-recognition.js). No image or template is ever stored here.
+    match /faceProfiles/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /faceAttempts/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // Engine URL and API key: Cloud Functions only, no client at all.
+    match /privateConfig/{id} {
+      allow read, write: if false;
+    }
     // Subject display names (renameSubject callable). Public: the marketing pages show subjects too.
     match /lmsSettings/{id} {
       allow get: if true;

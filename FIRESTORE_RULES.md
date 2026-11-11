@@ -86,6 +86,10 @@ user and denied access.
 | `attendanceNotifications` | Cloud Functions only | admin, the recipient, the student's parent (`audience == 'family'`) | Cloud Functions only |
 | `attendanceLocks` | Cloud Functions only | admin, the locked tutor | Cloud Functions only. While `{tutorId}_{subjectId}` exists, that tutor cannot mark or record work in that subject (`attendanceLocked`) |
 | `attendanceAudit` | Cloud Functions only | admin | nobody |
+| `attendanceSettings` | Cloud Functions only (`attendanceAdmin` setPolicy/resetStrikes, `faceAdmin`) | `policy`: anyone signed in; every other doc (e.g. `recognition`): admin | Cloud Functions only |
+| `faceProfiles` | Cloud Functions only (`faceAdmin`, `faceConsent`) | admin | Cloud Functions only. Consent and enrollment state only; no image or template |
+| `faceAttempts` | Cloud Functions only | admin | Cloud Functions only (pruned after `retentionDays` by `faceRetention`) |
+| `privateConfig` | Cloud Functions only | nobody (not even admins: holds the recognition engine API key) | nobody |
 | `lmsSettings` | Cloud Functions only (`renameSubject`) | get: anyone (subject names); list: signed in | Cloud Functions only |
 | `subjectRenames` | Cloud Functions only | admin | nobody |
 | `tutorChats/{studentId}_{tutorId}` | the student or the tutor, only when `students.tutorIds`/`tutorId` links them (student account must be OK); admin | the two members, admin | student: `studentReadAt` + `last*` only; tutor: `tutorReadAt` + `last*` only; admin. Delete: admin |

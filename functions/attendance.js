@@ -10,7 +10,8 @@
      attendanceSubmissions/{sessionId}                the rollcall snapshot (manual or auto), written once
      attendanceAmendments/{auto id}                   changes made after submission
      attendanceStrikes/{recordId}                     one strike per student per lesson
-     attendanceStudents/{studentId}                   strike counters per academic year
+     attendanceStudents/{studentId}                   strike counters per period (attendanceSettings/policy)
+     attendanceSettings/policy                        strike reset policy (Admin > Attendance > Settings)
      attendanceReferrals/{strikeId}                   fifth-strike (and later) disciplinary referrals
      attendanceRequests/{auto id}                     correction / excused-lateness requests
      attendanceNotifications/{deterministic id}       every notice, with email delivery state
@@ -79,6 +80,35 @@ function academicYearOf(ms) {
   const p = nairobiParts(ms);
   const start = p.month >= YEAR_START_MONTH ? p.year : p.year - 1;
   return { key: "y" + start, label: start + "/" + String((start + 1) % 100).padStart(2, "0") };
+}
+/* ---------------- strike reset policy (Admin > Attendance > Settings) ----------------
+   attendanceSettings/policy.strikeReset decides when strike counts start again:
+     academic_year  (default) every September (yearStartMonth), key "y2026"
+     calendar_year  every January, key "c2026"
+     never          one running count, key "all"
+     manual         only when the Studio Desk presses Reset, key "m<epoch>"
+   Strikes themselves are never deleted; the policy only chooses which counter they add to. */
+const POLICY_DEFAULTS = { strikeReset: "academic_year", yearStartMonth: YEAR_START_MONTH, manualEpoch: 0, manualResetAt: null };
+const RESET_MODES = ["academic_year", "calendar_year", "never", "manual"];
+let policyCache = null, policyAt = 0;
+async function loadPolicy(fresh) {
+  if (!fresh && policyCache && Date.now() - policyAt < 60000) return policyCache;
+  const s = await db().collection("attendanceSettings").doc("policy").get();
+  policyCache = Object.assign({}, POLICY_DEFAULTS, s.exists ? s.data() : {});
+  policyAt = Date.now();
+  return policyCache;
+}
+function strikePeriod(policy, msv) {
+  const p = nairobiParts(msv), pol = policy || POLICY_DEFAULTS;
+  if (pol.strikeReset === "calendar_year") return { key: "c" + p.year, label: String(p.year), phrase: "this calendar year" };
+  if (pol.strikeReset === "never") return { key: "all", label: "All time", phrase: "in total" };
+  if (pol.strikeReset === "manual") {
+    const since = pol.manualResetAt ? fmtDay(ms(pol.manualResetAt)) : "";
+    return { key: "m" + (pol.manualEpoch || 0), label: since ? "Since " + since : "Since records began", phrase: since ? "since " + since : "so far" };
+  }
+  const sm = Number(pol.yearStartMonth) >= 1 && Number(pol.yearStartMonth) <= 12 ? Number(pol.yearStartMonth) : YEAR_START_MONTH;
+  const start = p.month >= sm ? p.year : p.year - 1;
+  return { key: "y" + start, label: start + "/" + String((start + 1) % 100).padStart(2, "0"), phrase: "this academic year" };
 }
 /* When the lesson on `ymd` starts and ends; null if the entry has no usable start. */
 function occurrence(entry, ymd) {
@@ -234,7 +264,7 @@ function lessonView(entry, occ, session, record) {
 function publicRecord(r) {
   return {
     id: r.id, studentId: r.studentId, studentName: r.studentName, status: r.status,
-    checkIn: r.checkIn ? { at: ms(r.checkIn.at), minutesLate: r.checkIn.minutesLate, classification: r.checkIn.classification } : null,
+    checkIn: r.checkIn ? { at: ms(r.checkIn.at), minutesLate: r.checkIn.minutesLate, classification: r.checkIn.classification, method: r.checkIn.method || "online" } : null,
     needsVerification: !!r.needsVerification, strikeId: r.strikeId || null, reviewState: r.reviewState || null,
     resolution: r.resolution ? { outcome: r.resolution.outcome, note: r.resolution.note, byName: r.resolution.byName, at: ms(r.resolution.at) } : null
   };
@@ -284,13 +314,22 @@ async function todayFor(uid, now) {
   }
   out.lessons.sort((a, b) => a.startAt - b.startAt);
   out.policy = { graceMin: GRACE_MIN, earlyMin: EARLY_CHECKIN_MIN, noticeMin: NOTICE_MIN, autoSubmitAfterEndMin: AUTO_SUBMIT_AFTER_END_MIN };
+  out.strikePeriod = strikePeriod(await loadPolicy(), now);
+  // Facial recognition is offered only when the Studio Desk has enabled it and this person is
+  // enrolled with consent (functions/face-recognition.js). Otherwise nothing about it is sent.
+  out.recognition = { available: false };
+  if (out.role === "student" || out.role === "tutor") {
+    try { out.recognition = await require("./face-recognition").availabilityFor(uid, out.role); } catch (e) { console.warn("recognition availability", e.message); }
+  }
   return out;
 }
 
 /* =========================================================
    Student check-in (server time, idempotent, strike in the same transaction)
 ========================================================= */
-async function checkIn(uid, entryId, now) {
+async function checkIn(uid, entryId, now, how) {
+  how = how || {};
+  const method = how.method === "face" ? "face" : "online";
   const role = await roleOf(uid);
   if (!role.student) throw new HttpsError("permission-denied", "Only students register attendance.");
   const entrySnap = await db().collection("timetableEntries").doc(String(entryId || "")).get();
@@ -314,7 +353,8 @@ async function checkIn(uid, entryId, now) {
   const sumRef = db().collection("attendanceStudents").doc(uid);
   const sesRef = db().collection("attendanceSessions").doc(sid);
   const c = classify(startAt, now);
-  const ay = session.academicYear || academicYearOf(startAt).key;
+  const per = strikePeriod(await loadPolicy(), startAt);
+  const ay = per.key;
 
   const result = await db().runTransaction(async (tx) => {
     const [recSnap, strikeSnap, sumSnap, sesSnap] = await Promise.all([tx.get(recRef), tx.get(strikeRef), tx.get(sumRef), tx.get(sesRef)]);
@@ -327,7 +367,8 @@ async function checkIn(uid, entryId, now) {
     const before = { status: rec.status };
     const patch = {
       status: c.late ? "late" : "present",
-      checkIn: { at: ts(now), minutesLate: c.minutesLate, classification: c.late ? "late" : "on_time", source: "student" },
+      checkIn: Object.assign({ at: ts(now), minutesLate: c.minutesLate, classification: c.late ? "late" : "on_time", source: "student", method },
+        method === "face" && how.similarity != null ? { similarity: Math.round(how.similarity * 1000) / 1000 } : {}),
       needsVerification: submitted,              // a registration after the register went in is shown to the tutor for checking
       updatedAt: FV().serverTimestamp()
     };
@@ -339,13 +380,13 @@ async function checkIn(uid, entryId, now) {
       const number = (y.active || 0) + 1;
       strike = {
         studentId: uid, studentName: rec.studentName, sessionId: sid, recordId: rid, subjectId: session.subjectId, subjectName: session.subjectName,
-        tutorName: session.tutorName, academicYear: ay, academicYearLabel: academicYearOf(startAt).label, startAt: ts(startAt), checkInAt: ts(now),
+        tutorName: session.tutorName, academicYear: ay, academicYearLabel: per.label, periodPhrase: per.phrase, startAt: ts(startAt), checkInAt: ts(now),
         minutesLate: c.minutesLate, number, status: "active", reversal: null, createdAt: FV().serverTimestamp()
       };
       tx.set(strikeRef, strike);
       tx.set(sumRef, {
         studentId: uid, studentName: rec.studentName, updatedAt: FV().serverTimestamp(), lastStrikeAt: FV().serverTimestamp(),
-        years: { [ay]: { active: number, total: (y.total || 0) + 1, reversed: y.reversed || 0, label: academicYearOf(startAt).label } }
+        years: { [ay]: { active: number, total: (y.total || 0) + 1, reversed: y.reversed || 0, label: per.label } }
       }, { merge: true });
       patch.strikeId = rid;
     }
@@ -354,8 +395,8 @@ async function checkIn(uid, entryId, now) {
       "counts.checkedIn": FV().increment(1), ["counts." + (c.late ? "late" : "present")]: FV().increment(1),
       studentIds: FV().arrayUnion(uid), updatedAt: FV().serverTimestamp()
     });
-    audit(tx, { action: "check_in", sessionId: sid, recordId: rid, studentId: uid, actorId: uid, actorRole: "student", actorName: rec.studentName, before, after: { status: patch.status, minutesLate: c.minutesLate }, strikeNumber: strike ? strike.number : null });
-    return { already: false, record: Object.assign({ id: rid }, rec, patch, { checkIn: { at: ts(now), minutesLate: c.minutesLate, classification: patch.checkIn.classification } }), strike };
+    audit(tx, { action: "check_in", sessionId: sid, recordId: rid, studentId: uid, actorId: uid, actorRole: "student", actorName: rec.studentName, before, after: { status: patch.status, minutesLate: c.minutesLate, method }, strikeNumber: strike ? strike.number : null });
+    return { already: false, record: Object.assign({ id: rid }, rec, patch, { checkIn: { at: ts(now), minutesLate: c.minutesLate, classification: patch.checkIn.classification, method } }), strike };
   });
   return {
     already: result.already, record: publicRecord(result.record),
@@ -436,7 +477,7 @@ async function releaseLocks(session) {
 function snapshotRow(r) {
   return {
     studentId: r.studentId, studentName: r.studentName, status: r.status,
-    checkInAt: r.checkIn ? r.checkIn.at : null, minutesLate: r.checkIn ? r.checkIn.minutesLate : null, classification: r.checkIn ? r.checkIn.classification : null,
+    checkInAt: r.checkIn ? r.checkIn.at : null, minutesLate: r.checkIn ? r.checkIn.minutesLate : null, classification: r.checkIn ? r.checkIn.classification : null, checkInMethod: r.checkIn ? (r.checkIn.method || "online") : null,
     resolution: r.resolution ? { outcome: r.resolution.outcome, note: r.resolution.note, byName: r.resolution.byName } : null,
     strikeId: r.strikeId || null
   };
@@ -530,14 +571,14 @@ function mail(kind, extra) { return templates.attendanceNotice(Object.assign({ k
 async function noticeStrike(strike, strikeId) {
   const { student, parents } = await studentAndParents(strike.studentId);
   const base = { studentId: strike.studentId, studentName: student.name || strike.studentName, sessionId: strike.sessionId, recordId: strike.recordId };
-  const lesson = { subjectName: strike.subjectName, tutorName: strike.tutorName, startAt: ms(strike.startAt), arrivedAt: ms(strike.checkInAt), minutesLate: strike.minutesLate, strikes: strike.number, academicYear: strike.academicYearLabel };
+  const lesson = { subjectName: strike.subjectName, tutorName: strike.tutorName, startAt: ms(strike.startAt), arrivedAt: ms(strike.checkInAt), minutesLate: strike.minutesLate, strikes: strike.number, academicYear: strike.academicYearLabel, periodPhrase: strike.periodPhrase || "this academic year" };
   const startTxt = fmtTime(lesson.startAt), arrTxt = fmtTime(lesson.arrivedAt);
   for (const p of parents) {
     const m = mail("late", Object.assign({ audience: "parent", recipientName: p.name, student }, lesson));
     await queueNotice(Object.assign({}, base, {
       id: noticeId("late", strikeId, p.id), kind: "late", audience: "family", recipientId: p.id, recipientRole: "parent", recipientName: p.name || "", email: p.email || "",
       incidentId: strikeId, title: "Late arrival: " + strike.subjectName,
-      message: (student.name || "Your child") + " registered for " + strike.subjectName + " at " + arrTxt + ", " + strike.minutesLate + " minutes after the " + startTxt + " start. This is late arrival " + strike.number + " this academic year.",
+      message: (student.name || "Your child") + " registered for " + strike.subjectName + " at " + arrTxt + ", " + strike.minutesLate + " minutes after the " + startTxt + " start. This is late arrival " + strike.number + " " + (strike.periodPhrase || "this academic year") + ".",
       emailSubject: m.subject, emailHtml: m.html
     }));
   }
@@ -546,7 +587,7 @@ async function noticeStrike(strike, strikeId) {
     await queueNotice(Object.assign({}, base, {
       id: noticeId("strike4_student", strikeId, strike.studentId), kind: "strike4_student", audience: "family", recipientId: strike.studentId, recipientRole: "student", recipientName: student.name || "", email: student.email || "",
       incidentId: strikeId, title: "Formal warning: 4 late arrivals",
-      message: "You have 4 late-arrival strikes this academic year. The next late arrival will be referred to the Studio Desk for disciplinary review.",
+      message: "You have 4 late-arrival strikes " + (strike.periodPhrase || "this academic year") + ". The next late arrival will be referred to the Studio Desk for disciplinary review.",
       emailSubject: ms4.subject, emailHtml: ms4.html
     }));
     for (const p of parents) {
@@ -554,7 +595,7 @@ async function noticeStrike(strike, strikeId) {
       await queueNotice(Object.assign({}, base, {
         id: noticeId("strike4_parent", strikeId, p.id), kind: "strike4_parent", audience: "family", recipientId: p.id, recipientRole: "parent", recipientName: p.name || "", email: p.email || "",
         incidentId: strikeId, title: "Formal warning: " + (student.name || "your child") + " has 4 late arrivals",
-        message: (student.name || "Your child") + " now has 4 late-arrival strikes this academic year. The next late arrival will be referred to the Studio Desk for disciplinary review.",
+        message: (student.name || "Your child") + " now has 4 late-arrival strikes " + (strike.periodPhrase || "this academic year") + ". The next late arrival will be referred to the Studio Desk for disciplinary review.",
         emailSubject: mp.subject, emailHtml: mp.html
       }));
     }
@@ -575,7 +616,7 @@ async function noticeStrike(strike, strikeId) {
       await queueNotice(Object.assign({}, base, {
         id: noticeId("referral_admin", strikeId, a.id), kind: "referral_admin", audience: "admin", recipientId: a.id, recipientRole: "admin", recipientName: a.name, email: a.email,
         incidentId: strikeId, title: "Disciplinary referral: " + (student.name || "a student") + " (" + strike.number + " strikes)",
-        message: (student.name || "A student") + " reached " + strike.number + " late-arrival strikes this academic year. Review the referral in Attendance.",
+        message: (student.name || "A student") + " reached " + strike.number + " late-arrival strikes " + (strike.periodPhrase || "this academic year") + ". Review the referral in Attendance.",
         emailSubject: ma.subject, emailHtml: ma.html
       }));
     }
@@ -584,7 +625,7 @@ async function noticeStrike(strike, strikeId) {
       await queueNotice(Object.assign({}, base, {
         id: noticeId("referral_parent", strikeId, p.id), kind: "referral_parent", audience: "family", recipientId: p.id, recipientRole: "parent", recipientName: p.name || "", email: p.email || "",
         incidentId: strikeId, title: "Disciplinary referral: " + (student.name || "your child"),
-        message: (student.name || "Your child") + " has reached " + strike.number + " late-arrival strikes this academic year, the disciplinary referral threshold. The Studio Desk will review the case.",
+        message: (student.name || "Your child") + " has reached " + strike.number + " late-arrival strikes " + (strike.periodPhrase || "this academic year") + ", the disciplinary referral threshold. The Studio Desk will review the case.",
         emailSubject: mp.subject, emailHtml: mp.html
       }));
     }
@@ -799,6 +840,32 @@ async function adminAction(uid, data, now) {
     await audit(null, { action: "request_decision", recordId: q.recordId, studentId: q.studentId, actorId: uid, actorRole: "admin", actorName: actor.name, reason, after: { decision: approve ? "approved" : "rejected", kind: q.kind } });
     return { ok: true };
   }
+  if (action === "setPolicy") {
+    needReason();
+    const mode = String(data.strikeReset || "");
+    if (RESET_MODES.indexOf(mode) === -1) throw new HttpsError("invalid-argument", "Choose how strike counts reset.");
+    const month = Math.round(Number(data.yearStartMonth || YEAR_START_MONTH));
+    if (!(month >= 1 && month <= 12)) throw new HttpsError("invalid-argument", "Choose the month the academic year starts.");
+    const before = await loadPolicy(true);
+    const next = Object.assign({}, before, { strikeReset: mode, yearStartMonth: month });
+    await db().collection("attendanceSettings").doc("policy").set({ strikeReset: mode, yearStartMonth: month, manualEpoch: before.manualEpoch || 0, manualResetAt: before.manualResetAt || null,
+      updatedAt: FV().serverTimestamp(), updatedBy: uid, history: FV().arrayUnion({ strikeReset: mode, yearStartMonth: month, reason, by: uid, at: ts(now) }) }, { merge: true });
+    policyCache = null;
+    const rebuilt = await rebuildStrikeCounts(next);
+    await audit(null, { action: "policy_changed", actorId: uid, actorRole: "admin", actorName: actor.name, reason, before: { strikeReset: before.strikeReset, yearStartMonth: before.yearStartMonth }, after: { strikeReset: mode, yearStartMonth: month } });
+    return { ok: true, rebuilt };
+  }
+  if (action === "resetStrikes") {
+    needReason();
+    const pol = await loadPolicy(true);
+    if (pol.strikeReset !== "manual") throw new HttpsError("failed-precondition", "Counts reset by hand only under the policy 'Only when the Studio Desk resets'.");
+    const epoch = (pol.manualEpoch || 0) + 1;
+    await db().collection("attendanceSettings").doc("policy").set({ manualEpoch: epoch, manualResetAt: ts(now), updatedAt: FV().serverTimestamp(), updatedBy: uid,
+      history: FV().arrayUnion({ reset: epoch, reason, by: uid, at: ts(now) }) }, { merge: true });
+    policyCache = null;
+    await audit(null, { action: "strikes_reset", actorId: uid, actorRole: "admin", actorName: actor.name, reason, after: { epoch } });
+    return { ok: true, epoch };
+  }
   throw new HttpsError("invalid-argument", "Unknown action.");
 }
 
@@ -836,6 +903,67 @@ async function explain(uid, data) {
   await db().collection("attendanceSessions").doc(session.id).update({ tutorExplanation: row, explanations: FV().arrayUnion(row), explanationReview: null, updatedAt: FV().serverTimestamp() });
   await audit(null, { action: "tutor_explanation", sessionId: session.id, actorId: uid, actorRole: "tutor", actorName: row.byName, reason: text });
   return { ok: true };
+}
+
+/* =========================================================
+   Tutor attendance: the tutor confirms they are teaching the lesson
+   (button, or face verification when the Studio Desk has enabled it).
+   attendanceSessions.tutorPresence.{tutorId} = first confirmation, never
+   overwritten; a later face match only adds faceVerifiedAt.
+========================================================= */
+async function recordTutorPresence(uid, sessionId, now, how) {
+  how = how || {};
+  const method = how.method === "face" ? "face" : "online";
+  const role = await roleOf(uid);
+  if (!role.tutor) throw new HttpsError("permission-denied", "Only the lesson's tutor can confirm they are teaching it.");
+  const ref = db().collection("attendanceSessions").doc(String(sessionId || ""));
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Register not found.");
+    const s = snap.data();
+    if ((s.tutorIds || []).indexOf(uid) === -1) throw new HttpsError("permission-denied", "This is not your lesson.");
+    if (s.status === "cancelled") throw new HttpsError("failed-precondition", "This lesson was cancelled.");
+    if (now < ms(s.startAt) - EARLY_CHECKIN_MIN * 60000) throw new HttpsError("failed-precondition", "You can confirm from " + EARLY_CHECKIN_MIN + " minutes before the start.");
+    if (now >= ms(s.endAt)) throw new HttpsError("deadline-exceeded", "This lesson has ended.");
+    const cur = (s.tutorPresence || {})[uid];
+    const sim = how.similarity != null ? Math.round(how.similarity * 1000) / 1000 : null;
+    if (cur) {
+      if (method === "face" && !cur.faceVerifiedAt) {
+        tx.update(ref, { ["tutorPresence." + uid + ".faceVerifiedAt"]: ts(now), ["tutorPresence." + uid + ".similarity"]: sim, updatedAt: FV().serverTimestamp() });
+        audit(tx, { action: "tutor_face_verified", sessionId: ref.id, actorId: uid, actorRole: "tutor", actorName: role.tutor.name || "Tutor" });
+        return { ok: true, already: true, faceVerified: true };
+      }
+      return { ok: true, already: true };
+    }
+    const c = classify(ms(s.startAt), now);
+    const row = { at: ts(now), name: role.tutor.name || "Tutor", minutesLate: c.minutesLate, classification: c.late ? "late" : "on_time", method,
+      faceVerifiedAt: method === "face" ? ts(now) : null, similarity: method === "face" ? sim : null };
+    tx.update(ref, { ["tutorPresence." + uid]: row, tutorsPresent: FV().arrayUnion(uid), updatedAt: FV().serverTimestamp() });
+    audit(tx, { action: "tutor_present", sessionId: ref.id, actorId: uid, actorRole: "tutor", actorName: row.name, after: { classification: row.classification, minutesLate: row.minutesLate, method } });
+    return { ok: true, classification: row.classification, minutesLate: row.minutesLate, method };
+  });
+}
+
+/* Policy change: recount every student's strikes under the new periods. Strike documents
+   never change; only the counters in attendanceStudents are rebuilt. */
+async function rebuildStrikeCounts(policy) {
+  const snap = await db().collection("attendanceStrikes").get();
+  const by = {};
+  snap.forEach((d) => {
+    const k = d.data();
+    let per = strikePeriod(policy, ms(k.startAt));
+    if (policy.strikeReset === "manual" && policy.manualResetAt && ms(k.createdAt || k.checkInAt) < ms(policy.manualResetAt)) per = { key: "m" + Math.max(0, (policy.manualEpoch || 0) - 1), label: "Before the last reset" };
+    const b = by[k.studentId] = by[k.studentId] || { name: k.studentName, years: {} };
+    const y = b.years[per.key] = b.years[per.key] || { active: 0, total: 0, reversed: 0, label: per.label };
+    y.total++; if (k.status === "active") y.active++; else y.reversed++;
+  });
+  let batch = db().batch(), n = 0;
+  for (const id of Object.keys(by)) {
+    batch.set(db().collection("attendanceStudents").doc(id), { studentId: id, studentName: by[id].name || "", years: by[id].years, countsRebuiltAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() });
+    if (++n % 400 === 0) { await batch.commit(); batch = db().batch(); }
+  }
+  await batch.commit();
+  return { students: Object.keys(by).length, strikes: snap.size };
 }
 
 /* =========================================================
@@ -925,6 +1053,7 @@ exports.attendanceSubmit = onCall(CALL, wrap(async (request) => {
   if (Date.now() < ms(session.graceAt)) throw new HttpsError("failed-precondition", "You can submit once the " + GRACE_MIN + "-minute grace period is over.");
   return submitRegister(session.id, { method: "manual", uid, name: (role.tutor && role.tutor.name) || "Studio Desk", now: Date.now() });
 }));
+exports.attendanceTutorCheckIn = onCall(CALL, wrap(async (request) => recordTutorPresence(requireAuth(request), (request.data || {}).sessionId, Date.now(), { method: "online" })));
 exports.attendanceExplain = onCall(CALL, wrap(async (request) => explain(requireAuth(request), request.data || {})));
 exports.attendanceRequest = onCall(CALL, wrap(async (request) => makeRequest(requireAuth(request), request.data || {})));
 exports.attendanceAdmin = onCall(CALL, wrap(async (request) => adminAction(requireAuth(request), request.data || {}, Date.now())));
@@ -941,7 +1070,9 @@ exports.onAttendanceNotificationCreated = onDocumentCreated({ document: "attenda
   async (event) => { if (event.data && event.data.data().emailStatus === "pending") await deliver(event.params.id); });
 
 exports._internals = {
-  GRACE_MIN, AUTO_SUBMIT_AFTER_END_MIN, WARNING_AT, REFERRAL_AT, STATUS_LABEL, TUTOR_OUTCOMES,
+  GRACE_MIN, AUTO_SUBMIT_AFTER_END_MIN, WARNING_AT, REFERRAL_AT, STATUS_LABEL, TUTOR_OUTCOMES, EARLY_CHECKIN_MIN,
+  loadPolicy, strikePeriod, recordTutorPresence, rebuildStrikeCounts, roleOf, loadSession, audit, wrap, CALL, requireAuth,
+  resetPolicyCache: () => { policyCache = null; },
   nairobiParts, atNairobi, occurrence, classify, academicYearOf, tutorCovers, studentTakes,
   ensureSession, todayFor, checkIn, resolveStudent, submitRegister, sweep, adminAction, makeRequest, explain,
   reverseStrike, noticeStrike, noticeAbsence, deliver, queueNotice
