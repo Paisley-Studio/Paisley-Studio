@@ -175,9 +175,10 @@
       <button class="nav-item active" data-v="home" type="button"><i class="fas fa-house"></i> Overview</button>
       <button class="nav-item" data-v="progress" type="button"><i class="fas fa-chart-line"></i> Growth</button>
       <button class="nav-item" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
+      <button class="nav-item" data-v="homework" type="button"><i class="fas fa-book-open-reader"></i> Homework</button>
       <button class="nav-item" data-v="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results</button>
       <button class="nav-item" data-v="projects" type="button"><i class="fas fa-book-open"></i> Projects <span class="nav-dot" id="bProj" hidden>0</span></button>
-      <button class="nav-item" data-v="live" type="button"><i class="fas fa-calendar-days"></i> Live classes</button>
+      <button class="nav-item" data-v="timetable" type="button"><i class="fas fa-calendar-week"></i> Timetable</button>
       <button class="nav-item" data-v="activity" type="button"><i class="fas fa-gamepad"></i> Activity</button>
       <button class="nav-item" data-v="coach" type="button"><i class="fas fa-comments"></i> Coach</button>
       <button class="nav-item" data-v="desk" type="button"><i class="fas fa-envelope"></i> Messages <span class="nav-dot" id="bDesk" hidden>0</span></button>
@@ -214,9 +215,11 @@
 <script src="/js/tech/code-lab.js?v=tech18"></script>
 <script src="/js/tech/upload-pad.js?v=tech7"></script>
 <script src="/js/ui/fast-video.js?v=4"></script>
-<script src="/js/tech/tech-helpers.js?v=tech19"></script>
+<script src="/js/tech/tech-helpers.js?v=tech20"></script>
 <script src="/js/tech/tech-work.js?v=10"></script>
 <script src="/js/tech/tech-classes.js?v=15"></script>
+<script src="/js/tech/tech-timetable.js?v=1"></script>
+<script src="/js/tech/tech-homework.js?v=1"></script>
 <script>
 /* Paisley Tech Studio guardian portal, in the main Parent Portal's design.
    A guardian is a parentAccounts identity with techGuardianLinks/{uid}_{studentUid}.
@@ -230,7 +233,7 @@ const $=id=>document.getElementById(id);
 T.injectStyle(); TechWork.style();
 
 const S={uid:null,me:{},links:[],kids:{},cid:null,builds:[],work:[],progress:null,classes:[],activity:[],desk:{},v:'home',openId:null,live:null,classLesson:null,pf:'all',unsubs:[],kidUnsubs:[],buildUnsubs:[]};
-const TITLES={home:'Overview',progress:'Growth',classes:'Classes',results:'Results',projects:'Projects',live:'Live classes',activity:'Activity',coach:'Coach',desk:'Messages',account:'Account'};
+const TITLES={home:'Overview',progress:'Growth',classes:'Classes',results:'Results',projects:'Projects',live:'Timetable',timetable:'Timetable',homework:'Homework',activity:'Activity',coach:'Coach',desk:'Messages',account:'Account'};
 
 const ms=x=>{ const d=T.toDate(x); return d?d.getTime():0; };
 const cap=s=>{ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase(); };
@@ -271,7 +274,8 @@ function boot(){
     if(n.section==='results'||n.section==='projects'){ go(n.section); return true; }
     if(n.lessonId){ S.classLesson=n.lessonId; go('classes'); return true; }
     if(n.section==='classes'){ go('classes'); return true; }
-    if(n.classId){ go('live'); return true; }
+    if(n.section==='homework'){ go('homework'); return true; }
+    if(n.classId){ go('timetable'); return true; }
     if(n.chatId){ go('coach'); return true; }
     if(n.buildId){ openBuild(n.buildId); return true; }
     go('home'); return true;
@@ -417,6 +421,8 @@ function render(silent){
   const k=kid();
   if(!k){ $('view').innerHTML=''; return; }
   if(S.v==='classes') return openClasses();
+  if(S.v==='homework') return openHomework();
+  if(S.v==='timetable'||S.v==='live') return openTimetable();
   if(S.v==='results') return openResults();
   if(S.v==='coach') return openCoach();
   if(S.v==='desk') return openDesk();
@@ -432,6 +438,18 @@ function openClasses(){
   const lid=S.classLesson; S.classLesson=null;
   $('view').innerHTML=head('Classes')+'<div id="liveHost"></div>';
   S.live=TechClasses.mountLearner($('liveHost'),{me:{uid:S.uid,role:'guardian',name:S.me.name||'Guardian'},student:k,lessonId:lid});
+}
+function openHomework(){
+  const k=kid(); if(!k) return;
+  kill();
+  $('view').innerHTML=head('Homework')+'<p class="sub-note">Homework '+esc(first())+'\'s coaches set, what they handed in and the marks.</p><div id="liveHost"></div>';
+  S.live=TechHomework.mountFamily($('liveHost'),{me:{uid:S.uid,role:'guardian',name:S.me.name||'Guardian'},student:k});
+}
+function openTimetable(){
+  const k=kid(); if(!k) return;
+  kill();
+  $('view').innerHTML=head('Timetable')+'<div id="liveHost"></div>';
+  S.live=TechTimetable.mountView($('liveHost'),{level:k.skillLevel||'beginner',who:first()});
 }
 function openResults(){
   const k=kid(); if(!k) return;

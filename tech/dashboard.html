@@ -396,12 +396,13 @@ body.no-create [data-newbuild]{display:none!important}
       <button class="nav on" data-v="home" type="button"><i class="fas fa-house"></i> Home</button>
       <div class="nav-sep">Learn</div>
       <button class="nav" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
+      <button class="nav" data-v="homework" type="button"><i class="fas fa-book-open-reader"></i> Homework</button>
       <button class="nav" data-v="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results</button>
       <button class="nav" data-v="groups" type="button"><i class="fas fa-people-group"></i> My group</button>
       <button class="nav" data-v="missions" id="navMissions" type="button" hidden><i class="fas fa-bullseye"></i> Missions</button>
       <button class="nav" data-v="learn" id="navLearn" type="button" hidden><i class="fas fa-book-open"></i> Resources</button>
       <button class="nav" data-v="practice" type="button"><i class="fas fa-flask"></i> Practice</button>
-      <button class="nav" data-v="live" type="button"><i class="fas fa-video"></i> Live classes <span class="badge live" id="navLiveBadge" hidden></span></button>
+      <button class="nav" data-v="timetable" type="button"><i class="fas fa-calendar-week"></i> Timetable <span class="badge live" id="navLiveBadge" hidden></span></button>
       <div class="nav-sep">Build</div>
       <button class="nav" data-v="projects" type="button"><i class="fas fa-hammer"></i> My projects</button>
       <button class="nav" data-v="feedback" type="button"><i class="fas fa-clipboard-check"></i> Coach feedback <span class="badge" id="navFbBadge" hidden>0</span></button>
@@ -440,10 +441,12 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="../js/tech/code-lab.js?v=tech18"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=4"></script>
-<script src="../js/tech/tech-helpers.js?v=tech19"></script>
+<script src="../js/tech/tech-helpers.js?v=tech20"></script>
 <script src="../js/tech/tech-work.js?v=10"></script>
 <script src="../js/tech/tech-groups.js?v=3"></script>
 <script src="../js/tech/tech-classes.js?v=15"></script>
+<script src="../js/tech/tech-timetable.js?v=1"></script>
+<script src="../js/tech/tech-homework.js?v=1"></script>
 <script>
 (function(){
 'use strict';
@@ -453,8 +456,8 @@ T.injectStyle(); TechWork.style();
 
 const S={uid:null,p:null,classLesson:null,classPractise:false,work:[],recent:[],navVideo:null,bubbles:null,content:{},builds:[],wall:[],progress:null,live:{},practice:[],activity:[],v:'home',ws:null,chat:null,openId:null,openTab:null,pr:null,projFilter:'all',mtab:'missions',unsubs:[]};
 const KINDS=['path','topic','mission','challenge','tool','resource','template','aiTool'];
-const TITLES={home:'Home',classes:'Classes',results:'Results',groups:'My group',missions:'Missions',learn:'Resources',practice:'Practice',projects:'My projects',feedback:'Coach feedback',live:'Live classes',showcase:'My showcase',progress:'Learning path',toolbox:'AI Toolbox',coach:'Coach',profile:'Profile'};
-const ALIAS={studio:'home',messages:'coach',portfolio:'showcase',challenges:'missions'};
+const TITLES={home:'Home',classes:'Classes',results:'Results',groups:'My group',missions:'Missions',learn:'Resources',practice:'Practice',projects:'My projects',feedback:'Coach feedback',live:'Timetable',timetable:'Timetable',homework:'Homework',showcase:'My showcase',progress:'Learning path',toolbox:'AI Toolbox',coach:'Coach',profile:'Profile'};
+const ALIAS={live:'timetable',studio:'home',messages:'coach',portfolio:'showcase',challenges:'missions'};
 const DISCIPLINES=T.DISCIPLINES;
 const CREATION_ICON={CODE:'fa-code',DESIGN:'fa-palette',WRITING:'fa-pen-nib',RESEARCH:'fa-microscope',MEDIA:'fa-film',MUSIC:'fa-music',AI:'fa-robot',BUILD:'fa-rocket',Other:'fa-star'};
 const CREATE_TYPES=[['CODE','Code','Websites, games and apps in Paisley VS Code.'],['WRITING','Blog / writing','Articles and stories in the Writing Studio.'],['RESEARCH','Research','Investigate a question and write it up.'],['DESIGN','Design / AI images','Images, posters and visual work.'],['MEDIA','Media','Video, animation and podcasts.'],['MUSIC','Music','Songs, beats and sound.'],['BUILD','Invention','Anything that mixes disciplines.']];
@@ -521,7 +524,8 @@ function boot(){
     if(n.section==='results'||n.section==='projects'){ go(n.section); return true; }
     if(n.lessonId){ S.classLesson=n.lessonId; go('classes'); return true; }
     if(n.buildId&&S.builds.some(b=>b.id===n.buildId)){ openBuild(n.buildId,n.type==='tech_feedback'?'submit':null); return true; }
-    if(n.classId){ go('live'); return true; }
+    if(n.section==='homework'){ go('homework'); return true; }
+    if(n.classId){ go('timetable'); return true; }
     if(n.missionId&&item(n.missionId)){ openItem(n.missionId); return true; }
     if(n.chatId){ go('coach'); return true; }
     if(n.section&&TITLES[n.section]){ go(n.section); return true; }
@@ -549,8 +553,8 @@ function boot(){
   S.unsubs.push(db.collection('techLessonWork').where('studentId','==',S.uid).onSnapshot(s=>{ S.work=s.docs.map(d=>Object.assign({id:d.id},d.data())); softRender(); },e=>console.warn('class work',e)));
   S.unsubs.push(db.collection('techProgress').doc(S.uid).onSnapshot(s=>{ S.progress=s.exists?s.data():null; softRender(); },()=>{}));
   const liveIn=key=>s=>{ Object.keys(S.live).forEach(id=>{ if(S.live[id]._src===key) delete S.live[id]; }); s.docs.forEach(d=>{ S.live[d.id]=Object.assign({id:d.id,_src:key},d.data()); }); softRender(); };
-  S.unsubs.push(db.collection('techLiveClasses').where('audience','==','all').onSnapshot(liveIn('all'),e=>console.warn('live',e)));
-  S.unsubs.push(db.collection('techLiveClasses').where('studentIds','array-contains',S.uid).onSnapshot(liveIn('mine'),e=>console.warn('live mine',e)));
+  /* The timetable (techTimetable) replaced one-off live classes. */
+  S.unsubs.push(TechTimetable.listen(l=>{ S.tt=l; softRender(); }));
   S.unsubs.push(db.collection('techPractice').where('studentId','==',S.uid).onSnapshot(s=>{ S.practice=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>(T.toDate(b.updatedAt)||0)-(T.toDate(a.updatedAt)||0)); softRender(); },e=>console.warn('practice',e)));
   S.unsubs.push(db.collection('techActivity').where('studentId','==',S.uid).orderBy('at','desc').limit(15).onSnapshot(s=>{ S.activity=s.docs.map(d=>d.data()); softRender(); },e=>console.warn('activity',e)));
   db.collection('techShowcase').get().then(s=>{ S.wall=s.docs.map(d=>Object.assign({id:d.id},d.data())); softRender(); }).catch(()=>{});
@@ -574,7 +578,7 @@ function softRender(){
 function updateBadges(){
   $('navMissions').hidden=!missions().length; $('navLearn').hidden=!hasOldLearn();
   const n=S.builds.filter(b=>st(b)==='revision').length, b=$('navFbBadge'); if(b){ b.hidden=!n; b.textContent=n; }
-  const l=upcomingLive().filter(c=>T.liveState(c)==='live').length, lb=$('navLiveBadge'); if(lb){ lb.hidden=!l; lb.textContent=l?'Live':''; }
+  const l=TechTimetable.forLevel(S.tt||[],S.p.skillLevel).filter(e=>TechTimetable.stateOf(e)==='live').length, lb=$('navLiveBadge'); if(lb){ lb.hidden=!l; lb.textContent=l?'Live':''; }
 }
 
 /* ---------- navigation ---------- */
@@ -591,7 +595,9 @@ function subFor(v){
     practice:'Try things out. Practice is never graded.',
     projects:'Your missions and your own self-led projects.',
     feedback:'Reviews, revision requests and approvals.',
-    live:'Join your live classes on Google Meet.',
+    live:'Your class times and links.',
+    timetable:'Your class times for the week. Press Join when a class is on.',
+    homework:'Homework from your coaches: notes, files, videos and coding to hand in.',
     showcase:'Approved projects you can share.',
     progress:'Your level in each discipline.',
     toolbox:'AI tools your coaches have approved.',
@@ -684,6 +690,8 @@ function render(silent){
   if(v==='projects'&&S.openId) return mountProject();
   if(v==='coach') return renderCoach();
   if(v==='classes') return mountClasses();
+  if(v==='homework') return mountHomework();
+  if(v==='timetable'||v==='live') return mountTimetable();
   if(v==='results') return mountResults();
   if(v==='groups') return mountGroups();
   if(v==='practice'&&S.openId) return openPractice(S.openId);
@@ -703,6 +711,14 @@ function mountClasses(){
   const lid=S.classLesson, fix=S.classPractise; S.classLesson=null; S.classPractise=false;
   $('view').innerHTML='<div id="classHost"></div>';
   S.ws=TechClasses.mountLearner($('classHost'),{me:me(),student:Object.assign({id:S.uid},S.p),lessonId:lid,practise:fix,onStartProject:startClassProject});
+}
+function mountHomework(){
+  $('view').innerHTML='<div id="hwHost"></div>';
+  S.ws=TechHomework.mountLearner($('hwHost'),{me:me(),student:Object.assign({id:S.uid},S.p)});
+}
+function mountTimetable(){
+  $('view').innerHTML='<div id="ttHost"></div>';
+  S.ws=TechTimetable.mountView($('ttHost'),{level:S.p.skillLevel||'beginner'});
 }
 function mountResults(){
   $('view').innerHTML='<div id="resHost"></div>';
@@ -744,6 +760,8 @@ function renderCoach(){
   S.chat=T.mountChat($('chatHost'),{studentId:S.uid,studentName:p.name,coachId:p.coachId,coachName:p.coachName,me:me()});
 }
 function liveBanner(){
+  const today=TechTimetable.todayHtml(S.tt||[],S.p.skillLevel);
+  if(today) return today+'<button class="link" type="button" data-go="timetable" style="justify-self:start">The whole timetable</button>';
   const up=upcomingLive();
   if(!up.length) return '';
   return '<section class="live-strip" aria-label="Live classes">'+up.slice(0,2).map(c=>T.liveCardHtml(c,{banner:true})).join('')+(up.length>2?'<button class="link" type="button" data-go="live">All live classes</button>':'')+'</section>';

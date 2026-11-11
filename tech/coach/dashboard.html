@@ -28,10 +28,11 @@
       <button class="nav" data-v="reviews" type="button"><i class="fas fa-clipboard-check"></i> Reviews <span class="badge" id="bReviews" hidden>0</span></button>
       <button class="nav" data-v="work" type="button"><i class="fas fa-hammer"></i> Student work</button>
       <button class="nav" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
+      <button class="nav" data-v="homework" type="button"><i class="fas fa-book-open-reader"></i> Homework</button>
       <button class="nav" data-v="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results</button>
       <button class="nav" data-v="groups" type="button"><i class="fas fa-users-rectangle"></i> Groups</button>
       <button class="nav" data-v="content" type="button"><i class="fas fa-toolbox"></i> Resources &amp; AI tools</button>
-      <button class="nav" data-v="live" type="button"><i class="fas fa-video"></i> Live classes</button>
+      <button class="nav" data-v="timetable" type="button"><i class="fas fa-calendar-week"></i> Timetable</button>
       <button class="nav" data-v="activity" type="button"><i class="fas fa-wave-square"></i> Activity</button>
       <button class="nav" data-v="practice" type="button"><i class="fas fa-flask"></i> Practice <span class="badge" id="bHelp" hidden>0</span></button>
       <button class="nav" data-v="messages" type="button"><i class="fas fa-comments"></i> Builder messages</button>
@@ -67,10 +68,12 @@
 <script src="/js/ui/fast-video.js?v=4"></script>
 <script src="/js/classroom/classroom-helpers.js?v=tools1"></script>
 <script src="/js/classroom/ink-grader.js?v=tools2"></script>
-<script src="/js/tech/tech-helpers.js?v=tech19"></script>
+<script src="/js/tech/tech-helpers.js?v=tech20"></script>
 <script src="/js/tech/tech-work.js?v=10"></script>
 <script src="/js/tech/tech-groups.js?v=3"></script>
 <script src="/js/tech/tech-classes.js?v=15"></script>
+<script src="/js/tech/tech-timetable.js?v=1"></script>
+<script src="/js/tech/tech-homework.js?v=1"></script>
 <script src="/js/tech/tech-manage.js?v=tech9"></script>
 <script src="/js/tech/coach-access.js?v=tech7"></script>
 <script>
@@ -85,7 +88,7 @@ T.injectStyle();
 
 const S={uid:null,me:null,v:'home',students:[],builds:[],chats:[],gchats:[],content:[],allContent:[],classes:[],help:[],progress:{},
   builder:null,live:null,back:null,rf:'all',wf:'all',unsubs:[]};
-const TITLES={home:'Overview',builders:'Builders',reviews:'Reviews',work:'Student work',classes:'Classes',results:'Results',groups:'Groups',content:'Resources & AI tools',live:'Live classes',activity:'Activity',practice:'Practice',messages:'Builder messages',families:'Families',profile:'Profile'};
+const TITLES={home:'Overview',builders:'Builders',reviews:'Reviews',work:'Student work',classes:'Classes',results:'Results',groups:'Groups',content:'Resources & AI tools',live:'Timetable',timetable:'Timetable',homework:'Homework',activity:'Activity',practice:'Practice',messages:'Builder messages',families:'Families',profile:'Profile'};
 const KINDS=[['resource','Resource'],['aiTool','AI tool']];
 
 const ms=x=>{ const d=T.toDate(x); return d?d.getTime():0; };
@@ -134,6 +137,8 @@ function boot(){
   db.collection('techCoaches').doc(S.uid).update({lastLoginAt:FV().serverTimestamp()}).catch(()=>{});
   S.bubbles=T.mountBubbles({root:$('nav'),selector:'.nav[data-v]',uid:S.uid,role:'coach',current:()=>S.v});
   T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
+    if(n.section==='homework'){ go('homework'); return true; }
+    if(n.classId){ go('timetable'); return true; }
     if(n.chatId&&openChatById(n.chatId)) return true;
     if(n.buildId){ openBuild(n.buildId); return true; }
     if(n.studentId&&stu(n.studentId)){ openBuilder(n.studentId); return true; }
@@ -141,6 +146,7 @@ function boot(){
   }});
   listen(db.collection('techStudents').where('coachId','==',S.uid),'students',()=>{
     S.students.sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    if(S.live&&S.live.setStudents) S.live.setStudents(S.students);
     S.students.forEach(s=>{ if(!(s.id in S.progress)){ S.progress[s.id]=null; db.collection('techProgress').doc(s.id).get().then(p=>{ S.progress[s.id]=p.exists?p.data():null; refresh(); }).catch(()=>{}); } });
   });
   listen(db.collection('techBuilds').where('coachId','==',S.uid),'builds',()=>S.builds.sort((a,b)=>ms(b.updatedAt)-ms(a.updatedAt)));
@@ -186,7 +192,7 @@ function head(title,sub){ $('pageTitle').textContent=title; $('pageSub').textCon
 function subFor(v){
   return ({home:'Hi '+T.firstName(S.me.name)+'. Here is what needs you.',builders:active().length+' active builder'+(active().length===1?'':'s'),
     reviews:'Submissions, resubmissions and publish requests from your builders.',work:'Every mission and self-led project your builders are working on.',
-    messages:'Talk to your builders.',families:'Parents and guardians of your builders.',classes:'Build classes and post lessons and practice tests by level.',results:'Quiz and test scores, and class work to mark with ink.',groups:'Builders working together on shared tasks, live.',content:'Short resources and approved AI tools for builders.',
+    messages:'Talk to your builders.',timetable:'The week of Tech Studio classes. The Studio Desk keeps it up to date.',homework:'Set homework for a class, then mark what your builders hand in.',live:'The week of Tech Studio classes.',families:'Parents and guardians of your builders.',classes:'Build classes and post lessons and practice tests by level.',results:'Quiz and test scores, and class work to mark with ink.',groups:'Builders working together on shared tasks, live.',content:'Short resources and approved AI tools for builders.',
     live:'Schedule Google Meet classes for your builders.',activity:'What your builders are doing, and when they were last seen.',practice:'Practice work. Never graded; answer help requests here.',profile:S.me.email||''})[v]||'';
 }
 
@@ -319,6 +325,8 @@ function builderDetail(s){
 function render(silent){
   if(S.live) return;
   head(TITLES[S.v]||'Overview', S.v==='builders'&&S.builder&&stu(S.builder)?'Builder':subFor(S.v));
+  if(S.v==='homework'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechHomework.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
+  if(S.v==='timetable'||S.v==='live'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechTimetable.mountView($('liveHost'),{coachId:S.uid}); return; }
   if(S.v==='classes'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechClasses.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
   if(S.v==='groups'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechGroups.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
   if(S.v==='results'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.resN=active().length; S.live=TechClasses.mountResults($('liveHost'),{me:mine(),students:S.students}); return; }

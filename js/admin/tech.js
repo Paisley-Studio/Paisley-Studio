@@ -94,9 +94,10 @@
       S.unsubs.push(q.onSnapshot(function (snap) {
         S[key] = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
         if (after) after();
-        if (key === 'students') S.loaded = true;
+        if (key === 'students') { S.loaded = true; if (S.panel && S.panel.setStudents) S.panel.setStudents(S.students); }
+        if (key === 'coaches' && S.panel && S.panel.setCoaches) S.panel.setCoaches(S.coaches);
         /* Open modals and the live Activity / Practice panels keep their state; only the tab badges refresh. */
-        var busy = document.querySelector('.cr-overlay') || (S.panel && (S.tab === 'activity' || S.tab === 'practice' || S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups'));
+        var busy = document.querySelector('.cr-overlay') || (S.panel && (S.tab === 'activity' || S.tab === 'practice' || S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups' || S.tab === 'homework' || S.tab === 'timetable'));
         if (S.loaded && !busy) render(); else if (S.loaded) renderTabsOnly();
       }, function (e) { console.warn('tech ' + key + ':', e); if (key === 'students') { root.innerHTML = '<div class="cr-panel"><div class="cr-empty">Could not load Tech Studio students: ' + esc(errMsg(e)) + '</div></div>'; } }));
     }
@@ -123,15 +124,17 @@
       var tabs = [
         ['applications', 'fa-user-plus', 'Applications', pa],
         ['builders', 'fa-user-graduate', 'Builders', 0],
+        ['paisley', 'fa-school', 'Paisley students', 0],
         ['coaches', 'fa-chalkboard-user', 'Coaches', S.coaches.filter(function (c) { return c.status === 'Pending'; }).length],
         ['builds', 'fa-hammer', 'Projects & reviews', rv],
         ['classes', 'fa-chalkboard', 'Classes', 0],
+        ['homework', 'fa-book-open-reader', 'Homework', 0],
         ['results', 'fa-square-poll-vertical', 'Results', 0],
         ['groups', 'fa-users-rectangle', 'Groups', 0],
         ['missions', 'fa-bullseye', 'Older missions', 0],
         ['content', 'fa-toolbox', 'Resources', 0],
         ['aitools', 'fa-robot', 'AI Toolbox', 0],
-        ['live', 'fa-video', 'Live classes', S.classes.filter(function (c) { return T.liveState(c) === 'live'; }).length],
+        ['timetable', 'fa-calendar-week', 'Timetable', 0],
         ['activity', 'fa-wave-square', 'Activity', 0],
         ['practice', 'fa-flask', 'Practice', 0],
         ['reports', 'fa-chart-column', 'Performance', 0],
@@ -142,7 +145,7 @@
       ];
       tabs.forEach(function (t) { TAB_NAMES[t[0]] = t[2]; });
       tabs = tabs.filter(function (t) { return t[0] !== 'missions' || S.tab === 'missions' || S.content.some(function (c) { return c.kind === 'mission' || c.kind === 'challenge'; }); });
-      var GROUP = { applications: 'People', builds: 'Learning', content: 'Resources', live: 'Running the studio', messages: 'Messages' };
+      var GROUP = { applications: 'People', builds: 'Learning', content: 'Resources', timetable: 'Running the studio', messages: 'Messages' };
       return '<nav class="tx-side" role="tablist" aria-label="Tech Studio" aria-orientation="vertical" id="txTabs"><div class="tx-side-head"><b>Tech Studio</b></div>' + tabs.map(function (t) {
         return (GROUP[t[0]] ? '<div class="tx-group">' + GROUP[t[0]] + '</div>' : '') +
           '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="tx-tab' + (S.tab === t[0] ? ' on' : '') + '" data-a="tab" data-v="' + t[0] + '"><i class="fas ' + t[1] + '" aria-hidden="true"></i><span>' + t[2] + '</span>' +
@@ -159,7 +162,7 @@
       mountAdminBell();
       var b = root.querySelector('#txBody');
       if (!S.loaded) { b.innerHTML = '<div class="cr-empty">Loading Tech Studio…</div>'; return; }
-      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, classes: classesTab, results: resultsTab, groups: groupsTab, missions: missionsTab, content: content, aitools: aiTools, live: liveTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall, navvideo: navVideoTab }[S.tab] || applications);
+      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, classes: classesTab, results: resultsTab, groups: groupsTab, missions: missionsTab, content: content, aitools: aiTools, live: timetableTab, timetable: timetableTab, homework: homeworkTab, paisley: paisleyTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall, navvideo: navVideoTab }[S.tab] || applications);
       view(b);
       if (S.bubbles) S.bubbles.sync();
     }
@@ -190,7 +193,8 @@
         if (n.buildId && S.builds.some(function (x) { return x.id === n.buildId; })) { openBuild(n.buildId); return true; }
         if (n.type === 'tech_application') { S.tab = 'applications'; render(); return true; }
         if (n.type === 'tech_beginner') { S.tab = 'builders'; S.skill = 'beginner'; render(); return true; }
-        if (n.classId) { S.tab = 'live'; render(); return true; }
+        if (n.section === 'homework') { S.tab = 'homework'; render(); return true; }
+        if (n.classId) { S.tab = 'timetable'; render(); return true; }
         if (n.type === 'tech_desk_message') { S.tab = 'desk'; render(); return true; }
         if (n.chatId) { S.tab = 'messages'; render(); return true; }
         return true;
@@ -453,6 +457,122 @@
       TechManage.editMission({ me: me(), item: id ? missionOf(id) : null, students: S.students, missions: S.content,
         aiTools: S.content.filter(function (c) { return c.kind === 'aiTool' && c.status === 'published'; }), onSaved: function () { toast('Mission saved.'); } });
     }
+
+    /* ---------------- Timetable (replaced live classes) ---------------- */
+    function timetableTab(b) {
+      b.innerHTML = '<div id="txPanel"></div>';
+      S.panel = g.TechTimetable.mountManager(b.querySelector('#txPanel'), { coaches: S.coaches });
+    }
+    /* ---------------- Homework ---------------- */
+    function homeworkTab(b) {
+      b.innerHTML = '<div id="txPanel"></div>';
+      S.panel = g.TechHomework.mountManager(b.querySelector('#txPanel'), { me: me(), students: S.students });
+    }
+
+    /* ---------------- Paisley students: admit them to Tech Studio ----------------
+       Every Paisley Studio student (students/{uid}) with their programme and subjects.
+       Admitting (admitToTechStudio) adds Tech Studio to the same login: they get a
+       congratulations email, their Parent Portal parents are linked and emailed, and
+       the parents see a Paisley Tech Studio button. */
+    var PZ = { list: null, loading: false, q: '', prog: 'all', show: 'out', cs: false, sel: {} };
+    function pzLoad(force) {
+      if (PZ.loading || (PZ.list && !force)) return;
+      PZ.loading = true; PZ.err = '';
+      db.collection('students').get().then(function (snap) {
+        PZ.list = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); })
+          .filter(function (s) { return s.studentType !== 'tech'; })
+          .sort(function (a, c) { return String(a.name || '').localeCompare(String(c.name || '')); });
+      }).catch(function (e) { PZ.err = errMsg(e); }).then(function () { PZ.loading = false; if (S.tab === 'paisley') render(); });
+    }
+    function pzProg(s) { return s.studentType === 'tuition' ? 'CBC tuition' : s.studentType === 'remote' ? 'Remote' : 'Online'; }
+    function pzSubjects(s) { return typeof g.lmzSubjectLabels === 'function' ? g.lmzSubjectLabels(s.subjects) : (s.subjectNames || s.subjects || []); }
+    function pzTech(s) { return S.students.filter(function (x) { return x.id === s.id; })[0] || null; }
+    function pzComputing(s) { return (s.subjects || []).some(function (k) { return /comput|ict/i.test(String((k && (k.id || k)) || '')); }); }
+    function paisleyTab(b) {
+      if (!PZ.list) {
+        pzLoad();
+        b.innerHTML = '<div class="cr-panel"><div class="cr-empty">' + (PZ.err ? 'Could not load Paisley students: ' + esc(PZ.err) : 'Loading Paisley students…') + '</div></div>';
+        return;
+      }
+      var q = PZ.q.trim().toLowerCase();
+      var list = PZ.list.filter(function (s) {
+        var t = pzTech(s), inTech = t && t.status === 'Active';
+        if (PZ.prog !== 'all' && pzProg(s) !== PZ.prog) return false;
+        if (PZ.show === 'out' && inTech) return false;
+        if (PZ.show === 'in' && !inTech) return false;
+        if (PZ.cs && !pzComputing(s)) return false;
+        return !q || ((s.name || '') + ' ' + (s.email || '') + ' ' + pzSubjects(s).join(' ')).toLowerCase().indexOf(q) > -1;
+      });
+      Object.keys(PZ.sel).forEach(function (id) { if (!list.some(function (s) { return s.id === id; })) delete PZ.sel[id]; });
+      var nSel = Object.keys(PZ.sel).length, inCount = PZ.list.filter(function (s) { var t = pzTech(s); return t && t.status === 'Active'; }).length;
+      var h = '<div class="cr-bar"><div><h3>Paisley students</h3><div class="cr-sub">Every Paisley Studio student and what they study. Admit them to Tech Studio: they keep the same login, get a congratulations email telling them to sign in, and their parents are emailed about the new Paisley Tech Studio button in their Parent Portal.</div></div>' +
+        '<div class="cr-actions"><button type="button" class="cr-btn" data-pz="reload"><i class="fas fa-rotate"></i> Refresh</button><button type="button" class="cr-btn primary" data-pz="admitsel"' + (nSel ? '' : ' disabled') + '><i class="fas fa-wand-magic-sparkles"></i> Admit selected (' + nSel + ')</button></div></div>' +
+        '<div class="cr-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:1rem">' + stat(PZ.list.length, 'Paisley students') + stat(inCount, 'In Tech Studio') + stat(PZ.list.filter(pzComputing).length, 'Study computing') + '</div>' +
+        '<div class="cr-filters"><input type="search" data-pzf="q" placeholder="Search name, email or subject…" value="' + esc(PZ.q) + '" aria-label="Search" style="min-width:230px">' +
+        '<select data-pzf="prog" aria-label="Programme">' + [['all', 'All programmes'], ['Online', 'Online'], ['Remote', 'Remote'], ['CBC tuition', 'CBC tuition']].map(function (x) { return '<option value="' + x[0] + '"' + (PZ.prog === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
+        '<select data-pzf="show" aria-label="Tech Studio">' + [['out', 'Not in Tech Studio yet'], ['in', 'Already in Tech Studio'], ['all', 'Everyone']].map(function (x) { return '<option value="' + x[0] + '"' + (PZ.show === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
+        '<label class="cr-note" style="display:inline-flex;gap:.35rem;align-items:center;cursor:pointer"><input type="checkbox" data-pzf="cs"' + (PZ.cs ? ' checked' : '') + '> Computing / Computer Science only</label></div>';
+      if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No students match these filters.</div></div>'; return; }
+      var open = list.filter(function (s) { var t = pzTech(s); return !(t && t.status === 'Active'); });
+      var allOn = open.length && open.every(function (s) { return PZ.sel[s.id]; });
+      b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th><input type="checkbox" data-pz="all" aria-label="Select all"' + (allOn ? ' checked' : '') + '></th><th>Student</th><th>Programme</th><th>Key Stage</th><th>Subjects</th><th>Account</th><th>Tech Studio</th><th></th></tr></thead><tbody>' + list.map(function (s) {
+        var t = pzTech(s), inTech = t && t.status === 'Active', subs = pzSubjects(s);
+        return '<tr><td>' + (inTech ? '' : '<input type="checkbox" data-pz="sel" data-id="' + esc(s.id) + '" aria-label="Select ' + esc(s.name || 'student') + '"' + (PZ.sel[s.id] ? ' checked' : '') + '>') + '</td>' +
+          '<td><b>' + esc(s.name || '—') + '</b><div class="cr-note">' + esc(s.email || '') + '</div></td><td>' + esc(pzProg(s)) + '</td><td>' + esc(String(s.keyStage || '—').replace(/\s*\(.*/, '')) + '</td>' +
+          '<td>' + (subs.length ? subs.map(function (x) { return '<span class="badge" style="margin:0 .2rem .2rem 0;display:inline-block">' + esc(x) + '</span>'; }).join('') : '<span class="cr-note">Not recorded</span>') + '</td>' +
+          '<td>' + esc(s.status || 'Pending') + '</td>' +
+          '<td>' + (inTech ? '<span class="badge b-active">In Tech Studio · ' + esc(T.SKILL_LABEL[t.skillLevel] || 'Builder') + '</span>' : t ? '<span class="badge b-pending">Applied</span>' : '<span class="cr-note">—</span>') + '</td>' +
+          '<td>' + (inTech ? '' : '<button type="button" class="cr-btn sm primary" data-pz="admit" data-id="' + esc(s.id) + '"><i class="fas fa-wand-magic-sparkles"></i> Admit to Tech Studio</button>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    }
+    function pzAdmit(ids) {
+      var people = ids.map(function (id) { return (PZ.list || []).filter(function (s) { return s.id === id; })[0]; }).filter(Boolean);
+      if (!people.length) return;
+      var m = CU.openModal({ title: 'Admit to Paisley Tech Studio' });
+      m.body.innerHTML = '<p style="margin:0 0 .8rem">' + esc(people.length === 1 ? (people[0].name || 'This student') : people.length + ' students') + ' will keep their Paisley login, get a congratulations email telling them to sign in to Tech Studio, and their parents will be told about the new Tech Studio button in the Parent Portal.</p>' +
+        (people.length > 1 ? '<div class="cr-note" style="margin-bottom:.8rem;max-height:120px;overflow:auto">' + people.map(function (s) { return esc(s.name || s.email || 'Student'); }).join(', ') + '</div>' : '') +
+        '<div class="form-grid"><div class="form-field"><label for="pzLevel">Level</label><select id="pzLevel">' + T.SKILL_LEVELS.map(function (l) { return '<option value="' + l + '">' + esc(T.SKILL_LABEL[l]) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="form-field"><label for="pzCoach">Coach <span class="cr-note">(optional)</span></label><select id="pzCoach"><option value="">Choose later</option>' + activeCoaches().map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name || c.email) + '</option>'; }).join('') + '</select></div></div>' +
+        '<div class="cr-note" id="pzOut" role="status" style="margin-top:.7rem"></div>';
+      m.foot.innerHTML = '<button type="button" class="cr-btn" data-x="no">Cancel</button><button type="button" class="cr-btn primary" data-x="yes"><i class="fas fa-wand-magic-sparkles"></i> Admit' + (people.length === 1 ? '' : ' ' + people.length + ' students') + '</button>';
+      m.foot.addEventListener('click', function (e) {
+        var bt = e.target.closest('[data-x]'); if (!bt) return;
+        if (bt.dataset.x === 'no') { m.close(); return; }
+        var out = m.body.querySelector('#pzOut');
+        bt.disabled = true; out.textContent = 'Admitting…';
+        call('admitToTechStudio', { studentIds: ids, skillLevel: m.body.querySelector('#pzLevel').value, coachId: m.body.querySelector('#pzCoach').value }).then(function (r) {
+          var bad = (r.results || []).filter(function (x) { return !x.ok; });
+          ids.forEach(function (id) { delete PZ.sel[id]; });
+          if (!bad.length) { m.close(); render(); toast((r.admitted || 0) + ' admitted to Tech Studio. Their emails are on the way.'); return; }
+          out.innerHTML = '<b>' + (r.admitted || 0) + ' admitted.</b> Not admitted:<br>' + bad.map(function (x) { return esc((x.name || x.id) + ': ' + x.reason); }).join('<br>');
+          bt.hidden = true; m.foot.querySelector('[data-x="no"]').textContent = 'Close';
+        }).catch(function (er) { bt.disabled = false; out.textContent = 'Could not admit: ' + errMsg(er); });
+      });
+    }
+    root.addEventListener('click', function (e) {
+      if (S.tab !== 'paisley') return;
+      var t = e.target.closest('[data-pz]'); if (!t || t.tagName === 'INPUT') return;
+      var a = t.dataset.pz;
+      if (a === 'reload') { PZ.list = null; pzLoad(true); render(); }
+      else if (a === 'admit') pzAdmit([t.dataset.id]);
+      else if (a === 'admitsel') pzAdmit(Object.keys(PZ.sel));
+    });
+    root.addEventListener('change', function (e) {
+      if (S.tab !== 'paisley') return;
+      var t = e.target;
+      if (t.dataset.pz === 'sel') { if (t.checked) PZ.sel[t.dataset.id] = 1; else delete PZ.sel[t.dataset.id]; render(); return; }
+      if (t.dataset.pz === 'all') {
+        root.querySelectorAll('[data-pz="sel"]').forEach(function (c) { if (t.checked) PZ.sel[c.dataset.id] = 1; else delete PZ.sel[c.dataset.id]; });
+        render(); return;
+      }
+      if (t.dataset.pzf === 'prog' || t.dataset.pzf === 'show') { PZ[t.dataset.pzf] = t.value; render(); }
+      else if (t.dataset.pzf === 'cs') { PZ.cs = t.checked; render(); }
+    });
+    root.addEventListener('input', function (e) {
+      if (S.tab !== 'paisley' || e.target.dataset.pzf !== 'q') return;
+      PZ.q = e.target.value; var pos = e.target.selectionStart;
+      clearTimeout(PZ.t); PZ.t = setTimeout(function () { render(); var i = root.querySelector('[data-pzf="q"]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (x) { } } }, 250);
+    });
 
     /* ---------------- Live classes ---------------- */
     function liveTab(b) {
@@ -744,7 +864,7 @@
     function fail(e) { toast(errMsg(e), true); }
     root.addEventListener('click', function (e) {
       var t = e.target.closest('[data-a]'); if (!t) return; var a = t.dataset.a, id = t.dataset.id;
-      if ((S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups') && t.closest('#txPanel')) return;   // the classes module handles its own clicks
+      if ((S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups' || S.tab === 'homework' || S.tab === 'timetable') && t.closest('#txPanel')) return;   // the classes module handles its own clicks
       var stu = function () { return S.students.filter(function (x) { return x.id === id; })[0]; };
       if (a === 'fold') { fold(!S.folded); return; }
       if (a === 'tab') {

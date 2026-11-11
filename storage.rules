@@ -326,6 +326,26 @@ service firebase.storage {
       allow delete: if isSignedIn() && isAdmin();
     }
 
+    // Tech Studio homework: files a coach or the Studio Desk attaches for builders to
+    // download (techHomework/{homeworkId}/...), and what a builder uploads for it
+    // (techHomeworkWork/{uid}/{homeworkId}/...). Everyone opens them through the saved link.
+    // Web pages, scripts and SVG are refused. Two Firestore docs at most per request.
+    function techHomeworkFileOk() {
+      return request.resource.size < 50 * 1024 * 1024 &&
+        !request.resource.contentType.matches('(text/html|application/xhtml[+]xml|image/svg.*|text/xml|application/xml)') &&
+        !request.resource.contentType.matches('.*javascript.*');
+    }
+    match /techHomework/{homeworkId}/{fileName} {
+      allow read: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches') || techActiveIn('techStudents'));
+      allow create, update: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches')) && techHomeworkFileOk();
+      allow delete: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches'));
+    }
+    match /techHomeworkWork/{studentId}/{homeworkId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == studentId || isAdmin() || techActiveIn('techCoaches'));
+      allow create, update: if isSignedIn() && request.auth.uid == studentId && techActiveIn('techStudents') && techHomeworkFileOk();
+      allow delete: if isSignedIn() && (request.auth.uid == studentId || isAdmin());
+    }
+
     // Tech Studio chats: pictures, screenshots and files sent in builder <-> coach
     // (techChats) and family <-> coach (techGuardianChats) conversations. Each sender
     // uploads under their own uid; one Firestore doc (the chat) plus admins/ at most.

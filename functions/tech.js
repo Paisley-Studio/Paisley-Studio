@@ -278,6 +278,15 @@ async function linkTechGuardians(db, studentId, s) {
           cta: { label: "Set my password", url: link }
         });
       }
+    } else if (newLink && s.admittedBy) {
+      /* A Paisley parent whose child the Studio Desk admitted: same login, a new button. */
+      emailSent = await email(to, `${s.name || "Your child"} is now in Paisley Tech Studio`, {
+        preheader: "There is a new Paisley Tech Studio button in your Parent Portal.", heading: "Good news from Paisley Tech Studio.",
+        intro: `Hi ${esc(first(name))}, ${child} has been admitted to Paisley Tech Studio.`,
+        body: `<p style="margin:0 0 8px;">You don't need a new login. Sign in to your Parent Portal as usual: there is now a <strong>Paisley Tech Studio</strong> button where you can watch their progress, classes, homework and projects, and message their coach.</p>` +
+          `<p style="margin:0;">Nothing changes for your child either: they sign in to Tech Studio with the email and password they already use.</p>`,
+        cta: { label: "Open my Parent Portal", url: PORTALS.parent }
+      });
     } else if (newLink) {
       emailSent = await email(to, `${s.name || "Your child"} joined Paisley Tech Studio`, {
         preheader: "Tech Studio is now on your guardian account.", heading: "Tech Studio is on your account.",
@@ -323,6 +332,8 @@ exports.onTechEnrolmentCreated = onDocumentCreated(
     const sid = event.params.studentId, db = admin.firestore();
     const programmes = await otherProgrammes(db, sid);
     if (programmes.length) await event.data.ref.set({ programmes }, { merge: true });
+    /* Admitted by the Studio Desk (admitToTechStudio): no application to approve; the welcome comes on activation. */
+    if (s.admittedBy) return;
 
     const also = programmes.length ? ` Already with Paisley: ${programmes.join(", ")}.` : "";
     const level = SKILL_LABEL[s.skillLevel] || "";
@@ -365,8 +376,22 @@ exports.onTechEnrolmentUpdated = onDocumentUpdated(
 
     if (b.status !== "Active" && a.status === "Active") {
       if (!a.welcomedAt) {
-        await techNotify(sid, "student", "tech_welcome", "Welcome to Tech Studio", "Your account is approved. Let's build something.", { studentId: sid });
-        if (a.email) {
+        await techNotify(sid, "student", "tech_welcome", a.admittedBy ? "Congratulations, you're in Tech Studio" : "Welcome to Tech Studio",
+          a.admittedBy ? "The Studio Desk admitted you. Sign in with your usual Paisley login." : "Your account is approved. Let's build something.", { studentId: sid });
+        if (a.email && a.admittedBy) {
+          /* A Paisley student admitted by the Studio Desk keeps their login. */
+          await email(a.email, `Congratulations ${first(a.name)}! You're in Paisley Tech Studio`, {
+            preheader: "You've been admitted to Paisley Tech Studio. Sign in with the login you already use.",
+            heading: `Congratulations, ${first(a.name)}!`,
+            intro: "The Studio Desk has admitted you to Paisley Tech Studio.",
+            body: `<p style="margin:0 0 12px;">You don't need a new account. Sign in to Tech Studio with the <strong>same email and password you use for Paisley Studio</strong>${a.coachName ? `. <strong>${esc(a.coachName)}</strong> is your coach` : ""}.</p>` +
+              `<p style="margin:0 0 6px;"><strong>Sign-in page:</strong> ${esc(PORTALS.tech)}</p>` +
+              `<p style="margin:0 0 6px;"><strong>Email:</strong> ${esc(a.email)}</p>` +
+              `<p style="margin:0 0 12px;"><strong>Level:</strong> ${esc(SKILL_LABEL[a.skillLevel] || "Beginner")}</p>` +
+              `<p style="margin:0;">Open <strong>Classes</strong> to start Level 1, check <strong>Timetable</strong> for your class times and <strong>Homework</strong> for anything your coach sets. Forgotten your password? Use “Forgot your password?” on the sign-in page.</p>`,
+            cta: { label: "Sign in to Tech Studio", url: PORTALS.tech }
+          });
+        } else if (a.email) {
           const t = templates.techStudentApproved({ student: a, coachName: a.coachName || "" });
           try { await notifications.sendEmail(a.email, t.subject, t.html); } catch (e) { console.warn("tech approval email failed:", e.message); }
         }
@@ -392,6 +417,9 @@ exports.onTechEnrolmentUpdated = onDocumentUpdated(
       /* Class work follows too, so hand-ins reach the new coach's Results. */
       const works = await db.collection("techLessonWork").where("studentId", "==", sid).get();
       works.docs.forEach((d) => { if ((d.data().coachId || "") !== cid) batch.update(d.ref, { coachId: cid }); });
+      /* So does homework, so hand-ins reach the new coach. */
+      const hws = await db.collection("techHomeworkWork").where("studentId", "==", sid).get();
+      hws.docs.forEach((d) => { if ((d.data().coachId || "") !== cid) batch.update(d.ref, { coachId: cid }); });
       await batch.commit();
     }
     if (coachChanged || approvedWithCoach) {
@@ -744,6 +772,108 @@ function lessonTitle(l) {
   const word = l && l.type === "test" ? "practice test" : "lesson";
   return String((l && l.title) || (l && l.topicTitle ? `${l.topicTitle} ${word}` : `New ${word}`)).slice(0, 160);
 }
+
+/* =========================================================
+   Homework (js/tech/tech-homework.js)
+   techHomework/{id} moving to "published" goes to every active builder on its
+   class's level (bell + email) and their guardians (bell). A hand-in rings the
+   builder's coach (or the Studio Desk when they have none); marking rings the
+   builder (bell + email) and their guardians. Ids are deterministic, so a retried
+   trigger never notifies twice.
+========================================================= */
+function dueLine(h) {
+  if (!h.dueAt || !h.dueAt.toDate) return "";
+  return h.dueAt.toDate().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Nairobi" });
+}
+exports.onTechHomeworkWritten = onDocumentWritten(
+  { document: "techHomework/{hid}", region: LOCATION, secrets: SMTP_SECRETS, timeoutSeconds: 540, memory: "512MiB" },
+  async (event) => {
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    if (!a || a.status !== "published" || (b && b.status === "published")) return;
+    const hid = event.params.hid, course = a.courseName || "your class", title = String(a.title || "Homework").slice(0, 140);
+    const due = dueLine(a), from = a.createdByName || "your coach";
+    const what = [];
+    if (a.ide && a.ide.enabled) what.push("a Paisley VS Code practice");
+    if (a.requireUpload) what.push("files to upload");
+    if ((a.videos || []).length) what.push(`${a.videos.length} video${a.videos.length === 1 ? "" : "s"} to watch`);
+    if ((a.files || []).length) what.push(`${a.files.length} file${a.files.length === 1 ? "" : "s"} to download`);
+    const msg = `${course}: ${title}${due ? ` · due ${due}` : ""}`;
+    const extra = { courseId: a.courseId || "", section: "homework", id: `hw_${hid}` };
+    for (const s of await trackAudience(a.track)) {
+      const fresh = await techNotify(s.id, "student", "tech_homework", `New homework in ${course}`, msg, Object.assign({ studentId: s.id, link: LINKS.student + "#homework" }, extra));
+      if (!fresh) continue;
+      await email(s.email, `New homework in ${course}: ${title}`, {
+        preheader: msg, heading: "You have new homework.",
+        intro: `Hi ${esc(first(s.name))}, ${esc(from)} set homework in ${esc(course)}.`,
+        body: `<p style="margin:0 0 8px;"><strong>${esc(title)}</strong></p>` +
+          (due ? `<p style="margin:0 0 8px;">Due: <strong>${esc(due)}</strong></p>` : "") +
+          (what.length ? `<p style="margin:0;">It includes ${esc(what.join(", "))}.</p>` : `<p style="margin:0;">Open it in your studio to see what to do.</p>`),
+        cta: { label: "Open my homework", url: APP + LINKS.student + "#homework" }
+      });
+      for (const g of await guardiansOf(s.id)) {
+        await techNotify(g.parentUid, "guardian", "tech_homework", `New homework for ${first(s.name)}`, msg, Object.assign({ studentId: s.id, link: LINKS.guardian + "#homework" }, extra, { id: `hw_${hid}_${s.id}` }));
+      }
+    }
+  }
+);
+
+exports.onTechHomeworkWorkWritten = onDocumentWritten(
+  { document: "techHomeworkWork/{wid}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    if (!a) return;
+    const wid = event.params.wid, db = admin.firestore();
+    const hs = await db.collection("techHomework").doc(a.homeworkId || "-").get();
+    const h = hs.exists ? hs.data() : {};
+    const title = String(h.title || "Homework").slice(0, 140), course = h.courseName || "class";
+    const name = a.studentName || "A builder";
+
+    /* Handed in (first time, or again after corrections). */
+    if (a.status === "Submitted" && (!b || b.status !== "Submitted")) {
+      const id = `hwsub_${wid}_${tsMs(a.submittedAt) || Date.now()}`;
+      const msg = `${name} handed in “${title}” (${course}).`;
+      const extra = { studentId: a.studentId, section: "homework", id, link: a.coachId ? LINKS.coach + "#homework" : LINKS.admin };
+      if (a.coachId) {
+        const fresh = await techNotify(a.coachId, "coach", "tech_homework_submitted", "Homework to mark", msg, extra);
+        if (fresh) await email(await coachEmail(a.coachId), `Homework to mark: ${title}`, {
+          preheader: msg, heading: "Homework to mark", intro: esc(msg),
+          body: `<p style="margin:0;">Open Homework in your coach dashboard to mark it.</p>`,
+          cta: { label: "Mark it", url: APP + LINKS.coach + "#homework" }
+        });
+      } else {
+        await notifyAdmins("tech_homework_submitted", "Homework to mark (no coach)", msg, extra);
+      }
+      return;
+    }
+
+    /* Marked, or sent back for corrections. */
+    const marked = (a.status === "Graded" || a.status === "Corrections") && tsMs(a.markedAt) && (!b || tsMs(b.markedAt) !== tsMs(a.markedAt));
+    if (!marked) return;
+    const st = await techStudent(a.studentId);
+    const graded = a.status === "Graded";
+    const id = `hwmark_${wid}_${tsMs(a.markedAt)}`;
+    const head = graded ? `Homework marked${a.grade ? `: ${a.grade}` : ""}` : "Corrections asked";
+    const msg = `${title} (${course})${a.feedback ? ` · ${String(a.feedback).slice(0, 160)}` : ""}`;
+    const fresh = await techNotify(a.studentId, "student", graded ? "tech_homework_marked" : "tech_homework_corrections", head, msg, { studentId: a.studentId, section: "homework", id, link: LINKS.student + "#homework" });
+    if (fresh && st && st.email) {
+      await email(st.email, graded ? `Your homework is marked: ${title}` : `Corrections for your homework: ${title}`, {
+        preheader: msg, heading: graded ? "Your homework is marked." : "Your coach asked for corrections.",
+        intro: `Hi ${esc(first(st.name))}, ${esc(a.markedByName || "your coach")} ${graded ? "marked" : "looked at"} “${esc(title)}”.`,
+        body: (graded && a.grade ? `<p style="margin:0 0 8px;">Grade: <strong>${esc(a.grade)}</strong></p>` : "") +
+          (a.feedback ? `<p style="margin:0;white-space:pre-wrap;">${esc(String(a.feedback).slice(0, 1500))}</p>` : "") +
+          (graded ? "" : `<p style="margin:8px 0 0;">Make the corrections and hand it in again.</p>`),
+        cta: { label: "Open my homework", url: APP + LINKS.student + "#homework" }
+      });
+    }
+    for (const g of await guardiansOf(a.studentId)) {
+      await techNotify(g.parentUid, "guardian", graded ? "tech_homework_marked" : "tech_homework_corrections",
+        graded ? `${first(name)}’s homework is marked${a.grade ? `: ${a.grade}` : ""}` : `Corrections for ${first(name)}’s homework`, msg,
+        { studentId: a.studentId, section: "homework", id: `${id}_${g.parentUid}`, link: LINKS.guardian + "#homework" });
+    }
+  }
+);
 
 /* =========================================================
    Levels: passing a class unlocks the next class
@@ -1756,6 +1886,62 @@ exports.techLinkGuardians = onCall(
     const results = await linkTechGuardians(db, snap.id, s);
     await ref.set({ guardianLinkResults: results.map((r) => ({ email: r.email || "", created: !!r.created, skipped: r.skipped || "" })) }, { merge: true });
     return { results };
+  }
+);
+
+/* Admit Paisley students to Tech Studio (Admin > Tech Studio > Paisley students).
+   They keep their login: techStudents/{uid} is added to the same account, Active
+   straight away, with the level (and coach) the Studio Desk chose. onTechEnrolmentUpdated
+   then welcomes them ("congratulations, sign in with the login you already have") and links
+   their Parent Portal parents, who are told about the new Tech Studio button.
+   data: { studentIds: [uid], skillLevel, coachId } */
+exports.admitToTechStudio = onCall(
+  { cors: true, region: LOCATION, timeoutSeconds: 300 },
+  async (request) => {
+    await requireAdmin(request);
+    const d = request.data || {}, db = admin.firestore();
+    const ids = Array.from(new Set((Array.isArray(d.studentIds) ? d.studentIds : [d.studentId]).map((x) => String(x || "").trim()).filter(Boolean)));
+    if (!ids.length) throw new HttpsError("invalid-argument", "Choose at least one student.");
+    if (ids.length > 50) throw new HttpsError("invalid-argument", "Admit at most 50 students at a time.");
+    const skillLevel = String(d.skillLevel || "");
+    if (!SKILL_LABEL[skillLevel]) throw new HttpsError("invalid-argument", "Choose a level: Beginner, Intermediate or Expert.");
+    let coachId = String(d.coachId || ""), coachName = "";
+    if (coachId) {
+      const c = await db.collection("techCoaches").doc(coachId).get();
+      if (!c.exists || c.data().status !== "Active") throw new HttpsError("failed-precondition", "That coach is not active.");
+      coachName = c.data().name || "";
+    }
+    const adminSnap = await db.collection("admins").doc(request.auth.uid).get();
+    const byName = (adminSnap.exists && adminSnap.data().name) || "Studio Desk";
+    const results = [];
+    for (const id of ids) {
+      try {
+        const st = await db.collection("students").doc(id).get();
+        if (!st.exists) { results.push({ id, ok: false, reason: "Not a Paisley student." }); continue; }
+        const s = st.data() || {};
+        if (s.studentType === "tech") { results.push({ id, name: s.name || "", ok: false, reason: "An old Tech Studio record. Use the migration on the Builders page." }); continue; }
+        const ref = db.collection("techStudents").doc(id), cur = await ref.get();
+        if (cur.exists && cur.data().status === "Active") { results.push({ id, name: s.name || "", ok: false, reason: "Already in Tech Studio." }); continue; }
+        let mail = String(s.email || "").trim();
+        if (!mail) { try { mail = (await admin.auth().getUser(id)).email || ""; } catch (e) { /* no auth user */ } }
+        if (!mail) { results.push({ id, name: s.name || "", ok: false, reason: "No email or login on this student." }); continue; }
+        const from = s.studentType === "tuition" ? "CBC tuition" : s.studentType === "remote" ? "Remote" : "Online";
+        const base = {
+          name: String(s.name || "").slice(0, 80), email: mail.slice(0, 120), phone: String(s.phone || "").slice(0, 30),
+          skillLevel, admittedBy: request.auth.uid, admittedByName: byName, admittedFrom: from, admittedAt: FV().serverTimestamp(),
+          updatedAt: FV().serverTimestamp()
+        };
+        if (cur.exists) await ref.set(base, { merge: true });
+        else await ref.set(Object.assign({ status: "Pending", techProfile: { identity: "student", interests: [] }, createdAt: FV().serverTimestamp() }, base));
+        /* Pending -> Active is what onTechEnrolmentUpdated welcomes (once, welcomedAt). */
+        await ref.update({ status: "Active", coachId: coachId || (cur.exists ? (cur.data().coachId || "") : ""), coachName: coachId ? coachName : (cur.exists ? (cur.data().coachName || "") : ""), activatedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() });
+        results.push({ id, name: s.name || "", ok: true });
+      } catch (e) {
+        console.error("admitToTechStudio", id, e);
+        results.push({ id, ok: false, reason: e.message || "Could not admit." });
+      }
+    }
+    return { results, admitted: results.filter((r) => r.ok).length };
   }
 );
 

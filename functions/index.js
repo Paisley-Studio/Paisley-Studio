@@ -152,6 +152,9 @@ exports.createTechCoach               = tech.createTechCoach;
 exports.onTechCoachApplied            = tech.onTechCoachApplied;
 exports.techLinkGuardians             = tech.techLinkGuardians;
 exports.nudgeTechChat                 = tech.nudgeTechChat;
+exports.admitToTechStudio             = tech.admitToTechStudio;
+exports.onTechHomeworkWritten         = tech.onTechHomeworkWritten;
+exports.onTechHomeworkWorkWritten     = tech.onTechHomeworkWorkWritten;
 exports.migrateTechArchitecture       = tech.migrateTechArchitecture;
 exports.techShare                     = tech.techShare;
 

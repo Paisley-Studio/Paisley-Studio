@@ -1479,6 +1479,65 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Timetable (replaces live classes in the portals): the week of classes, each with a time,
+    // level ('all' or one level), coach and class link. Only the Studio Desk writes it.
+    match /techTimetable/{id} {
+      allow read: if canReadTechClasses();
+      allow create, update: if isAdmin() &&
+        request.resource.data.dayOfWeek in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+        request.resource.data.level in ['all', 'beginner', 'intermediate', 'expert'] &&
+        request.resource.data.link is string && request.resource.data.link.size() <= 500;
+      allow delete: if isAdmin();
+    }
+
+    // Homework, set for one class (techCourses) and seen by every builder on its level.
+    // Coaches set and change their own; the Studio Desk any. Posting (status published)
+    // notifies the builders (onTechHomeworkWritten).
+    match /techHomework/{id} {
+      allow read: if isAdmin() || isTechCoach() ||
+        (resource.data.status == 'published' && (techStudentActive() || isParentAccount()));
+      allow create: if techAuthorCreate() &&
+        request.resource.data.track in ['beginner', 'intermediate', 'expert', 'advanced'] &&
+        request.resource.data.status in ['draft', 'published'];
+      allow update: if techAuthorChange() &&
+        request.resource.data.track in ['beginner', 'intermediate', 'expert', 'advanced'] &&
+        request.resource.data.status in ['draft', 'published'];
+      allow delete: if isAdmin() || (isTechCoach() && resource.data.createdBy == request.auth.uid);
+    }
+    // A builder's hand-in: techHomeworkWork/{uid}_{homeworkId}. The builder writes their work
+    // while it is Draft or Corrections and may move it to Submitted; marks (grade, feedback,
+    // Graded / Corrections) come only from their coach or the Studio Desk.
+    function hwWorkKeys() {
+      return ['homeworkId', 'studentId', 'studentName', 'coachId', 'courseId', 'track', 'text', 'files',
+        'codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'status', 'submittedAt', 'createdAt', 'updatedAt'];
+    }
+    function hwMarkKeys() {
+      return ['grade', 'feedback', 'markedBy', 'markedByName', 'markedAt', 'status', 'updatedAt'];
+    }
+    match /techHomeworkWork/{id} {
+      allow read: if (isSignedIn() && id.matches(request.auth.uid + '_.+')) ||
+        isAdmin() ||
+        (isSignedIn() && resource.data.studentId == request.auth.uid) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid) ||
+        isTechGuardianOf(resource.data.studentId);
+      allow create: if techStudentActive() &&
+        request.resource.data.studentId == request.auth.uid &&
+        id == request.auth.uid + '_' + request.resource.data.homeworkId &&
+        request.resource.data.get('coachId', '') == techCoachIdOf(request.auth.uid) &&
+        request.resource.data.status == 'Draft' &&
+        request.resource.data.keys().hasOnly(hwWorkKeys()) &&
+        exists(/databases/$(database)/documents/techHomework/$(request.resource.data.homeworkId));
+      allow update: if isAdmin() ||
+        (techStudentActive() && resource.data.studentId == request.auth.uid &&
+          resource.data.status in ['Draft', 'Corrections'] &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'files', 'codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'status', 'submittedAt', 'updatedAt']) &&
+          (request.resource.data.status == resource.data.status || request.resource.data.status == 'Submitted')) ||
+        (isTechCoach() && resource.data.get('coachId', '') == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(hwMarkKeys()) &&
+          request.resource.data.status in ['Submitted', 'Graded', 'Corrections']);
+      allow delete: if isAdmin();
+    }
+
     // Live classes (Google Meet). audience 'all' = every active builder; 'selected' = studentIds.
     // parentUids is filled by onTechLiveClassWritten so guardians of those builders see the class.
     match /techLiveClasses/{id} {
