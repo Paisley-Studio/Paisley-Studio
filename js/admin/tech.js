@@ -474,7 +474,43 @@
        Admitting (admitToTechStudio) adds Tech Studio to the same login: they get a
        congratulations email, their Parent Portal parents are linked and emailed, and
        the parents see a Paisley Tech Studio button. */
-    var PZ = { list: null, loading: false, q: '', prog: 'all', show: 'out', cs: false, sel: {} };
+    var PZ = { list: null, loading: false, q: '', prog: 'all', show: 'out', cs: false, sel: {}, open: {} };
+    function pzStyle() {
+      if (document.getElementById('pzStyle')) return;
+      var st = document.createElement('style'); st.id = 'pzStyle';
+      st.textContent = [
+        '.pz-list{background:var(--surface,#fff);border:1px solid var(--line,#dfe7e5);border-radius:14px;overflow:hidden}',
+        '.pz-head,.pz-row{display:grid;grid-template-columns:28px minmax(180px,1.6fr) minmax(110px,.8fr) minmax(200px,2fr) minmax(120px,.9fr) 118px;gap:.9rem;align-items:center;padding:.7rem 1rem}',
+        '.pz-head{background:var(--sage,#F3F8F7);font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#5A6E6A)}',
+        '.pz-row{border-top:1px solid var(--line,#dfe7e5);transition:background .12s}.pz-row:hover{background:#fafcfc}.pz-row.sel{background:rgba(85,191,179,.07)}',
+        '.pz-who{display:flex;gap:.65rem;align-items:center;min-width:0}',
+        '.pz-av{flex:0 0 34px;height:34px;border-radius:50%;background:var(--brand-deep,#245F5A);color:#fff;display:grid;place-items:center;font-weight:800;font-size:.8rem}',
+        '.pz-who b{display:block;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+        '.pz-who small{display:block;font-size:.74rem;color:var(--muted,#5A6E6A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+        '.pz-who>div{min-width:0}',
+        '.pz-prog b{display:block;font-size:.8rem;font-weight:700}.pz-prog small{font-size:.72rem;color:var(--muted,#5A6E6A)}',
+        '.pz-subs{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;min-width:0}',
+        '.pz-chip{font-size:.7rem;font-weight:700;padding:.18rem .55rem;border-radius:20px;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}',
+        '.pz-more{border:0;background:none;color:var(--brand-deep,#245F5A);font-family:inherit;font-size:.72rem;font-weight:800;cursor:pointer;padding:.18rem .3rem;white-space:nowrap;display:inline-flex;gap:.3rem;align-items:center}',
+        '.pz-more:hover{text-decoration:underline}.pz-more i{font-size:.65rem;transition:transform .15s}.pz-more.on i{transform:rotate(180deg)}',
+        '.pz-state{display:flex;flex-direction:column;gap:.15rem;font-size:.74rem;color:var(--muted,#5A6E6A)}',
+        '.pz-dot{display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}.pz-dot:before{content:"";width:7px;height:7px;border-radius:50%;background:#c3cfcc}',
+        '.pz-dot.ok:before{background:#2eb872}.pz-dot.wait:before{background:#f39c12}',
+        '.pz-in{font-weight:800;color:#1d8b57;white-space:nowrap}',
+        '.pz-admit{white-space:nowrap;display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .85rem;border-radius:9px;border:0;background:var(--brand-deep,#245F5A);color:#fff;font-family:inherit;font-weight:800;font-size:.76rem;cursor:pointer;justify-self:end}',
+        '.pz-admit:hover{background:var(--brand,#55BFB3)}',
+        '.pz-done{justify-self:end;font-size:.74rem;color:var(--muted,#5A6E6A);white-space:nowrap}',
+        '@media (max-width:900px){.pz-head{display:none}.pz-row{grid-template-columns:28px 1fr auto;grid-template-areas:"c who act" ". prog prog" ". subs subs" ". state state";row-gap:.45rem}',
+        '.pz-row>.c{grid-area:c}.pz-row>.pz-who{grid-area:who}.pz-row>.pz-prog{grid-area:prog}.pz-row>.pz-subs{grid-area:subs}.pz-row>.pz-state{grid-area:state;flex-direction:row;gap:.8rem}.pz-row>.act{grid-area:act}}'
+      ].join('');
+      document.head.appendChild(st);
+    }
+    function pzSubsHtml(s, subs) {
+      if (!subs.length) return '<span class="cr-note">No subjects recorded</span>';
+      var open = PZ.open[s.id], shown = open ? subs : subs.slice(0, 2), rest = subs.length - 2;
+      return shown.map(function (x) { return '<span class="pz-chip" title="' + esc(x) + '">' + esc(x) + '</span>'; }).join('') +
+        (rest > 0 ? '<button type="button" class="pz-more' + (open ? ' on' : '') + '" data-pz="more" data-id="' + esc(s.id) + '" aria-expanded="' + !!open + '">' + (open ? 'Show less' : '+' + rest + ' more') + ' <i class="fas fa-chevron-down" aria-hidden="true"></i></button>' : '');
+    }
     function pzLoad(force) {
       if (PZ.loading || (PZ.list && !force)) return;
       PZ.loading = true; PZ.err = '';
@@ -505,7 +541,7 @@
       });
       Object.keys(PZ.sel).forEach(function (id) { if (!list.some(function (s) { return s.id === id; })) delete PZ.sel[id]; });
       var nSel = Object.keys(PZ.sel).length, inCount = PZ.list.filter(function (s) { var t = pzTech(s); return t && t.status === 'Active'; }).length;
-      var h = '<div class="cr-bar"><div><h3>Paisley students</h3><div class="cr-sub">Every Paisley Studio student and what they study. Admit them to Tech Studio: they keep the same login, get a congratulations email telling them to sign in, and their parents are emailed about the new Paisley Tech Studio button in their Parent Portal.</div></div>' +
+      var h = '<div class="cr-bar"><div><h3>Paisley students</h3><div class="cr-sub">Admit Paisley students to Tech Studio on the same login. They and their parents are emailed.</div></div>' +
         '<div class="cr-actions"><button type="button" class="cr-btn" data-pz="reload"><i class="fas fa-rotate"></i> Refresh</button><button type="button" class="cr-btn primary" data-pz="admitsel"' + (nSel ? '' : ' disabled') + '><i class="fas fa-wand-magic-sparkles"></i> Admit selected (' + nSel + ')</button></div></div>' +
         '<div class="cr-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:1rem">' + stat(PZ.list.length, 'Paisley students') + stat(inCount, 'In Tech Studio') + stat(PZ.list.filter(pzComputing).length, 'Study computing') + '</div>' +
         '<div class="cr-filters"><input type="search" data-pzf="q" placeholder="Search name, email or subject…" value="' + esc(PZ.q) + '" aria-label="Search" style="min-width:230px">' +
@@ -515,15 +551,21 @@
       if (!list.length) { b.innerHTML = h + '<div class="cr-panel"><div class="cr-empty">No students match these filters.</div></div>'; return; }
       var open = list.filter(function (s) { var t = pzTech(s); return !(t && t.status === 'Active'); });
       var allOn = open.length && open.every(function (s) { return PZ.sel[s.id]; });
-      b.innerHTML = h + '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th><input type="checkbox" data-pz="all" aria-label="Select all"' + (allOn ? ' checked' : '') + '></th><th>Student</th><th>Programme</th><th>Key Stage</th><th>Subjects</th><th>Account</th><th>Tech Studio</th><th></th></tr></thead><tbody>' + list.map(function (s) {
-        var t = pzTech(s), inTech = t && t.status === 'Active', subs = pzSubjects(s);
-        return '<tr><td>' + (inTech ? '' : '<input type="checkbox" data-pz="sel" data-id="' + esc(s.id) + '" aria-label="Select ' + esc(s.name || 'student') + '"' + (PZ.sel[s.id] ? ' checked' : '') + '>') + '</td>' +
-          '<td><b>' + esc(s.name || '—') + '</b><div class="cr-note">' + esc(s.email || '') + '</div></td><td>' + esc(pzProg(s)) + '</td><td>' + esc(String(s.keyStage || '—').replace(/\s*\(.*/, '')) + '</td>' +
-          '<td>' + (subs.length ? subs.map(function (x) { return '<span class="badge" style="margin:0 .2rem .2rem 0;display:inline-block">' + esc(x) + '</span>'; }).join('') : '<span class="cr-note">Not recorded</span>') + '</td>' +
-          '<td>' + esc(s.status || 'Pending') + '</td>' +
-          '<td>' + (inTech ? '<span class="badge b-active">In Tech Studio · ' + esc(T.SKILL_LABEL[t.skillLevel] || 'Builder') + '</span>' : t ? '<span class="badge b-pending">Applied</span>' : '<span class="cr-note">—</span>') + '</td>' +
-          '<td>' + (inTech ? '' : '<button type="button" class="cr-btn sm primary" data-pz="admit" data-id="' + esc(s.id) + '"><i class="fas fa-wand-magic-sparkles"></i> Admit to Tech Studio</button>') + '</td></tr>';
-      }).join('') + '</tbody></table></div>';
+      pzStyle();
+      b.innerHTML = h + '<div class="pz-list"><div class="pz-head"><span><input type="checkbox" data-pz="all" aria-label="Select all"' + (allOn ? ' checked' : '') + '></span><span>Student</span><span>Programme</span><span>Subjects</span><span>Status</span><span></span></div>' + list.map(function (s) {
+        var t = pzTech(s), inTech = t && t.status === 'Active', subs = pzSubjects(s), name = s.name || s.email || 'Student';
+        var initials = String(name).trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+        var acct = s.status || 'Pending';
+        return '<div class="pz-row' + (PZ.sel[s.id] ? ' sel' : '') + '">' +
+          '<span class="c">' + (inTech ? '' : '<input type="checkbox" data-pz="sel" data-id="' + esc(s.id) + '" aria-label="Select ' + esc(name) + '"' + (PZ.sel[s.id] ? ' checked' : '') + '>') + '</span>' +
+          '<div class="pz-who"><span class="pz-av" aria-hidden="true">' + esc(initials || '?') + '</span><div><b title="' + esc(name) + '">' + esc(name) + '</b><small title="' + esc(s.email || '') + '">' + esc(s.email || '') + '</small></div></div>' +
+          '<div class="pz-prog"><b>' + esc(pzProg(s)) + '</b><small>' + esc(String(s.keyStage || '').replace(/\s*\(.*/, '') || '—') + '</small></div>' +
+          '<div class="pz-subs">' + pzSubsHtml(s, subs) + '</div>' +
+          '<div class="pz-state"><span class="pz-dot ' + (acct === 'Active' ? 'ok' : 'wait') + '">' + esc(acct) + '</span>' +
+            (inTech ? '<span class="pz-in"><i class="fas fa-circle-check" aria-hidden="true"></i> Tech · ' + esc(T.SKILL_LABEL[t.skillLevel] || 'Builder') + '</span>' : t ? '<span>Applied to Tech</span>' : '') + '</div>' +
+          '<span class="act" style="justify-self:end">' + (inTech ? '<span class="pz-done">Admitted</span>' : '<button type="button" class="pz-admit" data-pz="admit" data-id="' + esc(s.id) + '"><i class="fas fa-plus" aria-hidden="true"></i> Admit</button>') + '</span>' +
+        '</div>';
+      }).join('') + '</div>';
     }
     function pzAdmit(ids) {
       var people = ids.map(function (id) { return (PZ.list || []).filter(function (s) { return s.id === id; })[0]; }).filter(Boolean);
@@ -555,6 +597,7 @@
       var a = t.dataset.pz;
       if (a === 'reload') { PZ.list = null; pzLoad(true); render(); }
       else if (a === 'admit') pzAdmit([t.dataset.id]);
+      else if (a === 'more') { if (PZ.open[t.dataset.id]) delete PZ.open[t.dataset.id]; else PZ.open[t.dataset.id] = 1; render(); }
       else if (a === 'admitsel') pzAdmit(Object.keys(PZ.sel));
     });
     root.addEventListener('change', function (e) {

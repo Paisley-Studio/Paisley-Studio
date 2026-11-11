@@ -376,8 +376,7 @@ function mayRunRegister(role, session, uid) {
   return role.admin || (role.tutor && (session.tutorIds || []).indexOf(uid) !== -1);
 }
 async function resolveStudent(uid, data, now) {
-  const role = await roleOf(uid);
-  const session = await loadSession(data.sessionId);
+  const [role, session] = await Promise.all([roleOf(uid), loadSession(data.sessionId)]);
   if (!mayRunRegister(role, session, uid)) throw new HttpsError("permission-denied", "This is not your register.");
   if (session.status === "cancelled") throw new HttpsError("failed-precondition", "This lesson was cancelled.");
   if (now < ms(session.startAt)) throw new HttpsError("failed-precondition", "The lesson has not started yet.");
@@ -454,7 +453,9 @@ async function submitRegister(sessionId, opts) {
     const recs = await tx.get(db().collection("attendanceRecords").where("sessionId", "==", sessionId));
     const rows = recs.docs.map((d) => Object.assign({ id: d.id }, d.data()));
     const unresolved = rows.filter((r) => UNRESOLVED.indexOf(r.status) !== -1);
-    if (method === "manual" && unresolved.length) {
+    // Before the lesson ends every student must be marked; from the end the tutor may submit
+    // anyway; unmarked students stay unaccounted (never absent) and can be marked afterwards.
+    if (method === "manual" && unresolved.length && now < ms(s.endAt)) {
       throw new HttpsError("failed-precondition", "Account for every student first: " + unresolved.map((r) => r.studentName).join(", ") + ".");
     }
     const counts = {};
@@ -910,11 +911,16 @@ const wrap = (fn) => async (request) => {
 };
 exports.attendanceToday = onCall(CALL, wrap(async (request) => todayFor(requireAuth(request), Date.now())));
 exports.attendanceCheckIn = onCall(CALL, wrap(async (request) => checkIn(requireAuth(request), (request.data || {}).entryId, Date.now())));
-exports.attendanceResolve = onCall(CALL, wrap(async (request) => resolveStudent(requireAuth(request), request.data || {}, Date.now())));
+// { warm: true } only wakes the instance so the tutor's first tap is not a cold start.
+exports.attendanceResolve = onCall(CALL, wrap(async (request) => {
+  const uid = requireAuth(request);
+  if ((request.data || {}).warm) return { ok: true, warm: true };
+  return resolveStudent(uid, request.data || {}, Date.now());
+}));
 exports.attendanceSubmit = onCall(CALL, wrap(async (request) => {
   const uid = requireAuth(request);
-  const role = await roleOf(uid);
-  const session = await loadSession((request.data || {}).sessionId);
+  if ((request.data || {}).warm) return { ok: true, warm: true };
+  const [role, session] = await Promise.all([roleOf(uid), loadSession((request.data || {}).sessionId)]);
   if (!mayRunRegister(role, session, uid)) throw new HttpsError("permission-denied", "This is not your register.");
   if (Date.now() < ms(session.graceAt)) throw new HttpsError("failed-precondition", "You can submit once the " + GRACE_MIN + "-minute grace period is over.");
   return submitRegister(session.id, { method: "manual", uid, name: (role.tutor && role.tutor.name) || "Studio Desk", now: Date.now() });

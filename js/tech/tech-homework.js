@@ -86,7 +86,8 @@
   function dueText(h) {
     if (!h.dueAt) return '';
     var d = ms(h.dueAt), late = d && d < Date.now();
-    return '<span class="hw-due' + (late ? ' late' : '') + '"><i class="fas fa-calendar-day" aria-hidden="true"></i> Due ' + esc(day(h.dueAt)) + '</span>';
+    var t = T.toDate(h.dueAt), hm = t ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    return '<span class="hw-due' + (late ? ' late' : '') + '"><i class="fas fa-calendar-day" aria-hidden="true"></i> ' + (late ? 'Was due ' : 'Due ') + esc(day(h.dueAt)) + (hm ? ', ' + esc(hm) : '') + '</span>';
   }
   function statusPill(w) {
     var s = (w && STATUS[w.status]) || STATUS.Draft;
@@ -239,7 +240,8 @@
       h = h || {};
       if (!S.courses.length) { alert('Make a class in Classes first: homework is set for a class.'); return; }
       var id = h.id || HW().doc().id, files = (h.files || []).slice(), busy = 0;
-      var due = h.dueAt ? T.toDate(h.dueAt) : null, dueVal = due ? new Date(due.getTime() - due.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : '';
+      var due = h.dueAt ? T.toDate(h.dueAt) : null, dueIso = due ? new Date(due.getTime() - due.getTimezoneOffset() * 60000).toISOString() : '';
+      var dueVal = dueIso.slice(0, 10), dueTime = dueIso ? dueIso.slice(11, 16) : '23:59';
       var m = modal(h.id ? 'Edit homework' : 'Set homework',
         '<div class="hw-form">' +
           '<label class="f full">Class<select id="hwCourse">' + S.courses.map(function (c) { return '<option value="' + esc(c.id) + '"' + ((h.courseId || (S.course !== 'all' ? S.course : '')) === c.id ? ' selected' : '') + '>' + esc(courseLabel(c)) + '</option>'; }).join('') + '</select></label>' +
@@ -248,7 +250,8 @@
           '<div class="f full"><label class="f">Files for builders to download <span class="hint">As many as you need, up to ' + MAX_FILES + ', 50 MB each</span></label><div id="hwFiles"></div>' +
             '<div class="hw-drop" id="hwDrop" tabindex="0" role="button"><i class="fas fa-cloud-arrow-up"></i> Drop files here or press to choose</div><input type="file" id="hwFileIn" multiple hidden></div>' +
           '<label class="f full">Video links <span class="hint">Optional. One per line: AWS, YouTube, Vimeo or Google Drive</span><textarea id="hwVideos" placeholder="https://youtu.be/…">' + esc((h.videos || []).join('\n')) + '</textarea></label>' +
-          '<label class="f">Due date <span class="hint">Optional</span><input type="date" id="hwDue" value="' + esc(dueVal) + '"></label><div></div>' +
+          '<label class="f">Deadline <span class="hint">Builders, their parents and coaches are emailed it</span><input type="date" id="hwDue" value="' + esc(dueVal) + '"></label>' +
+          '<label class="f">Time<input type="time" id="hwDueTime" value="' + esc(dueTime) + '"></label>' +
           '<label class="hw-check full"><input type="checkbox" id="hwUpload"' + (h.requireUpload ? ' checked' : '') + '><span><b>Builders upload files</b><span>They must attach at least one file (a document, pictures, a zip) to hand in.</span></span></label>' +
           '<label class="hw-check full"><input type="checkbox" id="hwIde"' + (h.ide && h.ide.enabled ? ' checked' : '') + '><span><b>Paisley VS Code practice</b><span>Builders write code in the IDE and hand it in; you see their page when you mark it.</span></span></label>' +
           '<label class="f full" id="hwStarterRow"' + (h.ide && h.ide.enabled ? '' : ' hidden') + '>Opening code <span class="hint">Optional. What index.html starts with; leave empty for a blank page</span><textarea id="hwStarter" class="code" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;…">' + esc((h.ide && h.ide.starter) || '') + '</textarea></label>' +
@@ -287,7 +290,8 @@
         var vids = q('#hwVideos').value.split(/\s*\n\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
         var badV = vids.filter(function (v) { return !T.safeUrl(v); });
         if (badV.length) return m.err('Video links must start with https:// (' + badV[0] + ')');
-        var dv = q('#hwDue').value, dueAt = dv ? firebase.firestore.Timestamp.fromDate(new Date(dv + 'T23:59:00')) : null;
+        var dv = q('#hwDue').value, tv = q('#hwDueTime').value || '23:59', dueAt = dv ? firebase.firestore.Timestamp.fromDate(new Date(dv + 'T' + tv + ':00')) : null;
+        if (dueAt && b.dataset.f === 'post' && dueAt.toMillis() < Date.now()) return m.err('The deadline is in the past. Choose a later date or time.');
         var post = b.dataset.f === 'post';
         var d = {
           courseId: c.id, courseName: c.name || '', track: c.track || 'intermediate', title: title.slice(0, 140),
@@ -305,7 +309,7 @@
     }
 
     function post(h) {
-      confirmBox('Post “' + (h.title || 'this homework') + '” to every ' + (T.TRACK_LABEL[h.track] || '') + ' builder in ' + (h.courseName || 'the class') + '?', 'Post it').then(function (ok) {
+      confirmBox('Post “' + (h.title || 'this homework') + '” to every ' + (T.TRACK_LABEL[h.track] || '') + ' builder in ' + (h.courseName || 'the class') + '? They, their parents and their coaches are emailed.', 'Post it').then(function (ok) {
         if (ok) HW().doc(h.id).update({ status: 'published', publishedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() }).catch(function (e) { alert('Could not post: ' + T.errMsg(e)); });
       });
     }

@@ -156,6 +156,18 @@ test("tutor accounts for students, submits; absence notice only once it is final
   assert.equal(sent.filter((x) => x.to === "bea@example.com").length, 1, "never sent twice");
 });
 
+test("from the end of the lesson the tutor may submit with students unmarked; they stay unaccounted and can be marked after", { skip: !HAVE }, async () => {
+  await seed();
+  await A.checkIn("ann", "maths", at("09:05"));
+  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:59") }), /Account for every student first/);
+  const sub = await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:00") });
+  assert.equal(sub.status, "submitted"); assert.equal(sub.unresolved, 2);
+  const ben = await rec(maths, "ben");
+  assert.notEqual(ben.status, "absent", "never absent just because the register went in");
+  await A.resolveStudent("t1", { sessionId: maths, studentId: "ben", outcome: "absent", note: "" }, at("10:05"));
+  assert.equal((await rec(maths, "ben")).status, "absent");
+});
+
 test("auto-submit: keeps registrations, leaves the unaccounted unresolved, tells the Studio Desk once", { skip: !HAVE }, async () => {
   await seed();
   await A.checkIn("ann", "maths", at("09:02"));

@@ -783,14 +783,24 @@ function lessonTitle(l) {
 ========================================================= */
 function dueLine(h) {
   if (!h.dueAt || !h.dueAt.toDate) return "";
-  return h.dueAt.toDate().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Nairobi" });
+  const d = h.dueAt.toDate(), tz = "Africa/Nairobi";
+  const date = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: tz });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+  return `${date}, ${time}`;
 }
+/* Posting homework (or setting / moving the deadline of posted homework) tells, by bell and
+   email: every builder on the level, each builder's guardians, and each builder's coach (one
+   email per coach, naming how many of their builders got it). Notification ids are
+   deterministic, so a retry never sends twice. */
 exports.onTechHomeworkWritten = onDocumentWritten(
   { document: "techHomework/{hid}", region: LOCATION, secrets: SMTP_SECRETS, timeoutSeconds: 540, memory: "512MiB" },
   async (event) => {
     const b = event.data.before.exists ? event.data.before.data() : null;
     const a = event.data.after.exists ? event.data.after.data() : null;
-    if (!a || a.status !== "published" || (b && b.status === "published")) return;
+    if (!a || a.status !== "published") return;
+    const posted = !b || b.status !== "published";
+    const dueMs = tsMs(a.dueAt), dueMoved = !posted && dueMs && dueMs !== tsMs(b.dueAt);
+    if (!posted && !dueMoved) return;
     const hid = event.params.hid, course = a.courseName || "your class", title = String(a.title || "Homework").slice(0, 140);
     const due = dueLine(a), from = a.createdByName || "your coach";
     const what = [];
@@ -799,21 +809,44 @@ exports.onTechHomeworkWritten = onDocumentWritten(
     if ((a.videos || []).length) what.push(`${a.videos.length} video${a.videos.length === 1 ? "" : "s"} to watch`);
     if ((a.files || []).length) what.push(`${a.files.length} file${a.files.length === 1 ? "" : "s"} to download`);
     const msg = `${course}: ${title}${due ? ` · due ${due}` : ""}`;
-    const extra = { courseId: a.courseId || "", section: "homework", id: `hw_${hid}` };
+    const key = posted ? `hw_${hid}` : `hwdue_${hid}_${dueMs}`;
+    const extra = { courseId: a.courseId || "", section: "homework", id: key };
+    const dueHtml = due ? `<p style="margin:0 0 8px;">Deadline: <strong>${esc(due)}</strong></p>` : "";
+    const whatHtml = what.length ? `<p style="margin:0;">It includes ${esc(what.join(", "))}.</p>` : `<p style="margin:0;">Open it in the studio to see what to do.</p>`;
+    const head = posted ? "New homework" : "New homework deadline";
+    const coaches = {};
     for (const s of await trackAudience(a.track)) {
-      const fresh = await techNotify(s.id, "student", "tech_homework", `New homework in ${course}`, msg, Object.assign({ studentId: s.id, link: LINKS.student + "#homework" }, extra));
+      const fresh = await techNotify(s.id, "student", "tech_homework", `${head} in ${course}`, msg, Object.assign({ studentId: s.id, link: LINKS.student + "#homework" }, extra));
       if (!fresh) continue;
-      await email(s.email, `New homework in ${course}: ${title}`, {
-        preheader: msg, heading: "You have new homework.",
-        intro: `Hi ${esc(first(s.name))}, ${esc(from)} set homework in ${esc(course)}.`,
-        body: `<p style="margin:0 0 8px;"><strong>${esc(title)}</strong></p>` +
-          (due ? `<p style="margin:0 0 8px;">Due: <strong>${esc(due)}</strong></p>` : "") +
-          (what.length ? `<p style="margin:0;">It includes ${esc(what.join(", "))}.</p>` : `<p style="margin:0;">Open it in your studio to see what to do.</p>`),
+      if (s.coachId) (coaches[s.coachId] = coaches[s.coachId] || []).push(s);
+      await email(s.email, `${head} in ${course}: ${title}`, {
+        preheader: msg, heading: posted ? "You have new homework." : "Your homework deadline has been set.",
+        intro: posted ? `Hi ${esc(first(s.name))}, ${esc(from)} set homework in ${esc(course)}.` : `Hi ${esc(first(s.name))}, the deadline for this ${esc(course)} homework is now:`,
+        body: `<p style="margin:0 0 8px;"><strong>${esc(title)}</strong></p>` + dueHtml + (posted ? whatHtml : ""),
         cta: { label: "Open my homework", url: APP + LINKS.student + "#homework" }
       });
       for (const g of await guardiansOf(s.id)) {
-        await techNotify(g.parentUid, "guardian", "tech_homework", `New homework for ${first(s.name)}`, msg, Object.assign({ studentId: s.id, link: LINKS.guardian + "#homework" }, extra, { id: `hw_${hid}_${s.id}` }));
+        const gFresh = await techNotify(g.parentUid, "guardian", "tech_homework", `${head} for ${first(s.name)}`, msg, Object.assign({ studentId: s.id, link: LINKS.guardian + "#homework" }, extra, { id: `${key}_${s.id}` }));
+        if (!gFresh) continue;
+        await email(g.email, `${head} for ${first(s.name)}: ${title}`, {
+          preheader: msg, heading: posted ? `${first(s.name)} has new homework.` : `${first(s.name)}'s homework deadline`,
+          intro: `Hi ${esc(first(g.name) || "there")}, ${posted ? `${esc(from)} set homework for ${esc(first(s.name))} in ${esc(course)}.` : `the deadline for ${esc(first(s.name))}'s ${esc(course)} homework is now set.`}`,
+          body: `<p style="margin:0 0 8px;"><strong>${esc(title)}</strong></p>` + dueHtml + (posted ? whatHtml : ""),
+          cta: { label: "See it in the Parent Portal", url: APP + LINKS.guardian + "#homework" }
+        });
       }
+    }
+    for (const cid of Object.keys(coaches)) {
+      const list = coaches[cid], n = list.length;
+      const cFresh = await techNotify(cid, "coach", "tech_homework", `${head} in ${course}`, `${msg} · ${n} of your builder${n === 1 ? "" : "s"}`, Object.assign({ link: LINKS.coach + "#homework" }, extra, { id: `${key}_coach` }));
+      if (!cFresh) continue;
+      const names = list.slice(0, 12).map((x) => esc(x.name || "Builder")).join(", ") + (n > 12 ? ` and ${n - 12} more` : "");
+      await email(await coachEmail(cid), `${head} for your builders: ${title}`, {
+        preheader: msg, heading: posted ? "Homework set for your builders" : "Homework deadline set",
+        intro: posted ? `${esc(from)} set homework in ${esc(course)} for ${n} of your builder${n === 1 ? "" : "s"}.` : `The deadline for this ${esc(course)} homework is now set for ${n} of your builder${n === 1 ? "" : "s"}.`,
+        body: `<p style="margin:0 0 8px;"><strong>${esc(title)}</strong></p>` + dueHtml + `<p style="margin:0;">Builders: ${names}.</p>`,
+        cta: { label: "Open Homework", url: APP + LINKS.coach + "#homework" }
+      });
     }
   }
 );

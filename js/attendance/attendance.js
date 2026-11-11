@@ -94,6 +94,12 @@ var Attendance = (function () {
       '.att-resolve select,.att-resolve input{font-family:inherit;font-size:.78rem;padding:.4rem .5rem;border:1.5px solid var(--line,#dfe7e5);border-radius:8px;background:#fff;color:var(--ink,#263331);box-sizing:border-box}',
       '.att-resolve select:focus,.att-resolve input:focus,.att-field textarea:focus{outline:none;border-color:var(--brand,#55BFB3)}',
       '.att-wrap{max-width:100%}',
+      '.att-quick{display:inline-flex;gap:.3rem;flex-wrap:nowrap;align-items:center}',
+      '.att-q{display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .7rem;border-radius:8px;border:1.5px solid var(--line,#dfe7e5);background:#fff;color:var(--ink,#263331);font-family:inherit;font-weight:800;font-size:.74rem;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s,color .12s}',
+      '.att-q:hover{border-color:var(--brand,#55BFB3)}.att-q:disabled{cursor:progress}',
+      '.att-q.ok.on{background:#1d8b57;border-color:#1d8b57;color:#fff}.att-q.bad.on{background:#b8362a;border-color:#b8362a;color:#fff}.att-q.more.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}',
+      '.att-q.ok:not(.on){color:#1d8b57}.att-q.bad:not(.on){color:#b8362a}',
+      'tr.att-busy td{opacity:.75}',
       '.att-row-actions{display:flex;gap:.3rem;flex-wrap:wrap}',
       '.att-reg-tabs{display:flex;gap:.35rem;flex-wrap:wrap;padding:.6rem 1.2rem 0}',
       '.att-msg{font-size:.8rem;font-weight:700;margin-top:.5rem}.att-msg.bad{color:#b8362a}.att-msg.ok{color:#1d8b57}',
@@ -313,7 +319,21 @@ var Attendance = (function () {
   ========================================================= */
   function mountTutor(o) {
     style();
-    var S = { lessons: [], pending: [], skew: 0, sessions: {}, records: {}, unsubs: {}, dismissed: {}, modal: null, active: null, locks: [], policy: { graceMin: 15, autoSubmitAfterEndMin: 15 } };
+    var S = { lessons: [], pending: [], skew: 0, sessions: {}, records: {}, unsubs: {}, dismissed: {}, modal: null, active: null, locks: [], policy: { graceMin: 15, autoSubmitAfterEndMin: 15 }, opt: {}, more: {} };
+    /* Optimistic marks: S.opt[sessionId_studentId] = { status, resolution, busy }. The row shows the
+       tutor's choice the moment it is tapped; the live snapshot replaces it once the server has it. */
+    function recsOf(sid) {
+      return (S.records[sid] || []).map(function (r) {
+        var o2 = S.opt[sid + '_' + r.studentId];
+        return o2 ? Object.assign({}, r, { status: o2.status, resolution: o2.resolution, _busy: o2.busy }) : r;
+      });
+    }
+    // Wake the attendance functions so the first tap is not a cold start.
+    var warmed = 0;
+    function warm() {
+      if (Date.now() - warmed < 4 * 60000) return; warmed = Date.now();
+      ['attendanceResolve', 'attendanceSubmit'].forEach(function (n) { call(n, { warm: true }).catch(function () { }); });
+    }
     try { S.dismissed = JSON.parse(store('attDismissed') || '{}'); } catch (e) { }
     var dock = document.createElement('div'); dock.className = 'att-dock att'; document.body.appendChild(dock);
     function now() { return Date.now() + S.skew; }
@@ -339,6 +359,11 @@ var Attendance = (function () {
       }, function () { });
       var b = db.collection('attendanceRecords').where('sessionId', '==', sid).where('tutorIds', 'array-contains', o.uid).onSnapshot(function (s) {
         S.records[sid] = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (x, y) { return String(x.studentName).localeCompare(String(y.studentName)); });
+        // Drop optimistic marks the server now confirms (or that a student's own check-in overtook).
+        S.records[sid].forEach(function (r) {
+          var k = sid + '_' + r.studentId, o2 = S.opt[k];
+          if (o2 && !o2.busy && (r.status === o2.status || r.checkIn)) delete S.opt[k];
+        });
         paint();
       }, function (e) { console.warn('register', e); });
       S.unsubs[sid] = function () { a(); b(); };
@@ -367,20 +392,36 @@ var Attendance = (function () {
       });
       return c;
     }
+    /* One tap marks a student: Present / Absent, or More for the other outcomes with a note. */
+    function quickHtml(s, r) {
+      var k = s.id + '_' + r.studentId, cur = r.resolution && r.resolution.outcome, busy = r._busy;
+      var data = ' data-sid="' + esc(s.id) + '" data-st="' + esc(r.studentId) + '"' + (busy ? ' disabled' : '');
+      function q(out, cls, ic, label) {
+        return '<button type="button" class="att-q ' + cls + (cur === out ? ' on' : '') + '" data-quick="' + out + '"' + data + ' aria-pressed="' + (cur === out) + '">' + icon(busy === out ? 'fa-spinner fa-spin' : ic) + ' ' + label + '</button>';
+      }
+      var other = cur && cur !== 'absent' && cur !== 'present_unable';
+      var h = '<div class="att-quick">' + q('present_unable', 'ok', 'fa-check', 'Present') + q('absent', 'bad', 'fa-xmark', 'Absent') +
+        '<button type="button" class="att-q more' + (other ? ' on' : '') + '" data-more="' + esc(k) + '"' + data + ' title="Other outcomes">' + icon(busy && busy !== 'absent' && busy !== 'present_unable' ? 'fa-spinner fa-spin' : 'fa-ellipsis') + (other ? ' ' + esc(r.resolution.label || 'Other') : ' More') + '</button></div>';
+      if (S.more[k]) {
+        h += '<div class="att-resolve"><select data-out="' + esc(r.studentId) + '" aria-label="Outcome for ' + esc(r.studentName) + '">' + OUTCOMES.filter(function (x) { return x[0] !== 'absent' && x[0] !== 'present_unable'; }).map(function (x) { return '<option value="' + x[0] + '"' + (cur === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
+          '<input data-note="' + esc(r.studentId) + '" placeholder="Explanation" maxlength="1000" value="' + esc(r.resolution ? r.resolution.note || '' : '') + '"><button type="button" class="att-btn sm primary" data-resolve="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '"' + (busy ? ' disabled' : '') + '>Save</button></div>';
+      }
+      return h;
+    }
     function registerHtml(s, compact) {
-      var recs = S.records[s.id] || [], c = counts(recs), t = now();
+      var recs = recsOf(s.id), c = counts(recs), t = now();
       var started = t >= msOf(s.startAt), afterGrace = t >= msOf(s.graceAt), submitted = s.status !== 'open';
       var rows = recs.map(function (r) {
         var unresolved = r.status === 'expected' || r.status === 'unaccounted';
         var flag = (unresolved && afterGrace) || r.needsVerification || r.reviewState === 'pending';
         var tutorMarked = !r.checkIn && ['absent', 'present_verified', 'connectivity', 'excused', 'other'].indexOf(r.status) !== -1;
         var canResolve = started && !r.checkIn && (unresolved || (tutorMarked && !submitted)) && s.status !== 'cancelled';
-        return '<tr class="' + (flag ? 'flag' : '') + '"><td><b>' + esc(r.studentName) + '</b>' + (r.resolution ? '<div class="att-muted">' + esc(r.resolution.label || r.resolution.outcome) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName || '') + ' ' + hm(r.resolution.at) + '</div>' : '') + '</td>' +
+        return '<tr class="' + (flag ? 'flag' : '') + (r._busy ? ' att-busy' : '') + '"><td><b>' + esc(r.studentName) + '</b>' + (r.resolution ? '<div class="att-muted">' + esc(r.resolution.label || r.resolution.outcome) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName || '') + ' ' + hm(r.resolution.at) + '</div>' : '') + '</td>' +
           '<td>' + pill(unresolved && !afterGrace ? 'expected' : r.status) + (unresolved && afterGrace ? ' <span class="att-pill bad">Account for</span>' : '') + (r.needsVerification ? ' <span class="att-pill wait">Registered after submission</span>' : '') + (r.reviewState === 'pending' ? ' <span class="att-pill wait">Studio Desk review</span>' : '') + '</td>' +
           '<td>' + (r.checkIn ? hm(r.checkIn.at) : '—') + '</td>' +
           '<td>' + (r.checkIn ? (r.checkIn.classification === 'late' ? '<span class="att-pill late">' + r.checkIn.minutesLate + ' min late</span>' : '<span class="att-pill ok">On time</span>') : '—') + '</td>' +
           '<td>' + (r.strikeId ? '<span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + icon('fa-triangle-exclamation') + ' ' + (r.strikeReversed ? 'Reversed' : 'Strike') + '</span>' : '—') + '</td>' +
-          '<td>' + (canResolve ? '<div class="att-resolve"><select data-out="' + esc(r.studentId) + '" aria-label="Account for ' + esc(r.studentName) + '"><option value="">Account for…</option>' + OUTCOMES.map(function (x) { return '<option value="' + x[0] + '"' + (r.resolution && r.resolution.outcome === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select><input data-note="' + esc(r.studentId) + '" placeholder="Explanation" maxlength="1000" value="' + esc(r.resolution ? r.resolution.note || '' : '') + '"><button type="button" class="att-btn sm primary" data-resolve="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '">Save</button></div>' : '') +
+          '<td>' + (canResolve ? quickHtml(s, r) : '') +
           (r.needsVerification ? '<button type="button" class="att-btn sm" data-verify="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '">' + icon('fa-check') + ' Verified</button>' : '') + '</td></tr>';
       }).join('');
       var head = '<div class="att-stats"><div class="att-stat"><b>' + c.total + '</b><span>Enrolled</span></div><div class="att-stat"><b>' + c.checked + '</b><span>Checked in</span></div>' +
@@ -390,10 +431,11 @@ var Attendance = (function () {
         submitted ? '<div class="att-banner"><div class="ic">' + icon('fa-circle-check') + '</div><div class="t"><b>' + (s.status === 'auto_submitted' ? 'AUTO-SUBMITTED' : 'Submitted') + ' ' + hm(s.submission && s.submission.at) + '</b><small>' + (s.status === 'auto_submitted' ? 'You did not submit this register, so the system did. Account for anyone still unresolved and add your explanation below.' : 'Submitted by ' + esc((s.submission && s.submission.byName) || '')) + '</small></div></div>' :
         !started ? '<p class="att-muted">The register opens at ' + hm(s.startAt) + '. Students appear here as they register.</p>' :
         !afterGrace ? '<p class="att-muted">Students are registering. Anyone not registered by ' + hm(s.graceAt) + ' is flagged for you to account for. Nobody is marked absent automatically.</p>' :
-        '<p class="att-muted">Account for every flagged student, then submit. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + ' and the Studio Desk is told.</p>';
+        t >= msOf(s.endAt) ? '<p class="att-muted">The lesson has ended, so you can submit now. Anyone you have not marked stays unaccounted for (never absent) and you can still mark them after submitting. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + '.</p>' :
+        '<p class="att-muted">Mark every flagged student, then submit. Submit opens for everyone the moment the lesson ends at ' + hm(s.endAt) + '. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + ' and the Studio Desk is told.</p>';
       var explain = s.status === 'auto_submitted' ? '<div class="att-panel"><h4>' + icon('fa-comment-dots') + ' Your explanation</h4>' + (s.tutorExplanation ? '<p class="att-muted">"' + esc(s.tutorExplanation.text) + '" (' + dayLabel(s.tutorExplanation.at) + ')' + (s.explanationReview ? ' · Studio Desk: ' + esc(s.explanationReview.decision) : '') + '</p>' : '') +
         '<label class="att-field">Why was the register not submitted?<textarea data-explain="' + esc(s.id) + '" maxlength="2000"></textarea></label><button type="button" class="att-btn sm primary" data-explain-go="' + esc(s.id) + '">' + icon('fa-paper-plane') + ' Send explanation</button></div>' : '';
-      return state + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Checked in</th><th>On time</th><th>Strike</th><th>Account for</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
+      return state + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Checked in</th><th>On time</th><th>Strike</th><th>Mark</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
         '<div class="att-msg" data-msg="' + esc(s.id) + '"></div>' + explain;
     }
     function openRoll(sid) {
@@ -407,23 +449,59 @@ var Attendance = (function () {
       S.dismissed[S.modal.sid] = 1; store('attDismissed', JSON.stringify(S.dismissed));
       var m = S.modal.m; S.modal = null; m.close(); paint();
     }
+    function submitState(s) {
+      var t = now(), c = counts(recsOf(s.id)), ended = t >= msOf(s.endAt), afterGrace = t >= msOf(s.graceAt);
+      if (ended) return { ok: true, note: c.unresolved ? c.unresolved + ' not marked: they stay unaccounted for' : '' };
+      if (!afterGrace) return { ok: false, why: 'Opens at ' + hm(s.graceAt) + ', after the grace period' };
+      if (c.unresolved) return { ok: false, why: 'Mark every flagged student, or wait until the lesson ends at ' + hm(s.endAt) };
+      return { ok: true };
+    }
+    function footHtml(s) {
+      if (s.status !== 'open') return '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' Closing this keeps collecting registrations. Reopen it from the Rollcall button.</span>';
+      var st = submitState(s);
+      return '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' ' + esc(st.ok ? (st.note || 'Ready to submit.') : st.why) + '</span>' +
+        '<button type="button" class="att-btn primary" data-submit="' + esc(s.id) + '"' + (st.ok ? '' : ' disabled title="' + esc(st.why) + '"') + '>' + icon('fa-paper-plane') + ' Submit register</button>';
+    }
     function paintRoll() {
       if (!S.modal) return;
       var lv = live(), s = S.sessions[S.modal.sid];
       if (!s) return;
-      // Keep the tutor's typing: only repaint the parts that are not being edited.
-      var active = document.activeElement, editing = active && S.modal.m.el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName);
-      if (editing) return;
       var m = S.modal.m;
+      // The Submit button always follows the clock, even while the tutor is typing.
+      if (!m.foot.querySelector('[data-submit] .fa-spinner')) m.foot.innerHTML = footHtml(s);
+      // Keep the tutor's typing: only repaint the parts that are not being edited.
+      var active = document.activeElement, editing = active && m.el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName);
+      if (editing) return;
       m.el.querySelector('h3').textContent = 'Rollcall: ' + s.subjectName;
       m.el.querySelector('.sub').textContent = (s.keyStage || '').replace(/\s*\(.*/, '') + ' · ' + hm(s.startAt) + ' to ' + hm(s.endAt) + ' · ' + (s.tutorName || '') + (s.room && !/^https?:/i.test(s.room) ? ' · ' + s.room : '');
       var tabs = lv.length > 1 ? '<div class="att-reg-tabs">' + lv.map(function (x) { return '<button type="button" class="att-btn sm' + (x.id === s.id ? ' primary' : '') + '" data-roll-tab="' + esc(x.id) + '">' + esc(x.subjectName) + ' ' + hm(x.startAt) + '</button>'; }).join('') + '</div>' : '';
       var old = m.el.querySelector('.att-reg-tabs'); if (old) old.remove();
       if (tabs) m.head.insertAdjacentHTML('afterend', tabs);
+      var msgEl = m.body.querySelector('[data-msg]'), keep = msgEl ? [msgEl.className, msgEl.textContent] : null;
       m.body.innerHTML = registerHtml(s);
-      var recs = S.records[s.id] || [], c = counts(recs), afterGrace = now() >= msOf(s.graceAt);
-      m.foot.innerHTML = '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' Closing this keeps collecting registrations. Reopen it from the Rollcall button.</span>' +
-        (s.status === 'open' ? '<button type="button" class="att-btn primary" data-submit="' + esc(s.id) + '"' + (!afterGrace || c.unresolved ? ' disabled title="' + (!afterGrace ? 'Available once the grace period ends' : 'Account for every flagged student first') + '"' : '') + '>' + icon('fa-paper-plane') + ' Submit register</button>' : '');
+      var nm = m.body.querySelector('[data-msg]'); if (nm && keep) { nm.className = keep[0]; nm.textContent = keep[1]; }
+    }
+    /* Mark a student: shown at once, saved in the background, undone with a message if it fails. */
+    function mark(sid, st, outcome, note, host) {
+      var k = sid + '_' + st, label = (OUTCOMES.filter(function (x) { return x[0] === outcome; })[0] || [])[1] || outcome;
+      var statusOf = { absent: 'absent', present_unable: 'present_verified', connectivity: 'connectivity', excused_admin: 'excused', other: 'other' };
+      var prev = S.opt[k];
+      S.opt[k] = { status: statusOf[outcome] || 'other', resolution: { outcome: outcome, label: label, note: note || '', byName: 'You', at: now() }, busy: outcome };
+      delete S.more[k];
+      paint();
+      var msg = function () { return (S.modal && S.modal.m.el.querySelector('[data-msg="' + sid + '"]')) || (host && host.querySelector('[data-msg="' + sid + '"]')); };
+      call('attendanceResolve', { sessionId: sid, studentId: st, outcome: outcome, note: note || '' }).then(function (r) {
+        if (S.opt[k]) S.opt[k].busy = null;
+        // Already confirmed by the live snapshot? Then the optimistic mark can go.
+        var rec = (S.records[sid] || []).filter(function (x) { return x.studentId === st; })[0];
+        if (rec && S.opt[k] && rec.status === S.opt[k].status) delete S.opt[k];
+        var m2 = msg(); if (m2) { m2.className = 'att-msg ok'; m2.textContent = r && r.reviewPending ? 'Saved. The Studio Desk reviews this explanation.' : ''; }
+        paint();
+      }).catch(function (er) {
+        if (prev) S.opt[k] = prev; else delete S.opt[k];
+        paint();
+        var m2 = msg(); if (m2) { m2.className = 'att-msg bad'; m2.textContent = errMsg(er); }
+      });
     }
     function act(e) {
       var t = e.target.closest ? e.target : null; if (!t) return;
@@ -431,17 +509,19 @@ var Attendance = (function () {
       var tab = t.closest('[data-roll-tab]'); if (tab) { openRoll(tab.dataset.rollTab); return; }
       var open = t.closest('[data-open-reg]'); if (open) { watch(open.dataset.openReg); delete S.dismissed[open.dataset.openReg]; openRoll(open.dataset.openReg); return; }
       var host = t.closest('.att-card') || t.closest('.att');
+      var qk = t.closest('[data-quick]');
+      if (qk) { if (!qk.disabled) mark(qk.dataset.sid, qk.dataset.st, qk.dataset.quick, '', host); return; }
+      var mo = t.closest('[data-more]');
+      if (mo) { if (S.more[mo.dataset.more]) delete S.more[mo.dataset.more]; else S.more[mo.dataset.more] = 1; paint(); return; }
       var res = t.closest('[data-resolve]');
       if (res) {
         var sid = res.dataset.sid, st = res.dataset.resolve, scope = res.closest('tr');
         var out = scope.querySelector('[data-out]').value, note = scope.querySelector('[data-note]').value.trim();
         var msg = host && host.querySelector('[data-msg="' + sid + '"]');
         if (!out) { if (msg) { msg.className = 'att-msg bad'; msg.textContent = 'Choose how the student is accounted for.'; } return; }
-        res.disabled = true;
-        call('attendanceResolve', { sessionId: sid, studentId: st, outcome: out, note: note }).then(function (r) {
-          if (msg) { msg.className = 'att-msg ok'; msg.textContent = r.reviewPending ? 'Saved. The Studio Desk reviews this explanation.' : 'Saved.'; }
-          if (document.activeElement) document.activeElement.blur(); paint();
-        }).catch(function (er) { res.disabled = false; if (msg) { msg.className = 'att-msg bad'; msg.textContent = errMsg(er); } });
+        if (out === 'other' && note.length < 3) { if (msg) { msg.className = 'att-msg bad'; msg.textContent = 'Write the reason for "Other".'; } return; }
+        if (document.activeElement) document.activeElement.blur();
+        mark(sid, st, out, note, host);
         return;
       }
       var ver = t.closest('[data-verify]');
@@ -449,7 +529,11 @@ var Attendance = (function () {
       var sub = t.closest('[data-submit]');
       if (sub) {
         sub.disabled = true; sub.innerHTML = icon('fa-spinner fa-spin') + ' Submitting…';
-        call('attendanceSubmit', { sessionId: sub.dataset.submit }).then(function () { refreshLocks(); paint(); }).catch(function (er) {
+        call('attendanceSubmit', { sessionId: sub.dataset.submit }).then(function () {
+          // Show it as submitted straight away; the live snapshot follows.
+          var ss = S.sessions[sub.dataset.submit]; if (ss && ss.status === 'open') S.sessions[sub.dataset.submit] = Object.assign({}, ss, { status: 'submitted', submission: { at: now(), byName: 'You' } });
+          refreshLocks(); paint();
+        }).catch(function (er) {
           sub.disabled = false; sub.innerHTML = icon('fa-paper-plane') + ' Submit register';
           var msg = host && host.querySelector('[data-msg="' + sub.dataset.submit + '"]'); if (msg) { msg.className = 'att-msg bad'; msg.textContent = errMsg(er); }
         });
@@ -481,7 +565,7 @@ var Attendance = (function () {
         var s = S.sessions[l.sessionId], st = s ? s.status : 'upcoming';
         return '<tr><td><b>' + esc(l.subjectName) + '</b><div class="att-muted">' + esc((l.keyStage || '').replace(/\s*\(.*/, '')) + '</div></td><td>' + hm(l.startAt) + ' to ' + hm(l.endAt) + '</td>' +
           '<td>' + (st === 'upcoming' ? '<span class="att-pill wait">Opens ' + hm(l.startAt - 20 * 60000) + '</span>' : st === 'open' ? (t < l.startAt ? '<span class="att-pill info">Ready</span>' : t < l.endAt ? '<span class="att-pill ok">Live</span>' : '<span class="att-pill bad">Submit now</span>') : st === 'auto_submitted' ? '<span class="att-pill bad">AUTO-SUBMITTED</span>' : st === 'cancelled' ? pill('cancelled') : '<span class="att-pill ok">Submitted</span>') + '</td>' +
-          '<td>' + (s ? counts(S.records[l.sessionId] || []).checked + ' / ' + (S.records[l.sessionId] || []).length : '—') + '</td>' +
+          '<td>' + (s ? counts(recsOf(l.sessionId)).checked + ' / ' + (S.records[l.sessionId] || []).length : '—') + '</td>' +
           '<td>' + (s ? '<button type="button" class="att-btn sm" data-open-reg="' + esc(l.sessionId) + '">' + icon('fa-clipboard-list') + ' Open register</button>' : '') + '</td></tr>';
       }).join('');
       var follow = hist.filter(function (s) { return s.status === 'auto_submitted' && (!s.tutorExplanation || (s.unresolvedCount || 0) > 0); });
@@ -499,12 +583,23 @@ var Attendance = (function () {
       if (o.onLocks) o.onLocks(S.locks);
       paintView();
     }, function () { });
-    var tick = setInterval(paint, 15000), poll = setInterval(refresh, 60000);
+    var tick = setInterval(paint, 15000), poll = setInterval(refresh, 60000), edge = null;
+    // Repaint the moment a lesson starts, its grace ends or it ends, so Submit comes alive on time.
+    function scheduleEdge() {
+      clearTimeout(edge);
+      var t = now(), next = Infinity;
+      Object.keys(S.sessions).forEach(function (k) {
+        var s = S.sessions[k]; if (s.status !== 'open') return;
+        [msOf(s.startAt), msOf(s.graceAt), msOf(s.endAt)].forEach(function (x) { if (x > t && x < next) next = x; });
+      });
+      if (next !== Infinity) edge = setTimeout(function () { paint(); }, Math.min(next - t + 250, 2147483000));
+    }
+    var paint0 = paint; paint = function () { paint0(); scheduleEdge(); if (S.modal) warm(); };
     refresh(); loadHistory();
     return {
       refresh: function () { refresh(); loadHistory(); },
       locks: function () { return S.locks.slice(); },
-      destroy: function () { clearInterval(tick); clearInterval(poll); document.removeEventListener('click', act); dock.remove(); Object.keys(S.unsubs).forEach(function (k) { S.unsubs[k](); }); if (lockUnsub) lockUnsub(); }
+      destroy: function () { clearInterval(tick); clearInterval(poll); clearTimeout(edge); document.removeEventListener('click', act); dock.remove(); Object.keys(S.unsubs).forEach(function (k) { S.unsubs[k](); }); if (lockUnsub) lockUnsub(); }
     };
   }
 
