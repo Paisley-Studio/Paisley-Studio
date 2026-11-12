@@ -158,6 +158,10 @@ exports.onTechHomeworkWorkWritten     = tech.onTechHomeworkWorkWritten;
 exports.migrateTechArchitecture       = tech.migrateTechArchitecture;
 exports.techShare                     = tech.techShare;
 
+// Advanced Paisley IDE: Java (and fallback) runs, forwarded to an isolated Judge0-compatible sandbox.
+const codeRunner = require("./code-runner");
+exports.runCode                       = codeRunner.runCode;
+
 const attendance = require("./attendance");
 exports.attendanceToday               = attendance.attendanceToday;
 exports.attendanceCheckIn             = attendance.attendanceCheckIn;

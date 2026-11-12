@@ -1,39 +1,42 @@
 /* =========================================================
    Paisley Studio — optional facial recognition for attendance
    -----------------------------------------------------------
-   One school-wide switch, held by the Studio Desk:
+   Runs entirely on Firebase and in the browser. No other server.
+
+   The browser (js/attendance/face.js, face-api.js) finds the face in a camera
+   frame or an uploaded photo and turns it into a face descriptor: 128 numbers.
+   The picture never leaves the device; only the numbers come here. This
+   function compares them with the person's enrolled descriptors (Euclidean
+   distance; 0 = identical, about 0.6 = a different person) and decides.
 
      attendanceSettings/recognition   status: disabled | enabled | suspended,
-                                      threshold, margin, retentionDays,
+                                      maxDistance, retentionDays,
                                       studentsApproved (+ dpia), history
-     privateConfig/faceRecognition    engine URL + API key (no client may read it)
-     faceProfiles/{uid}               one per enrolled-or-consenting person, linked by
-                                      account id (never by name): personType student|tutor,
-                                      consent, enrollment state. No image, no template.
-     faceAttempts/{auto id}           every recognition attempt: who, lesson, result,
-                                      similarity, threshold. No image. Pruned after retentionDays.
+     faceProfiles/{uid}               consent and enrollment state, linked by account id
+                                      (never by name). No descriptor. Admin may read.
+     faceTemplates/{uid}              the enrolled descriptors (AES-256-GCM when
+                                      FACE_TEMPLATE_KEY is set). Nobody may read it but
+                                      Cloud Functions; it never goes back to a browser.
+     faceAttempts/{auto id}           each attempt: who, lesson, result, distance. Pruned.
      attendanceAudit                  enable / disable / suspend, consent, enrol, remove.
 
-   Reference photos are uploaded by the Studio Desk and passed straight to
-   the self-hosted engine (functions/face-provider.js), which keeps the face
-   example under the subject "s_<uid>" or "t_<uid>". Firebase keeps no copy.
-   Check-in frames are sent to the engine, compared, and discarded.
-
-   Server-side gates on every call (the browser is never trusted):
-     - the switch is "enabled" (not disabled, not suspended), read fresh;
-     - students only once the Studio Desk has approved student processing
-       (DPIA reference recorded);
+   Server-side gates on every attempt (the browser is never trusted):
+     - the switch is "enabled", read fresh, and read again before a match counts;
+     - students only once the Studio Desk has approved student processing (DPIA);
      - the caller has a faceProfiles doc of the right type, consent granted,
-       status enrolled;
-     - exactly one face, best match is the caller's own subject, similarity
-       at or above the threshold, and clearly ahead of any other subject.
-   Anything else is a refusal, logged, and the normal check-in stays available.
+       status enrolled, and a template;
+     - 3 frames, each 128 finite numbers, close to each other but not identical
+       (a copied vector is refused), never seen before (replays are refused);
+     - every frame within maxDistance of the caller's OWN template. The caller is
+       the signed-in account, so one person can never register as another.
+   A descriptor computed in a browser cannot prove a live person was in front of
+   the camera. It confirms identity; the tutor's register stays the record.
 ========================================================= */
+const crypto = require("crypto");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const W = require("./work-shared");
-const P = require("./face-provider");
 const A = require("./attendance")._internals;
 
 if (!admin.apps.length) admin.initializeApp();
@@ -41,30 +44,64 @@ const db = () => admin.firestore();
 const FV = () => admin.firestore.FieldValue;
 const TS = () => admin.firestore.Timestamp;
 
-const DEFAULTS = { status: "disabled", threshold: 0.9, margin: 0.05, retentionDays: 90, studentsApproved: false, dpia: null };
-const MAX_IMAGE_CHARS = 1400000;           // about 1 MB of JPEG as base64
+const MODEL = "face-api.js recognition net (dlib ResNet, 128-d)";
+const DIM = 128;
+const DEFAULTS = { status: "disabled", maxDistance: 0.5, retentionDays: 90, studentsApproved: false, dpia: null };
+const FRAMES = 3;                         // a check-in sends 3 frames taken about half a second apart
+const SAME_FRAME = 0.0005;                // frames closer than this are copies, not a camera
+const FRAME_SPREAD = 0.45;                // frames further apart than this are not one face
+const ENROL_SPREAD = 0.6;                 // reference photos must all be the same person
+const MAX_REFS = 5;
 const MAX_ATTEMPTS_PER_10_MIN = 8;
-const PERSON = { student: { col: "students", prefix: "s_" }, tutor: { col: "tutorAccounts", prefix: "t_" } };
+const PERSON = { student: { col: "students" }, tutor: { col: "tutorAccounts" } };
 const CONSENT_METHODS = ["signed_form", "parent_portal", "email", "in_person", "self_portal"];
 
 const settingsRef = () => db().collection("attendanceSettings").doc("recognition");
+const profileRef = (uid) => db().collection("faceProfiles").doc(uid);
+const templateRef = (uid) => db().collection("faceTemplates").doc(uid);
 async function settings() {
   const s = await settingsRef().get();   // always fresh: switching off must take effect at once
   return Object.assign({}, DEFAULTS, s.exists ? s.data() : {});
 }
-const subjectOf = (type, uid) => PERSON[type].prefix + uid;
-const profileRef = (uid) => db().collection("faceProfiles").doc(uid);
 function clean(s, max) { return String(s == null ? "" : s).trim().slice(0, max || 500); }
 function requireAuth(request) { if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in again."); return request.auth.uid; }
 async function isAdmin(uid) { return (await db().collection("admins").doc(uid).get()).exists; }
 function audit(row) { return db().collection("attendanceAudit").add(Object.assign({ at: FV().serverTimestamp(), area: "recognition" }, row)); }
 
-function cleanImage(img) {
-  let b64 = String(img || "");
-  const m = /^data:image\/(jpeg|jpg|png|webp);base64,/i.exec(b64);
-  if (m) b64 = b64.slice(m[0].length);
-  if (!b64 || b64.length > MAX_IMAGE_CHARS || !/^[A-Za-z0-9+/=\s]+$/.test(b64)) throw new HttpsError("invalid-argument", "The picture could not be read. Try again.");
-  return b64.replace(/\s+/g, "");
+/* ---------------- descriptors ---------------- */
+function vec(v) {
+  if (!Array.isArray(v) || v.length !== DIM) return null;
+  const out = new Array(DIM);
+  for (let i = 0; i < DIM; i++) { const x = Number(v[i]); if (!Number.isFinite(x) || Math.abs(x) > 1) return null; out[i] = x; }
+  const norm = Math.sqrt(out.reduce((s, x) => s + x * x, 0));
+  return norm > 0.2 && norm < 3 ? out : null;     // face-api descriptors sit around norm 1; zeros or junk are refused
+}
+function dist(a, b) { let s = 0; for (let i = 0; i < DIM; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
+function vecs(list, min, max) {
+  if (!Array.isArray(list) || list.length < min || list.length > max) return null;
+  const out = list.map(vec);
+  return out.every(Boolean) ? out : null;
+}
+function fingerprint(v) { return crypto.createHash("sha256").update(v.map((x) => x.toFixed(4)).join(",")).digest("hex").slice(0, 24); }
+
+/* Templates at rest: AES-256-GCM when FACE_TEMPLATE_KEY (64 hex chars, functions/.env) is set;
+   otherwise kept in a collection no client can read (Firestore encrypts it at rest). */
+function key() { const k = process.env.FACE_TEMPLATE_KEY || ""; return /^[0-9a-f]{64}$/i.test(k) ? Buffer.from(k, "hex") : null; }
+function seal(list) {
+  const k = key(), plain = JSON.stringify(list);
+  if (!k) return { enc: false, data: plain };
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv("aes-256-gcm", k, iv);
+  const body = Buffer.concat([c.update(plain, "utf8"), c.final()]);
+  return { enc: true, iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), data: body.toString("base64") };
+}
+function open(doc) {
+  if (!doc) return null;
+  if (!doc.enc) return JSON.parse(doc.data);
+  const k = key();
+  if (!k) throw new Error("FACE_TEMPLATE_KEY is missing, so enrolled faces cannot be read.");
+  const d = crypto.createDecipheriv("aes-256-gcm", k, Buffer.from(doc.iv, "base64"));
+  d.setAuthTag(Buffer.from(doc.tag, "base64"));
+  return JSON.parse(Buffer.concat([d.update(Buffer.from(doc.data, "base64")), d.final()]).toString("utf8"));
 }
 
 /* What attendanceToday tells the browser. Nothing is offered unless every gate passes. */
@@ -79,94 +116,92 @@ async function availabilityFor(uid, role) {
   return { available: true };
 }
 
-/* ---------------- recognition (one person, one face) ---------------- */
+/* ---------------- recognition (one person, their own template) ---------------- */
 async function logAttempt(row) {
-  const cfg = row.cfg || {};
-  const days = Math.max(1, Math.min(3650, Number(cfg.retentionDays) || DEFAULTS.retentionDays));
+  const days = Math.max(1, Math.min(3650, Number(row.cfg.retentionDays) || DEFAULTS.retentionDays));
   await db().collection("faceAttempts").add({
     personId: row.uid, personType: row.type, personName: row.name || "", purpose: row.purpose, sessionId: row.sessionId || "", entryId: row.entryId || "",
-    result: row.result, similarity: row.similarity == null ? null : Math.round(row.similarity * 1000) / 1000, threshold: cfg.threshold || null,
-    provider: row.provider || "", at: FV().serverTimestamp(), expireAt: TS().fromMillis(Date.now() + days * 86400000)
+    result: row.result, distance: row.distance == null ? null : Math.round(row.distance * 1000) / 1000, maxDistance: row.cfg.maxDistance,
+    model: MODEL, at: FV().serverTimestamp(), expireAt: TS().fromMillis(Date.now() + days * 86400000)
   });
 }
 const FEEDBACK = {
-  no_face: "Please reposition your face: look straight at the camera in good light.",
-  multiple_faces: "Only you should be in front of the camera. Please try again on your own.",
-  no_match: "Face not recognised. Try again, or use the normal check-in.",
-  low_confidence: "Face not recognised clearly enough. Please reposition your face, or use the normal check-in.",
-  ambiguous: "Face not recognised clearly enough. Please use the normal check-in.",
-  wrong_person: "Face not recognised. Manual check-in required."
+  bad_frames: "The camera pictures could not be read. Please reposition your face and try again.",
+  inconsistent: "Please hold still, facing the camera, and try again.",
+  replay: "Face not recognised. Manual check-in required.",
+  no_match: "Face not recognised. Try again, or use the normal check-in."
 };
-async function recognise(uid, type, imageRaw, ctx) {
+async function recognise(uid, type, frames, ctx) {
   const cfg = await settings();
   if (cfg.status !== "enabled" || (type === "student" && !cfg.studentsApproved)) {
     throw new HttpsError("failed-precondition", "Facial recognition is not available. Please use the normal check-in.", { fallback: true, reason: "disabled" });
   }
   const pRef = profileRef(uid);
-  const p = await pRef.get();
+  const [p, t] = await Promise.all([pRef.get(), templateRef(uid).get()]);
   const prof = p.exists ? p.data() : null;
-  if (!prof || prof.personType !== type || prof.status !== "enrolled" || !prof.consent || prof.consent.status !== "granted") {
+  if (!prof || prof.personType !== type || prof.status !== "enrolled" || !prof.consent || prof.consent.status !== "granted" || !t.exists) {
     throw new HttpsError("failed-precondition", "You are not enrolled for facial recognition. Please use the normal check-in.", { fallback: true, reason: "not_enrolled" });
   }
-  // Rate limit per person (transaction so two tabs cannot both slip through).
-  await db().runTransaction(async (tx) => {
-    const s = await tx.get(pRef);
-    const now = Date.now();
-    const recent = ((s.data() || {}).attemptTimes || []).filter((t) => t > now - 10 * 60000);
-    if (recent.length >= MAX_ATTEMPTS_PER_10_MIN) throw new HttpsError("resource-exhausted", "Too many attempts. Please use the normal check-in.", { fallback: true, reason: "rate_limited" });
-    tx.update(pRef, { attemptTimes: recent.concat([now]).slice(-MAX_ATTEMPTS_PER_10_MIN) });
-  });
-  const b64 = cleanImage(imageRaw);
+  const live = vecs(frames, FRAMES, FRAMES);
   const base = { uid, type, name: prof.name, purpose: ctx.purpose, sessionId: ctx.sessionId, entryId: ctx.entryId, cfg };
-  let prov, out;
-  try {
-    prov = await P.provider();
-    out = await prov.recognize(b64);
-  } catch (e) {
-    await logAttempt(Object.assign({}, base, { result: "engine_unavailable", provider: prov ? prov.name : "" }));
-    if (e instanceof P.ProviderRejected) throw new HttpsError("invalid-argument", FEEDBACK.no_face, { fallback: false, reason: "no_face" });
-    throw new HttpsError("unavailable", "Recognition is unavailable right now. Please use the normal check-in.", { fallback: true, reason: "engine_unavailable" });
-  }
-  const faces = (out.faces || []).filter((f) => f.probability >= 0.8 || f.probability === 0);
-  let result, sim = null;
-  if (!faces.length) result = "no_face";
-  else if (faces.length > 1) result = "multiple_faces";
+  const prints = live ? live.map(fingerprint) : [];
+  // Rate limit + replay check in one transaction, so two tabs cannot both slip through.
+  const pre = await db().runTransaction(async (tx) => {
+    const s = await tx.get(pRef), d = s.data() || {}, now = Date.now();
+    const recent = (d.attemptTimes || []).filter((x) => x > now - 10 * 60000);
+    if (recent.length >= MAX_ATTEMPTS_PER_10_MIN) throw new HttpsError("resource-exhausted", "Too many attempts. Please use the normal check-in.", { fallback: true, reason: "rate_limited" });
+    const seen = d.seenPrints || [];
+    const replay = prints.some((x) => seen.indexOf(x) !== -1);
+    tx.update(pRef, { attemptTimes: recent.concat([now]).slice(-MAX_ATTEMPTS_PER_10_MIN), seenPrints: seen.concat(prints).slice(-60) });
+    return { replay };
+  });
+  let result, best = null;
+  if (!live) result = "bad_frames";
+  else if (pre.replay) result = "replay";
   else {
-    const m = faces[0].matches || [], top = m[0], second = m.filter((x) => top && x.subject !== top.subject)[0];
-    sim = top ? top.similarity : null;
-    if (!top) result = "no_match";
-    else if (top.subject !== subjectOf(type, uid)) result = top.similarity >= cfg.threshold ? "wrong_person" : "no_match";
-    else if (top.similarity < cfg.threshold) result = "low_confidence";
-    else if (second && top.similarity - second.similarity < cfg.margin) result = "ambiguous";
-    else result = "matched";
+    let spread = 0, tooClose = false;
+    for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
+      const d = dist(live[i], live[j]); spread = Math.max(spread, d); if (d < SAME_FRAME) tooClose = true;
+    }
+    if (tooClose) result = "replay";
+    else if (spread > FRAME_SPREAD) result = "inconsistent";
+    else {
+      let refs;
+      try { refs = open(t.data().template); } catch (e) { console.error("face template", e.message); throw new HttpsError("unavailable", "Recognition is unavailable right now. Please use the normal check-in.", { fallback: true, reason: "error" }); }
+      // Each frame must be close to the person's own enrolled faces; the worst frame decides.
+      best = Math.max.apply(null, live.map((f) => Math.min.apply(null, refs.map((r) => dist(f, r)))));
+      result = best <= cfg.maxDistance ? "matched" : "no_match";
+    }
   }
   // Re-read the switch: a disable during the call stops the attempt from counting.
-  const again = await settings();
-  if (result === "matched" && (again.status !== "enabled" || (type === "student" && !again.studentsApproved))) result = "disabled_during_attempt";
-  await logAttempt(Object.assign({}, base, { result, similarity: result === "wrong_person" ? null : sim, provider: prov.name }));
+  if (result === "matched") {
+    const again = await settings();
+    if (again.status !== "enabled" || (type === "student" && !again.studentsApproved)) result = "disabled_during_attempt";
+  }
+  await logAttempt(Object.assign({}, base, { result, distance: best }));
   if (result === "matched") {
     await pRef.update({ consecutiveFailures: 0, lastMatchedAt: FV().serverTimestamp(), attention: null });
-    return { similarity: sim };
+    return { distance: best };
   }
   const fails = (prof.consecutiveFailures || 0) + 1;
   await pRef.update({ consecutiveFailures: FV().increment(1), lastFailedAt: FV().serverTimestamp(),
-    attention: fails >= 3 ? { reason: "Repeated recognition failures (" + fails + " in a row). Check the reference photo.", at: TS().now() } : (prof.attention || null) });
+    attention: fails >= 3 ? { reason: "Repeated recognition failures (" + fails + " in a row). Check the reference photos.", at: TS().now() } : (prof.attention || null) });
   if (result === "disabled_during_attempt") throw new HttpsError("failed-precondition", "Facial recognition was switched off. Please use the normal check-in.", { fallback: true, reason: "disabled" });
-  throw new HttpsError("permission-denied", FEEDBACK[result] || FEEDBACK.no_match, { fallback: result !== "no_face", reason: result });
+  throw new HttpsError("permission-denied", FEEDBACK[result] || FEEDBACK.no_match, { fallback: result === "replay", reason: result });
 }
 
 async function studentFaceCheckIn(uid, data) {
   const entryId = String(data.entryId || "");
-  const r = await recognise(uid, "student", data.image, { purpose: "student_check_in", entryId });
+  const r = await recognise(uid, "student", data.descriptors, { purpose: "student_check_in", entryId });
   // Same engine as the I'm Here button: server time, one record, one strike at most.
-  return Object.assign(await A.checkIn(uid, entryId, Date.now(), { method: "face", similarity: r.similarity }), { recognised: true });
+  return Object.assign(await A.checkIn(uid, entryId, Date.now(), { method: "face", distance: r.distance }), { recognised: true });
 }
 async function tutorFaceVerify(uid, data) {
   const sid = String(data.sessionId || "");
   const s = await db().collection("attendanceSessions").doc(sid).get();
   if (!s.exists || (s.data().tutorIds || []).indexOf(uid) === -1) throw new HttpsError("permission-denied", "This is not your lesson.");
-  const r = await recognise(uid, "tutor", data.image, { purpose: "tutor_verification", sessionId: sid });
-  return Object.assign(await A.recordTutorPresence(uid, sid, Date.now(), { method: "face", similarity: r.similarity }), { recognised: true });
+  const r = await recognise(uid, "tutor", data.descriptors, { purpose: "tutor_verification", sessionId: sid });
+  return Object.assign(await A.recordTutorPresence(uid, sid, Date.now(), { method: "face", distance: r.distance }), { recognised: true });
 }
 
 /* ---------------- consent and enrollment ---------------- */
@@ -176,17 +211,11 @@ async function personOf(type, uid) {
   if (!s.exists) throw new HttpsError("not-found", "That account does not exist.");
   const d = s.data();
   if (type === "student" && d.studentType && d.studentType !== "online") throw new HttpsError("failed-precondition", "Only online-school students take timetabled registers, so only they can be enrolled.");
-  return { id: s.id, name: d.name || (type === "tutor" ? "Tutor" : "Student"), email: d.email || "" };
+  return { id: s.id, name: d.name || (type === "tutor" ? "Tutor" : "Student") };
 }
-async function deleteEnrollment(type, uid, why, actor) {
-  let engine = "not_needed";
-  const p = await profileRef(uid).get();
-  if (p.exists && (p.data().status === "enrolled" || p.data().enrolledAt)) {
-    try { const prov = await P.provider(); await prov.remove(subjectOf(type, uid)); engine = "deleted"; }
-    catch (e) { engine = "pending"; }   // retried by the daily job until the engine confirms
-  }
-  await profileRef(uid).set({ status: engine === "pending" ? "deletion_pending" : "not_enrolled", enrolledAt: null, removedAt: FV().serverTimestamp(), removal: { reason: why, by: actor.uid, byName: actor.name, engine }, updatedAt: FV().serverTimestamp() }, { merge: true });
-  return engine;
+async function deleteEnrollment(uid, why, actor) {
+  await templateRef(uid).delete();
+  await profileRef(uid).set({ status: "not_enrolled", enrolledAt: null, refCount: 0, removedAt: FV().serverTimestamp(), removal: { reason: why, by: actor.uid, byName: actor.name }, updatedAt: FV().serverTimestamp() }, { merge: true });
 }
 async function setConsent(type, uid, decision, meta, actor) {
   const person = await personOf(type, uid);
@@ -200,13 +229,12 @@ async function setConsent(type, uid, decision, meta, actor) {
   }
   const ref = profileRef(uid);
   const existing = await ref.get();
-  await ref.set(Object.assign({ personId: uid, personType: type, name: person.name, subject: subjectOf(type, uid), consent: row, consentHistory: FV().arrayUnion(row), updatedAt: FV().serverTimestamp() },
-    existing.exists ? {} : { createdAt: FV().serverTimestamp() }), { merge: true });
-  let engine = null;
-  if (row.status === "withdrawn") engine = await deleteEnrollment(type, uid, "Consent withdrawn", actor);
-  else { const cur = (await ref.get()).data(); if (!cur.status || cur.status === "not_enrolled" || cur.status === "withdrawn") await ref.update({ status: "awaiting_photo" }); }
-  await audit({ action: row.status === "granted" ? "face_consent_granted" : "face_consent_withdrawn", personId: uid, personType: type, actorId: actor.uid, actorRole: actor.role, actorName: actor.name, after: { method: row.method, relationship: row.relationship, engine } });
-  return { ok: true, consent: row.status, engine };
+  await ref.set(Object.assign({ personId: uid, personType: type, name: person.name, consent: row, consentHistory: FV().arrayUnion(row), updatedAt: FV().serverTimestamp() },
+    existing.exists ? {} : { createdAt: FV().serverTimestamp(), status: "not_enrolled" }), { merge: true });
+  if (row.status === "withdrawn") await deleteEnrollment(uid, "Consent withdrawn", actor);
+  else if (!existing.exists || ["not_enrolled", "withdrawn", undefined].indexOf(existing.data().status) !== -1) await ref.update({ status: "awaiting_photo" });
+  await audit({ action: row.status === "granted" ? "face_consent_granted" : "face_consent_withdrawn", personId: uid, personType: type, actorId: actor.uid, actorRole: actor.role, actorName: actor.name, after: { method: row.method, relationship: row.relationship } });
+  return { ok: true, consent: row.status };
 }
 
 /* ---------------- Studio Desk ---------------- */
@@ -222,24 +250,17 @@ async function adminAction(uid, data) {
     const st = String(data.status || "");
     if (["enabled", "disabled", "suspended"].indexOf(st) === -1) throw new HttpsError("invalid-argument", "Unknown status.");
     needReason();
-    if (st === "enabled") {
-      const prov = await P.provider(true);
-      if (!prov.configured()) throw new HttpsError("failed-precondition", "Connect the recognition engine first (engine URL and API key).");
-      let h; try { h = await prov.health(); } catch (e) { h = { ok: false, detail: e.message }; }
-      if (!h.ok) throw new HttpsError("failed-precondition", "The recognition engine did not answer: " + h.detail);
-    }
-    await settingsRef().set({ status: st, updatedAt: FV().serverTimestamp(), updatedBy: uid, history: FV().arrayUnion({ status: st, reason, by: uid, at: TS().now() }) }, { merge: true });
+    await settingsRef().set({ status: st, model: MODEL, updatedAt: FV().serverTimestamp(), updatedBy: uid, history: FV().arrayUnion({ status: st, reason, by: uid, at: TS().now() }) }, { merge: true });
     await audit({ action: "recognition_" + st, actorId: uid, actorRole: "admin", actorName: actor.name, reason, before: { status: cfg.status }, after: { status: st } });
     return { ok: true, status: st };
   }
   if (action === "config") {
     needReason();
-    const threshold = Number(data.threshold), margin = Number(data.margin), days = Math.round(Number(data.retentionDays));
-    if (!(threshold >= 0.8 && threshold <= 0.995)) throw new HttpsError("invalid-argument", "The confidence threshold must be between 0.80 and 0.995.");
-    if (!(margin >= 0 && margin <= 0.3)) throw new HttpsError("invalid-argument", "The margin must be between 0 and 0.30.");
+    const maxDistance = Number(data.maxDistance), days = Math.round(Number(data.retentionDays));
+    if (!(maxDistance >= 0.35 && maxDistance <= 0.6)) throw new HttpsError("invalid-argument", "The match distance must be between 0.35 (strict) and 0.60 (lenient).");
     if (!(days >= 7 && days <= 730)) throw new HttpsError("invalid-argument", "Keep attempt logs between 7 and 730 days.");
-    await settingsRef().set({ threshold, margin, retentionDays: days, updatedAt: FV().serverTimestamp(), updatedBy: uid, history: FV().arrayUnion({ config: { threshold, margin, retentionDays: days }, reason, by: uid, at: TS().now() }) }, { merge: true });
-    await audit({ action: "recognition_config", actorId: uid, actorRole: "admin", actorName: actor.name, reason, before: { threshold: cfg.threshold, margin: cfg.margin, retentionDays: cfg.retentionDays }, after: { threshold, margin, retentionDays: days } });
+    await settingsRef().set({ maxDistance, retentionDays: days, updatedAt: FV().serverTimestamp(), updatedBy: uid, history: FV().arrayUnion({ config: { maxDistance, retentionDays: days }, reason, by: uid, at: TS().now() }) }, { merge: true });
+    await audit({ action: "recognition_config", actorId: uid, actorRole: "admin", actorName: actor.name, reason, before: { maxDistance: cfg.maxDistance, retentionDays: cfg.retentionDays }, after: { maxDistance, retentionDays: days } });
     return { ok: true };
   }
   if (action === "students") {
@@ -253,19 +274,6 @@ async function adminAction(uid, data) {
     await audit({ action: approve ? "recognition_students_approved" : "recognition_students_withdrawn", actorId: uid, actorRole: "admin", actorName: actor.name, reason, after: { dpia } });
     return { ok: true };
   }
-  if (action === "engine") {
-    needReason();
-    const url = clean(data.url, 300).replace(/\/+$/, "");
-    if (!/^https:\/\/[^\s/]+/i.test(url)) throw new HttpsError("invalid-argument", "Give the engine's HTTPS address, e.g. https://face.example.com");
-    const patch = { provider: "compreface", url, updatedAt: FV().serverTimestamp(), updatedBy: uid };
-    if (clean(data.apiKey, 200)) patch.apiKey = clean(data.apiKey, 200);
-    await db().collection("privateConfig").doc("faceRecognition").set(patch, { merge: true });
-    P.resetCache();
-    await settingsRef().set({ engine: { provider: "compreface", host: url.replace(/^https:\/\//i, "").split("/")[0], keySet: !!(patch.apiKey || (await P.engineConfig(true)).apiKey), updatedAt: TS().now() } }, { merge: true });
-    await audit({ action: "recognition_engine_changed", actorId: uid, actorRole: "admin", actorName: actor.name, reason, after: { host: url.replace(/^https:\/\//i, "").split("/")[0], keyChanged: !!patch.apiKey } });
-    return engineTest();
-  }
-  if (action === "test") return engineTest();
   if (action === "consent") {
     needReason();
     return setConsent(String(data.personType), String(data.personId), data.decision === "granted" ? "granted" : "withdrawn",
@@ -277,35 +285,27 @@ async function adminAction(uid, data) {
     if (cfg.status === "disabled") throw new HttpsError("failed-precondition", "Enable or suspend facial recognition before enrolling anyone. While it is disabled no biometric data is processed.");
     if (type === "student" && !cfg.studentsApproved) throw new HttpsError("failed-precondition", "Student enrollment opens once the Data Protection Impact Assessment is recorded and student processing is approved.");
     const p = await profileRef(pid).get();
-    if (!p.exists || !p.data().consent || p.data().consent.status !== "granted") throw new HttpsError("failed-precondition", "Record consent before uploading a reference photo.");
-    const b64 = cleanImage(data.image);
-    const prov = await P.provider();
-    try { await prov.enroll(subjectOf(type, pid), b64); }
-    catch (e) {
-      if (e instanceof P.ProviderRejected) throw new HttpsError("invalid-argument", e.message);
-      throw new HttpsError("unavailable", "The recognition engine is unavailable. Try again later.");
+    if (!p.exists || !p.data().consent || p.data().consent.status !== "granted") throw new HttpsError("failed-precondition", "Record consent before adding reference photos.");
+    const refs = vecs(data.descriptors, 1, MAX_REFS);
+    if (!refs) throw new HttpsError("invalid-argument", "The reference photos could not be read. Use 1 to " + MAX_REFS + " clear photos with one face each.");
+    for (let i = 0; i < refs.length; i++) for (let j = i + 1; j < refs.length; j++) {
+      if (dist(refs[i], refs[j]) > ENROL_SPREAD) throw new HttpsError("invalid-argument", "These photos do not look like the same person. Use photos of " + person.name + " only.");
     }
     const replacing = p.data().status === "enrolled";
-    await profileRef(pid).set({ personId: pid, personType: type, name: person.name, subject: subjectOf(type, pid), status: "enrolled", enrolledAt: FV().serverTimestamp(), enrolledBy: uid,
-      photoVersion: FV().increment(1), consecutiveFailures: 0, attention: null, provider: prov.name, updatedAt: FV().serverTimestamp() }, { merge: true });
-    await audit({ action: replacing ? "face_photo_replaced" : "face_enrolled", personId: pid, personType: type, actorId: uid, actorRole: "admin", actorName: actor.name });
-    return { ok: true, replaced: replacing };
+    await templateRef(pid).set({ personId: pid, personType: type, model: MODEL, dim: DIM, template: seal(refs), count: refs.length, updatedAt: FV().serverTimestamp() });
+    await profileRef(pid).set({ personId: pid, personType: type, name: person.name, status: "enrolled", enrolledAt: FV().serverTimestamp(), enrolledBy: uid, refCount: refs.length,
+      model: MODEL, photoVersion: FV().increment(1), consecutiveFailures: 0, attention: null, seenPrints: [], updatedAt: FV().serverTimestamp() }, { merge: true });
+    await audit({ action: replacing ? "face_photo_replaced" : "face_enrolled", personId: pid, personType: type, actorId: uid, actorRole: "admin", actorName: actor.name, after: { photos: refs.length } });
+    return { ok: true, replaced: replacing, photos: refs.length };
   }
   if (action === "remove") {
     needReason();
     const type = String(data.personType), pid = String(data.personId);
-    await personOf(type, pid).catch(() => null);
-    const engine = await deleteEnrollment(type, pid, reason, actor);
-    await audit({ action: "face_enrollment_removed", personId: pid, personType: type, actorId: uid, actorRole: "admin", actorName: actor.name, reason, after: { engine } });
-    return { ok: true, engine };
+    await deleteEnrollment(pid, reason, actor);
+    await audit({ action: "face_enrollment_removed", personId: pid, personType: type, actorId: uid, actorRole: "admin", actorName: actor.name, reason });
+    return { ok: true };
   }
   throw new HttpsError("invalid-argument", "Unknown action.");
-}
-async function engineTest() {
-  const prov = await P.provider(true);
-  if (!prov.configured()) return { ok: false, detail: "Not configured" };
-  try { const h = await prov.health(); await settingsRef().set({ engineCheck: { ok: h.ok, detail: h.detail, at: TS().now() } }, { merge: true }); return h; }
-  catch (e) { await settingsRef().set({ engineCheck: { ok: false, detail: e.message, at: TS().now() } }, { merge: true }); return { ok: false, detail: e.message }; }
 }
 
 /* Parents (for their child), tutors (for themselves) and students (withdraw only) manage consent.
@@ -330,7 +330,6 @@ async function consentCall(uid, data) {
   const prof = p.exists ? p.data() : null;
   const view = () => ({ enabled: cfg.status !== "disabled" && (type === "tutor" || cfg.studentsApproved), consent: prof && prof.consent ? prof.consent.status : "none", enrolled: !!(prof && prof.status === "enrolled") });
   if (action === "status") {
-    // Students and tutors see nothing while the feature is off; parents still see an existing consent so they can withdraw it.
     if (!view().enabled && !(actor.role === "parent" && prof && prof.consent && prof.consent.status === "granted")) return { enabled: false };
     return view();
   }
@@ -349,15 +348,16 @@ async function retention(now) {
   const old = await db().collection("faceAttempts").where("expireAt", "<=", TS().fromMillis(now)).limit(400).get();
   const b = db().batch(); old.forEach((d) => b.delete(d.ref)); if (old.size) await b.commit();
   out.attemptsDeleted = old.size;
-  const profs = await db().collection("faceProfiles").where("status", "in", ["enrolled", "deletion_pending"]).get();
+  const profs = await db().collection("faceProfiles").where("status", "==", "enrolled").get();
+  const sys = { uid: "system", name: "System", role: "system" };
   for (const d of profs.docs) {
-    const p = d.data(), type = p.personType;
-    if (!PERSON[type]) continue;
-    const acct = await db().collection(PERSON[type].col).doc(d.id).get();
-    const sys = { uid: "system", name: "System", role: "system" };
-    if (p.status === "deletion_pending" || !acct.exists) {
-      const engine = await deleteEnrollment(type, d.id, acct.exists ? "Retrying deletion" : "Account deleted", sys);
-      if (engine !== "pending") { out.enrollmentsDeleted++; await audit({ action: "face_enrollment_removed", personId: d.id, personType: type, actorId: "system", actorRole: "system", actorName: "System", reason: acct.exists ? "Deletion retried" : "Account deleted" }); }
+    const p = d.data();
+    if (!PERSON[p.personType]) continue;
+    const acct = await db().collection(PERSON[p.personType].col).doc(d.id).get();
+    if (!acct.exists) {
+      await deleteEnrollment(d.id, "Account deleted", sys);
+      await audit({ action: "face_enrollment_removed", personId: d.id, personType: p.personType, actorId: "system", actorRole: "system", actorName: "System", reason: "Account deleted" });
+      out.enrollmentsDeleted++;
       continue;
     }
     const st = String(acct.data().status || "Active");
@@ -366,11 +366,17 @@ async function retention(now) {
       out.flagged++;
     }
   }
+  // Templates whose profile is gone or no longer enrolled are deleted.
+  const tpl = await db().collection("faceTemplates").get();
+  for (const d of tpl.docs) {
+    const p = await profileRef(d.id).get();
+    if (!p.exists || p.data().status !== "enrolled") { await d.ref.delete(); out.enrollmentsDeleted++; }
+  }
   return out;
 }
 
 /* ---------------- exports ---------------- */
-const CALL = { cors: true, region: W.LOCATION, timeoutSeconds: 30, memory: "512MiB" };
+const CALL = { cors: true, region: W.LOCATION, timeoutSeconds: 30 };
 const wrap = (fn) => async (request) => {
   try { return await fn(request); } catch (e) {
     if (e instanceof HttpsError) throw e;
@@ -386,4 +392,4 @@ exports.faceRetention = onSchedule({ schedule: "every day 02:30", region: W.LOCA
   async () => { const r = await retention(Date.now()); console.log("faceRetention", JSON.stringify(r)); });
 
 exports.availabilityFor = availabilityFor;
-exports._internals = { settings, availabilityFor, recognise, studentFaceCheckIn, tutorFaceVerify, adminAction, consentCall, retention, subjectOf, DEFAULTS };
+exports._internals = { settings, availabilityFor, recognise, studentFaceCheckIn, tutorFaceVerify, adminAction, consentCall, retention, dist, vec, seal, open, DEFAULTS, MODEL };

@@ -80,6 +80,10 @@ To deploy this update: `firebase deploy --only functions,firestore:indexes` (new
 
 To deploy: `firebase deploy --only functions` (new: `onTechLessonWorkWritten`, `onTechGroupWritten`, `onTechGroupTaskWritten`; changed: `onTechLessonWritten`, `submitTechQuiz`, `onTechEnrolmentUpdated`, the deadline reminders), then `firebase deploy --only firestore:rules,storage,hosting`. No new indexes.
 
+## Advanced Paisley IDE (Nov 2026)
+
+A second coding environment beside Code Lab, at `/tech/ide`. It covers Python, Java, C, C++, PHP, JavaScript, HTML and CSS in Monaco, with real runs. Python, C, C++ and PHP compile and run as WebAssembly in a sandboxed opaque-origin iframe; Java runs through the `runCode` Cloud Function, which forwards to an isolated Judge0-compatible service that still has to be configured. Projects are `techPractice` docs with `type: 'advanced'`, so the practice rules, the coach's practice view and Practice in the builder portal cover them. Code Lab is unchanged, apart from an "Advanced IDE" button that Practice turns on (`CodeLab.mount(..., { advanced })`). Full details, security, configuration and limits: `ADVANCED_IDE.md`.
+
 ## Deployment order
 
 1. `cd functions && npm install`, then `firebase deploy --only functions,firestore:indexes`.

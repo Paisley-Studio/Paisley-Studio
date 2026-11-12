@@ -27,12 +27,19 @@
     { "source": "/tech/coach/:slug",        "destination": "/tech/coach/index.html" },
     { "source": "/tech/parent",             "destination": "/tech/parent/index.html" },
     { "source": "/tech/parent/dashboard",   "destination": "/tech/parent/dashboard.html" },
+    { "source": "/tech/ide",                "destination": "/tech/ide.html" },
     { "source": "/tech/p/:id",             "destination": "/tech/project.html" },
 
     { "source": "/student",                 "destination": "/student/index.html" },
     { "source": "/student/dashboard",       "destination": "/student/dashboard.html" },
     { "source": "/student/exam",            "destination": "/student/exam.html" },
     { "source": "/student/submit-homework", "destination": "/student/submit-homework.html" }
+  ],
+  "headers": [
+    { "source": "/tech/ide(.html)?", "headers": [
+      { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+      { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
+    ] }
   ],
   "redirects": [
     { "source": "/tutor",  "destination": "/tutor/login.html", "permanent": true },

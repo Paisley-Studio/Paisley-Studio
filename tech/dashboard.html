@@ -438,7 +438,8 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../js/tech/writing-studio.js?v=tech13"></script>
-<script src="../js/tech/code-lab.js?v=tech18"></script>
+<script src="../js/tech/code-lab.js?v=tech19"></script>
+<script src="../js/tech/advanced-ide/ide-entry.js?v=1"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=4"></script>
 <script src="../js/tech/tech-helpers.js?v=tech20"></script>
@@ -462,6 +463,9 @@ const DISCIPLINES=T.DISCIPLINES;
 const CREATION_ICON={CODE:'fa-code',DESIGN:'fa-palette',WRITING:'fa-pen-nib',RESEARCH:'fa-microscope',MEDIA:'fa-film',MUSIC:'fa-music',AI:'fa-robot',BUILD:'fa-rocket',Other:'fa-star'};
 const CREATE_TYPES=[['CODE','Code','Websites, games and apps in Paisley VS Code.'],['WRITING','Blog / writing','Articles and stories in the Writing Studio.'],['RESEARCH','Research','Investigate a question and write it up.'],['DESIGN','Design / AI images','Images, posters and visual work.'],['MEDIA','Media','Video, animation and podcasts.'],['MUSIC','Music','Songs, beats and sound.'],['BUILD','Invention','Anything that mixes disciplines.']];
 const PRACTICE_TYPES=[['code','Coding experiment'],['writing','Writing practice'],['research','Research activity'],['ai','AI exploration']];
+/* Advanced Paisley IDE projects are techPractice docs too (type 'advanced'); they open in /tech/ide. */
+const IDE_LANG={py:'Python',java:'Java',c:'C',cpp:'C++',php:'PHP',js:'JavaScript',html:'HTML',css:'CSS'};
+const practiceLabel=p=>p.type==='advanced'?'Advanced IDE · '+(IDE_LANG[(p.ide||{}).lang]||'Code'):(PRACTICE_TYPES.find(t=>t[0]===p.type)||[0,'Practice'])[1];
 const KI={path:'route',topic:'layer-group',mission:'bullseye',challenge:'trophy',tool:'wand-magic-sparkles',resource:'book-open',template:'clone',aiTool:'robot'};
 
 /* ---------- small helpers ---------- */
@@ -835,6 +839,7 @@ home(){
     '<section class="panel quick"><div class="panel-head"><h2>Practise or create</h2></div><div class="quick-grid">'+
       '<button class="quick-card" type="button" data-go="classes"><i class="fas fa-chalkboard"></i><b>Classes</b><span>Videos, notes, quizzes and practice tests.</span></button>'+
       '<button class="quick-card" type="button" data-go="practice"><i class="fas fa-flask"></i><b>Practice</b><span>Experiments and small challenges, never graded.</span></button>'+
+      '<button class="quick-card" type="button" data-advanced-ide><i class="fas fa-terminal"></i><b>Advanced Paisley IDE</b><span>Python, Java, C, C++, PHP and the web, with real runs.</span></button>'+
       '<button class="quick-card" type="button" data-newbuild><i class="fas fa-lightbulb"></i><b>Create something</b><span>A self-led project of your own.</span></button>'+
       '<button class="quick-card" type="button" data-go="toolbox"><i class="fas fa-wand-magic-sparkles"></i><b>AI Toolbox</b><span>Tools your coaches approved.</span></button>'+
       '<button class="quick-card" type="button" data-go="showcase"><i class="fas fa-globe"></i><b>My showcase</b><span>Share published work.</span></button>'+
@@ -873,10 +878,11 @@ practice(){
   const fromMissions=[];
   S.builds.filter(b=>b.missionId&&st(b)!=='mastered').forEach(b=>{ const m=item(b.missionId); (m&&m.practice||[]).forEach((a,i)=>fromMissions.push({a,i,m,b})); });
   return '<div class="stack">'+
+    (window.PaisleyIDEEntry?PaisleyIDEEntry.card():'')+
     '<section class="panel"><div class="panel-head"><h2>Start practising</h2></div><p class="muted" style="margin:-.6rem 0 1rem">Experiment freely. Save what you like, retry anything, and ask your coach for help.</p>'+
       '<div class="quick-grid">'+PRACTICE_TYPES.map(t=>'<button class="quick-card" type="button" data-newpractice="'+t[0]+'"><i class="fas '+({code:'fa-code',writing:'fa-pen-nib',research:'fa-microscope',ai:'fa-robot'})[t[0]]+'"></i><b>'+t[1]+'</b></button>').join('')+'</div></section>'+
     (fromMissions.length?panelList('Practice from your missions',fromMissions.map(x=>'<button class="row" type="button" data-mpractice="'+esc(x.b.id)+'|'+x.i+'"><span class="ico"><i class="fas fa-flask"></i></span><span class="t"><b>'+esc(x.a.title||'Practice')+'</b><span>'+esc(x.m.title)+' · '+esc((x.a.instructions||'').slice(0,90))+'</span></span><span class="tags">'+((x.b.practiceIds||[]).some(p=>String(p).indexOf('m'+x.i+'_')===0)?'<span class="pill ok">Practised</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
-    (S.practice.length?panelList('My practice',S.practice.map(p=>'<button class="row" type="button" data-practice="'+esc(p.id)+'"><span class="ico"><i class="fas fa-flask-vial"></i></span><span class="t"><b>'+esc(p.title||'Practice')+'</b><span>'+esc((PRACTICE_TYPES.find(t=>t[0]===p.type)||[0,'Practice'])[1])+(p.missionTitle?' · '+esc(p.missionTitle):'')+' · '+esc(dateShort(p.updatedAt))+'</span></span><span class="tags">'+(p.done?'<span class="pill ok">Done</span>':'')+(p.helpRequested?'<span class="pill warn">Help asked</span>':'')+(p.coachNote?'<span class="pill gold">Coach note</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
+    (S.practice.length?panelList('My practice',S.practice.map(p=>'<button class="row" type="button" '+(p.type==='advanced'?'data-advanced-ide data-project="'+esc(p.id)+'"':'data-practice="'+esc(p.id)+'"')+'><span class="ico"><i class="fas '+(p.type==='advanced'?'fa-terminal':'fa-flask-vial')+'"></i></span><span class="t"><b>'+esc(p.title||'Practice')+'</b><span>'+esc(practiceLabel(p))+(p.missionTitle?' · '+esc(p.missionTitle):'')+' · '+esc(dateShort(p.updatedAt))+'</span></span><span class="tags">'+(p.done?'<span class="pill ok">Done</span>':'')+(p.helpRequested?'<span class="pill warn">Help asked</span>':'')+(p.coachNote?'<span class="pill gold">Coach note</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
   '</div>';
 },
 
@@ -1140,7 +1146,7 @@ function openPractice(id){
         '<button class="btn light" type="button" id="prRetry">Start again</button>'+
         '<button class="btn light" type="button" id="prDel">Delete</button></div><div class="msg" id="prMsg" role="status"></div></section>';
     const tool=host.querySelector('#prTool'), fake={id:p.id,studentId:p.studentId,codeFiles:p.codeFiles,codeActive:p.codeActive,writingHtml:p.writingHtml,files:[]};
-    if(p.type==='code'&&window.CodeLab) mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save});
+    if(p.type==='code'&&window.CodeLab) mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,advanced:window.PaisleyIDEEntry?b=>PaisleyIDEEntry.launch({from:p.id,origin:b}):null});
     else if(p.type==='writing'&&window.WritingStudio) mod=WritingStudio.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,files:[]});
     const q=s=>host.querySelector(s);
     if(q('#prSave')) q('#prSave').onclick=()=>save({text:q('#prText').value.slice(0,20000)}).catch(e=>{ q('#prMsg').textContent=T.errMsg(e); });
@@ -1152,6 +1158,7 @@ function openPractice(id){
   unsub=ref.onSnapshot(s=>{
     if(dead) return;
     if(!s.exists){ host.innerHTML=emptyBox('Not found','This practice was deleted.'); return; }
+    if(s.data().type==='advanced'){ dead=true; if(unsub) unsub(); PaisleyIDEEntry.launch({project:s.id}); return; }
     const first=!p; const prevNote=p&&p.coachNote; p=Object.assign({id:s.id},s.data());
     if(first||prevNote!==p.coachNote) paint();
   },e=>{ host.innerHTML=emptyBox('Could not open',esc(T.errMsg(e))); });

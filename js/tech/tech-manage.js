@@ -328,6 +328,7 @@
   }
 
   /* ---------------- practice (read-only + coach note) ---------------- */
+  var IDE_LANG = { py: 'Python', java: 'Java', c: 'C', cpp: 'C++', php: 'PHP', js: 'JavaScript', html: 'HTML', css: 'CSS' };
   function mountPractice(host, o) {
     T.injectStyle();
     var students = o.students || [], unsubs = [], lists = {}, open = null, dead = false;
@@ -340,11 +341,14 @@
       if (!all.length) { host.innerHTML = '<div class="tk-empty">No practice work yet. Practice is never graded; it shows here so you can see what builders are trying.</div>'; return; }
       host.innerHTML = '<div class="tk-list">' + all.map(function (p) {
         var isOpen = open === p.id;
-        return '<div class="tk-box"><div style="display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center"><div><b>' + esc(p.title || 'Practice') + '</b> <span class="tk-pill">' + esc(p.type || '') + '</span>' +
+        var adv = p.type === 'advanced';
+        return '<div class="tk-box"><div style="display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center"><div><b>' + esc(p.title || 'Practice') + '</b> <span class="tk-pill">' + esc(adv ? 'Advanced IDE · ' + (IDE_LANG[(p.ide || {}).lang] || 'code') : (p.type || '')) + '</span>' +
           (p.helpRequested ? ' <span class="tk-pill warn">Asked for help</span>' : '') + (p.done ? ' <span class="tk-pill ok">Done</span>' : '') +
           '<div class="tk-sub" style="margin:0">' + esc(who(p.studentId) || p.studentName || '') + (p.missionTitle ? ' · for ' + esc(p.missionTitle) : '') + ' · ' + esc(T.ago(p.updatedAt)) + '</div></div>' +
           '<button type="button" class="tk-btn sm" data-popen="' + esc(p.id) + '">' + (isOpen ? 'Close' : 'Open') + '</button></div>' +
           (isOpen ? '<div style="margin-top:.6rem">' + (p.instructions ? '<div class="tk-fb">' + esc(p.instructions) + '</div>' : '') +
+            /* Read only for staff; they can run it there, sandboxed away from their own sign-in. */
+            (adv ? '<p style="margin:.2rem 0 .6rem"><a class="tk-btn sm" href="/tech/ide?p=' + encodeURIComponent(p.id) + '" target="_blank" rel="noopener"><i class="fas fa-terminal"></i> Open in the Advanced IDE</a></p>' : '') +
             (p.writingHtml ? '<div class="tk-article" style="margin-top:.5rem">' + T.cleanHtml(p.writingHtml) + '</div>' : '') +
             ((p.codeFiles || []).length ? p.codeFiles.map(function (f) { return '<details><summary>' + esc(f.name) + '</summary><pre class="tk-code">' + esc(f.content) + '</pre></details>'; }).join('') : '') +
             (p.text ? '<div class="tk-prose" style="margin-top:.5rem">' + esc(p.text) + '</div>' : '') +

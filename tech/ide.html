@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0B0F0E" />
+<title>Advanced Paisley IDE · Paisley Tech Studio</title>
+<meta name="robots" content="noindex" />
+<!-- Served with Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: credentialless
+     (firebase.json / vercel.json), so a running program can pause and wait for typed input. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
+<link rel="stylesheet" href="../js/tech/advanced-ide/ide.css?v=1" />
+</head>
+<body>
+<div id="aiIntro" aria-live="polite">
+  <canvas aria-hidden="true"></canvas>
+  <div class="ai-intro-inner">
+    <div class="ai-mark" aria-hidden="true"><i class="fas fa-terminal"></i></div>
+    <div class="ai-kicker">Paisley Tech Studio</div>
+    <h1 class="ai-title">
+      <span class="w" style="transition-delay:.20s">WELCOME</span>
+      <span class="w" style="transition-delay:.32s">TO</span>
+      <span class="w" style="transition-delay:.44s">THE</span>
+      <span class="w accent" style="transition-delay:.60s">ADVANCED</span>
+      <span class="w accent" style="transition-delay:.74s">PAISLEY</span>
+      <span class="w accent" style="transition-delay:.88s">IDE</span>
+    </h1>
+    <p class="ai-sub">Your ideas. Your code. Your next big creation starts here.</p>
+    <div class="ai-load"><div class="ai-bar indet"><i></i></div><p>Starting</p></div>
+  </div>
+  <button type="button" class="ai-skip">Skip <i class="fas fa-forward"></i></button>
+</div>
+<noscript><p style="position:fixed;inset:auto 0 2rem;text-align:center;color:#D9E7E3;font-family:sans-serif">The Advanced Paisley IDE needs JavaScript.</p></noscript>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="../firebase-config.js"></script>
+<script src="../js/tech/code-lab.js?v=tech19"></script>
+<script src="../js/tech/advanced-ide/ide-langs.js?v=1"></script>
+<script src="../js/tech/advanced-ide/ide-runner.js?v=1"></script>
+<script src="../js/tech/advanced-ide/ide-intellisense.js?v=1"></script>
+<script src="../js/tech/advanced-ide/ide-app.js?v=1"></script>
+<script>PaisleyIDE.start();</script>
+</body>
+</html>

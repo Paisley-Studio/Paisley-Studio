@@ -260,7 +260,8 @@ var Attendance = (function () {
       m.foot.querySelector('[data-go]').onclick = function () { register(l, m); };
       if (face) m.foot.querySelector('[data-face]').onclick = function () { faceStart(l, m); };
     }
-    /* Face check-in: the camera starts only now; one picture is checked on the server and discarded. */
+    /* Face check-in: the camera and the face model start only now. The face is read on this device;
+       only its 128-number descriptor is sent, never a picture. */
     function faceStart(l, m) {
       if (!S.recognition.available) { registerBody(l, m); return; }
       m.el.querySelector('h3').textContent = 'Check in with your face';
@@ -269,24 +270,26 @@ var Attendance = (function () {
       var msg = m.body.querySelector('[data-m]'), shot = m.foot.querySelector('[data-shot]');
       m.foot.querySelector('[data-back]').onclick = function () { registerBody(l, m); };
       S.cam = AttendanceFace.camera(m.body.querySelector('[data-cam]'));
+      msg.className = 'att-msg'; msg.textContent = 'Starting the camera and the face model…';
       S.cam.ready.then(function () { shot.disabled = false; msg.className = 'att-msg'; msg.textContent = 'Position your face inside the oval, then press Check me in.'; })
         .catch(function (e) { stopCam(); msg.className = 'att-msg bad'; msg.textContent = errMsg(e); });
       shot.onclick = function () {
         if (S.busy || !S.cam) return;
-        var img = S.cam.capture();
-        if (!img) { msg.className = 'att-msg bad'; msg.textContent = 'The camera is not ready yet.'; return; }
         S.busy = true; shot.disabled = true; shot.innerHTML = icon('fa-spinner fa-spin') + ' Checking…';
-        msg.className = 'att-msg'; msg.textContent = 'Checking…';
-        call('faceCheckIn', { entryId: l.entryId, image: img }).then(function (r) {
-          img = null; S.busy = false; stopCam();
+        msg.className = 'att-msg'; msg.textContent = 'Hold still…';
+        S.cam.scan().then(function (descs) {
+          msg.textContent = 'Checking…';
+          return call('faceCheckIn', { entryId: l.entryId, descriptors: descs });
+        }).then(function (r) {
+          S.busy = false; stopCam();
           showRegistered(l, m, r, 'Face recognised. ');
         }).catch(function (e) {
-          img = null; S.busy = false; shot.disabled = false; shot.innerHTML = icon('fa-camera') + ' Try again';
+          S.busy = false; shot.disabled = false; shot.innerHTML = icon('fa-camera') + ' Try again';
           var d = errDetails(e);
           msg.className = 'att-msg bad'; msg.textContent = errMsg(e);
-          // Switched off, engine down, not enrolled or too many tries: go back to the normal check-in.
-          if (d.fallback && /disabled|engine_unavailable|not_enrolled|rate_limited|error/.test(d.reason || '')) {
-            if (d.reason !== 'engine_unavailable' && d.reason !== 'error') S.recognition = { available: false };
+          // Switched off, model would not load, not enrolled or too many tries: go back to the normal check-in.
+          if (d.fallback && /disabled|model_unavailable|not_enrolled|rate_limited|replay|error/.test(d.reason || '')) {
+            if (/disabled|not_enrolled/.test(d.reason)) S.recognition = { available: false };
             stopCam();
             setTimeout(function () { if (S.open && S.open.modal === m) { registerBody(l, m); var mm = m.body.querySelector('[data-m]'); if (mm) { mm.className = 'att-msg bad'; mm.textContent = errMsg(e) + ' Manual check-in required.'; } } }, 50);
           } else if (/already|ended|cancelled/i.test(errMsg(e))) { stopCam(); refresh(); }
@@ -504,19 +507,21 @@ var Attendance = (function () {
     }
     function tutorFace(sid) {
       if (!S.recognition.available || typeof AttendanceFace === 'undefined') return;
-      var m = modal({ title: 'Verify it is you', sub: 'Only you, facing the camera. Nothing is saved.', closeLabel: 'Cancel', onClose: stopCam });
+      var m = modal({ title: 'Verify it is you', sub: 'Only you, facing the camera. Your picture never leaves this device.', closeLabel: 'Cancel', onClose: stopCam });
       m.body.innerHTML = '<div data-cam></div><div class="att-msg" data-m style="text-align:center"></div>';
       m.foot.innerHTML = '<button type="button" class="att-btn" data-c>Cancel</button><button type="button" class="att-btn primary" data-shot disabled>' + icon('fa-camera') + ' Verify</button>';
       var msg = m.body.querySelector('[data-m]'), shot = m.foot.querySelector('[data-shot]');
       m.foot.querySelector('[data-c]').onclick = function () { m.close(); };
       stopCam(); S.cam = AttendanceFace.camera(m.body.querySelector('[data-cam]'));
-      S.cam.ready.then(function () { shot.disabled = false; }).catch(function (e) { msg.className = 'att-msg bad'; msg.textContent = errMsg(e); });
+      msg.textContent = 'Starting the camera and the face model…';
+      S.cam.ready.then(function () { shot.disabled = false; msg.textContent = ''; }).catch(function (e) { msg.className = 'att-msg bad'; msg.textContent = errMsg(e); });
       shot.onclick = function () {
-        var img = S.cam && S.cam.capture(); if (!img) return;
+        if (!S.cam) return;
         shot.disabled = true; shot.innerHTML = icon('fa-spinner fa-spin') + ' Checking…';
-        call('faceTutorVerify', { sessionId: sid, image: img }).then(function () { img = null; m.close(); toast('Face recognised. You are verified for this lesson.'); })
+        S.cam.scan().then(function (descs) { return call('faceTutorVerify', { sessionId: sid, descriptors: descs }); })
+          .then(function () { m.close(); toast('Face recognised. You are verified for this lesson.'); })
           .catch(function (e) {
-            img = null; shot.disabled = false; shot.innerHTML = icon('fa-camera') + ' Try again';
+            shot.disabled = false; shot.innerHTML = icon('fa-camera') + ' Try again';
             var d = errDetails(e); msg.className = 'att-msg bad'; msg.textContent = errMsg(e);
             if (d.fallback && /disabled|not_enrolled|rate_limited/.test(d.reason || '')) { S.recognition = { available: false }; stopCam(); shot.remove(); paint(); }
           });

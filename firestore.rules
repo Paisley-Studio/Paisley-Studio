@@ -1855,7 +1855,7 @@ service cloud.firestore {
       allow read: if isAdmin() || (isSignedIn() && id == 'policy');
       allow write: if false;
     }
-    // Facial recognition (functions/face-recognition.js). No image or template is ever stored here.
+    // Facial recognition (functions/face-recognition.js). Consent and enrollment state only; no image or descriptor.
     match /faceProfiles/{uid} {
       allow read: if isAdmin();
       allow write: if false;
@@ -1864,8 +1864,17 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
-    // Engine URL and API key: Cloud Functions only, no client at all.
-    match /privateConfig/{id} {
+    // Enrolled face descriptors (128 numbers each, never images): Cloud Functions only, no client at all,
+    // not even admins. Matching happens in functions/face-recognition.js.
+    match /faceTemplates/{uid} {
+      allow read, write: if false;
+    }
+    // Advanced Paisley IDE code runner (functions/code-runner.js): the execution-service URL and key,
+    // and per-person run counts. Cloud Functions only; no client at all, not even admins.
+    match /serverConfig/{id} {
+      allow read, write: if false;
+    }
+    match /codeRunUsage/{uid} {
       allow read, write: if false;
     }
     // Subject display names (renameSubject callable). Public: the marketing pages show subjects too.

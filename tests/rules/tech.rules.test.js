@@ -218,6 +218,30 @@ test("practice: the builder owns it, their coach reads it and leaves notes", asy
   await assertFails(as("kid1").doc("techPractice/p1").update({ coachNote: "edited" }));
 });
 
+test("Advanced IDE projects: practice docs the builder owns; staff read only; guardians cannot open them", async () => {
+  const proj = { studentId: "kid1", studentName: "Kid One", coachId: "coach1", type: "advanced", title: "Guess", done: false, helpRequested: false,
+    codeFiles: [{ name: "main.py", lang: "py", content: "print(1)" }], codeFolders: [], codeActive: "main.py", ide: { v: 1, lang: "py", entry: "main.py", open: ["main.py"] } };
+  await assertSucceeds(as("kid1").doc("techPractice/adv1").set(proj));
+  await assertSucceeds(as("kid1").doc("techPractice/adv1").update({ codeFiles: [{ name: "main.py", lang: "py", content: "print(2)" }], ide: { v: 1, lang: "py", entry: "main.py", open: [] } }));
+  await assertSucceeds(as("coach1").doc("techPractice/adv1").get());
+  await assertFails(as("coach1").doc("techPractice/adv1").update({ codeFiles: [] }));
+  await assertSucceeds(as("coach1").doc("techPractice/adv1").update({ coachNote: "Nice loop", coachNoteBy: "Coach One" }));
+  await assertSucceeds(as("admin1").doc("techPractice/adv1").get());
+  await assertFails(as("mum").doc("techPractice/adv1").get());
+  await assertFails(as("mum").doc("techPractice/adv1").update({ title: "parent edit" }));
+  await assertFails(as("kid2").doc("techPractice/adv1").get());
+});
+
+test("code runner config and run counts are closed to every client, admins included", async () => {
+  await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc("serverConfig/codeRunner").set({ url: "https://judge.example", key: "secret" }));
+  for (const who of ["admin1", "kid1", "coach1"]) {
+    await assertFails(as(who).doc("serverConfig/codeRunner").get());
+    await assertFails(as(who).doc("serverConfig/codeRunner").set({ url: "x" }));
+    await assertFails(as(who).doc("codeRunUsage/" + who).get());
+    await assertFails(as(who).doc("codeRunUsage/" + who).set({ dayCount: 0 }));
+  }
+});
+
 test("activity: builders append real, server-stamped events; history is read-only", async () => {
   const ev = { studentId: "kid1", studentName: "Kid One", type: "project_opened", label: "Opened Bot", buildId: "b1", at: serverTimestamp() };
   await assertSucceeds(as("kid1").collection("techActivity").add(ev));

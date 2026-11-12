@@ -368,7 +368,7 @@ async function checkIn(uid, entryId, now, how) {
     const patch = {
       status: c.late ? "late" : "present",
       checkIn: Object.assign({ at: ts(now), minutesLate: c.minutesLate, classification: c.late ? "late" : "on_time", source: "student", method },
-        method === "face" && how.similarity != null ? { similarity: Math.round(how.similarity * 1000) / 1000 } : {}),
+        method === "face" && how.distance != null ? { faceDistance: Math.round(how.distance * 1000) / 1000 } : {}),
       needsVerification: submitted,              // a registration after the register went in is shown to the tutor for checking
       updatedAt: FV().serverTimestamp()
     };
@@ -926,10 +926,10 @@ async function recordTutorPresence(uid, sessionId, now, how) {
     if (now < ms(s.startAt) - EARLY_CHECKIN_MIN * 60000) throw new HttpsError("failed-precondition", "You can confirm from " + EARLY_CHECKIN_MIN + " minutes before the start.");
     if (now >= ms(s.endAt)) throw new HttpsError("deadline-exceeded", "This lesson has ended.");
     const cur = (s.tutorPresence || {})[uid];
-    const sim = how.similarity != null ? Math.round(how.similarity * 1000) / 1000 : null;
+    const sim = how.distance != null ? Math.round(how.distance * 1000) / 1000 : null;
     if (cur) {
       if (method === "face" && !cur.faceVerifiedAt) {
-        tx.update(ref, { ["tutorPresence." + uid + ".faceVerifiedAt"]: ts(now), ["tutorPresence." + uid + ".similarity"]: sim, updatedAt: FV().serverTimestamp() });
+        tx.update(ref, { ["tutorPresence." + uid + ".faceVerifiedAt"]: ts(now), ["tutorPresence." + uid + ".faceDistance"]: sim, updatedAt: FV().serverTimestamp() });
         audit(tx, { action: "tutor_face_verified", sessionId: ref.id, actorId: uid, actorRole: "tutor", actorName: role.tutor.name || "Tutor" });
         return { ok: true, already: true, faceVerified: true };
       }
@@ -937,7 +937,7 @@ async function recordTutorPresence(uid, sessionId, now, how) {
     }
     const c = classify(ms(s.startAt), now);
     const row = { at: ts(now), name: role.tutor.name || "Tutor", minutesLate: c.minutesLate, classification: c.late ? "late" : "on_time", method,
-      faceVerifiedAt: method === "face" ? ts(now) : null, similarity: method === "face" ? sim : null };
+      faceVerifiedAt: method === "face" ? ts(now) : null, faceDistance: method === "face" ? sim : null };
     tx.update(ref, { ["tutorPresence." + uid]: row, tutorsPresent: FV().arrayUnion(uid), updatedAt: FV().serverTimestamp() });
     audit(tx, { action: "tutor_present", sessionId: ref.id, actorId: uid, actorRole: "tutor", actorName: row.name, after: { classification: row.classification, minutesLate: row.minutesLate, method } });
     return { ok: true, classification: row.classification, minutesLate: row.minutesLate, method };

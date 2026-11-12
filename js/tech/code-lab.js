@@ -31,7 +31,8 @@
    CodeLab.mount(host, { build, me, canEdit, onSave(payload) -> Promise,
                          uploadAsset(file) -> Promise<{ url, storagePath }>,
                          collab: { ref, presence, me: { uid, name } },
-                         mode: 'code' | 'doc', title })
+                         mode: 'code' | 'doc', title,
+                         advanced(button) })   adds an "Advanced IDE" button (Practice uses it)
      -> { destroy(), flush() -> Promise, state() }
    CodeLab.buildPreview(files, active, assets) -> html
    CodeLab.load() -> Promise   (warms the editor libraries)
@@ -357,6 +358,8 @@
           '<div class="cl-crumb" aria-live="polite"></div>' +
           '<div class="cl-people" aria-label="Who is here"></div>' +
           '<div class="cl-actions">' +
+            /* Only where the page asks for it (Practice): opens the Advanced Paisley IDE. */
+            (typeof opts.advanced === 'function' && !docMode && g.PaisleyIDEEntry ? g.PaisleyIDEEntry.button({ compact: true, label: 'Advanced IDE' }).replace(' data-advanced-ide', ' data-clcmd="advanced"') : '') +
             (docMode ? '' : '<button type="button" class="cl-btn" data-clcmd="layout" title="Side by side / stacked" aria-label="Change layout"><i class="fas fa-table-columns"></i></button>') +
             '<button type="button" class="cl-btn cl-fullbtn" data-clcmd="full" title="Full screen" aria-label="Full screen" aria-pressed="false"><i class="fas fa-expand"></i></button>' +
             (canEdit && !collab ? '<button type="button" class="cl-btn cl-save" data-clcmd="save"><i class="fas fa-floppy-disk"></i> Save</button>' : '') +
@@ -1071,6 +1074,7 @@
         else if (cmd === 'layout') bodyEl.classList.toggle('cl-stacked');
         else if (cmd === 'full') toggleFull();
         else if (cmd === 'tree') hostEl.querySelector('.cl-shell').classList.toggle('cl-tree-open');
+        else if (cmd === 'advanced') { flushSave(); opts.advanced(b); }
         else if (!canEdit) return;
         else if (cmd === 'add') addFile(curFolder);
         else if (cmd === 'folder') addFolder();

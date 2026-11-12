@@ -92,14 +92,14 @@ test("subject names are public to read and written only by the renameSubject fun
   await assertFails(as("t1").doc("lmsSettings/subjects").set({ names: {} }));
 });
 
-test("facial recognition: settings, profiles, attempts and engine keys are Studio Desk only; nobody writes them", async () => {
+test("facial recognition: settings, profiles and attempts are Studio Desk only; face templates are readable by no client; nobody writes them", async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await db.doc("attendanceSettings/policy").set({ strikeReset: "academic_year" });
     await db.doc("attendanceSettings/recognition").set({ status: "enabled", threshold: 0.9 });
     await db.doc("faceProfiles/ann").set({ personType: "student", status: "enrolled" });
     await db.doc("faceAttempts/x").set({ personId: "ann", result: "matched" });
-    await db.doc("privateConfig/faceRecognition").set({ apiKey: "secret" });
+    await db.doc("faceTemplates/ann").set({ template: { enc: false, data: "[]" } });
   });
   await assertSucceeds(as("ann").doc("attendanceSettings/policy").get());
   await assertFails(anon().doc("attendanceSettings/policy").get());
@@ -113,6 +113,6 @@ test("facial recognition: settings, profiles, attempts and engine keys are Studi
   await assertSucceeds(as("desk").doc("faceProfiles/ann").get());
   await assertFails(as("desk").doc("attendanceSettings/recognition").set({ status: "disabled" }));
   await assertFails(as("desk").doc("faceProfiles/ann").set({ status: "enrolled" }));
-  await assertFails(as("desk").doc("privateConfig/faceRecognition").get());
-  await assertFails(as("ann").doc("privateConfig/faceRecognition").get());
+  await assertFails(as("desk").doc("faceTemplates/ann").get());
+  await assertFails(as("ann").doc("faceTemplates/ann").get());
 });

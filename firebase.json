@@ -25,9 +25,26 @@
       "vertex-key.json",
       "FIRESTORE_RULES.md",
       "ATTENDANCE_RECOGNITION.md",
+      "ADVANCED_IDE.md",
       "paisley-ad/**",
       "**/*.zip",
       "**/*.mp4"
+    ],
+    "headers": [
+      {
+        "source": "/tech/ide",
+        "headers": [
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+          { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
+        ]
+      },
+      {
+        "source": "/tech/ide.html",
+        "headers": [
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+          { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
+        ]
+      }
     ],
     "redirects": [
       {
@@ -117,6 +134,10 @@
       {
         "source": "/tech/parent/dashboard",
         "destination": "/tech/parent/dashboard.html"
+      },
+      {
+        "source": "/tech/ide",
+        "destination": "/tech/ide.html"
       },
       {
         "source": "/tech/p/:id",
