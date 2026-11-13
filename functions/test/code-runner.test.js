@@ -24,7 +24,8 @@ function fakeDb(docs) {
 const b64 = (s) => Buffer.from(s, "utf8").toString("base64");
 const ok = (body) => async () => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
 const JAVA = { name: "Main.java", content: "public class Main { public static void main(String[] a) { System.out.println(\"hi\"); } }" };
-const CONFIGURED = { "admins/boss": {}, "techStudents/kid": { status: "Active" }, "techStudents/waiting": { status: "Pending" }, "serverConfig/codeRunner": { url: "https://judge.example/", key: "secret" } };
+const IDE_ON = { "techSettings/advancedIde": { enabled: true, levels: ["intermediate"], students: [] } };
+const CONFIGURED = Object.assign({ "admins/boss": {}, "techStudents/kid": { status: "Active" }, "techStudents/waiting": { status: "Pending" }, "serverConfig/codeRunner": { url: "https://judge.example/", key: "secret" } }, IDE_ON);
 
 test("needs a signed-in user", async () => {
   await assert.rejects(runCodeHandler({ data: {} }, { db: fakeDb({}) }), /Sign in/);
@@ -36,9 +37,21 @@ test("refuses anyone who is not an active builder, coach or admin", async () => 
   await assert.rejects(runCodeHandler({ auth: { uid: "stranger" }, data: { language: "java", files: [JAVA], entry: "Main.java" } }, { db, fetch: ok({}) }), (e) => e.code === "permission-denied");
 });
 
+test("builders need the Advanced IDE switched on for them (Admin > Tech Studio > Controls)", async () => {
+  const base = { "techStudents/kid": { status: "Active", skillLevel: "beginner" }, "techCoaches/coach": { status: "Active" }, "serverConfig/codeRunner": { url: "https://judge.example/" } };
+  const call = (db, uid) => runCodeHandler({ auth: { uid }, data: { language: "java", files: [JAVA], entry: "Main.java" } }, { db, fetch: ok({ stdout: "", status: { id: 3 } }) });
+  await assertRejectsCode(call(fakeDb(base), "kid"), "permission-denied", /not been switched on for you/);
+  await assertRejectsCode(call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: true, levels: ["intermediate"], students: [] } })), "kid"), "permission-denied");
+  await call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: true, levels: ["beginner"], students: [] } })), "kid");
+  await call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: true, levels: [], students: ["kid"] } })), "kid");
+  await assertRejectsCode(call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: false, levels: ["beginner"], students: ["kid"] } })), "kid"), "permission-denied");
+  await call(fakeDb(base), "coach");   // coaches review builders' work whatever the switch says
+});
+async function assertRejectsCode(p, code, re) { await assert.rejects(p, (e) => e.code === code && (!re || re.test(e.message))); }
+
 test("says clearly when the runner has not been configured, and calls nothing", async () => {
   let called = false;
-  const db = fakeDb({ "techStudents/kid": { status: "Active" } });
+  const db = fakeDb(Object.assign({ "techStudents/kid": { status: "Active" } }, IDE_ON));
   delete process.env.CODE_RUNNER_URL;
   await assert.rejects(
     runCodeHandler({ auth: { uid: "kid" }, data: { language: "java", files: [JAVA], entry: "Main.java" } }, { db, fetch: async () => { called = true; } }),

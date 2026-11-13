@@ -1005,6 +1005,16 @@ service cloud.firestore {
       return isSignedIn() && exists(/databases/$(database)/documents/techStudents/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/techStudents/$(request.auth.uid)).data.status == 'Active';
     }
+    // Advanced Paisley IDE access (Admin > Tech Studio > Controls, techSettings/advancedIde): switched on,
+    // and the builder's level is ticked or they were picked by name. No level counts as intermediate.
+    // Mirrored in js/admin/tech-controls.js, tech/dashboard.html, js/tech/advanced-ide/ide-app.js, functions/code-runner.js.
+    function advancedIdeAllowed() {
+      let cfg = get(/databases/$(database)/documents/techSettings/advancedIde).data;
+      let me = get(/databases/$(database)/documents/techStudents/$(request.auth.uid)).data;
+      let lvl = me.get('skillLevel', '') in ['beginner', 'intermediate', 'expert'] ? me.get('skillLevel', '') : 'intermediate';
+      return cfg.get('enabled', false) == true &&
+        (request.auth.uid in cfg.get('students', []) || lvl in cfg.get('levels', []));
+    }
     function isTechCoach() {
       return isSignedIn() && exists(/databases/$(database)/documents/techCoaches/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/techCoaches/$(request.auth.uid)).data.status == 'Active';
@@ -1450,11 +1460,13 @@ service cloud.firestore {
         isTechCoachOf(resource.data.studentId);
       allow create: if techStudentActive() &&
         request.resource.data.studentId == request.auth.uid &&
-        !request.resource.data.keys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt']);
+        !request.resource.data.keys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt']) &&
+        (request.resource.data.get('type', '') != 'advanced' || advancedIdeAllowed());
       allow update: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid &&
           request.resource.data.studentId == resource.data.studentId &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt'])) ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt']) &&
+          ((request.resource.data.get('type', '') != 'advanced' && resource.data.get('type', '') != 'advanced') || advancedIdeAllowed())) ||
         (isTechCoachOf(resource.data.studentId) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coachNote', 'coachNoteBy', 'coachNoteAt', 'helpRequested', 'updatedAt']));
       allow delete: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);

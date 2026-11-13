@@ -176,7 +176,7 @@ Lessons, assignments and exams are readable per audience via `audiences.{online,
 
 ## Paisley Tech Studio (its own architecture)
 
-`techSettings/{id}` holds studio-wide settings such as `portal.navVideo` (the navigation video's Storage path). Active builders and admins read it; only admins write it.
+`techSettings/{id}` holds studio-wide settings such as `portal.navVideo` (the navigation video's Storage path) and `advancedIde` (who may use the Advanced Paisley IDE: `enabled`, `levels`, `students`). Active builders and admins read it; only admins write it. `advancedIdeAllowed()` uses `advancedIde`: a builder may create or save a `type: 'advanced'` practice doc only while it is enabled and their level (no level = intermediate) is ticked or they are picked by name.
 
 TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH role is recognised by which collection holds the UID:
 
@@ -204,7 +204,7 @@ TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH
 | `techNotifications` | Cloud Functions only | recipient, admin | recipient may only flip `read` |
 | `techBuilds` (+ `feedback`) | active builder; `coachId` must equal their current coach | builder, their coach, linked guardians, admin | builder (cannot change coach / approve themselves / write grade or review fields, `techReviewKeys()`), coach (review, grading and publication fields only), admin |
 | `techBuilds/{id}/submissions` | the active builder, `status: 'submitted'`, no review fields | builder, their coach, linked guardians, admin | coach: review fields and `status` only; admin. Never the submitted work |
-| `techPractice` | active builder, own, no coach note | builder, their coach, admin | builder (not the coach note); coach: note and `helpRequested` only; admin. Advanced Paisley IDE projects are `type: 'advanced'` docs here (same rules; parents have no access) |
+| `techPractice` | active builder, own, no coach note | builder, their coach, admin | builder (not the coach note); coach: note and `helpRequested` only; admin. Advanced Paisley IDE projects are `type: 'advanced'` docs here; the builder also needs `advancedIdeAllowed()` to create or save them (parents have no access) |
 | `techActivity` | active builder, own events only, `at == request.time`, listed `type`s (Cloud Functions add review / mastery / publication events) | builder, their coach, linked guardians, admin | nobody (admin may delete) |
 | `techLiveClasses` | admin (any audience); coach with `coachId` = self, `audience: 'selected'`, no `parentUids` | admin, any active coach, active builders when `audience == 'all'` or listed in `studentIds`, guardians listed in `parentUids` (set by `onTechLiveClassWritten`) | admin; the class's coach (still `selected`, cannot touch `parentUids` / `notifyKey`) |
 | `techTimetable` | admin only (day, level in all/beginner/intermediate/expert, link ≤ 500 chars) | admin, active coaches, active builders, parent accounts | admin only |

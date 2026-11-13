@@ -15,12 +15,30 @@ Page: `/tech/ide` (`tech/ide.html`). Code: `js/tech/advanced-ide/`.
 | `ide.css` | Workspace styles (Paisley palette on deep charcoal; Quicksand UI, JetBrains Mono code) |
 | `functions/code-runner.js` | `runCode` callable: forwards Java (and fallback) runs to an isolated execution service |
 
-## Where builders find it
+## Who can use it (Admin > Tech Studio > Controls)
 
-- Practice: a card at the top ("Ready for more? Meet the Advanced Paisley IDE").
+The IDE is **off for everyone** until the Studio Desk switches it on in Admin > Tech Studio > Controls (`js/admin/tech-controls.js`). Its settings live in `techSettings/advancedIde`:
+
+```
+{ enabled, levels: ['beginner' | 'intermediate' | 'expert'], students: [uid], updatedAt, updatedBy, updatedByName }
+```
+
+A builder has it when it is **enabled** and either **their level is ticked** or **they were picked by name**. A builder with no level counts as Intermediate, as everywhere else in Tech Studio. The picker lists every active builder, tagged "Admitted from Paisley" (`admittedFrom`) or "Applied". It can filter, pick everyone shown, and shows how many builders will have access before you save.
+
+The same test runs in four places, so hiding the button is never the only lock:
+- the builder portal (`ideOn()` in `tech/dashboard.html`, which follows the setting live);
+- `/tech/ide`, which refuses to open without access, and locks to read only if access is switched off while a builder is working (unsaved changes stay in the browser and are offered back later);
+- `firestore.rules` (`advancedIdeAllowed()`: creating or saving a `type: 'advanced'` practice doc, or turning another practice into one);
+- `runCode`.
+
+Coaches and admins can always open a builder's project read only, to review it.
+
+## Where builders find it (only with access)
+
+- Practice > Start practising: an "Advanced Paisley IDE" practice tool beside Coding experiment, Writing, Research and AI.
 - Home, under Practise or create: an Advanced Paisley IDE card.
 - Inside Code Lab, only on Practice coding experiments: an "Advanced IDE" button in the toolbar. It offers to bring that practice's files into a new Advanced project. The files are copied; the practice itself is never changed.
-- My practice lists Advanced projects ("Advanced IDE · Python"); opening one goes straight to it with a short fade (the fireworks are for entering from the button).
+- My practice lists Advanced projects ("Advanced IDE · Python"). Opening one goes straight to it with a short fade; the fireworks are for entering from the button. Without access they show as locked, with an explanation.
 
 ## The entrance
 
@@ -106,8 +124,23 @@ Then set **one** of:
 
 Single-file `Main.java` programs use Judge0's Java (id 62). Several files, packages or another main class use the multi-file program (id 89) with `javac -d out …` and `java -cp out <MainClass>`. The JDK paths default to Judge0 CE's image (`/usr/local/openjdk13/bin`); override them with `serverConfig/codeRunner.commands.java = { compile, run }` if your image differs. The function also accepts `python`, `c`, `cpp` and `php`, so a runner could later serve as a fallback for those. This integration is unit-tested against the Judge0 API shape (`functions/test/code-runner.test.js`) but has **not** been run against a live Judge0 service.
 
+## When a runtime breaks
+
+Mistakes in a builder's code come back as ordinary results: tracebacks, compiler errors, exit codes. A JavaScript-level throw while running means the runtime itself broke. When that happens:
+1. The worker posts `restart: true`.
+2. The page throws that worker away (`reset(role)` in `ide-runner.js`).
+3. The next Run starts a fresh worker, loading the runtime again from Cache Storage. A broken Pyodide ("Pyodide already fatally failed") is never reused.
+4. If the tools worker is replaced, Jedi loads again automatically.
+
+The terminal says what happened, with a Run again button.
+
+This is what used to happen with **pygame**: `pygame.init()` read the page's `screen`, which a worker does not have, and killed Pyodide for the rest of the session. The worker now provides a `screen`, so pygame imports and initialises. `pygame.display.set_mode` still cannot open a window from a worker, so the IDE explains that and restarts Python. `turtle` and `tkinter` do not exist in the browser and get their own explanation; matplotlib works.
+
+The service worker (`sw.js`) leaves `/tech/ide` and `js/tech/advanced-ide/` alone, so the page keeps its COOP/COEP headers. It also answers offline misses with a plain network error, never an uncaught "Failed to fetch".
+
 ## Known limits
 
+- Pygame windows (`set_mode`), turtle and tkinter do not work in the browser.
 - C++ exceptions (`try`/`throw`) are off in the browser compiler; the IDE explains this when they are used.
 - Python packages are the ones Pyodide ships; anything else fails with ModuleNotFoundError and a hint.
 - PHP runs as a script (CLI-style). Output that is HTML can be opened as a page; there is no web server, forms or sessions.

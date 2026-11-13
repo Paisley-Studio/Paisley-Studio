@@ -16,7 +16,8 @@
               sent as X-RapidAPI-Host)
    commands   optional overrides of the compile/run scripts used for multi-file programs
 
-   Who: active Tech Studio builders, active coaches and admins.
+   Who: active coaches and admins, and active builders the Studio Desk has given the Advanced IDE
+   (Admin > Tech Studio > Controls, techSettings/advancedIde).
    Limits: 40 files, 256 KB of source, 64 KB of input, 15 runs a minute and
    300 a day per person (codeRunUsage/{uid}, server only).
 ========================================================= */
@@ -101,13 +102,24 @@ async function config(db) {
 }
 
 /* ---------- who may run ---------- */
+/* Admin > Tech Studio > Controls (techSettings/advancedIde). Same test as advancedIdeAllowed() in firestore.rules. */
+const IDE_LEVELS = ["beginner", "intermediate", "expert"];
+function ideAllowed(cfg, uid, student) {
+  if (!cfg || cfg.enabled !== true) return false;
+  const lvl = IDE_LEVELS.includes(student.skillLevel) ? student.skillLevel : "intermediate";
+  return (Array.isArray(cfg.students) && cfg.students.includes(uid)) || (Array.isArray(cfg.levels) && cfg.levels.includes(lvl));
+}
+/* "" when allowed, else why not. Coaches and admins can always run (they review builders' work). */
 async function allowed(db, uid) {
   const [a, s, c] = await Promise.all([
     db.collection("admins").doc(uid).get(),
     db.collection("techStudents").doc(uid).get(),
     db.collection("techCoaches").doc(uid).get(),
   ]);
-  return a.exists || (s.exists && s.data().status === "Active") || (c.exists && c.data().status === "Active");
+  if (a.exists || (c.exists && c.data().status === "Active")) return "";
+  if (!(s.exists && s.data().status === "Active")) return "Only Tech Studio builders, coaches and admins can run code here.";
+  const cfg = await db.collection("techSettings").doc("advancedIde").get();
+  return ideAllowed(cfg.exists ? cfg.data() : null, uid, s.data()) ? "" : "The Advanced Paisley IDE has not been switched on for you. Your coach or the Studio Desk can turn it on.";
 }
 
 async function takeRun(db, uid, now) {
@@ -225,7 +237,8 @@ async function runCodeHandler(req, deps) {
   const entry = cleanName(d.entry) || files[0].name;
   if (!files.some((f) => f.name === entry)) throw new HttpsError("invalid-argument", "The file to run is not in the project.");
 
-  if (!(await allowed(db, uid))) throw new HttpsError("permission-denied", "Only Tech Studio builders, coaches and admins can run code here.");
+  const denied = await allowed(db, uid);
+  if (denied) throw new HttpsError("permission-denied", denied);
   const cfg = await config(db);
   if (!cfg) throw new HttpsError("failed-precondition", "The Paisley code runner has not been switched on yet, so " + (language === "java" ? "Java" : "this program") + " cannot run. Ask your coach or the Studio Desk.");
   const limited = await takeRun(db, uid, now);
@@ -236,4 +249,4 @@ async function runCodeHandler(req, deps) {
 }
 
 exports.runCode = onCall({ region: LOCATION, timeoutSeconds: 90, memory: "256MiB" }, (req) => runCodeHandler(req, { db: admin.firestore() }));
-exports._test = { runCodeHandler, buildSubmission, javaMainClass, diagnostics, shape, zip, crc32, cleanName, LIMITS };
+exports._test = { runCodeHandler, ideAllowed, buildSubmission, javaMainClass, diagnostics, shape, zip, crc32, cleanName, LIMITS };

@@ -97,7 +97,7 @@
         if (key === 'students') { S.loaded = true; if (S.panel && S.panel.setStudents) S.panel.setStudents(S.students); }
         if (key === 'coaches' && S.panel && S.panel.setCoaches) S.panel.setCoaches(S.coaches);
         /* Open modals and the live Activity / Practice panels keep their state; only the tab badges refresh. */
-        var busy = document.querySelector('.cr-overlay') || (S.panel && (S.tab === 'activity' || S.tab === 'practice' || S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups' || S.tab === 'homework' || S.tab === 'timetable'));
+        var busy = document.querySelector('.cr-overlay') || (S.panel && (S.tab === 'activity' || S.tab === 'practice' || S.tab === 'classes' || S.tab === 'results' || S.tab === 'groups' || S.tab === 'homework' || S.tab === 'timetable' || S.tab === 'controls'));
         if (S.loaded && !busy) render(); else if (S.loaded) renderTabsOnly();
       }, function (e) { console.warn('tech ' + key + ':', e); if (key === 'students') { root.innerHTML = '<div class="cr-panel"><div class="cr-empty">Could not load Tech Studio students: ' + esc(errMsg(e)) + '</div></div>'; } }));
     }
@@ -141,11 +141,12 @@
         ['messages', 'fa-comments', 'Messages', 0],
         ['desk', 'fa-headset', 'Family desk', S.desk.filter(function (c) { return c.unreadForAdmin; }).length],
         ['wall', 'fa-trophy', 'Showcase', publishAsks()],
-        ['navvideo', 'fa-circle-play', 'Navigation video', 0]
+        ['navvideo', 'fa-circle-play', 'Navigation video', 0],
+        ['controls', 'fa-sliders', 'Controls', 0]
       ];
       tabs.forEach(function (t) { TAB_NAMES[t[0]] = t[2]; });
       tabs = tabs.filter(function (t) { return t[0] !== 'missions' || S.tab === 'missions' || S.content.some(function (c) { return c.kind === 'mission' || c.kind === 'challenge'; }); });
-      var GROUP = { applications: 'People', builds: 'Learning', content: 'Resources', timetable: 'Running the studio', messages: 'Messages' };
+      var GROUP = { applications: 'People', builds: 'Learning', content: 'Resources', timetable: 'Running the studio', messages: 'Messages', controls: 'Settings' };
       return '<nav class="tx-side" role="tablist" aria-label="Tech Studio" aria-orientation="vertical" id="txTabs"><div class="tx-side-head"><b>Tech Studio</b></div>' + tabs.map(function (t) {
         return (GROUP[t[0]] ? '<div class="tx-group">' + GROUP[t[0]] + '</div>' : '') +
           '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="tx-tab' + (S.tab === t[0] ? ' on' : '') + '" data-a="tab" data-v="' + t[0] + '"><i class="fas ' + t[1] + '" aria-hidden="true"></i><span>' + t[2] + '</span>' +
@@ -162,7 +163,7 @@
       mountAdminBell();
       var b = root.querySelector('#txBody');
       if (!S.loaded) { b.innerHTML = '<div class="cr-empty">Loading Tech Studio…</div>'; return; }
-      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, classes: classesTab, results: resultsTab, groups: groupsTab, missions: missionsTab, content: content, aitools: aiTools, live: timetableTab, timetable: timetableTab, homework: homeworkTab, paisley: paisleyTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall, navvideo: navVideoTab }[S.tab] || applications);
+      var view = ({ applications: applications, builders: builders, coaches: coaches, builds: builds, classes: classesTab, results: resultsTab, groups: groupsTab, missions: missionsTab, content: content, aitools: aiTools, live: timetableTab, timetable: timetableTab, homework: homeworkTab, paisley: paisleyTab, activity: activityTab, practice: practiceTab, reports: reports, messages: messages, desk: deskTab, wall: wall, navvideo: navVideoTab, controls: controlsTab }[S.tab] || applications);
       view(b);
       if (S.bubbles) S.bubbles.sync();
     }
@@ -627,6 +628,12 @@
     function activityTab(b) {
       b.innerHTML = '<div class="cr-bar"><div><h3>Activity</h3><div class="cr-sub">Real events recorded as builders work: sessions, projects opened and saved, materials and videos, practice, submissions, revisions, reviews, mastery and publication. Last seen is the latest of sign-in and activity.</div></div></div><div id="txPanel"></div>';
       S.panel = TechManage.mountActivity(b.querySelector('#txPanel'), { me: me(), students: S.students });
+    }
+    /* Controls: who sees the Advanced Paisley IDE (js/admin/tech-controls.js). */
+    function controlsTab(b) {
+      if (!g.TechControls) { b.innerHTML = '<div class="cr-empty">The controls did not load. Check that js/admin/tech-controls.js is deployed.</div>'; return; }
+      b.innerHTML = '<div id="txPanel"></div>';
+      S.panel = g.TechControls.mount(b.querySelector('#txPanel'), { me: me(), students: S.students });
     }
     function practiceTab(b) {
       b.innerHTML = '<div class="cr-bar"><div><h3>Practice</h3><div class="cr-sub">Practice work is never graded. Coaches answer help requests; you can too.</div></div></div><div id="txPanel"></div>';

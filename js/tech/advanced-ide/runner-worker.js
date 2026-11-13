@@ -26,6 +26,12 @@
 ========================================================= */
 'use strict';
 
+/* SDL (pygame) asks Emscripten for the screen size, and Emscripten reads `screen`, which only
+   pages have. Without this, `import pygame; pygame.init()` killed Pyodide for good. */
+if (typeof self.screen === 'undefined') {
+  self.screen = { width: 1280, height: 720, availWidth: 1280, availHeight: 720, colorDepth: 24, pixelDepth: 24, orientation: { type: 'landscape-primary', angle: 0 } };
+}
+
 let CFG = null;              // { role, urls, proxy: [prefixes] }
 let ctl = null, buf = null;  // stdin SharedArrayBuffer views
 const enc = new TextEncoder();
@@ -469,8 +475,11 @@ async function handle(m) {
     if (m.t === 'phpcheck') return reply({ ok: true, data: await checkPhp(m) });
   } catch (e) {
     const msg = String(e && (e.message || e)) || 'Unknown error';
-    if (m.t === 'run') return post({ t: 'done', id: m.id, res: { ok: false, code: 1, type: 'runtime', message: msg, failed: true } });
-    return reply({ ok: false, error: msg });
+    /* Mistakes in the builder's code come back as results, never as throws. A throw here means the
+       runtime itself broke (or never loaded), so the page throws this worker away and the next
+       run starts a fresh one: a broken runtime is never reused. */
+    if (m.t === 'run') return post({ t: 'done', id: m.id, res: { ok: false, code: 1, type: 'runtime', message: msg, failed: true, restart: true } });
+    return reply({ ok: false, error: msg, restart: /fatal|can no longer be used|RuntimeError|is not defined|unreachable|memory access/i.test(msg) });
   }
 }
 self.onmessage = e => { handle(e.data); };

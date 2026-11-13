@@ -583,6 +583,8 @@
       lint: lint,
       warmJedi: warmJedi,
       jediReady: function () { return jediOn; },
+      /* The tools worker was replaced: Jedi has to load again in the new one. */
+      resetJedi: function () { jediOn = false; jediWarming = null; pyDirty = true; if (ctx.onPyState) ctx.onPyState('idle'); },
       filesChanged: function () { pyDirty = true; },
       setMarkers: setMarkers,
       dispose: function () { disposers.forEach(function (d) { d.dispose(); }); }

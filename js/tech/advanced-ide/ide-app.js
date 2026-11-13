@@ -211,10 +211,22 @@
       }
     };
   }
+  /* Admin > Tech Studio > Controls (techSettings/advancedIde). Same test as advancedIdeAllowed() in firestore.rules. */
+  function ideAllowed(cfg, uid, student) {
+    if (!cfg || cfg.enabled !== true) return false;
+    var lvl = ['beginner', 'intermediate', 'expert'].indexOf(student.skillLevel) > -1 ? student.skillLevel : 'intermediate';
+    return (cfg.students || []).indexOf(uid) > -1 || (cfg.levels || []).indexOf(lvl) > -1;
+  }
   function whoAmI(user) {
     var uid = user.uid;
     return db.collection('techStudents').doc(uid).get().then(function (s) {
-      if (s.exists) return { uid: uid, role: s.data().status === 'Active' ? 'student' : 'pending', name: s.data().name || '', coachId: s.data().coachId || '' };
+      if (s.exists && s.data().status === 'Active') {
+        var st = s.data();
+        return db.collection('techSettings').doc('advancedIde').get().then(function (c) { return c.exists ? c.data() : null; }, function () { return null; }).then(function (cfg) {
+          return { uid: uid, role: 'student', name: st.name || '', coachId: st.coachId || '', skillLevel: st.skillLevel || '', ideAccess: ideAllowed(cfg, uid, st) };
+        });
+      }
+      if (s.exists) return { uid: uid, role: 'pending', name: s.data().name || '', coachId: s.data().coachId || '' };
       return Promise.all([db.collection('techCoaches').doc(uid).get().catch(function () { return null; }), db.collection('admins').doc(uid).get().catch(function () { return null; })]).then(function (r) {
         if (r[1] && r[1].exists) return { uid: uid, role: 'admin', name: (r[1].data() || {}).name || 'Admin' };
         if (r[0] && r[0].exists && r[0].data().status === 'Active') return { uid: uid, role: 'coach', name: r[0].data().name || 'Coach' };
@@ -246,6 +258,7 @@
     meP.then(function (me) {
       if (me.role === 'none') { Intro.fail('This account is not part of Paisley Tech Studio.', '<a href="/tech/index.html">Go to Tech Studio</a>'); return; }
       if (me.role === 'pending') { Intro.fail('Your Tech Studio account is waiting for approval from the Studio Desk.', '<a href="/tech/dashboard">Back to Tech Studio</a>'); return; }
+      if (me.role === 'student' && me.ideAccess === false) { Intro.fail('The Advanced Paisley IDE has not been switched on for you yet. Your coach or the Studio Desk can open it.', '<a href="/tech/dashboard#practice">Back to Tech Studio</a>'); return; }
       var pid = params.get('p');
       Intro.step(pid ? 'Opening your project' : 'Getting your projects', null);
       var projP = pid ? store.load(pid) : Promise.resolve(null);
@@ -259,6 +272,15 @@
           var ws = Workspace(r[0], { me: me, store: store, list: r[1], from: r[2] && r[2].studentId === me.uid ? r[2] : null });
           g.PaisleyIDE.workspace = ws;
           if (proj) ws.open(proj); else ws.launcher();
+          /* If the Studio Desk switches the IDE off for this builder while they work, it locks (the rules refuse saves too). */
+          if (me.role === 'student' && !opts.user) {
+            db.collection('techSettings').doc('advancedIde').onSnapshot(function (c) {
+              db.collection('techStudents').doc(me.uid).get().then(function (s) {
+                var ok = ideAllowed(c.exists ? c.data() : null, me.uid, s.exists ? s.data() : {});
+                if (!ok) ws.revoke(); else ws.restore();
+              });
+            }, function () { });
+          }
           Intro.ready(function () { ws.reveal(); });
         }, function (e) {
           Intro.fail(e.message || 'The editor could not load.', '<button type="button" onclick="location.reload()">Try again</button>');
@@ -287,7 +309,10 @@
     var saveTimer = 0, draftTimer = 0, prevTimer = 0, savedOnce = false, saving = false, dirtyMeta = false;
     var sideView = lsGet('pz-ide-side') || 'explorer', openDirs = {};
 
-    var runner = g.PaisleyRunner.create({ onProgress: onRuntime });
+    var runner = g.PaisleyRunner.create({
+      onProgress: onRuntime,
+      onReset: function () { intel.resetJedi(); if (P && S.warm) setTimeout(function () { warm(P.lang); }, 300); }
+    });
     var intel = g.PaisleyIntel.setup(monaco, {
       files: function () { return P ? P.files : []; }, runner: runner,
       pathOf: function (m) { return nameOfModel(m); }, langOfModel: function (m) { var n = nameOfModel(m); var f = file(n); return f ? f.lang : 'txt'; },
@@ -941,8 +966,16 @@
         return;
       }
       if (res.failed) {
-        tSys('bad', 'fa-triangle-exclamation', esc(langName(r)) + ' could not start.');
-        tHint((res.message || '') + (/download|network|fetch|load/i.test(res.message || '') ? ' Check your internet connection and press Run again.' : ''), null, ' <button type="button" data-cmd="run">Try again</button>');
+        if (runLang === 'py' && /pygame|SDL|document is not defined/i.test(runText + ' ' + (res.message || ''))) {
+          tSys('bad', 'fa-gamepad', 'Pygame could not open a game window.');
+          tHint('Pygame windows (pygame.display.set_mode) need a desktop window, which the Advanced IDE does not have yet. Python has been restarted, so press Run for other programs. For games in the browser, try a JavaScript project with a canvas; for charts, matplotlib works here.');
+          return;
+        }
+        var offline = /download|network|fetch|load/i.test(res.message || '');
+        tSys('bad', 'fa-triangle-exclamation', offline ? esc(langName(r)) + ' could not be downloaded.' : esc(langName(r)) + ' stopped unexpectedly.');
+        tHint(offline ? 'Check your internet connection, then press Run again.'
+          : 'The ' + langName(r) + ' engine hit a problem it could not recover from' + (res.message ? ' (' + res.message + ')' : '') + '. It has been restarted with a clean slate, so press Run to try again.',
+          null, ' <button type="button" data-cmd="run">Run again</button>');
         return;
       }
       if (res.phase === 'compile') {
@@ -1464,10 +1497,27 @@
     g.addEventListener('resize', function () { if (innerWidth <= 900 && !q('#aiMain').classList.contains('noside') && P && document.activeElement && !q('#aiSide').contains(document.activeElement)) { /* keep the overlay until a file is chosen */ } });
     runner.ready.then(function () { status(); updateInputHelp(); if (P && $('.ai-term-empty', term)) termEmpty(); }, function (e) { toast(e.message); });
 
+    /* Access switched off by the Studio Desk while the builder is here: lock, keep the unsaved draft
+       in this browser (offered back next time), and say why. Switched back on: reload. */
+    var revoked = false;
+    function revoke() {
+      if (revoked) return; revoked = true;
+      if (running) stop();
+      clearTimeout(saveTimer);
+      if (P) { scheduleDraft(); P.canEdit = false; groups.forEach(function (gr) { gr.ed.updateOptions({ readOnly: true }); }); paintSide(); paintTabs(); setSave(''); }
+      q('#aiRunGrp').hidden = true;
+      var msg = '<i class="fas fa-lock"></i><span>The Studio Desk has switched the Advanced IDE off for you. Your projects are kept and open again when it is switched back on.</span><span class="sp"></span><a class="ai-btn primary" href="/tech/dashboard#practice">Back to Tech Studio</a>';
+      banner(msg);
+      if (!P) { var box = q('#aiLaunch'); box.onclick = null; box.innerHTML = '<div class="ai-launch-in" style="grid-template-columns:1fr;max-width:620px"><div class="ai-card"><div class="ai-banner" style="border-radius:12px">' + msg + '</div></div></div>'; }
+    }
+    function restore() { if (revoked) location.reload(); }
+
     paintActs();
     return {
       open: open,
       launcher: launcher,
+      revoke: revoke,
+      restore: restore,
       reveal: function () {
         requestAnimationFrame(function () { app.classList.add('in'); });
         setTimeout(function () { groups.forEach(function (gr) { gr.ed.layout(); }); var ed = G().ed; if (P && ed.getModel()) ed.focus(); }, 700);

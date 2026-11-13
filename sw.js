@@ -1,7 +1,7 @@
 // Paisley Studio Service Worker
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v12-techwork'; // bumped: audience-aware client + Cloud Function calls must not be intercepted
+const CACHE_NAME = 'paisley-studio-v13-ide'; // bumped: the Advanced IDE is never intercepted; offline misses answer with a network error
 const CACHE_URLS = ['./', './index.html'];
 
 // Hosts that must NEVER be intercepted by the service worker.
@@ -62,6 +62,13 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // 2b) The Advanced Paisley IDE (/tech/ide and its scripts) always goes straight to the network:
+  //     it relies on its own response headers (COOP/COEP) and caches its runtimes itself.
+  const path = new URL(url).pathname;
+  if (path === '/tech/ide' || path.indexOf('/tech/ide.') === 0 || path.indexOf('/js/tech/advanced-ide/') === 0) {
+    return;
+  }
+
   // 3) Only cache safe GET requests. Everything else (POST, PUT, etc.)
   //    goes straight to the network.
   if (event.request.method !== 'GET') {
@@ -77,7 +84,7 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
           return response;
         })
-        .catch(() => caches.match(event.request).then(c => c || caches.match('./index.html')))
+        .catch(() => caches.match(event.request).then(c => c || caches.match('./index.html')).then(c => c || Response.error()))
     );
     return;
   }
@@ -90,7 +97,9 @@ self.addEventListener('fetch', event => {
           if (response.ok) { const copy = response.clone(); caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)); }
           return response;
         })
-        .catch(() => caches.match(event.request))
+        // Offline with nothing cached: answer with a plain network error instead of throwing
+        // "Failed to fetch" inside the service worker.
+        .catch(() => caches.match(event.request).then(c => c || Response.error()))
     );
     return;
   }
@@ -101,10 +110,10 @@ self.addEventListener('fetch', event => {
       return cached || fetch(event.request).then(response => {
         if (response.ok) {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
         }
         return response;
       });
-    })
+    }).catch(() => Response.error())
   );
 });

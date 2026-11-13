@@ -174,6 +174,7 @@
       [/ZeroDivisionError/, 'The program divided by zero. Check the number you divide by before dividing.'],
       [/IndexError/, 'The program asked for an item past the end of a list. Lists start at 0, so the last item is len(list) - 1.'],
       [/KeyError: (.*)/, function (m) { return 'The dictionary has no key ' + m[1] + '. Use dict.get(key) or check with "if key in dict".'; }],
+      [/No module named '(turtle|tkinter|_tkinter)'/, function (m) { return m[1].replace('_', '') + ' draws in a desktop window, which a browser cannot open. For pictures and charts use matplotlib (it works here); for games, try a JavaScript project with a canvas.'; }],
       [/ModuleNotFoundError: No module named '([^']+)'/, function (m) { return 'There is no module called "' + m[1] + '". For your own file, check that ' + m[1] + '.py exists. Some packages from pip are not available in the browser.'; }],
       [/EOFError/, 'The program wanted more input than it was given. Type your answer in the terminal when it asks, or add lines in the Input tab.'],
       [/RecursionError/, 'A function kept calling itself without stopping. Check its base case.'],

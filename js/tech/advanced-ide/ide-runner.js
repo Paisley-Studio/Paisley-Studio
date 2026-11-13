@@ -45,7 +45,7 @@
     'llvm.core.wasm': 75532134, 'llvm-resources.tar': 29665280
   };
   var CACHE = 'paisley-ide-runtimes-v1';
-  var WORKER_URL = '/js/tech/advanced-ide/runner-worker.js?v=1';
+  var WORKER_URL = '/js/tech/advanced-ide/runner-worker.js?v=2';
   var LANG_NAME = { python: 'Python', c: 'C', cpp: 'C/C++', php: 'PHP', java: 'Java' };
 
   function typeOf(url) {
@@ -167,11 +167,8 @@
         return;
       }
       if (m.t === 'crash') {
-        Object.keys(pending).forEach(function (id) {
-          var p = pending[id]; if (p.role !== m.role) return;
-          delete pending[id]; p.reject(new Error(m.message));
-        });
-        if (current && current.role === m.role) finish({ ok: false, code: 1, type: 'runtime', message: m.message, failed: true });
+        if (current && current.role === m.role) finish({ ok: false, code: 1, type: 'runtime', message: m.message, failed: true, restart: true });
+        reset(m.role);
         return;
       }
       if (current && m.id === current.id) {
@@ -184,9 +181,25 @@
       }
       if (m.t === 'result' && pending[m.id]) {
         var p = pending[m.id]; delete pending[m.id];
-        if (m.ok === false && m.error) p.reject(new Error(m.error)); else p.resolve(m);
+        if (m.ok === false && m.restart) reset(p.role);
+        if (m.ok === false && m.error) { var er = new Error(m.error); er.restart = !!m.restart; p.reject(er); } else p.resolve(m);
       }
     });
+
+    /* Throws a worker away (its runtime broke, or it was stopped). The next call starts a fresh one,
+       which loads its runtime again from Cache Storage. */
+    function reset(role) {
+      if (win) win.postMessage({ t: 'kill', role: role }, '*');
+      Object.keys(pending).forEach(function (id) {
+        if (pending[id].role !== role) return;
+        var p = pending[id]; delete pending[id];
+        var er = new Error('The runtime restarted.'); er.restart = true; p.reject(er);
+      });
+      if (role === 'tools') {
+        ['python', 'cpp', 'c', 'php'].forEach(function (l) { if (states[l]) setState(l, 'idle', {}); });
+        if (o.onReset) o.onReset(role);
+      }
+    }
 
     function call(role, msg, transfer) {
       return ready.then(function () {
@@ -201,6 +214,7 @@
     function finish(res) {
       var c = current; if (!c) return;
       current = null;
+      if (res && res.restart && c.role === 'run') reset('run');
       c.resolve(res || { ok: false, code: 1 });
     }
 

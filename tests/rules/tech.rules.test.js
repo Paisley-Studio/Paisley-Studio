@@ -218,7 +218,37 @@ test("practice: the builder owns it, their coach reads it and leaves notes", asy
   await assertFails(as("kid1").doc("techPractice/p1").update({ coachNote: "edited" }));
 });
 
+test("Advanced IDE access: off until the Studio Desk switches it on, then by level or by name", async () => {
+  const setCfg = (cfg) => env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc("techSettings/advancedIde").set(cfg));
+  const proj = (id) => ({ studentId: id, type: "advanced", title: "P", codeFiles: [], ide: { v: 1, lang: "py" } });
+  // No settings doc at all: nobody can make an Advanced project.
+  await assertFails(as("kid1").doc("techPractice/acc0").set(proj("kid1")));
+  await setCfg({ enabled: false, levels: ["beginner", "intermediate", "expert"], students: ["kid1"] });
+  await assertFails(as("kid1").doc("techPractice/acc1").set(proj("kid1")));
+  // On, by level: kid1 has no level, which counts as intermediate.
+  await setCfg({ enabled: true, levels: ["intermediate"], students: [] });
+  await assertSucceeds(as("kid1").doc("techPractice/acc2").set(proj("kid1")));
+  await setCfg({ enabled: true, levels: ["beginner"], students: [] });
+  await assertFails(as("kid1").doc("techPractice/acc3").set(proj("kid1")));
+  // On, picked by name.
+  await setCfg({ enabled: true, levels: [], students: ["kid1"] });
+  await assertSucceeds(as("kid1").doc("techPractice/acc3").set(proj("kid1")));
+  await assertFails(as("kid2").doc("techPractice/acc4").set(proj("kid2")));
+  // Ordinary practice is never affected, and cannot be turned into an Advanced project without access.
+  await assertSucceeds(as("kid2").doc("techPractice/plain2").set({ studentId: "kid2", type: "code", title: "x" }));
+  await assertFails(as("kid2").doc("techPractice/plain2").update({ type: "advanced" }));
+  // Switched off again: existing Advanced projects can no longer be saved.
+  await setCfg({ enabled: false, levels: [], students: ["kid1"] });
+  await assertFails(as("kid1").doc("techPractice/acc2").update({ title: "edited" }));
+  await assertSucceeds(as("kid1").doc("techPractice/acc2").get());
+  // Builders read the settings; only admins write them.
+  await assertSucceeds(as("kid1").doc("techSettings/advancedIde").get());
+  await assertFails(as("kid1").doc("techSettings/advancedIde").set({ enabled: true, levels: [], students: ["kid1"] }));
+  await assertSucceeds(as("admin1").doc("techSettings/advancedIde").set({ enabled: true, levels: [], students: ["kid1"] }));
+});
+
 test("Advanced IDE projects: practice docs the builder owns; staff read only; guardians cannot open them", async () => {
+  await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc("techSettings/advancedIde").set({ enabled: true, levels: ["intermediate"], students: [] }));
   const proj = { studentId: "kid1", studentName: "Kid One", coachId: "coach1", type: "advanced", title: "Guess", done: false, helpRequested: false,
     codeFiles: [{ name: "main.py", lang: "py", content: "print(1)" }], codeFolders: [], codeActive: "main.py", ide: { v: 1, lang: "py", entry: "main.py", open: ["main.py"] } };
   await assertSucceeds(as("kid1").doc("techPractice/adv1").set(proj));

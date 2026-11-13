@@ -1,3 +1,15 @@
+# Advanced Paisley IDE: access controls and Python crash fix (2026-11-13)
+
+- **Python stopped working for the whole session after one crash.** `pygame.init()` reads the page's `screen`, which a Web Worker does not have, so Pyodide died ("screen is not defined"). Every later run then failed ("Pyodide already fatally failed"). Now:
+  - the worker provides a `screen`, so pygame no longer kills Python;
+  - any runtime-level failure throws that worker away, so the next Run starts a fresh one;
+  - the terminal explains what happened, including that pygame windows and turtle/tkinter cannot open in a browser (matplotlib works).
+- **`sw.js`**: the service worker never handles `/tech/ide` or `js/tech/advanced-ide/`, and an offline miss returns a network error instead of throwing "Failed to fetch". Cache bumped to `paisley-studio-v13-ide`.
+- **Admin > Tech Studio > Controls** (`js/admin/tech-controls.js`, `techSettings/advancedIde`): the Advanced IDE is off until switched on, then given by level (Beginner / Intermediate / Expert) and/or to builders picked by name. The picker lists Paisley-admitted builders and applicants, with filters and a count of who will have access. Enforced in the builder portal (live), on `/tech/ide` (refuses, or locks if switched off mid-session), in `firestore.rules` (`advancedIdeAllowed()`) and in `runCode`.
+- In Practice the IDE is now a practice tool in Start practising (the large card is gone). The Home card, the Code Lab button and Advanced projects in My practice appear only with access.
+- Tests: new access cases in `tests/rules/tech.rules.test.js` and `functions/test/code-runner.test.js`.
+- Deploy: firestore rules, functions (`runCode`), hosting. Then switch the IDE on in Admin > Tech Studio > Controls.
+
 # Tech Studio: the Advanced Paisley IDE (2026-11-13)
 
 - **A new coding environment at `/tech/ide`** (`tech/ide.html`, `js/tech/advanced-ide/`). It supports Python, Java, C, C++, PHP, JavaScript, HTML and CSS in Monaco, with the Paisley look. Builders open it from a card in Practice, a card on Home, or the new "Advanced IDE" button in Code Lab on Practice coding experiments; that button copies the practice's files into a new project and never changes the original. Entering plays a short entrance: Tech Studio dims and blurs under a burst of Paisley confetti, then a dark welcome ("WELCOME TO THE ADVANCED PAISLEY IDE") shows the real loading steps and reveals the workspace. It can be skipped, and is a plain fade with reduced motion.
