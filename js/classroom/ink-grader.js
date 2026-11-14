@@ -32,6 +32,11 @@
    Libraries (CDN only, loaded lazily, no build step):
      pdf.js 3.11.174  - renders the student's PDF
      pdf-lib 1.17.1   - burns the ink into a NEW PDF on Grade
+   Any handed-in file opens: file-convert.js (loaded from next to this file
+   when a file is opened) reads what the file really is from its bytes and
+   repairs damaged PDFs or turns Word / Excel / PowerPoint / text / HEIC /
+   TIFF etc. into a PDF to mark. If the browser download is blocked (bucket
+   CORS not set), the file comes through the fetchWorkFile callable instead.
 ========================================================= */
 (function (global) {
   'use strict';
@@ -39,6 +44,10 @@
   var PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
   var PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   var PDFLIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+  var CONVERT_URL = (function () {
+    var me = document.currentScript && document.currentScript.src;
+    return (me ? me.replace(/ink-grader\.js(\?.*)?$/, 'file-convert.js') : '/js/classroom/file-convert.js') + '?v=conv1';
+  })();
 
   var SWATCHES = [
     { name: 'Teal', hex: '#55BFB3' },
@@ -84,10 +93,34 @@
     }).catch(function (e) { libsPromise = null; throw e; });
     return libsPromise;
   }
+  var convertPromise = null;
+  function ensureConverter() {
+    if (global.PaisleyFileConvert) return Promise.resolve(global.PaisleyFileConvert);
+    if (!convertPromise) convertPromise = loadScript(CONVERT_URL).then(function () { return global.PaisleyFileConvert; }).catch(function (e) { convertPromise = null; throw e; });
+    return convertPromise;
+  }
+  /* The student's file. The browser fetch needs CORS on the bucket (cors.json); when that
+     is blocked or fails, the fetchWorkFile callable hands the same file over (staff only,
+     and only with the file's own download token). */
+  function fetchViaServer(url) {
+    if (!(global.firebase && firebase.functions)) return Promise.reject(new Error('Could not download the student’s file.'));
+    return firebase.functions().httpsCallable('fetchWorkFile')({ url: url }).then(function (r) {
+      var b64 = (r.data && r.data.data) || '', bin = atob(b64), u8 = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    });
+  }
   function fetchBytes(url) {
     return fetch(url).then(function (r) {
-      if (!r.ok) throw new Error('Could not download the student’s file (' + r.status + ').');
+      if (!r.ok) { var e = new Error('Could not download the student’s file (' + r.status + ').'); e.httpStatus = r.status; throw e; }
       return r.arrayBuffer();
+    }).catch(function (e) {
+      if (e && (e.httpStatus === 404 || e.httpStatus === 403)) throw new Error(e.httpStatus === 404 ? 'The student’s file is no longer in storage (it may have been deleted or replaced). Ask the student to upload it again.' : 'Access to the student’s file was refused (403). The link may have been revoked; ask the student to upload it again.');
+      console.warn('ink: direct download failed, trying through the server', e);
+      return fetchViaServer(url).catch(function (e2) {
+        console.warn('ink: server download failed', e2);
+        throw new Error('Could not download the student’s file. ' + ((e2 && e2.message) || '') + ' If this keeps happening, set CORS on the storage bucket (gsutil cors set cors.json gs://<bucket>, see CHANGELOG.md).');
+      });
     });
   }
   function safeName(s) {
@@ -997,11 +1030,17 @@
       var keep = [];
       for (var i = 0; i < S.pageCount; i++) if (!info(i).removed) keep.push(i);
       if (!keep.length) throw new Error('Every page has been deleted. Restore at least one page.');
-      var srcDoc = S.isImage ? null : await L.PDFDocument.load(S.sourceBytes, { ignoreEncryption: true });
+      var srcDoc = null;
+      if (!S.isImage) {
+        // pdf.js opens more PDFs than pdf-lib does. If pdf-lib cannot read the student's file,
+        // every page is drawn from the pdf.js rendering instead (still a full marked copy).
+        try { srcDoc = await L.PDFDocument.load(S.sourceBytes, { ignoreEncryption: true, throwOnInvalidObject: false }); }
+        catch (e) { console.warn('pdf-lib could not read the source, using page pictures:', e); srcDoc = null; }
+      }
       var srcPages = srcDoc ? srcDoc.getPages() : [];
       function pageRot(k) { return srcPages[k] ? ((srcPages[k].getRotation().angle % 360) + 360) % 360 : 0; }
       function hasText(k) { return (info(k).strokes || []).some(function (m) { return m.tool === 'text'; }); }
-      function vectorOk(k) { return !S.isImage && isIdentity(info(k).view) && (pageRot(k) === 0 || !hasText(k)); }
+      function vectorOk(k) { return !!srcDoc && !S.isImage && isIdentity(info(k).view) && (pageRot(k) === 0 || !hasText(k)); }
       var font = null;
 
       async function drawMarks(doc, page, marks, rot) {
@@ -1340,9 +1379,6 @@
       var type = String(src ? (src.type || 'application/pdf') : (data.fileType || '')).toLowerCase();
       var name = String(src ? (src.name || 'work.pdf') : (data.fileName || '')).toLowerCase();
       var getBytes = !src ? fetchBytes : function () { return Promise.resolve(src.bytes instanceof Uint8Array ? src.bytes.buffer.slice(src.bytes.byteOffset, src.bytes.byteOffset + src.bytes.byteLength) : src.bytes); };
-      var isPdf = /pdf/.test(type) || /\.pdf$/.test(name);
-      var isImg = /^image\//.test(type) || /\.(jpe?g|png|webp)$/.test(name);
-
       if (!url) {
         stage.innerHTML = data.textAnswer
           ? '<div class="ink-text"><b>Typed answer</b><br><br>' + esc(data.textAnswer) + '</div>'
@@ -1350,24 +1386,36 @@
         hideMarkingTools();
         return;
       }
-      if (!isPdf && !isImg) {
-        stage.innerHTML = '<div class="ink-msg"><i class="fas fa-file" style="font-size:2rem"></i><br>This file type cannot be marked with ink here. ' +
-          '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Download it</a>, then give the score and feedback with Grade.</div>';
-        hideMarkingTools();
-        return;
-      }
+      var dl = /^https:\/\//.test(url) ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-download"></i> Download the original</a>' : '';
+      function step(t) { stage.innerHTML = '<div class="ink-msg"><i class="fas fa-spinner fa-spin"></i> ' + esc(t) + '</div>'; }
       try {
-        await ensureLibs();
-        if (isImg) {
-          var buf = await getBytes(url);
+        await Promise.all([ensureLibs(), ensureConverter()]);
+        step('Downloading the student’s work…');
+        var raw = new Uint8Array(await getBytes(url));
+        step('Opening the student’s work…');
+        // What the file really is comes from its bytes, never from its name or stored type.
+        var got = await global.PaisleyFileConvert.prepare(raw, { type: type, name: name, pdfjsLib: global.pdfjsLib, PDFLib: global.PDFLib, onStep: step });
+        if (got.kind === 'none') {
+          stage.innerHTML = '<div class="ink-msg"><i class="fas fa-file-circle-exclamation" style="font-size:2rem"></i><br>' + esc(got.message) + (dl ? '<br><br>' + dl : '') +
+            '<br><br><small>You can still give the score and feedback with Grade.</small></div>';
+          hideMarkingTools();
+          return;
+        }
+        if (got.note) {
+          var nb = document.createElement('div');
+          nb.className = 'ink-banner';
+          nb.innerHTML = '<b class="tag"><i class="fas fa-circle-info"></i> ' + esc(got.note) + '</b>' + dl;
+          root.querySelector('.ink-main').insertAdjacentElement('beforebegin', nb);
+        }
+        if (got.kind === 'image') {
           S.isImage = true;
-          S.imageBytes = new Uint8Array(buf);
-          S.imageKind = sniffImage(S.imageBytes) || (/png/.test(type + name) ? 'png' : 'jpg');
+          S.imageBytes = got.bytes;
+          S.imageKind = got.imageKind || sniffImage(got.bytes) || 'png';
           var im = await imageEl();
           S.pageCount = 1; S.dims = [{ w: im.naturalWidth || 1000, h: im.naturalHeight || 1414 }];
         } else {
-          S.sourceBytes = new Uint8Array(await getBytes(url));
-          S.pdf = await global.pdfjsLib.getDocument({ data: S.sourceBytes.slice() }).promise;
+          S.sourceBytes = got.bytes instanceof Uint8Array ? got.bytes : new Uint8Array(got.bytes);
+          S.pdf = got.pdf;
           S.pageCount = S.pdf.numPages;
           for (var i = 1; i <= S.pageCount; i++) {
             var pg = await S.pdf.getPage(i), vp = pg.getViewport({ scale: 1 });
@@ -1380,8 +1428,8 @@
       } catch (e) {
         console.error('ink boot:', e);
         stage.innerHTML = '<div class="ink-msg"><i class="fas fa-triangle-exclamation" style="font-size:2rem;color:var(--error,#E74C3C)"></i><br>' + esc(e.message || 'Could not open this file.') +
-          '<br><br>If this keeps happening, the storage bucket may need CORS enabled (see CHANGELOG.md).</div>';
-        fabEl.hidden = true;
+          (dl ? '<br><br>' + dl : '') + '<br><br><small>You can still give the score and feedback with Grade.</small></div>';
+        hideMarkingTools();
       }
     })();
 

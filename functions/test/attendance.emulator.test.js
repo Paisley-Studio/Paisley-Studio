@@ -133,6 +133,8 @@ test("tutor accounts for students, submits; absence notice only once it is final
   await A.resolveStudent("t1", { sessionId: maths, studentId: "ben", outcome: "absent", note: "" }, at("09:20"));
   const r2 = await A.resolveStudent("t1", { sessionId: maths, studentId: "cal", outcome: "connectivity", note: "Camera froze, joined by phone" }, at("09:21"));
   assert.equal(r2.status, "connectivity");
+  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:30") }), /Confirm who is in the class first.*Ann/);
+  await A.confirmPresence("t1", { sessionId: maths, studentId: "ann", outcome: "confirm" }, at("09:22"));
   assert.equal((await rec(maths, "ben")).absenceConfirmedAt, null, "not final before submission");
   const sub = await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:40") });
   assert.equal(sub.status, "submitted");
@@ -154,6 +156,65 @@ test("tutor accounts for students, submits; absence notice only once it is final
   assert.equal(d.emailStatus, "sent"); assert.equal(d.attempts, 2);
   await A.deliver(n.id);
   assert.equal(sent.filter((x) => x.to === "bea@example.com").length, 1, "never sent twice");
+});
+
+test("two timestamps: the student registers, the tutor confirms them in the live class or marks them not in class", { skip: !HAVE }, async () => {
+  await seed();
+  await A.checkIn("ann", "maths", at("09:03"));
+  await A.checkIn("ben", "maths", at("09:04"));
+  let ann = await rec(maths, "ann");
+  assert.equal(ann.confirmState, "pending"); assert.equal(ann.tutorConfirm, null);
+  // Only the register's tutor, only registered students, valid outcomes.
+  await assert.rejects(A.confirmPresence("t2", { sessionId: maths, studentId: "ann", outcome: "confirm" }, at("09:10")), /not your register/);
+  await assert.rejects(A.confirmPresence("t1", { sessionId: maths, studentId: "cal", outcome: "confirm" }, at("09:10")), /has not registered/);
+  await assert.rejects(A.confirmPresence("t1", { sessionId: maths, studentId: "ann", outcome: "maybe" }, at("09:10")), /Confirm or Not in class/);
+  const c1 = await A.confirmPresence("t1", { sessionId: maths, studentId: "ann", outcome: "confirm" }, at("09:10"));
+  assert.equal(c1.confirmState, "confirmed");
+  ann = await rec(maths, "ann");
+  assert.equal(ann.status, "present"); assert.equal(ann.checkIn.at.toMillis(), at("09:03"), "student timestamp untouched");
+  assert.equal(ann.tutorConfirm.at.toMillis(), at("09:10"), "second timestamp from the tutor");
+  assert.equal(ann.tutorConfirm.minutesAfterCheckIn, 7); assert.equal(ann.tutorConfirm.byName, "Tess Tutor");
+  assert.equal((await A.confirmPresence("t1", { sessionId: maths, studentId: "ann", outcome: "confirm" }, at("09:11"))).unchanged, true, "retries are harmless");
+  assert.equal((await rec(maths, "ann")).tutorConfirm.at.toMillis(), at("09:10"), "first confirmation kept on retry");
+  // Ben registered but is not in the Meet.
+  await A.confirmPresence("t1", { sessionId: maths, studentId: "ben", outcome: "not_in_class" }, at("09:12"));
+  let ben = await rec(maths, "ben");
+  assert.equal(ben.status, "no_show"); assert.equal(ben.confirmState, "not_in_class"); assert.equal(ben.absenceConfirmedAt, null, "not final before submission");
+  // The tutor may change their mind before submitting (Ben joined late after all), then back.
+  await A.confirmPresence("t1", { sessionId: maths, studentId: "ben", outcome: "confirm" }, at("09:13"));
+  assert.equal((await rec(maths, "ben")).status, "present");
+  await A.confirmPresence("t1", { sessionId: maths, studentId: "ben", outcome: "not_in_class" }, at("09:14"));
+  await A.resolveStudent("t1", { sessionId: maths, studentId: "cal", outcome: "absent", note: "" }, at("09:20"));
+  await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:30") });
+  ben = await rec(maths, "ben");
+  assert.ok(ben.absenceConfirmedAt, "final once the register is in");
+  await A.noticeAbsence(ben, maths + "_ben"); await A.noticeAbsence(ben, maths + "_ben");
+  const ns = await notices("no_show");
+  assert.equal(ns.length, 1); assert.equal(ns[0].recipientId, "pb"); assert.match(ns[0].message, /not find them in the live class/);
+  await assert.rejects(A.confirmPresence("t1", { sessionId: maths, studentId: "ben", outcome: "confirm" }, at("09:40")), /Studio Desk/);
+  const snap = (await db().doc("attendanceSubmissions/" + maths).get()).data();
+  const row = snap.rows.filter((r) => r.studentId === "ann")[0];
+  assert.equal(row.confirmState, "confirmed"); assert.equal(row.tutorConfirmAt.toMillis(), at("09:10"));
+  const audit = await db().collection("attendanceAudit").where("recordId", "==", maths + "_ann").get();
+  assert.ok(audit.docs.some((d) => d.data().action === "tutor_confirm_present"));
+});
+
+test("unconfirmed registrations: submittable from the end, flagged, still confirmable afterwards", { skip: !HAVE }, async () => {
+  await seed();
+  await A.checkIn("ann", "maths", at("09:05"));
+  await A.resolveStudent("t1", { sessionId: maths, studentId: "ben", outcome: "absent", note: "" }, at("09:20"));
+  await A.resolveStudent("t1", { sessionId: maths, studentId: "cal", outcome: "absent", note: "" }, at("09:20"));
+  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:59") }), /Confirm who is in the class first/);
+  const sub = await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:00") });
+  assert.equal(sub.unconfirmed, 1);
+  assert.equal((await rec(maths, "ann")).confirmState, "unconfirmed");
+  const s = (await db().doc("attendanceSessions/" + maths).get()).data();
+  assert.equal(s.unconfirmedCount, 1); assert.equal(s.needsFollowUp, true);
+  await A.confirmPresence("t1", { sessionId: maths, studentId: "ann", outcome: "confirm" }, at("10:05"));
+  const ann = await rec(maths, "ann");
+  assert.equal(ann.confirmState, "confirmed"); assert.equal(ann.tutorConfirm.afterSubmission, true);
+  const am = await db().collection("attendanceAmendments").where("sessionId", "==", maths).get();
+  assert.ok(am.docs.some((d) => d.data().kind === "tutor_confirmation"), "a confirmation after submission is an amendment");
 });
 
 test("from the end of the lesson the tutor may submit with students unmarked; they stay unaccounted and can be marked after", { skip: !HAVE }, async () => {

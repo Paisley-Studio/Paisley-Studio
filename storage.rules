@@ -143,10 +143,18 @@ service firebase.storage {
     // =====================================================
     // FLAT-EXAM SUBMISSIONS — the student's completed exam paper
     // =====================================================
+    // Any document, photo, spreadsheet or slide deck the marking screen can open
+    // (js/classroom/file-convert.js). Keep in step with HANDIN_TYPES in work-helpers.js.
+    // No HTML, SVG or scripts: nothing a browser would run.
     function studentWorkFileOk() {
       return request.resource.size < 25 * 1024 * 1024 && (
-        request.resource.contentType.matches('image/(jpeg|png|webp)') ||
-        request.resource.contentType.matches('application/pdf'));
+        request.resource.contentType.matches('image/(jpeg|png|webp|gif|bmp|heic|heif|tiff|avif)') ||
+        request.resource.contentType.matches('application/pdf') ||
+        request.resource.contentType.matches('application/(msword|rtf)') ||
+        request.resource.contentType.matches('application/vnd[.]openxmlformats-officedocument[.].*') ||
+        request.resource.contentType.matches('application/vnd[.]ms-(excel|powerpoint)([.].*)?') ||
+        request.resource.contentType.matches('application/vnd[.]oasis[.]opendocument[.](text|spreadsheet|presentation)') ||
+        request.resource.contentType.matches('text/(plain|csv)'));
     }
     function isParentOfStudent(studentId) {
       return isSignedIn() &&

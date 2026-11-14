@@ -983,8 +983,8 @@ function parentNewsletter({ newsletter, parentName, unsubUrl }) {
 }
 
 /* Attendance and punctuality (functions/attendance.js). One template, one plain style.
-   kind: late | absent | strike4_student | strike4_parent | referral_parent | referral_admin | auto_submit_admin */
-function attendanceNotice({ kind, audience, recipientName, student, subjectName, tutorName, startAt, arrivedAt, minutesLate, strikes, academicYear, periodPhrase, unresolved }) {
+   kind: late | absent | no_show | strike4_student | strike4_parent | referral_parent | referral_admin | auto_submit_admin */
+function attendanceNotice({ kind, audience, recipientName, student, subjectName, tutorName, startAt, arrivedAt, confirmedAt, minutesLate, strikes, academicYear, periodPhrase, unresolved }) {
   const per = esc(periodPhrase || "this academic year");
   const who = esc((student && student.name) || 'your child');
   const hi = recipientName ? `Hi ${esc(firstName(recipientName))},` : 'Hello,';
@@ -1018,6 +1018,17 @@ function attendanceNotice({ kind, audience, recipientName, student, subjectName,
       lead: `${fa('fa-user-xmark', '#E74C3C')}<strong>${who}</strong> was recorded absent from this lesson by the tutor.`,
       rows: lessonRows,
       tail: muted('If this is not right, or there was a reason for the absence, reply through Messages in the Parent Portal and the Studio Desk will look into it.'),
+      cta: parentCta
+    },
+    no_show: {
+      subject: `Registered but not in class: ${subjectName || 'lesson'}`,
+      heading: 'Not found in the live class',
+      lead: `${fa('fa-user-xmark', '#E74C3C')}<strong>${who}</strong> registered for this lesson, but was not in the live class when the tutor called the register.`,
+      rows: lessonRows.concat([
+        ['fa-user-clock', 'Registered at', timeOf(arrivedAt)],
+        confirmedAt ? ['fa-chalkboard-user', 'Tutor checked the class at', timeOf(confirmedAt)] : null
+      ]),
+      tail: muted('Registering is only the first step: the tutor also confirms each student is really in the class. This lesson is recorded as an absence. If this is not right, reply through Messages in the Parent Portal and the Studio Desk will look into it.'),
       cta: parentCta
     },
     strike4_student: {

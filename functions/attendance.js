@@ -18,6 +18,16 @@
      attendanceLocks/{tutorId}_{subjectId}            post-lesson subject restriction (rules read it)
      attendanceAudit/{auto id}                        append-only audit trail
 
+   Two timestamps per student (accountability for virtual classes):
+     1. checkIn.at       the STUDENT registers ("I'm here"); server time, decides on time / late.
+     2. tutorConfirm.at  the TUTOR confirms the student is really in the live class (Google Meet),
+                         after calling their name: Confirm (confirmState "confirmed") or
+                         Not in class (status "no_show", confirmState "not_in_class", treated as an
+                         absence and reported to the family once final).
+   confirmState: null (not registered) | pending | confirmed | not_in_class | unconfirmed
+   ("unconfirmed" = the register went in while the tutor had not confirmed; still confirmable).
+   Before the lesson ends the tutor must confirm every registered student to submit.
+
    Every write goes through this file (the rules allow no client writes).
    Idempotency: sessions and records are created with create(); a strike's
    id is its record id; a submission's id is its session id; notices use
@@ -56,10 +66,12 @@ const TUTOR_OUTCOMES = {
   excused_admin: { status: "excused", review: true, label: "Excused by administration" },
   other: { status: "other", review: true, label: "Other reason" }
 };
-const ADMIN_STATUSES = ["present", "late", "present_verified", "connectivity", "absent", "excused", "other", "unaccounted"];
+const ADMIN_STATUSES = ["present", "late", "present_verified", "connectivity", "absent", "no_show", "excused", "other", "unaccounted"];
+const CONFIRM_OUTCOMES = { confirm: "confirmed", not_in_class: "not_in_class" };
 const STATUS_LABEL = {
   expected: "Not registered yet", unaccounted: "Unaccounted for", present: "Present", late: "Late",
   present_verified: "Present (verified by tutor)", connectivity: "Connectivity / device issue", absent: "Absent",
+  no_show: "Registered but not in class",
   excused: "Excused", other: "Other reason", cancelled: "Lesson cancelled"
 };
 
@@ -197,6 +209,7 @@ function recordShell(session, sid, student) {
     tutorIds: session.tutorIds, tutorName: session.tutorName, startAt: session.startAt, endAt: session.endAt, graceAt: session.graceAt,
     academicYear: session.academicYear, status: "expected", checkIn: null, resolution: null, reviewState: null,
     needsVerification: false, strikeId: null, absenceConfirmedAt: null, corrections: [],
+    confirmState: null, tutorConfirm: null,
     createdAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp()
   };
 }
@@ -266,9 +279,20 @@ function publicRecord(r) {
     id: r.id, studentId: r.studentId, studentName: r.studentName, status: r.status,
     checkIn: r.checkIn ? { at: ms(r.checkIn.at), minutesLate: r.checkIn.minutesLate, classification: r.checkIn.classification, method: r.checkIn.method || "online" } : null,
     needsVerification: !!r.needsVerification, strikeId: r.strikeId || null, reviewState: r.reviewState || null,
-    resolution: r.resolution ? { outcome: r.resolution.outcome, note: r.resolution.note, byName: r.resolution.byName, at: ms(r.resolution.at) } : null
+    resolution: r.resolution ? { outcome: r.resolution.outcome, note: r.resolution.note, byName: r.resolution.byName, at: ms(r.resolution.at) } : null,
+    confirmState: confirmStateOf(r),
+    tutorConfirm: r.tutorConfirm ? { outcome: r.tutorConfirm.outcome, at: ms(r.tutorConfirm.at), byName: r.tutorConfirm.byName, minutesAfterCheckIn: r.tutorConfirm.minutesAfterCheckIn } : null
   };
 }
+/* Records made before tutor confirmation existed have no confirmState: a registered one
+   counts as waiting for the tutor, so the old and new records read the same way. */
+function confirmStateOf(r) {
+  if (!r || !r.checkIn) return null;
+  if (r.confirmState) return r.confirmState;
+  if (r.tutorConfirm) return r.tutorConfirm.outcome === "not_in_class" ? "not_in_class" : "confirmed";
+  return "pending";
+}
+function awaitingConfirm(r) { const c = confirmStateOf(r); return c === "pending" || c === "unconfirmed"; }
 
 /* =========================================================
    attendanceToday — the student's or tutor's lessons today, with
@@ -370,6 +394,7 @@ async function checkIn(uid, entryId, now, how) {
       checkIn: Object.assign({ at: ts(now), minutesLate: c.minutesLate, classification: c.late ? "late" : "on_time", source: "student", method },
         method === "face" && how.distance != null ? { faceDistance: Math.round(how.distance * 1000) / 1000 } : {}),
       needsVerification: submitted,              // a registration after the register went in is shown to the tutor for checking
+      confirmState: "pending", tutorConfirm: null,   // timestamp 2 comes from the tutor (confirmPresence)
       updatedAt: FV().serverTimestamp()
     };
     if (rec.resolution) patch.supersededResolution = rec.resolution;  // the tutor had marked them before they registered
@@ -440,7 +465,7 @@ async function resolveStudent(uid, data, now) {
       audit(tx, { action: "verify_late_registration", sessionId: session.id, recordId: rid, studentId: r.studentId, actorId: uid, actorRole: role.admin ? "admin" : "tutor", actorName });
       return { ok: true };
     }
-    if (r.checkIn) throw new HttpsError("failed-precondition", r.studentName + " registered themselves. Only the Studio Desk can correct a registration.");
+    if (r.checkIn) throw new HttpsError("failed-precondition", r.studentName + " registered themselves. Use Confirm or Not in class once you have called their name; only the Studio Desk can correct a registration.");
     const tutorMarked = ["absent", "present_verified", "connectivity", "excused", "other"].indexOf(r.status) !== -1;
     if (submitted && tutorMarked) throw new HttpsError("failed-precondition", "This register is submitted. Ask the Studio Desk for a correction.");
     if (!tutorMarked && UNRESOLVED.indexOf(r.status) === -1) throw new HttpsError("failed-precondition", "This student is already accounted for.");
@@ -457,6 +482,72 @@ async function resolveStudent(uid, data, now) {
     }
     audit(tx, { action: submitted ? "tutor_follow_up" : "tutor_resolve", sessionId: session.id, recordId: rid, studentId: r.studentId, actorId: uid, actorRole: resolution.role, actorName, before: { status: r.status }, after: { status: def.status, outcome }, reason: note });
     return { ok: true, status: def.status, reviewPending: def.review };
+  });
+}
+
+/* =========================================================
+   Tutor: confirm a registered student is really in the live class
+   (the second timestamp). outcome "confirm" | "not_in_class".
+   - only for students who registered themselves (checkIn);
+   - the tutor may change their mind until the register is submitted;
+   - after submission a first confirmation is still accepted (recorded as an
+     amendment, afterSubmission: true); changing one needs the Studio Desk;
+   - "not in class" makes the record status no_show, which is reported to the
+     family like an absence once final. A late strike already earned stays.
+========================================================= */
+async function confirmPresence(uid, data, now) {
+  const [role, session] = await Promise.all([roleOf(uid), loadSession(data.sessionId)]);
+  if (!mayRunRegister(role, session, uid)) throw new HttpsError("permission-denied", "This is not your register.");
+  if (session.status === "cancelled") throw new HttpsError("failed-precondition", "This lesson was cancelled.");
+  if (now < ms(session.startAt) - EARLY_CHECKIN_MIN * 60000) throw new HttpsError("failed-precondition", "The lesson has not opened yet.");
+  const outcome = String(data.outcome || "");
+  const state = CONFIRM_OUTCOMES[outcome];
+  if (!state) throw new HttpsError("invalid-argument", "Choose Confirm or Not in class.");
+  const note = clean(data.note, 1000);
+  const actorName = role.tutor ? (role.tutor.name || "Tutor") : "Studio Desk";
+  const actorRole = role.admin && !role.tutor ? "admin" : "tutor";
+  const rid = session.id + "_" + String(data.studentId || "");
+  const recRef = db().collection("attendanceRecords").doc(rid);
+  const sesRef = db().collection("attendanceSessions").doc(session.id);
+  return db().runTransaction(async (tx) => {
+    const [snap, sesSnap] = await Promise.all([tx.get(recRef), tx.get(sesRef)]);
+    if (!snap.exists) throw new HttpsError("not-found", "That student is not on this register.");
+    const r = snap.data(), ses = sesSnap.data() || session;
+    if (!r.checkIn) throw new HttpsError("failed-precondition", (r.studentName || "This student") + " has not registered, so there is nothing to confirm. Mark them Present or Absent instead.");
+    const submitted = ses.status === "submitted" || ses.status === "auto_submitted";
+    const cur = confirmStateOf(r);
+    if (cur === state) return { ok: true, unchanged: true, confirmState: state };
+    if (submitted && (cur === "confirmed" || cur === "not_in_class")) {
+      throw new HttpsError("failed-precondition", "This register is submitted. Ask the Studio Desk to change a confirmation.");
+    }
+    const checkInMs = ms(r.checkIn.at), startMs = ms(r.startAt || session.startAt);
+    const tutorConfirm = {
+      outcome: state, at: ts(now), by: uid, byName: actorName, role: actorRole, note,
+      minutesAfterCheckIn: Math.max(0, Math.floor((now - checkInMs) / 60000)),
+      minutesAfterStart: Math.max(0, Math.floor((now - startMs) / 60000)),
+      afterSubmission: submitted
+    };
+    const lateNow = r.checkIn.classification === "late";
+    const before = { status: r.status, confirmState: cur };
+    const patch = {
+      confirmState: state, tutorConfirm, needsVerification: false,
+      status: state === "not_in_class" ? "no_show" : (r.status === "no_show" ? (lateNow ? "late" : "present") : r.status),
+      updatedAt: FV().serverTimestamp()
+    };
+    if (r.needsVerification) Object.assign(patch, { verifiedBy: uid, verifiedByName: actorName, verifiedAt: FV().serverTimestamp() });
+    if (submitted && state === "not_in_class" && !r.absenceConfirmedAt) patch.absenceConfirmedAt = FV().serverTimestamp();
+    if (state === "confirmed" && r.status === "no_show") patch.absenceConfirmedAt = null;
+    tx.update(recRef, patch);
+    if (submitted) {
+      tx.set(db().collection("attendanceAmendments").doc(), {
+        sessionId: session.id, recordId: rid, studentId: r.studentId, studentName: r.studentName, tutorIds: session.tutorIds,
+        before, after: { status: patch.status, confirmState: state, note }, by: uid, byName: actorName, at: FV().serverTimestamp(), kind: "tutor_confirmation"
+      });
+      tx.update(sesRef, { lastAmendedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() });
+    }
+    audit(tx, { action: state === "confirmed" ? "tutor_confirm_present" : "tutor_not_in_class", sessionId: session.id, recordId: rid, studentId: r.studentId,
+      actorId: uid, actorRole, actorName, before, after: { status: patch.status, confirmState: state, minutesAfterCheckIn: tutorConfirm.minutesAfterCheckIn }, reason: note || null });
+    return { ok: true, status: patch.status, confirmState: state, at: now };
   });
 }
 
@@ -478,6 +569,7 @@ function snapshotRow(r) {
   return {
     studentId: r.studentId, studentName: r.studentName, status: r.status,
     checkInAt: r.checkIn ? r.checkIn.at : null, minutesLate: r.checkIn ? r.checkIn.minutesLate : null, classification: r.checkIn ? r.checkIn.classification : null, checkInMethod: r.checkIn ? (r.checkIn.method || "online") : null,
+    confirmState: awaitingConfirm(r) ? "unconfirmed" : confirmStateOf(r), tutorConfirmAt: r.tutorConfirm ? r.tutorConfirm.at : null, tutorConfirmByName: r.tutorConfirm ? r.tutorConfirm.byName : null,
     resolution: r.resolution ? { outcome: r.resolution.outcome, note: r.resolution.note, byName: r.resolution.byName } : null,
     strikeId: r.strikeId || null
   };
@@ -494,10 +586,16 @@ async function submitRegister(sessionId, opts) {
     const recs = await tx.get(db().collection("attendanceRecords").where("sessionId", "==", sessionId));
     const rows = recs.docs.map((d) => Object.assign({ id: d.id }, d.data()));
     const unresolved = rows.filter((r) => UNRESOLVED.indexOf(r.status) !== -1);
-    // Before the lesson ends every student must be marked; from the end the tutor may submit
-    // anyway; unmarked students stay unaccounted (never absent) and can be marked afterwards.
+    const unconfirmed = rows.filter(awaitingConfirm);
+    // Before the lesson ends every student must be marked and every registration confirmed
+    // (or marked not in class); from the end the tutor may submit anyway: unmarked students
+    // stay unaccounted (never absent), unconfirmed ones stay "not confirmed", and both can
+    // be dealt with afterwards.
     if (method === "manual" && unresolved.length && now < ms(s.endAt)) {
       throw new HttpsError("failed-precondition", "Account for every student first: " + unresolved.map((r) => r.studentName).join(", ") + ".");
+    }
+    if (method === "manual" && unconfirmed.length && now < ms(s.endAt)) {
+      throw new HttpsError("failed-precondition", "Confirm who is in the class first (Confirm or Not in class): " + unconfirmed.map((r) => r.studentName).join(", ") + ".");
     }
     const counts = {};
     rows.forEach((r) => { const st = UNRESOLVED.indexOf(r.status) !== -1 ? "unresolved" : r.status; counts[st] = (counts[st] || 0) + 1; });
@@ -505,27 +603,31 @@ async function submitRegister(sessionId, opts) {
       sessionId, entryId: s.entryId, date: s.date, subjectId: s.subjectId, subjectName: s.subjectName, keyStage: s.keyStage,
       tutorIds: s.tutorIds, tutorName: s.tutorName, startAt: s.startAt, endAt: s.endAt,
       method, manualSubmission: method === "manual", submittedAt: ts(now), submittedBy: uid || null, submittedByName: name || (method === "auto" ? "System (auto-submitted)" : ""),
-      rows: rows.map(snapshotRow), counts, unresolvedCount: unresolved.length, createdAt: FV().serverTimestamp()
+      rows: rows.map(snapshotRow), counts, unresolvedCount: unresolved.length, unconfirmedCount: unconfirmed.length, createdAt: FV().serverTimestamp()
     });
     rows.forEach((r) => {
       const ref = db().collection("attendanceRecords").doc(r.id);
-      if (r.status === "expected") tx.update(ref, { status: "unaccounted", updatedAt: FV().serverTimestamp() });   // flagged, never turned into absent
-      if (r.status === "absent" && !r.absenceConfirmedAt) tx.update(ref, { absenceConfirmedAt: FV().serverTimestamp(), updatedAt: FV().serverTimestamp() });
+      const patch = {};
+      if (r.status === "expected") patch.status = "unaccounted";   // flagged, never turned into absent
+      if ((r.status === "absent" || r.status === "no_show") && !r.absenceConfirmedAt) patch.absenceConfirmedAt = FV().serverTimestamp();
+      if (awaitingConfirm(r) && r.confirmState !== "unconfirmed") patch.confirmState = "unconfirmed";   // registered, tutor never confirmed
+      if (Object.keys(patch).length) tx.update(ref, Object.assign(patch, { updatedAt: FV().serverTimestamp() }));
     });
     tx.update(sesRef, {
       status: method === "auto" ? "auto_submitted" : "submitted",
       submission: { method, at: ts(now), by: uid || null, byName: name || (method === "auto" ? "System (auto-submitted)" : ""), manualSubmission: method === "manual" },
-      needsFollowUp: method === "auto" || unresolved.length > 0,
+      needsFollowUp: method === "auto" || unresolved.length > 0 || unconfirmed.length > 0,
       explanationRequired: method === "auto",
       unresolvedCount: unresolved.length,
+      unconfirmedCount: unconfirmed.length,
       updatedAt: FV().serverTimestamp()
     });
-    audit(tx, { action: method === "auto" ? "auto_submit" : "submit", sessionId, actorId: uid || "system", actorRole: method === "auto" ? "system" : "tutor", actorName: name || "System", after: { counts, unresolved: unresolved.length } });
-    return { already: false, status: method === "auto" ? "auto_submitted" : "submitted", session: s, unresolved: unresolved.length, counts };
+    audit(tx, { action: method === "auto" ? "auto_submit" : "submit", sessionId, actorId: uid || "system", actorRole: method === "auto" ? "system" : "tutor", actorName: name || "System", after: { counts, unresolved: unresolved.length, unconfirmed: unconfirmed.length } });
+    return { already: false, status: method === "auto" ? "auto_submitted" : "submitted", session: s, unresolved: unresolved.length, unconfirmed: unconfirmed.length, counts };
   });
   if (!out.already) await releaseLocks(Object.assign({ id: sessionId }, out.session));
   if (!out.already && method === "auto") await noticeAutoSubmitted(Object.assign({ id: sessionId }, out.session), out);
-  return { already: out.already, status: out.status, unresolved: out.unresolved || 0 };
+  return { already: out.already, status: out.status, unresolved: out.unresolved || 0, unconfirmed: out.unconfirmed || 0 };
 }
 
 /* =========================================================
@@ -631,16 +733,23 @@ async function noticeStrike(strike, strikeId) {
     }
   }
 }
+/* Absent, or registered but not in the live class (no_show): one notice per parent per record. */
 async function noticeAbsence(record, rid) {
   const { student, parents } = await studentAndParents(record.studentId);
-  const lesson = { subjectName: record.subjectName, tutorName: record.tutorName, startAt: ms(record.startAt) };
+  const noShow = record.status === "no_show";
+  const kind = noShow ? "no_show" : "absent";
+  const lesson = { subjectName: record.subjectName, tutorName: record.tutorName, startAt: ms(record.startAt),
+    arrivedAt: record.checkIn ? ms(record.checkIn.at) : null, confirmedAt: record.tutorConfirm ? ms(record.tutorConfirm.at) : null };
+  const who = student.name || "Your child";
   for (const p of parents) {
-    const m = mail("absent", Object.assign({ audience: "parent", recipientName: p.name, student }, lesson));
+    const m = mail(kind, Object.assign({ audience: "parent", recipientName: p.name, student }, lesson));
     await queueNotice({
-      id: noticeId("absent", rid, p.id), kind: "absent", audience: "family", recipientId: p.id, recipientRole: "parent", recipientName: p.name || "", email: p.email || "",
+      id: noticeId(kind, rid, p.id), kind, audience: "family", recipientId: p.id, recipientRole: "parent", recipientName: p.name || "", email: p.email || "",
       studentId: record.studentId, studentName: student.name || record.studentName, sessionId: record.sessionId, recordId: rid, incidentId: rid,
-      title: "Absent: " + record.subjectName,
-      message: (student.name || "Your child") + " was recorded absent from " + record.subjectName + " on " + fmtDay(lesson.startAt) + " at " + fmtTime(lesson.startAt) + ".",
+      title: (noShow ? "Registered but not in class: " : "Absent: ") + record.subjectName,
+      message: noShow
+        ? who + " registered for " + record.subjectName + " on " + fmtDay(lesson.startAt) + (lesson.arrivedAt ? " at " + fmtTime(lesson.arrivedAt) : "") + ", but the tutor did not find them in the live class when they called the register."
+        : who + " was recorded absent from " + record.subjectName + " on " + fmtDay(lesson.startAt) + " at " + fmtTime(lesson.startAt) + ".",
       emailSubject: m.subject, emailHtml: m.html
     });
   }
@@ -736,7 +845,7 @@ async function adminAction(uid, data, now) {
       if (decision === "rejected") {
         patch.status = finalStatus || "unaccounted";
         patch.corrections = FV().arrayUnion({ from: r.status, to: patch.status, reason: "Explanation rejected: " + reason, by: uid, byName: actor.name, at: ts(now) });
-        if (patch.status === "absent" && !r.absenceConfirmedAt && r.status !== "absent") patch.absenceConfirmedAt = FV().serverTimestamp();
+        if ((patch.status === "absent" || patch.status === "no_show") && !r.absenceConfirmedAt && r.status !== patch.status) patch.absenceConfirmedAt = FV().serverTimestamp();
       }
       tx.update(ref, patch);
       audit(tx, { action: "review_resolution", recordId: ref.id, sessionId: r.sessionId, studentId: r.studentId, actorId: uid, actorRole: "admin", actorName: actor.name, reason, before: { status: r.status, reviewState: r.reviewState }, after: { status: patch.status || r.status, reviewState: decision } });
@@ -759,7 +868,7 @@ async function adminAction(uid, data, now) {
         status: to, updatedAt: FV().serverTimestamp(),
         corrections: FV().arrayUnion({ from: r.status, to, reason, by: uid, byName: actor.name, at: ts(now) })
       };
-      if (to === "absent" && submitted && !r.absenceConfirmedAt) patch.absenceConfirmedAt = FV().serverTimestamp();
+      if ((to === "absent" || to === "no_show") && submitted && !r.absenceConfirmedAt) patch.absenceConfirmedAt = FV().serverTimestamp();
       tx.update(ref, patch);
       if (submitted) tx.set(db().collection("attendanceAmendments").doc(), { sessionId: r.sessionId, recordId: ref.id, studentId: r.studentId, studentName: r.studentName, tutorIds: r.tutorIds || [], before: { status: r.status }, after: { status: to }, by: uid, byName: actor.name, reason, at: FV().serverTimestamp(), kind: "admin_correction" });
       audit(tx, { action: "correct_record", recordId: ref.id, sessionId: r.sessionId, studentId: r.studentId, actorId: uid, actorRole: "admin", actorName: actor.name, reason, before: { status: r.status }, after: { status: to } });
@@ -1043,6 +1152,8 @@ exports.attendanceCheckIn = onCall(CALL, wrap(async (request) => checkIn(require
 exports.attendanceResolve = onCall(CALL, wrap(async (request) => {
   const uid = requireAuth(request);
   if ((request.data || {}).warm) return { ok: true, warm: true };
+  // Confirm / Not in class (the tutor's timestamp) go through the same callable.
+  if (CONFIRM_OUTCOMES[(request.data || {}).outcome]) return confirmPresence(uid, request.data || {}, Date.now());
   return resolveStudent(uid, request.data || {}, Date.now());
 }));
 exports.attendanceSubmit = onCall(CALL, wrap(async (request) => {
@@ -1064,7 +1175,7 @@ exports.onAttendanceStrikeCreated = onDocumentCreated({ document: "attendanceStr
 exports.onAttendanceRecordUpdated = onDocumentUpdated({ document: "attendanceRecords/{id}", region: W.LOCATION },
   async (event) => {
     const b = event.data.before.data() || {}, a = event.data.after.data() || {};
-    if (a.absenceConfirmedAt && !b.absenceConfirmedAt && a.status === "absent") await noticeAbsence(a, event.params.id);
+    if (a.absenceConfirmedAt && !b.absenceConfirmedAt && (a.status === "absent" || a.status === "no_show")) await noticeAbsence(a, event.params.id);
   });
 exports.onAttendanceNotificationCreated = onDocumentCreated({ document: "attendanceNotifications/{id}", region: W.LOCATION, secrets: W.SMTP_SECRETS },
   async (event) => { if (event.data && event.data.data().emailStatus === "pending") await deliver(event.params.id); });
@@ -1074,6 +1185,6 @@ exports._internals = {
   loadPolicy, strikePeriod, recordTutorPresence, rebuildStrikeCounts, roleOf, loadSession, audit, wrap, CALL, requireAuth,
   resetPolicyCache: () => { policyCache = null; },
   nairobiParts, atNairobi, occurrence, classify, academicYearOf, tutorCovers, studentTakes,
-  ensureSession, todayFor, checkIn, resolveStudent, submitRegister, sweep, adminAction, makeRequest, explain,
+  ensureSession, todayFor, checkIn, resolveStudent, confirmPresence, confirmStateOf, submitRegister, sweep, adminAction, makeRequest, explain,
   reverseStrike, noticeStrike, noticeAbsence, deliver, queueNotice
 };

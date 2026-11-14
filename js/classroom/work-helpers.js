@@ -289,6 +289,25 @@
     });
   }
   function cleanName(n) { return Date.now() + '_' + String(n).replace(/[^a-zA-Z0-9._-]/g, '_'); }
+  /* Student hand-ins: any document, photo, spreadsheet or slide deck the marking screen can open
+     (ink-grader.js + file-convert.js). Keep in step with studentWorkFileOk() in storage.rules. */
+  var HANDIN_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif,.tif,.tiff,.avif,.doc,.docx,.odt,.rtf,.txt,.md,.xls,.xlsx,.xlsm,.ods,.csv,.ppt,.pptx,.odp,application/pdf,image/*';
+  var HANDIN_TYPES = {
+    pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp',
+    heic: 'image/heic', heif: 'image/heif', tif: 'image/tiff', tiff: 'image/tiff', avif: 'image/avif',
+    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', odt: 'application/vnd.oasis.opendocument.text',
+    rtf: 'application/rtf', txt: 'text/plain', md: 'text/plain', csv: 'text/csv',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12', ods: 'application/vnd.oasis.opendocument.spreadsheet',
+    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', odp: 'application/vnd.oasis.opendocument.presentation'
+  };
+  /* The content type to store: from the file's extension, since browsers often give none
+     (HEIC on Windows, CSV, ODF) or a generic one. null = not a file we accept. */
+  function handInType(file) {
+    var m = /\.([a-z0-9]+)$/i.exec(String(file && file.name || '')), e = m ? m[1].toLowerCase() : '';
+    if (HANDIN_TYPES[e]) return HANDIN_TYPES[e];
+    var t = String(file && file.type || '').toLowerCase();
+    return /^image\/(jpeg|png|webp|gif|bmp|heic|heif|tiff|avif)$/.test(t) || t === 'application/pdf' ? t : null;
+  }
 
   function pad(n) { return U.pad2(n); }
   function dtParts(d) { return d ? { date: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), time: pad(d.getHours()) + ':' + pad(d.getMinutes()) } : { date: '', time: '17:00' }; }
@@ -2105,7 +2124,7 @@
             '<div class="wt-ide-note"><i class="fas fa-circle-info"></i><span>Your code saves as you type, so you can close this and carry on later. Press <b>Run</b> to try it, then <b>Submit</b> to hand it in.</span></div>' +
             '<div id="subIde"></div></div>' : '') +
           '<div class="cr-field"><label>' + (codeIn ? 'Anything to explain? (optional)' : 'Your Answer (Optional)') + '</label><textarea id="subText" rows="4" style="width:100%" placeholder="Type your answer here...">' + esc(sub && sub.textAnswer || '') + '</textarea></div>' +
-          '<div class="cr-field"><label>' + (codeIn ? 'Upload a file too (optional)' : 'Upload File (PDF/Image)') + '</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, JPG, or PNG (Max 25MB)</small></div><input type="file" id="subFile" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none"></div>' +
+          '<div class="cr-field"><label>' + (codeIn ? 'Upload a file too (optional)' : 'Upload your work (any document or photo)') + '</label><div class="wk-drop" id="subDrop"><b>Click to upload</b> or drag and drop<br><small>PDF, photo, Word, Excel, PowerPoint or text file (max 25MB)</small></div><input type="file" id="subFile" accept="' + HANDIN_ACCEPT + '" style="display:none"></div>' +
           '<div class="cr-prog" id="subProg" style="display:none;height:4px;background:var(--line);margin-top:1rem;border-radius:2px"><div style="height:100%;background:var(--brand);width:0%;transition:width .2s"></div></div></div>';
       }
       m.body.innerHTML = head + zones + form;
@@ -2146,21 +2165,21 @@
           if (file) {
             var prog = m.body.querySelector('#subProg');
             prog.style.display = 'block';
-            var okType = /^(image\/(jpeg|png|webp)|application\/pdf)$/.test(file.type);
-            if (!okType) throw new Error('Only PDF, JPG, PNG or WEBP files can be uploaded.');
+            var upType = handInType(file);
+            if (!upType) throw new Error('This kind of file cannot be handed in. Use a PDF, a photo, or a Word, Excel, PowerPoint or text file.');
             if (file.size >= 25 * 1024 * 1024) throw new Error('That file is larger than 25MB.');
             var uidNow = firebase.auth().currentUser.uid;
             var clsDoc = await U.clsRef(cid).get();
             var subjectId = clsDoc.exists ? clsDoc.data().subjectId : '';
             if (!subjectId) throw new Error('Could not find this class. Please refresh and try again.');
             var path = 'classroom-files/' + subjectId + '/' + cid + '/' + (kind === 'exam' ? 'exams/' : '') + id + '/submissions/' + uidNow + '/' + cleanName(file.name);
-            var task = firebase.storage().ref(path).put(file, { contentType: file.type });
+            var task = firebase.storage().ref(path).put(file, { contentType: upType });
             task.on('state_changed', function (s) {
               prog.firstChild.style.width = Math.round((s.bytesTransferred / s.totalBytes) * 100) + '%';
             });
             await new Promise(function (res2, rej) { task.on('state_changed', null, rej, res2); });
             var url = await firebase.storage().ref(path).getDownloadURL();
-            fileData = { fileUrl: url, fileName: file.name, fileType: file.type, storagePath: path };
+            fileData = { fileUrl: url, fileName: file.name, fileType: upType, storagePath: path };
           }
 
           var meNow = firebase.auth().currentUser;

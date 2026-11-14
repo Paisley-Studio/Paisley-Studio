@@ -3,6 +3,9 @@
    -----------------------------------------------------------
    Student:  get-ready banner 15 minutes before, registration pop-up at the
              start (minimisable, never dismissed until registered), history.
+   Two timestamps per student: the student's own check-in (checkIn.at) and the
+   tutor's confirmation that they are really in the live class (tutorConfirm.at),
+   pressed when the tutor calls their name in Google Meet: Confirm / Not in class.
    Tutor:    live rollcall pop-up at the start, persistent Rollcall pill,
              Attendance tab with today's registers, overdue ones, history,
              explanations after an auto-submit, subject-lock banner.
@@ -18,6 +21,7 @@ var Attendance = (function () {
   var STATUS = {
     expected: ['Not registered yet', 'wait'], unaccounted: ['Unaccounted for', 'warn'], present: ['Present', 'ok'], late: ['Late', 'late'],
     present_verified: ['Present (tutor verified)', 'ok'], connectivity: ['Connectivity issue', 'info'], absent: ['Absent', 'bad'],
+    no_show: ['Registered, not in class', 'bad'],
     excused: ['Excused', 'info'], other: ['Other reason', 'info'], cancelled: ['Lesson cancelled', 'wait']
   };
   var OUTCOMES = [
@@ -58,6 +62,25 @@ var Attendance = (function () {
     if (r.checkIn) return r.checkIn.method === 'face' ? '<span class="att-pill info">' + icon('fa-face-smile') + ' Face</span>' : '<span class="att-pill wait">' + icon('fa-hand') + ' Online</span>';
     if (r.resolution) return '<span class="att-pill wait">' + icon('fa-chalkboard-user') + ' Tutor</span>';
     return '—';
+  }
+
+  /* The tutor's confirmation (second timestamp). Mirrors confirmStateOf in functions/attendance.js:
+     records from before confirmation existed read as "awaiting the tutor" when registered. */
+  function confirmOf(r) {
+    if (!r || !r.checkIn) return null;
+    if (r.confirmState) return r.confirmState;
+    if (r.tutorConfirm) return r.tutorConfirm.outcome === 'not_in_class' ? 'not_in_class' : 'confirmed';
+    return 'pending';
+  }
+  function awaitingConfirm(r) { var c = confirmOf(r); return c === 'pending' || c === 'unconfirmed'; }
+  function confirmCell(r) {
+    var c = confirmOf(r), tc = r.tutorConfirm || null;
+    if (!c) return r.resolution ? '<span class="att-muted">' + hm(r.resolution.at) + ' (marked by tutor)</span>' : '—';
+    var who = tc ? '<div class="att-muted">' + esc(tc.byName || '') + (tc.minutesAfterCheckIn != null ? ' · ' + tc.minutesAfterCheckIn + ' min after check-in' : '') + (tc.afterSubmission ? ' · after submission' : '') + '</div>' : '';
+    if (c === 'confirmed') return '<span class="att-pill ok">' + icon('fa-user-check') + ' ' + hm(tc && tc.at) + '</span>' + who;
+    if (c === 'not_in_class') return '<span class="att-pill bad">' + icon('fa-user-xmark') + ' Not in class ' + hm(tc && tc.at) + '</span>' + who;
+    if (c === 'unconfirmed') return '<span class="att-pill bad">' + icon('fa-circle-exclamation') + ' Never confirmed</span>';
+    return '<span class="att-pill wait">' + icon('fa-hourglass-half') + ' Awaiting tutor</span>';
   }
 
   var styled = false;
@@ -206,7 +229,8 @@ var Attendance = (function () {
       S.recUnsub[l.sessionId] = db.collection('attendanceRecords').doc(l.sessionId + '_' + o.uid).onSnapshot(function (s) {
         if (!s.exists) return;
         var r = s.data();
-        S.records[l.sessionId] = { status: r.status, checkIn: r.checkIn ? { at: msOf(r.checkIn.at), minutesLate: r.checkIn.minutesLate, classification: r.checkIn.classification } : null, needsVerification: !!r.needsVerification, strikeId: r.strikeId || null };
+        S.records[l.sessionId] = { status: r.status, checkIn: r.checkIn ? { at: msOf(r.checkIn.at), minutesLate: r.checkIn.minutesLate, classification: r.checkIn.classification } : null, needsVerification: !!r.needsVerification, strikeId: r.strikeId || null,
+          confirmState: confirmOf(r), tutorConfirm: r.tutorConfirm ? { outcome: r.tutorConfirm.outcome, at: msOf(r.tutorConfirm.at), byName: r.tutorConfirm.byName } : null };
         paint();
       }, function () { });
     }
@@ -319,7 +343,8 @@ var Attendance = (function () {
         m.body.innerHTML = '<div class="att-center"><div class="att-big-ic ' + (late ? 'late' : 'ok') + '">' + icon(late ? 'fa-user-clock' : 'fa-circle-check') + '</div>' +
           '<p>' + esc(lead || '') + '<b>' + esc(l.subjectName) + '</b>: registered at ' + hm(rec.checkIn && rec.checkIn.at) + '.</p>' +
           (late ? '<p>You arrived ' + rec.checkIn.minutesLate + ' minutes after the start. This counts as a late-arrival strike' + (r.strikeNumber ? ' (' + r.strikeNumber + ' this academic year)' : '') + ' and your parent has been told.' + (r.strikeNumber === 4 ? ' This is your formal warning: the next late arrival goes to the Studio Desk.' : '') + (r.strikeNumber >= 5 ? ' Your case has been referred to the Studio Desk.' : '') + '</p>' : '<p>You are on time. Enjoy the lesson!</p>') +
-          (rec.needsVerification ? '<p><span class="att-pill wait">Awaiting tutor verification</span> Your tutor had already sent the register, so they will check this registration.</p>' : '') + '</div>';
+          (rec.needsVerification ? '<p><span class="att-pill wait">Awaiting tutor verification</span> Your tutor had already sent the register, so they will check this registration.</p>' : '') +
+          '<div class="att-panel" style="text-align:left"><h4>' + icon('fa-video') + ' Now join the live class</h4><p class="att-muted" style="margin:0">Registering is step one. Your tutor calls the register in the live class and confirms you are there. If you are not in the class when your name is called, you are recorded as <b>registered but not in class</b>, which counts as an absence, and your parent is told.</p></div></div>';
         m.foot.innerHTML = '<button type="button" class="att-btn primary" data-ok>' + icon('fa-check') + ' Done</button>';
         m.foot.querySelector('[data-ok]').onclick = function () { m.close(); paint(); };
         delete S.minimised[l.sessionId];
@@ -361,14 +386,15 @@ var Attendance = (function () {
       '<div class="att-stat"><b>' + (pct == null ? '—' : pct + '%') + '</b><span>Attendance</span></div>' +
       '<div class="att-stat"><b>' + (count('present') + count('present_verified') + count('connectivity')) + '</b><span>Present</span></div>' +
       '<div class="att-stat late"><b>' + count('late') + '</b><span>Late</span></div>' +
-      '<div class="att-stat warn"><b>' + count('absent') + '</b><span>Absent</span></div>' +
+      '<div class="att-stat warn"><b>' + (count('absent') + count('no_show')) + '</b><span>Absent' + (count('no_show') ? ' (' + count('no_show') + ' not in class)' : '') + '</span></div>' +
       '<div class="att-stat ' + ((y.active || 0) >= 4 ? 'warn' : '') + '"><b>' + (y.active || 0) + '</b><span>Active strikes (' + esc(per.label) + ')</span></div></div>' +
       ((y.active || 0) >= 5 ? '<div class="att-banner lock"><div class="ic">' + icon('fa-scale-balanced') + '</div><div class="t"><b>Referred to the Studio Desk</b><small>' + (y.active) + ' late arrivals ' + esc(per.phrase) + '. The Studio Desk reviews the case and decides what happens.</small></div></div>' :
         (y.active || 0) === 4 ? '<div class="att-banner urgent"><div class="ic">' + icon('fa-triangle-exclamation') + '</div><div class="t"><b>Formal warning</b><small>4 late arrivals ' + esc(per.phrase) + '. The next one is referred to the Studio Desk.</small></div></div>' : '') +
       (upcoming.length ? '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Scheduled</h4>' + upcoming.map(function (r) { return '<div class="att-muted">' + dayLabel(r.startAt) + ' ' + hm(r.startAt) + ' · ' + esc(r.subjectName) + '</div>'; }).join('') + '</div>' : '') +
-      '<div class="att-panel"><h4>' + icon('fa-list-check') + ' Attendance history</h4>' + (rows.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Subject</th><th>Start</th><th>Arrived</th><th>Status</th>' + (opts.requests ? '<th></th>' : '') + '</tr></thead><tbody>' +
+      '<div class="att-panel"><h4>' + icon('fa-list-check') + ' Attendance history</h4>' + (rows.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Subject</th><th>Start</th><th>Student check-in</th><th>Tutor confirmed</th><th>Status</th>' + (opts.requests ? '<th></th>' : '') + '</tr></thead><tbody>' +
         rows.map(function (r) {
           return '<tr><td>' + dayLabel(r.startAt) + '</td><td>' + esc(r.subjectName) + '</td><td>' + hm(r.startAt) + '</td><td>' + (r.checkIn ? hm(r.checkIn.at) + (r.checkIn.minutesLate ? ' <span class="att-muted">(' + r.checkIn.minutesLate + ' min)</span>' : '') + (r.checkIn.method === 'face' ? ' <span class="att-muted">' + icon('fa-face-smile') + '</span>' : '') : '—') + '</td>' +
+            '<td>' + confirmCell(r) + '</td>' +
             '<td>' + pill(r.status) + (r.strikeId ? ' <span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + (r.strikeReversed ? 'Strike reversed' : 'Strike') + '</span>' : '') + (r.lateExcused ? ' <span class="att-pill info">Lateness excused</span>' : '') + '</td>' +
             (opts.requests ? '<td>' + (r.strikeId && !r.strikeReversed ? '<button type="button" class="att-btn sm" data-att-excuse="' + esc(r.id) + '">' + icon('fa-envelope-open-text') + ' Ask to excuse</button>' : '') + '</td>' : '') + '</tr>';
         }).join('') + '</tbody></table></div>' : '<div class="att-empty">No lessons recorded yet.</div>') + '</div>';
@@ -406,7 +432,9 @@ var Attendance = (function () {
     function recsOf(sid) {
       return (S.records[sid] || []).map(function (r) {
         var o2 = S.opt[sid + '_' + r.studentId];
-        return o2 ? Object.assign({}, r, { status: o2.status, resolution: o2.resolution, _busy: o2.busy }) : r;
+        if (!o2) return r;
+        if (o2.kind === 'confirm') return Object.assign({}, r, { status: o2.status || r.status, confirmState: o2.confirmState, tutorConfirm: o2.tutorConfirm, _busy: o2.busy });
+        return Object.assign({}, r, { status: o2.status, resolution: o2.resolution, _busy: o2.busy });
       });
     }
     // Wake the attendance functions so the first tap is not a cold start.
@@ -444,7 +472,7 @@ var Attendance = (function () {
         // Drop optimistic marks the server now confirms (or that a student's own check-in overtook).
         S.records[sid].forEach(function (r) {
           var k = sid + '_' + r.studentId, o2 = S.opt[k];
-          if (o2 && !o2.busy && (r.status === o2.status || r.checkIn)) delete S.opt[k];
+          if (o2 && !o2.busy && (o2.kind === 'confirm' ? confirmOf(r) === o2.confirmState : (r.status === o2.status || r.checkIn))) delete S.opt[k];
         });
         paint();
       }, function (e) { console.warn('register', e); });
@@ -463,12 +491,15 @@ var Attendance = (function () {
       if (o.viewEl && o.viewEl.isConnected !== false) paintView();
     }
     function counts(recs) {
-      var c = { total: recs.length, checked: 0, present: 0, late: 0, unresolved: 0, absent: 0, other: 0 };
+      var c = { total: recs.length, checked: 0, present: 0, late: 0, unresolved: 0, absent: 0, other: 0, confirmed: 0, awaiting: 0, noShow: 0 };
       recs.forEach(function (r) {
         if (r.checkIn) c.checked++;
+        var cf = confirmOf(r);
+        if (cf === 'confirmed') c.confirmed++; else if (cf === 'pending' || cf === 'unconfirmed') c.awaiting++;
         if (r.status === 'present' || r.status === 'present_verified' || r.status === 'connectivity') c.present++;
         else if (r.status === 'late') c.late++;
         else if (r.status === 'absent') c.absent++;
+        else if (r.status === 'no_show') c.noShow++;
         else if (r.status === 'expected' || r.status === 'unaccounted') c.unresolved++;
         else c.other++;
       });
@@ -489,6 +520,15 @@ var Attendance = (function () {
           '<input data-note="' + esc(r.studentId) + '" placeholder="Explanation" maxlength="1000" value="' + esc(r.resolution ? r.resolution.note || '' : '') + '"><button type="button" class="att-btn sm primary" data-resolve="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '"' + (busy ? ' disabled' : '') + '>Save</button></div>';
       }
       return h;
+    }
+    /* Second timestamp: the tutor calls the name in the live class and confirms (or not). */
+    function confirmBtnsHtml(s, r) {
+      var c = confirmOf(r), busy = r._busy;
+      var data = ' data-sid="' + esc(s.id) + '" data-st="' + esc(r.studentId) + '"' + (busy ? ' disabled' : '');
+      function b(out, cls, ic, label, on) {
+        return '<button type="button" class="att-q ' + cls + (on ? ' on' : '') + '" data-confirm="' + out + '"' + data + ' aria-pressed="' + on + '">' + icon(busy === out ? 'fa-spinner fa-spin' : ic) + ' ' + label + '</button>';
+      }
+      return '<div class="att-quick">' + b('confirm', 'ok', 'fa-user-check', 'Confirm', c === 'confirmed') + b('not_in_class', 'bad', 'fa-user-xmark', 'Not in class', c === 'not_in_class') + '</div>';
     }
     /* The tutor's own attendance for this lesson (attendanceTutorCheckIn / faceTutorVerify). */
     function meHtml(s) {
@@ -532,20 +572,24 @@ var Attendance = (function () {
       var started = t >= msOf(s.startAt), afterGrace = t >= msOf(s.graceAt), submitted = s.status !== 'open';
       var rows = recs.map(function (r) {
         var unresolved = r.status === 'expected' || r.status === 'unaccounted';
-        var flag = (unresolved && afterGrace) || r.needsVerification || r.reviewState === 'pending';
+        var waiting = awaitingConfirm(r);
+        var flag = (unresolved && afterGrace) || r.needsVerification || r.reviewState === 'pending' || (waiting && started) || r.status === 'no_show';
+        var canConfirm = !!r.checkIn && s.status !== 'cancelled' && t >= msOf(s.startAt) - 10 * 60000 && (!submitted || waiting);
         var tutorMarked = !r.checkIn && ['absent', 'present_verified', 'connectivity', 'excused', 'other'].indexOf(r.status) !== -1;
         var canResolve = started && !r.checkIn && (unresolved || (tutorMarked && !submitted)) && s.status !== 'cancelled';
         return '<tr class="' + (flag ? 'flag' : '') + (r._busy ? ' att-busy' : '') + '"><td><b>' + esc(r.studentName) + '</b>' + (r.resolution ? '<div class="att-muted">' + esc(r.resolution.label || r.resolution.outcome) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName || '') + ' ' + hm(r.resolution.at) + '</div>' : '') + '</td>' +
           '<td>' + pill(unresolved && !afterGrace ? 'expected' : r.status) + (unresolved && afterGrace ? ' <span class="att-pill bad">Account for</span>' : '') + (r.needsVerification ? ' <span class="att-pill wait">Registered after submission</span>' : '') + (r.reviewState === 'pending' ? ' <span class="att-pill wait">Studio Desk review</span>' : '') + '</td>' +
           '<td>' + (r.checkIn ? hm(r.checkIn.at) : '—') + '</td><td>' + methodPill(r) + '</td>' +
           '<td>' + (r.checkIn ? (r.checkIn.classification === 'late' ? '<span class="att-pill late">' + r.checkIn.minutesLate + ' min late</span>' : '<span class="att-pill ok">On time</span>') : '—') + '</td>' +
+          '<td>' + confirmCell(r) + '</td>' +
           '<td>' + (r.strikeId ? '<span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + icon('fa-triangle-exclamation') + ' ' + (r.strikeReversed ? 'Reversed' : 'Strike') + '</span>' : '—') + '</td>' +
-          '<td>' + (canResolve ? quickHtml(s, r) : '') +
-          (r.needsVerification ? '<button type="button" class="att-btn sm" data-verify="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '">' + icon('fa-check') + ' Verified</button>' : '') + '</td></tr>';
+          '<td>' + (canResolve ? quickHtml(s, r) : '') + (canConfirm ? confirmBtnsHtml(s, r) : '') + '</td></tr>';
       }).join('');
       var head = '<div class="att-stats"><div class="att-stat"><b>' + c.total + '</b><span>Enrolled</span></div><div class="att-stat"><b>' + c.checked + '</b><span>Checked in</span></div>' +
-        '<div class="att-stat"><b>' + c.present + '</b><span>Present</span></div><div class="att-stat late"><b>' + c.late + '</b><span>Late</span></div>' +
-        '<div class="att-stat warn"><b>' + c.unresolved + '</b><span>' + (afterGrace ? 'Unaccounted for' : 'Not registered yet') + '</span></div><div class="att-stat"><b>' + c.absent + '</b><span>Absent</span></div></div>';
+        '<div class="att-stat"><b>' + c.confirmed + '</b><span>Confirmed in class</span></div><div class="att-stat warn"><b>' + c.awaiting + '</b><span>Awaiting your confirmation</span></div>' +
+        '<div class="att-stat late"><b>' + c.late + '</b><span>Late</span></div>' +
+        '<div class="att-stat warn"><b>' + c.unresolved + '</b><span>' + (afterGrace ? 'Unaccounted for' : 'Not registered yet') + '</span></div><div class="att-stat"><b>' + (c.absent + c.noShow) + '</b><span>Absent' + (c.noShow ? ' (' + c.noShow + ' not in class)' : '') + '</span></div></div>';
+      var how = s.status === 'open' && started ? '<div class="att-banner"><div class="ic">' + icon('fa-video') + '</div><div class="t"><b>Call the register in the live class</b><small>Students who register appear here. When you call a name in Google Meet and the student answers, press <b>Confirm</b>. If they are not there, press <b>Not in class</b>: it is recorded as an absence and the family is told. Both times are kept, when they registered and when you confirmed.</small></div></div>' : '';
       var state = s.status === 'cancelled' ? '<div class="att-banner"><div class="ic">' + icon('fa-ban') + '</div><div class="t"><b>Lesson cancelled</b><small>' + esc((s.cancelled && s.cancelled.reason) || '') + '</small></div></div>' :
         submitted ? '<div class="att-banner"><div class="ic">' + icon('fa-circle-check') + '</div><div class="t"><b>' + (s.status === 'auto_submitted' ? 'AUTO-SUBMITTED' : 'Submitted') + ' ' + hm(s.submission && s.submission.at) + '</b><small>' + (s.status === 'auto_submitted' ? 'You did not submit this register, so the system did. Account for anyone still unresolved and add your explanation below.' : 'Submitted by ' + esc((s.submission && s.submission.byName) || '')) + '</small></div></div>' :
         !started ? '<p class="att-muted">The register opens at ' + hm(s.startAt) + '. Students appear here as they register.</p>' :
@@ -554,7 +598,7 @@ var Attendance = (function () {
         '<p class="att-muted">Mark every flagged student, then submit. Submit opens for everyone the moment the lesson ends at ' + hm(s.endAt) + '. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + ' and the Studio Desk is told.</p>';
       var explain = s.status === 'auto_submitted' ? '<div class="att-panel"><h4>' + icon('fa-comment-dots') + ' Your explanation</h4>' + (s.tutorExplanation ? '<p class="att-muted">"' + esc(s.tutorExplanation.text) + '" (' + dayLabel(s.tutorExplanation.at) + ')' + (s.explanationReview ? ' · Studio Desk: ' + esc(s.explanationReview.decision) : '') + '</p>' : '') +
         '<label class="att-field">Why was the register not submitted?<textarea data-explain="' + esc(s.id) + '" maxlength="2000"></textarea></label><button type="button" class="att-btn sm primary" data-explain-go="' + esc(s.id) + '">' + icon('fa-paper-plane') + ' Send explanation</button></div>' : '';
-      return meHtml(s) + state + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Checked in</th><th>Method</th><th>On time</th><th>Strike</th><th>Mark</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
+      return meHtml(s) + state + how + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Student check-in</th><th>Method</th><th>On time</th><th>Tutor confirmed</th><th>Strike</th><th>Mark</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
         '<div class="att-msg" data-msg="' + esc(s.id) + '"></div>' + explain;
     }
     function openRoll(sid) {
@@ -570,9 +614,10 @@ var Attendance = (function () {
     }
     function submitState(s) {
       var t = now(), c = counts(recsOf(s.id)), ended = t >= msOf(s.endAt), afterGrace = t >= msOf(s.graceAt);
-      if (ended) return { ok: true, note: c.unresolved ? c.unresolved + ' not marked: they stay unaccounted for' : '' };
+      if (ended) return { ok: true, note: [c.unresolved ? c.unresolved + ' not marked: they stay unaccounted for' : '', c.awaiting ? c.awaiting + ' not confirmed: they stay "never confirmed"' : ''].filter(Boolean).join('. ') };
       if (!afterGrace) return { ok: false, why: 'Opens at ' + hm(s.graceAt) + ', after the grace period' };
       if (c.unresolved) return { ok: false, why: 'Mark every flagged student, or wait until the lesson ends at ' + hm(s.endAt) };
+      if (c.awaiting) return { ok: false, why: 'Confirm (or mark Not in class) every student who registered, or wait until the lesson ends at ' + hm(s.endAt) };
       return { ok: true };
     }
     function footHtml(s) {
@@ -599,6 +644,28 @@ var Attendance = (function () {
       var msgEl = m.body.querySelector('[data-msg]'), keep = msgEl ? [msgEl.className, msgEl.textContent] : null;
       m.body.innerHTML = registerHtml(s);
       var nm = m.body.querySelector('[data-msg]'); if (nm && keep) { nm.className = keep[0]; nm.textContent = keep[1]; }
+    }
+    /* Confirm / Not in class: shown at once, saved in the background, undone if it fails. */
+    function confirmStudent(sid, st, outcome, host) {
+      var k = sid + '_' + st, prev = S.opt[k];
+      var rec0 = (S.records[sid] || []).filter(function (x) { return x.studentId === st; })[0] || {};
+      var state = outcome === 'confirm' ? 'confirmed' : 'not_in_class';
+      var late = rec0.checkIn && rec0.checkIn.classification === 'late';
+      S.opt[k] = { kind: 'confirm', confirmState: state, status: state === 'not_in_class' ? 'no_show' : (rec0.status === 'no_show' ? (late ? 'late' : 'present') : rec0.status),
+        tutorConfirm: { outcome: state, at: now(), byName: 'You', minutesAfterCheckIn: rec0.checkIn ? Math.max(0, Math.floor((now() - msOf(rec0.checkIn.at)) / 60000)) : null }, busy: outcome };
+      paint();
+      var msg = function () { return (S.modal && S.modal.m.el.querySelector('[data-msg="' + sid + '"]')) || (host && host.querySelector('[data-msg="' + sid + '"]')); };
+      call('attendanceResolve', { sessionId: sid, studentId: st, outcome: outcome }).then(function () {
+        if (S.opt[k]) S.opt[k].busy = null;
+        var rec = (S.records[sid] || []).filter(function (x) { return x.studentId === st; })[0];
+        if (rec && S.opt[k] && confirmOf(rec) === S.opt[k].confirmState) delete S.opt[k];
+        var m2 = msg(); if (m2) { m2.className = 'att-msg'; m2.textContent = ''; }
+        paint();
+      }).catch(function (er) {
+        if (prev) S.opt[k] = prev; else delete S.opt[k];
+        paint();
+        var m2 = msg(); if (m2) { m2.className = 'att-msg bad'; m2.textContent = errMsg(er); }
+      });
     }
     /* Mark a student: shown at once, saved in the background, undone with a message if it fails. */
     function mark(sid, st, outcome, note, host) {
@@ -642,6 +709,8 @@ var Attendance = (function () {
         call('faceConsent', { action: 'withdraw' }).then(function () { S.recognition = { available: false }; toast('Consent withdrawn. Your face data is deleted.'); paint(); }).catch(function (er) { alert(errMsg(er)); });
         return;
       }
+      var cf = t.closest('[data-confirm]');
+      if (cf) { if (!cf.disabled) confirmStudent(cf.dataset.sid, cf.dataset.st, cf.dataset.confirm, host); return; }
       var qk = t.closest('[data-quick]');
       if (qk) { if (!qk.disabled) mark(qk.dataset.sid, qk.dataset.st, qk.dataset.quick, '', host); return; }
       var mo = t.closest('[data-more]');
@@ -698,7 +767,7 @@ var Attendance = (function () {
         var s = S.sessions[l.sessionId], st = s ? s.status : 'upcoming';
         return '<tr><td><b>' + esc(l.subjectName) + '</b><div class="att-muted">' + esc((l.keyStage || '').replace(/\s*\(.*/, '')) + '</div></td><td>' + hm(l.startAt) + ' to ' + hm(l.endAt) + '</td>' +
           '<td>' + (st === 'upcoming' ? '<span class="att-pill wait">Opens ' + hm(l.startAt - 20 * 60000) + '</span>' : st === 'open' ? (t < l.startAt ? '<span class="att-pill info">Ready</span>' : t < l.endAt ? '<span class="att-pill ok">Live</span>' : '<span class="att-pill bad">Submit now</span>') : st === 'auto_submitted' ? '<span class="att-pill bad">AUTO-SUBMITTED</span>' : st === 'cancelled' ? pill('cancelled') : '<span class="att-pill ok">Submitted</span>') + '</td>' +
-          '<td>' + (s ? counts(recsOf(l.sessionId)).checked + ' / ' + (S.records[l.sessionId] || []).length : '—') + '</td>' +
+          '<td>' + (s ? (function (c) { return c.checked + ' / ' + c.total + '<div class="att-muted">' + c.confirmed + ' confirmed' + (c.awaiting ? ', ' + c.awaiting + ' waiting' : '') + '</div>'; })(counts(recsOf(l.sessionId))) : '—') + '</td>' +
           '<td>' + (s ? '<button type="button" class="att-btn sm" data-open-reg="' + esc(l.sessionId) + '">' + icon('fa-clipboard-list') + ' Open register</button>' : '') + '</td></tr>';
       }).join('');
       var follow = hist.filter(function (s) { return s.status === 'auto_submitted' && (!s.tutorExplanation || (s.unresolvedCount || 0) > 0); });
@@ -935,6 +1004,9 @@ var Attendance = (function () {
         '<div class="att-stat"><b>' + n(sessions, function (s) { return s.status !== 'cancelled'; }) + '</b><span>Scheduled lessons</span></div>' +
         '<div class="att-stat"><b>' + records.length + '</b><span>Enrolled (student lessons)</span></div>' +
         '<div class="att-stat"><b>' + n(records, function (r) { return !!r.checkIn; }) + '</b><span>Checked in</span></div>' +
+        '<div class="att-stat"><b>' + n(records, function (r) { return confirmOf(r) === 'confirmed'; }) + '</b><span>Confirmed in class by tutor</span></div>' +
+        '<div class="att-stat warn"><b>' + n(records, awaitingConfirm) + '</b><span>Registered, not yet confirmed</span></div>' +
+        '<div class="att-stat warn"><b>' + n(records, function (r) { return r.status === 'no_show'; }) + '</b><span>Registered, not in class</span></div>' +
         '<div class="att-stat"><b>' + n(records, function (r) { return st(r.status); }) + '</b><span>Present</span></div>' +
         '<div class="att-stat late"><b>' + n(records, function (r) { return r.status === 'late'; }) + '</b><span>Late</span></div>' +
         '<div class="att-stat warn"><b>' + n(records, function (r) { return r.status === 'absent'; }) + '</b><span>Absent</span></div>' +
@@ -1038,10 +1110,11 @@ var Attendance = (function () {
         var recs = res[0].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return String(a.studentName).localeCompare(String(b.studentName)); });
         var sub = res[1].exists ? res[1].data() : null, am = res[2].docs.map(function (d) { return d.data(); });
         m.body.innerHTML = (sub ? '<div class="att-banner' + (sub.method === 'auto' ? ' lock' : '') + '"><div class="ic">' + icon('fa-clipboard-check') + '</div><div class="t"><b>' + (sub.method === 'auto' ? 'AUTO-SUBMITTED' : 'Submitted by ' + esc(sub.submittedByName)) + ' at ' + hm(sub.submittedAt) + '</b><small>' + (sub.manualSubmission ? 'Manual submission.' : 'No manual submission was made. Snapshot kept as submitted: ' + sub.rows.length + ' students, ' + (sub.unresolvedCount || 0) + ' unresolved.') + '</small></div></div>' : '') +
-          '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status now</th><th>As submitted</th><th>Checked in</th><th>Tutor record</th><th>Corrections</th><th></th></tr></thead><tbody>' + recs.map(function (r) {
+          '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status now</th><th>As submitted</th><th>Student check-in</th><th>Tutor confirmed</th><th>Tutor record</th><th>Corrections</th><th></th></tr></thead><tbody>' + recs.map(function (r) {
             var snap = sub && sub.rows.filter(function (x) { return x.studentId === r.studentId; })[0];
             return '<tr><td><b>' + esc(r.studentName) + '</b></td><td>' + pill(r.status) + (r.strikeId ? ' <span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + (r.strikeReversed ? 'Strike reversed' : 'Strike') + '</span>' : '') + '</td><td>' + (snap ? pill(snap.status) : '—') + '</td>' +
               '<td>' + (r.checkIn ? hm(r.checkIn.at) + ' (' + (r.checkIn.classification === 'late' ? r.checkIn.minutesLate + ' min late' : 'on time') + ')' : '—') + '</td>' +
+              '<td>' + confirmCell(r) + '</td>' +
               '<td class="att-muted">' + (r.resolution ? esc(r.resolution.label) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName) + ' ' + hm(r.resolution.at) + (r.resolution.afterSubmission ? ' (after submission)' : '') : '') + '</td>' +
               '<td class="att-muted">' + (r.corrections || []).map(function (c) { return esc((STATUS[c.from] || [c.from])[0]) + ' → ' + esc((STATUS[c.to] || [c.to])[0]) + ': ' + esc(c.reason); }).join('<br>') + '</td>' +
               '<td><button type="button" class="att-btn sm" data-a-correct="' + esc(r.id) + '">' + icon('fa-pen') + ' Correct</button></td></tr>';
@@ -1065,7 +1138,7 @@ var Attendance = (function () {
     function adminCall(data, okMsg) {
       return call('attendanceAdmin', data).then(function () { if (okMsg) toast(okMsg); }).catch(function (e) { alert(errMsg(e)); });
     }
-    var statusSelect = '<label class="att-field">New status<select data-extra="status">' + ['present', 'late', 'present_verified', 'connectivity', 'absent', 'excused', 'other', 'unaccounted'].map(function (k) { return '<option value="' + k + '">' + STATUS[k][0] + '</option>'; }).join('') + '</select></label>';
+    var statusSelect = '<label class="att-field">New status<select data-extra="status">' + ['present', 'late', 'present_verified', 'connectivity', 'absent', 'no_show', 'excused', 'other', 'unaccounted'].map(function (k) { return '<option value="' + k + '">' + STATUS[k][0] + '</option>'; }).join('') + '</select></label>';
     el.addEventListener('click', function (e) {
       var t = e.target; if (!t.closest) return;
       var b;

@@ -195,6 +195,9 @@ exports.onExamAttemptWritten          = work.onExamAttemptWritten;
 exports.onLessonSubmissionWritten     = work.onLessonSubmissionWritten;  // <--- NEW
 exports.migrateLegacyHomeworkAndExams = work.migrateLegacyHomeworkAndExams;
 
+const workFile = require("./work-file");
+exports.fetchWorkFile                 = workFile.fetchWorkFile;   // marking screen download fallback (no bucket CORS needed)
+
 /* ---------------------------------------------------------
    Config
 --------------------------------------------------------- */
