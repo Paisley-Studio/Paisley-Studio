@@ -59,6 +59,7 @@ var Attendance = (function () {
   function toast(t) { var d = document.createElement('div'); d.className = 'att-dock att'; d.innerHTML = '<span class="att-chip">' + icon('fa-circle-check') + ' ' + esc(t) + '</span>'; document.body.appendChild(d); setTimeout(function () { d.remove(); }, 2600); }
   function errDetails(e) { return (e && e.details) || {}; }
   function methodPill(r) {
+    if (r.checkIn && r.checkIn.source === 'tutor') return '<span class="att-pill wait">' + icon('fa-chalkboard-user') + ' Tutor</span>';
     if (r.checkIn) return r.checkIn.method === 'face' ? '<span class="att-pill info">' + icon('fa-face-smile') + ' Face</span>' : '<span class="att-pill wait">' + icon('fa-hand') + ' Online</span>';
     if (r.resolution) return '<span class="att-pill wait">' + icon('fa-chalkboard-user') + ' Tutor</span>';
     return '—';
@@ -73,10 +74,17 @@ var Attendance = (function () {
     return 'pending';
   }
   function awaitingConfirm(r) { var c = confirmOf(r); return c === 'pending' || c === 'unconfirmed'; }
+  // The student's timestamp, with the original kept visible when a tutor changed it.
+  function checkInTime(r) {
+    if (!r.checkIn) return '—';
+    var ci = r.checkIn;
+    return hm(ci.at) + (ci.source === 'tutor' ? '<span class="att-was">recorded by ' + esc(ci.recordedByName || 'the tutor') + '</span>' : '') +
+      (ci.originalAt ? '<span class="att-was">edited (was ' + hm(ci.originalAt) + ')</span>' : '');
+  }
   function confirmCell(r) {
     var c = confirmOf(r), tc = r.tutorConfirm || null;
     if (!c) return r.resolution ? '<span class="att-muted">' + hm(r.resolution.at) + ' (marked by tutor)</span>' : '—';
-    var who = tc ? '<div class="att-muted">' + esc(tc.byName || '') + (tc.minutesAfterCheckIn != null ? ' · ' + tc.minutesAfterCheckIn + ' min after check-in' : '') + (tc.afterSubmission ? ' · after submission' : '') + '</div>' : '';
+    var who = tc ? '<div class="att-muted">' + esc(tc.byName || '') + (tc.minutesAfterCheckIn != null ? ' · ' + tc.minutesAfterCheckIn + ' min after check-in' : '') + (tc.afterSubmission ? ' · after submission' : '') + (tc.edited ? ' · edited' + (tc.originalAt ? ' (was ' + hm(tc.originalAt) + ')' : '') : '') + '</div>' : '';
     if (c === 'confirmed') return '<span class="att-pill ok">' + icon('fa-user-check') + ' ' + hm(tc && tc.at) + '</span>' + who;
     if (c === 'not_in_class') return '<span class="att-pill bad">' + icon('fa-user-xmark') + ' Not in class ' + hm(tc && tc.at) + '</span>' + who;
     if (c === 'unconfirmed') return '<span class="att-pill bad">' + icon('fa-circle-exclamation') + ' Never confirmed</span>';
@@ -143,7 +151,17 @@ var Attendance = (function () {
       '.att-q.ok.on{background:#1d8b57;border-color:#1d8b57;color:#fff}.att-q.bad.on{background:#b8362a;border-color:#b8362a;color:#fff}.att-q.more.on{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}',
       '.att-q.ok:not(.on){color:#1d8b57}.att-q.bad:not(.on){color:#b8362a}',
       'tr.att-busy td{opacity:.75}',
-      '.att-row-actions{display:flex;gap:.3rem;flex-wrap:wrap}',
+      /* A decision once made: a locked chip, not a button. Changes go through Edit. */
+      '.att-done{display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .7rem;border-radius:8px;font-weight:800;font-size:.74rem;white-space:nowrap;border:1.5px solid transparent;cursor:default;user-select:none}',
+      '.att-done.ok{background:#1d8b57;color:#fff}.att-done.bad{background:#b8362a;color:#fff}.att-done.info{background:var(--brand-deep,#245F5A);color:#fff}',
+      '.att-done .fa-lock{opacity:.7;font-size:.65rem}',
+      '.att-btn.done,.att-btn.done:disabled{background:#e8f6ee;border-color:#9fd8b8;color:#1d8b57;opacity:1;cursor:default}',
+      '.att-card.wide .hd{position:sticky;top:0;background:#fff;z-index:3}.att-card.wide .ft{position:sticky;bottom:0;background:#fff;z-index:3;box-shadow:0 -6px 16px rgba(0,0,0,.05)}',
+      'tr.att-edit-row td{background:var(--sage,#E5F2EF);border-bottom:1px solid var(--line,#e3ecea)}',
+      '.att-edit{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end}.att-edit .att-field{margin:0}.att-edit .att-field input,.att-edit .att-field select{min-width:0}',
+      '.att-edit .att-field.note{flex:1 1 200px}.att-edit .att-field.note input{width:100%}.att-edit .hint{flex-basis:100%;font-size:.72rem;color:var(--muted,#5A6E6A);font-weight:600}',
+      '.att-was{display:block;font-size:.68rem;color:var(--muted,#5A6E6A);font-weight:700}',
+      '.att-row-actions{display:flex;gap:.3rem;flex-direction:column;align-items:flex-start}.att-row-actions .att-quick{flex-wrap:wrap}',
       '.att-reg-tabs{display:flex;gap:.35rem;flex-wrap:wrap;padding:.6rem 1.2rem 0}',
       '.att-msg{font-size:.8rem;font-weight:700;margin-top:.5rem}.att-msg.bad{color:#b8362a}.att-msg.ok{color:#1d8b57}',
       '.att-cam{position:relative;max-width:360px;margin:0 auto;border-radius:16px;overflow:hidden;background:#0f1d1b;aspect-ratio:4/3}',
@@ -393,7 +411,7 @@ var Attendance = (function () {
       (upcoming.length ? '<div class="att-panel"><h4>' + icon('fa-calendar-day') + ' Scheduled</h4>' + upcoming.map(function (r) { return '<div class="att-muted">' + dayLabel(r.startAt) + ' ' + hm(r.startAt) + ' · ' + esc(r.subjectName) + '</div>'; }).join('') + '</div>' : '') +
       '<div class="att-panel"><h4>' + icon('fa-list-check') + ' Attendance history</h4>' + (rows.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Date</th><th>Subject</th><th>Start</th><th>Student check-in</th><th>Tutor confirmed</th><th>Status</th>' + (opts.requests ? '<th></th>' : '') + '</tr></thead><tbody>' +
         rows.map(function (r) {
-          return '<tr><td>' + dayLabel(r.startAt) + '</td><td>' + esc(r.subjectName) + '</td><td>' + hm(r.startAt) + '</td><td>' + (r.checkIn ? hm(r.checkIn.at) + (r.checkIn.minutesLate ? ' <span class="att-muted">(' + r.checkIn.minutesLate + ' min)</span>' : '') + (r.checkIn.method === 'face' ? ' <span class="att-muted">' + icon('fa-face-smile') + '</span>' : '') : '—') + '</td>' +
+          return '<tr><td>' + dayLabel(r.startAt) + '</td><td>' + esc(r.subjectName) + '</td><td>' + hm(r.startAt) + '</td><td>' + (r.checkIn ? checkInTime(r) + (r.checkIn.minutesLate ? ' <span class="att-muted">(' + r.checkIn.minutesLate + ' min)</span>' : '') + (r.checkIn.method === 'face' ? ' <span class="att-muted">' + icon('fa-face-smile') + '</span>' : '') : '—') + '</td>' +
             '<td>' + confirmCell(r) + '</td>' +
             '<td>' + pill(r.status) + (r.strikeId ? ' <span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + (r.strikeReversed ? 'Strike reversed' : 'Strike') + '</span>' : '') + (r.lateExcused ? ' <span class="att-pill info">Lateness excused</span>' : '') + '</td>' +
             (opts.requests ? '<td>' + (r.strikeId && !r.strikeReversed ? '<button type="button" class="att-btn sm" data-att-excuse="' + esc(r.id) + '">' + icon('fa-envelope-open-text') + ' Ask to excuse</button>' : '') + '</td>' : '') + '</tr>';
@@ -425,7 +443,10 @@ var Attendance = (function () {
   ========================================================= */
   function mountTutor(o) {
     style();
-    var S = { lessons: [], pending: [], skew: 0, sessions: {}, records: {}, unsubs: {}, dismissed: {}, modal: null, active: null, locks: [], policy: { graceMin: 15, autoSubmitAfterEndMin: 15 }, opt: {}, more: {}, recognition: { available: false }, cam: null };
+    var S = { lessons: [], pending: [], skew: 0, sessions: {}, records: {}, unsubs: {}, dismissed: {}, modal: null, active: null, locks: [], policy: { graceMin: 15, autoSubmitAfterEndMin: 15 }, opt: {}, more: {}, edit: {}, recognition: { available: false }, cam: null };
+    // The register can be edited (times and states) until the auto-submit time, submitted or not.
+    function editUntil(s) { return msOf(s.endAt) + (S.policy.autoSubmitAfterEndMin || 15) * 60000; }
+    function canEditReg(s) { var t = now(); return s.status !== 'cancelled' && t >= msOf(s.startAt) - 10 * 60000 && t < editUntil(s); }
     function stopCam() { if (S.cam) { S.cam.stop(); S.cam = null; } }
     /* Optimistic marks: S.opt[sessionId_studentId] = { status, resolution, busy }. The row shows the
        tutor's choice the moment it is tapped; the live snapshot replaces it once the server has it. */
@@ -521,14 +542,54 @@ var Attendance = (function () {
       }
       return h;
     }
-    /* Second timestamp: the tutor calls the name in the live class and confirms (or not). */
+    /* Second timestamp: the tutor calls the name in the live class and confirms (or not).
+       Once pressed, the pair turns into a locked chip; a change goes through Edit. */
+    function doneChip(cls, ic, label, busy) {
+      return '<span class="att-done ' + cls + '" title="Recorded. Use Edit to change it.">' + icon(busy ? 'fa-spinner fa-spin' : ic) + ' ' + esc(label) + (busy ? '' : ' ' + icon('fa-lock')) + '</span>';
+    }
     function confirmBtnsHtml(s, r) {
       var c = confirmOf(r), busy = r._busy;
+      if (c === 'confirmed') return doneChip('ok', 'fa-user-check', 'Confirmed', busy);
+      if (c === 'not_in_class') return doneChip('bad', 'fa-user-xmark', 'Not in class', busy);
       var data = ' data-sid="' + esc(s.id) + '" data-st="' + esc(r.studentId) + '"' + (busy ? ' disabled' : '');
-      function b(out, cls, ic, label, on) {
-        return '<button type="button" class="att-q ' + cls + (on ? ' on' : '') + '" data-confirm="' + out + '"' + data + ' aria-pressed="' + on + '">' + icon(busy === out ? 'fa-spinner fa-spin' : ic) + ' ' + label + '</button>';
+      function b(out, cls, ic, label) {
+        return '<button type="button" class="att-q ' + cls + '" data-confirm="' + out + '"' + data + '>' + icon(busy === out ? 'fa-spinner fa-spin' : ic) + ' ' + label + '</button>';
       }
-      return '<div class="att-quick">' + b('confirm', 'ok', 'fa-user-check', 'Confirm', c === 'confirmed') + b('not_in_class', 'bad', 'fa-user-xmark', 'Not in class', c === 'not_in_class') + '</div>';
+      return '<div class="att-quick">' + b('confirm', 'ok', 'fa-user-check', 'Confirm') + b('not_in_class', 'bad', 'fa-user-xmark', 'Not in class') + '</div>';
+    }
+    // A student the tutor has already marked (no self check-in): locked as well.
+    function markedChip(r) {
+      var st = r.status, lab = (r.resolution && r.resolution.label) || (STATUS[st] || [st])[0];
+      if (st === 'present_verified') lab = 'Present';
+      return doneChip(st === 'absent' ? 'bad' : st === 'present_verified' || st === 'present' || st === 'late' ? 'ok' : 'info', st === 'absent' ? 'fa-xmark' : 'fa-check', lab, r._busy);
+    }
+    /* Edit a row: the state, the time the student came in and the time the tutor confirmed. */
+    var EDIT_OPTS = [['in_class', 'In class'], ['absent', 'Absent'], ['connectivity', 'Connectivity / device issue'], ['excused_admin', 'Excused by administration'], ['other', 'Other reason (explain)']];
+    function ownCheckIn(r) { return !!(r.checkIn && r.checkIn.source !== 'tutor'); }
+    function editDefaults(s, r) {
+      var attended = ['present', 'late', 'present_verified'].indexOf(r.status) !== -1;
+      var state = attended ? 'in_class' : r.status === 'absent' || r.status === 'no_show' ? 'absent' : r.status === 'connectivity' ? 'connectivity' : r.status === 'excused' ? 'excused_admin' : r.status === 'other' ? 'other' : (r.checkIn ? 'in_class' : 'absent');
+      var arr = r.checkIn ? hm(r.checkIn.at) : (r.resolution && attended ? hm(r.resolution.at) : '');
+      return { state: state, arrivedAt: arr === '—' ? '' : arr, confirmedAt: r.tutorConfirm && r.tutorConfirm.at ? hm(r.tutorConfirm.at) : '', note: '' };
+    }
+    function editShow(state, r) { return { arr: state === 'in_class', conf: state === 'in_class' || (state === 'absent' && ownCheckIn(r)) }; }
+    function editRowHtml(s, r) {
+      var k = s.id + '_' + r.studentId, e = S.edit[k]; if (!e) return '';
+      var own = ownCheckIn(r), sh = editShow(e.state, r);
+      var opts = EDIT_OPTS.filter(function (x) { return !own || x[0] === 'in_class' || x[0] === 'absent'; }).map(function (x) {
+        var lab = x[0] === 'absent' && own ? 'Not in class (registered, did not join)' : x[0] === 'in_class' ? 'In class (on time or late from the arrival time)' : x[1];
+        return '<option value="' + x[0] + '"' + (e.state === x[0] ? ' selected' : '') + '>' + lab + '</option>';
+      }).join('');
+      var d = ' data-k="' + esc(k) + '" data-sid="' + esc(s.id) + '" data-st="' + esc(r.studentId) + '"';
+      return '<tr class="att-edit-row"><td colspan="7"><div class="att-edit">' +
+        '<label class="att-field">Attendance<select data-ed="state"' + d + '>' + opts + '</select></label>' +
+        '<label class="att-field" data-ed-arr' + (sh.arr ? '' : ' hidden') + '>Came into class at<input type="time" data-ed="arrivedAt"' + d + ' value="' + esc(e.arrivedAt) + '"></label>' +
+        '<label class="att-field" data-ed-conf' + (sh.conf ? '' : ' hidden') + '>You confirmed at<input type="time" data-ed="confirmedAt"' + d + ' value="' + esc(e.confirmedAt) + '" placeholder="now"></label>' +
+        '<label class="att-field note">Note' + (e.state === 'other' ? ' (required)' : ' (optional)') + '<input data-ed="note"' + d + ' maxlength="1000" value="' + esc(e.note) + '" placeholder="e.g. joined late from a phone"></label>' +
+        '<button type="button" class="att-btn sm primary" data-ed-save="' + esc(r.studentId) + '" data-sid="' + esc(s.id) + '"' + (e.busy ? ' disabled' : '') + '>' + icon(e.busy ? 'fa-spinner fa-spin' : 'fa-check') + ' Save</button>' +
+        '<button type="button" class="att-btn sm" data-ed-cancel="' + esc(k) + '"' + (e.busy ? ' disabled' : '') + '>Cancel</button>' +
+        '<span class="hint">East Africa time. On time or late follows from the arrival time (late from ' + hm(s.graceAt) + '), and the late strike is added or removed to match. You can edit until ' + hm(editUntil(s)) + '.' + (e.err ? '</span><div class="att-msg bad" style="flex-basis:100%">' + esc(e.err) + '</div>' : '</span>') +
+        '</div></td></tr>';
     }
     /* The tutor's own attendance for this lesson (attendanceTutorCheckIn / faceTutorVerify). */
     function meHtml(s) {
@@ -574,31 +635,35 @@ var Attendance = (function () {
         var unresolved = r.status === 'expected' || r.status === 'unaccounted';
         var waiting = awaitingConfirm(r);
         var flag = (unresolved && afterGrace) || r.needsVerification || r.reviewState === 'pending' || (waiting && started) || r.status === 'no_show';
-        var canConfirm = !!r.checkIn && s.status !== 'cancelled' && t >= msOf(s.startAt) - 10 * 60000 && (!submitted || waiting);
+        var decided = confirmOf(r) === 'confirmed' || confirmOf(r) === 'not_in_class';
+        var canConfirm = !!r.checkIn && s.status !== 'cancelled' && t >= msOf(s.startAt) - 10 * 60000 && (waiting || decided);
         var tutorMarked = !r.checkIn && ['absent', 'present_verified', 'connectivity', 'excused', 'other'].indexOf(r.status) !== -1;
-        var canResolve = started && !r.checkIn && (unresolved || (tutorMarked && !submitted)) && s.status !== 'cancelled';
+        var canResolve = started && !r.checkIn && unresolved && s.status !== 'cancelled';
+        var k = s.id + '_' + r.studentId, editable = canEditReg(s) && started && !r._busy;
+        var editBtn = editable ? '<button type="button" class="att-q more' + (S.edit[k] ? ' on' : '') + '" data-ed-open="' + esc(k) + '" data-sid="' + esc(s.id) + '" data-st="' + esc(r.studentId) + '" title="Change the state or the times">' + icon('fa-pen') + ' Edit</button>' : '';
         return '<tr class="' + (flag ? 'flag' : '') + (r._busy ? ' att-busy' : '') + '"><td><b>' + esc(r.studentName) + '</b>' + (r.resolution ? '<div class="att-muted">' + esc(r.resolution.label || r.resolution.outcome) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName || '') + ' ' + hm(r.resolution.at) + '</div>' : '') + '</td>' +
           '<td>' + pill(unresolved && !afterGrace ? 'expected' : r.status) + (unresolved && afterGrace ? ' <span class="att-pill bad">Account for</span>' : '') + (r.needsVerification ? ' <span class="att-pill wait">Registered after submission</span>' : '') + (r.reviewState === 'pending' ? ' <span class="att-pill wait">Studio Desk review</span>' : '') + '</td>' +
-          '<td>' + (r.checkIn ? hm(r.checkIn.at) : '—') + '</td><td>' + methodPill(r) + '</td>' +
+          '<td>' + checkInTime(r) + (r.checkIn || r.resolution ? '<div style="margin-top:.2rem">' + methodPill(r) + '</div>' : '') + '</td>' +
           '<td>' + (r.checkIn ? (r.checkIn.classification === 'late' ? '<span class="att-pill late">' + r.checkIn.minutesLate + ' min late</span>' : '<span class="att-pill ok">On time</span>') : '—') + '</td>' +
           '<td>' + confirmCell(r) + '</td>' +
           '<td>' + (r.strikeId ? '<span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + icon('fa-triangle-exclamation') + ' ' + (r.strikeReversed ? 'Reversed' : 'Strike') + '</span>' : '—') + '</td>' +
-          '<td>' + (canResolve ? quickHtml(s, r) : '') + (canConfirm ? confirmBtnsHtml(s, r) : '') + '</td></tr>';
+          '<td><div class="att-row-actions">' + (canResolve ? quickHtml(s, r) : '') + (canConfirm ? confirmBtnsHtml(s, r) : '') + (tutorMarked ? markedChip(r) : '') + editBtn + '</div></td></tr>' +
+          (editable ? editRowHtml(s, r) : '');
       }).join('');
       var head = '<div class="att-stats"><div class="att-stat"><b>' + c.total + '</b><span>Enrolled</span></div><div class="att-stat"><b>' + c.checked + '</b><span>Checked in</span></div>' +
         '<div class="att-stat"><b>' + c.confirmed + '</b><span>Confirmed in class</span></div><div class="att-stat warn"><b>' + c.awaiting + '</b><span>Awaiting your confirmation</span></div>' +
         '<div class="att-stat late"><b>' + c.late + '</b><span>Late</span></div>' +
         '<div class="att-stat warn"><b>' + c.unresolved + '</b><span>' + (afterGrace ? 'Unaccounted for' : 'Not registered yet') + '</span></div><div class="att-stat"><b>' + (c.absent + c.noShow) + '</b><span>Absent' + (c.noShow ? ' (' + c.noShow + ' not in class)' : '') + '</span></div></div>';
-      var how = s.status === 'open' && started ? '<div class="att-banner"><div class="ic">' + icon('fa-video') + '</div><div class="t"><b>Call the register in the live class</b><small>Students who register appear here. When you call a name in Google Meet and the student answers, press <b>Confirm</b>. If they are not there, press <b>Not in class</b>: it is recorded as an absence and the family is told. Both times are kept, when they registered and when you confirmed.</small></div></div>' : '';
+      var how = s.status === 'open' && started ? '<div class="att-banner"><div class="ic">' + icon('fa-video') + '</div><div class="t"><b>Call the register in the live class</b><small>Students who register appear here. When you call a name in Google Meet and the student answers, press <strong>Confirm</strong>. If they are not there, press <strong>Not in class</strong>: it is recorded as an absence and the family is told. Both times are kept, when they registered and when you confirmed. A button locks once pressed; use <strong>Edit</strong> to change a row.</small></div></div>' : '';
       var state = s.status === 'cancelled' ? '<div class="att-banner"><div class="ic">' + icon('fa-ban') + '</div><div class="t"><b>Lesson cancelled</b><small>' + esc((s.cancelled && s.cancelled.reason) || '') + '</small></div></div>' :
-        submitted ? '<div class="att-banner"><div class="ic">' + icon('fa-circle-check') + '</div><div class="t"><b>' + (s.status === 'auto_submitted' ? 'AUTO-SUBMITTED' : 'Submitted') + ' ' + hm(s.submission && s.submission.at) + '</b><small>' + (s.status === 'auto_submitted' ? 'You did not submit this register, so the system did. Account for anyone still unresolved and add your explanation below.' : 'Submitted by ' + esc((s.submission && s.submission.byName) || '')) + '</small></div></div>' :
+        submitted ? '<div class="att-banner"><div class="ic">' + icon('fa-circle-check') + '</div><div class="t"><b>' + (s.status === 'auto_submitted' ? 'AUTO-SUBMITTED' : 'Submitted') + ' ' + hm(s.submission && s.submission.at) + '</b><small>' + (s.status === 'auto_submitted' ? 'You did not submit this register, so the system did. Account for anyone still unresolved and add your explanation below.' : 'Submitted by ' + esc((s.submission && s.submission.byName) || '')) + (canEditReg(s) ? '. You can still Edit a row (state, arrival time, confirmation time) until ' + hm(editUntil(s)) + '; absences reach families after that.' : '') + '</small></div></div>' :
         !started ? '<p class="att-muted">The register opens at ' + hm(s.startAt) + '. Students appear here as they register.</p>' :
         !afterGrace ? '<p class="att-muted">Students are registering. Anyone not registered by ' + hm(s.graceAt) + ' is flagged for you to account for. Nobody is marked absent automatically.</p>' :
-        t >= msOf(s.endAt) ? '<p class="att-muted">The lesson has ended, so you can submit now. Anyone you have not marked stays unaccounted for (never absent) and you can still mark them after submitting. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + '.</p>' :
-        '<p class="att-muted">Mark every flagged student, then submit. Submit opens for everyone the moment the lesson ends at ' + hm(s.endAt) + '. If the register is not submitted it is auto-submitted at ' + hm(msOf(s.endAt) + S.policy.autoSubmitAfterEndMin * 60000) + ' and the Studio Desk is told.</p>';
+        t >= msOf(s.endAt) ? '<p class="att-muted">The lesson has ended, so you can submit now: you do not need to wait. Anyone you have not marked stays unaccounted for (never absent). You can Edit any row until ' + hm(editUntil(s)) + ', and the register is auto-submitted then if you have not submitted it.</p>' :
+        '<p class="att-muted">Mark every flagged student and confirm who is in the live class. Submit opens the moment the lesson ends at ' + hm(s.endAt) + ', not before. If the register is not submitted it is auto-submitted at ' + hm(editUntil(s)) + ' and the Studio Desk is told.</p>';
       var explain = s.status === 'auto_submitted' ? '<div class="att-panel"><h4>' + icon('fa-comment-dots') + ' Your explanation</h4>' + (s.tutorExplanation ? '<p class="att-muted">"' + esc(s.tutorExplanation.text) + '" (' + dayLabel(s.tutorExplanation.at) + ')' + (s.explanationReview ? ' · Studio Desk: ' + esc(s.explanationReview.decision) : '') + '</p>' : '') +
         '<label class="att-field">Why was the register not submitted?<textarea data-explain="' + esc(s.id) + '" maxlength="2000"></textarea></label><button type="button" class="att-btn sm primary" data-explain-go="' + esc(s.id) + '">' + icon('fa-paper-plane') + ' Send explanation</button></div>' : '';
-      return meHtml(s) + state + how + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Student check-in</th><th>Method</th><th>On time</th><th>Tutor confirmed</th><th>Strike</th><th>Mark</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
+      return meHtml(s) + state + how + head + (recs.length ? '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status</th><th>Student check-in</th><th>On time</th><th>Tutor confirmed</th><th>Strike</th><th>Mark / edit</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="att-empty">No students are enrolled in this session.</div>') +
         '<div class="att-msg" data-msg="' + esc(s.id) + '"></div>' + explain;
     }
     function openRoll(sid) {
@@ -613,18 +678,21 @@ var Attendance = (function () {
       var m = S.modal.m; S.modal = null; m.close(); paint();
     }
     function submitState(s) {
-      var t = now(), c = counts(recsOf(s.id)), ended = t >= msOf(s.endAt), afterGrace = t >= msOf(s.graceAt);
-      if (ended) return { ok: true, note: [c.unresolved ? c.unresolved + ' not marked: they stay unaccounted for' : '', c.awaiting ? c.awaiting + ' not confirmed: they stay "never confirmed"' : ''].filter(Boolean).join('. ') };
-      if (!afterGrace) return { ok: false, why: 'Opens at ' + hm(s.graceAt) + ', after the grace period' };
-      if (c.unresolved) return { ok: false, why: 'Mark every flagged student, or wait until the lesson ends at ' + hm(s.endAt) };
-      if (c.awaiting) return { ok: false, why: 'Confirm (or mark Not in class) every student who registered, or wait until the lesson ends at ' + hm(s.endAt) };
-      return { ok: true };
+      var t = now(), c = counts(recsOf(s.id));
+      if (t < msOf(s.endAt)) return { ok: false, why: 'You can submit when the lesson ends at ' + hm(s.endAt) };
+      return { ok: true, note: [c.unresolved ? c.unresolved + ' not marked: they stay unaccounted for' : '', c.awaiting ? c.awaiting + ' not confirmed: they stay "never confirmed"' : ''].filter(Boolean).join('. ') };
     }
+    var CLOSE_BTN = '<button type="button" class="att-btn" data-roll-close>' + icon('fa-xmark') + ' Close register</button>';
     function footHtml(s) {
-      if (s.status !== 'open') return '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' Closing this keeps collecting registrations. Reopen it from the Rollcall button.</span>';
+      if (s.status === 'cancelled') return '<span class="att-muted" style="margin-right:auto"></span>' + CLOSE_BTN;
+      if (s.status !== 'open') {
+        var auto = s.status === 'auto_submitted';
+        return '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' ' + (canEditReg(s) ? 'You can still edit rows until ' + hm(editUntil(s)) + '.' : 'The register is closed. Ask the Studio Desk for any correction.') + '</span>' + CLOSE_BTN +
+          '<button type="button" class="att-btn done" disabled aria-disabled="true">' + icon(auto ? 'fa-robot' : 'fa-circle-check') + ' ' + (auto ? 'Auto-submitted ' : 'Submitted ') + hm(s.submission && s.submission.at) + '</button>';
+      }
       var st = submitState(s);
-      return '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' ' + esc(st.ok ? (st.note || 'Ready to submit.') : st.why) + '</span>' +
-        '<button type="button" class="att-btn primary" data-submit="' + esc(s.id) + '"' + (st.ok ? '' : ' disabled title="' + esc(st.why) + '"') + '>' + icon('fa-paper-plane') + ' Submit register</button>';
+      return '<span class="att-muted" style="margin-right:auto">' + icon('fa-circle-info') + ' ' + esc(st.ok ? (st.note || 'Ready to submit.') : st.why) + '</span>' + CLOSE_BTN +
+        '<button type="button" class="att-btn primary" data-submit="' + esc(s.id) + '"' + (st.ok ? '' : ' disabled title="' + esc(st.why) + '"') + '>' + icon(st.ok ? 'fa-paper-plane' : 'fa-clock') + ' ' + (st.ok ? 'Submit register' : 'Submit at ' + hm(s.endAt)) + '</button>';
     }
     function paintRoll() {
       if (!S.modal) return;
@@ -709,6 +777,17 @@ var Attendance = (function () {
         call('faceConsent', { action: 'withdraw' }).then(function () { S.recognition = { available: false }; toast('Consent withdrawn. Your face data is deleted.'); paint(); }).catch(function (er) { alert(errMsg(er)); });
         return;
       }
+      if (t.closest('[data-roll-close]')) { closeRoll(); return; }
+      var eo = t.closest('[data-ed-open]');
+      if (eo) {
+        var ek = eo.dataset.edOpen;
+        if (S.edit[ek]) delete S.edit[ek];
+        else { var r0 = (recsOf(eo.dataset.sid)).filter(function (x) { return x.studentId === eo.dataset.st; })[0]; if (r0) S.edit[ek] = editDefaults(S.sessions[eo.dataset.sid] || {}, r0); }
+        paint(); return;
+      }
+      var ec = t.closest('[data-ed-cancel]'); if (ec) { delete S.edit[ec.dataset.edCancel]; paint(); return; }
+      var es = t.closest('[data-ed-save]');
+      if (es) { if (!es.disabled) saveEdit(es.dataset.sid, es.dataset.edSave); return; }
       var cf = t.closest('[data-confirm]');
       if (cf) { if (!cf.disabled) confirmStudent(cf.dataset.sid, cf.dataset.st, cf.dataset.confirm, host); return; }
       var qk = t.closest('[data-quick]');
@@ -730,6 +809,7 @@ var Attendance = (function () {
       if (ver) { ver.disabled = true; call('attendanceResolve', { sessionId: ver.dataset.sid, studentId: ver.dataset.verify, outcome: 'verify' }).catch(function (er) { ver.disabled = false; alert(errMsg(er)); }); return; }
       var sub = t.closest('[data-submit]');
       if (sub) {
+        if (sub.disabled) return;
         sub.disabled = true; sub.innerHTML = icon('fa-spinner fa-spin') + ' Submitting…';
         call('attendanceSubmit', { sessionId: sub.dataset.submit }).then(function () {
           // Show it as submitted straight away; the live snapshot follows.
@@ -750,6 +830,31 @@ var Attendance = (function () {
       }
     }
     document.addEventListener('click', act);
+    // Keep what the tutor types in an Edit row (the register repaints every few seconds).
+    function edInput(e) {
+      var f = e.target && e.target.closest && e.target.closest('[data-ed]'); if (!f) return;
+      var ed = S.edit[f.dataset.k]; if (!ed) return;
+      ed[f.dataset.ed] = f.value; ed.err = '';
+      if (f.dataset.ed === 'state') {
+        var row = f.closest('.att-edit'), sid = f.dataset.sid, st = f.dataset.st;
+        var r0 = (S.records[sid] || []).filter(function (x) { return x.studentId === st; })[0] || {};
+        var sh = editShow(f.value, r0);
+        row.querySelector('[data-ed-arr]').hidden = !sh.arr; row.querySelector('[data-ed-conf]').hidden = !sh.conf;
+      }
+    }
+    document.addEventListener('input', edInput); document.addEventListener('change', edInput);
+    function saveEdit(sid, st) {
+      var k = sid + '_' + st, ed = S.edit[k]; if (!ed) return;
+      var sh = editShow(ed.state, (S.records[sid] || []).filter(function (x) { return x.studentId === st; })[0] || {});
+      if (sh.arr && !ed.arrivedAt) { ed.err = 'Write the time the student came into the class.'; paint(); return; }
+      if (ed.state === 'other' && String(ed.note || '').trim().length < 3) { ed.err = 'Write the reason for "Other".'; paint(); return; }
+      ed.busy = true; ed.err = '';
+      if (document.activeElement) document.activeElement.blur();
+      paint();
+      call('attendanceResolve', { sessionId: sid, studentId: st, outcome: 'edit', state: ed.state, arrivedAt: sh.arr ? ed.arrivedAt : '', confirmedAt: sh.conf ? ed.confirmedAt : '', note: String(ed.note || '').trim() })
+        .then(function (r) { delete S.edit[k]; paint(); toast(r && r.strike === 'added' ? 'Saved. Late arrival: strike recorded.' : r && r.strike === 'reversed' ? 'Saved. On time: the late strike was removed.' : 'Saved.'); })
+        .catch(function (er) { if (S.edit[k]) { S.edit[k].busy = false; S.edit[k].err = errMsg(er); } paint(); });
+    }
 
     /* Attendance tab: today's registers, overdue ones, history. */
     var hist = [];
@@ -792,8 +897,8 @@ var Attendance = (function () {
       clearTimeout(edge);
       var t = now(), next = Infinity;
       Object.keys(S.sessions).forEach(function (k) {
-        var s = S.sessions[k]; if (s.status !== 'open') return;
-        [msOf(s.startAt), msOf(s.graceAt), msOf(s.endAt)].forEach(function (x) { if (x > t && x < next) next = x; });
+        var s = S.sessions[k]; if (s.status === 'cancelled') return;
+        [msOf(s.startAt), msOf(s.graceAt), msOf(s.endAt), editUntil(s)].forEach(function (x) { if (x > t && x < next) next = x; });
       });
       if (next !== Infinity) edge = setTimeout(function () { paint(); }, Math.min(next - t + 250, 2147483000));
     }
@@ -802,7 +907,7 @@ var Attendance = (function () {
     return {
       refresh: function () { refresh(); loadHistory(); },
       locks: function () { return S.locks.slice(); },
-      destroy: function () { clearInterval(tick); clearInterval(poll); clearTimeout(edge); document.removeEventListener('click', act); dock.remove(); Object.keys(S.unsubs).forEach(function (k) { S.unsubs[k](); }); if (lockUnsub) lockUnsub(); }
+      destroy: function () { clearInterval(tick); clearInterval(poll); clearTimeout(edge); document.removeEventListener('click', act); document.removeEventListener('input', edInput); document.removeEventListener('change', edInput); dock.remove(); Object.keys(S.unsubs).forEach(function (k) { S.unsubs[k](); }); if (lockUnsub) lockUnsub(); }
     };
   }
 
@@ -971,7 +1076,7 @@ var Attendance = (function () {
       submit: 'Register submitted', auto_submit: 'Register AUTO-SUBMITTED', review_resolution: 'Explanation reviewed', correct_record: 'Record corrected', strike_reversed: 'Strike reversed', referral_created: 'Referral opened',
       referral_decision: 'Referral decision', lock_override: 'Subject lock overridden', session_cancelled: 'Lesson cancelled', explanation_review: 'Tutor explanation reviewed', follow_up_closed: 'Follow-up closed',
       request_made: 'Request made', request_decision: 'Request decided', tutor_explanation: 'Tutor explanation', tutor_present: 'Tutor confirmed teaching', tutor_face_verified: 'Tutor face-verified',
-      policy_changed: 'Strike policy changed', strikes_reset: 'Strike counts reset' };
+      policy_changed: 'Strike policy changed', strikes_reset: 'Strike counts reset', tutor_confirm_present: 'Tutor confirmed a student in class', tutor_not_in_class: 'Tutor marked a student not in class', tutor_edit: 'Tutor edited a row (state / times)' };
     function auditHtml() {
       var a = (D.audit || []).filter(function (x) { return x.area !== 'recognition'; });
       return '<div class="att-panel"><h4>' + icon('fa-list-ul') + ' Audit trail (latest ' + a.length + ')</h4><p class="att-muted">Append-only. Original registrations, submitted snapshots and earlier decisions are never overwritten; recognition changes are in Facial recognition > Change log.</p>' +
@@ -1113,7 +1218,7 @@ var Attendance = (function () {
           '<div class="att-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Status now</th><th>As submitted</th><th>Student check-in</th><th>Tutor confirmed</th><th>Tutor record</th><th>Corrections</th><th></th></tr></thead><tbody>' + recs.map(function (r) {
             var snap = sub && sub.rows.filter(function (x) { return x.studentId === r.studentId; })[0];
             return '<tr><td><b>' + esc(r.studentName) + '</b></td><td>' + pill(r.status) + (r.strikeId ? ' <span class="att-pill ' + (r.strikeReversed ? 'wait' : 'late') + '">' + (r.strikeReversed ? 'Strike reversed' : 'Strike') + '</span>' : '') + '</td><td>' + (snap ? pill(snap.status) : '—') + '</td>' +
-              '<td>' + (r.checkIn ? hm(r.checkIn.at) + ' (' + (r.checkIn.classification === 'late' ? r.checkIn.minutesLate + ' min late' : 'on time') + ')' : '—') + '</td>' +
+              '<td>' + (r.checkIn ? checkInTime(r) + ' (' + (r.checkIn.classification === 'late' ? r.checkIn.minutesLate + ' min late' : 'on time') + ')' : '—') + '</td>' +
               '<td>' + confirmCell(r) + '</td>' +
               '<td class="att-muted">' + (r.resolution ? esc(r.resolution.label) + (r.resolution.note ? ': ' + esc(r.resolution.note) : '') + ' · ' + esc(r.resolution.byName) + ' ' + hm(r.resolution.at) + (r.resolution.afterSubmission ? ' (after submission)' : '') : '') + '</td>' +
               '<td class="att-muted">' + (r.corrections || []).map(function (c) { return esc((STATUS[c.from] || [c.from])[0]) + ' → ' + esc((STATUS[c.to] || [c.to])[0]) + ': ' + esc(c.reason); }).join('<br>') + '</td>' +

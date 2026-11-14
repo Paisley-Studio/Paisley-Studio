@@ -129,18 +129,22 @@ test("tutor accounts for students, submits; absence notice only once it is final
   await assert.rejects(A.resolveStudent("t2", { sessionId: maths, studentId: "ben", outcome: "absent" }, at("09:20")), /not your register/);
   await assert.rejects(A.resolveStudent("t1", { sessionId: maths, studentId: "ben", outcome: "other", note: "" }, at("09:20")), /reason/);
   await assert.rejects(A.resolveStudent("t1", { sessionId: maths, studentId: "ann", outcome: "absent" }, at("09:20")), /registered themselves/);
-  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:30") }), /Account for every student first: Ben, Cal/);
+  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:59") }), /once the lesson ends at 10:00/);
   await A.resolveStudent("t1", { sessionId: maths, studentId: "ben", outcome: "absent", note: "" }, at("09:20"));
   const r2 = await A.resolveStudent("t1", { sessionId: maths, studentId: "cal", outcome: "connectivity", note: "Camera froze, joined by phone" }, at("09:21"));
   assert.equal(r2.status, "connectivity");
-  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:30") }), /Confirm who is in the class first.*Ann/);
   await A.confirmPresence("t1", { sessionId: maths, studentId: "ann", outcome: "confirm" }, at("09:22"));
   assert.equal((await rec(maths, "ben")).absenceConfirmedAt, null, "not final before submission");
-  const sub = await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:40") });
+  const sub = await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:00") });
   assert.equal(sub.status, "submitted");
-  assert.equal((await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:41") })).already, true);
+  assert.equal((await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:01") })).already, true, "no second submission");
+  assert.equal((await rec(maths, "ben")).absenceConfirmedAt, null, "the tutor may still edit until 10:15: not final yet");
+  assert.equal((await A.finalizeRegister(maths, at("10:14"))).skipped, true);
+  const sw = await A.sweep(at("10:15"));
+  assert.equal(sw.finalized, 1);
   const ben = await rec(maths, "ben");
-  assert.ok(ben.absenceConfirmedAt); assert.equal(ben.resolution.byName, "Tess Tutor");
+  assert.ok(ben.absenceConfirmedAt, "final once the edit window closes"); assert.equal(ben.resolution.byName, "Tess Tutor");
+  assert.equal((await db().doc("attendanceSessions/" + maths).get()).data().finalized, true);
   const snap = (await db().doc("attendanceSubmissions/" + maths).get()).data();
   assert.equal(snap.method, "manual"); assert.equal(snap.manualSubmission, true); assert.equal(snap.submittedBy, "t1");
   await A.noticeAbsence(ben, maths + "_ben"); await A.noticeAbsence(ben, maths + "_ben");
@@ -185,13 +189,15 @@ test("two timestamps: the student registers, the tutor confirms them in the live
   assert.equal((await rec(maths, "ben")).status, "present");
   await A.confirmPresence("t1", { sessionId: maths, studentId: "ben", outcome: "not_in_class" }, at("09:14"));
   await A.resolveStudent("t1", { sessionId: maths, studentId: "cal", outcome: "absent", note: "" }, at("09:20"));
-  await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:30") });
+  await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:01") });
+  assert.equal((await rec(maths, "ben")).absenceConfirmedAt, null, "edit window open");
+  await A.finalizeRegister(maths, at("10:15"));
   ben = await rec(maths, "ben");
-  assert.ok(ben.absenceConfirmedAt, "final once the register is in");
+  assert.ok(ben.absenceConfirmedAt, "final once the edit window closes");
   await A.noticeAbsence(ben, maths + "_ben"); await A.noticeAbsence(ben, maths + "_ben");
   const ns = await notices("no_show");
   assert.equal(ns.length, 1); assert.equal(ns[0].recipientId, "pb"); assert.match(ns[0].message, /not find them in the live class/);
-  await assert.rejects(A.confirmPresence("t1", { sessionId: maths, studentId: "ben", outcome: "confirm" }, at("09:40")), /Studio Desk/);
+  await assert.rejects(A.confirmPresence("t1", { sessionId: maths, studentId: "ben", outcome: "confirm" }, at("10:20")), /Studio Desk/);
   const snap = (await db().doc("attendanceSubmissions/" + maths).get()).data();
   const row = snap.rows.filter((r) => r.studentId === "ann")[0];
   assert.equal(row.confirmState, "confirmed"); assert.equal(row.tutorConfirmAt.toMillis(), at("09:10"));
@@ -204,7 +210,7 @@ test("unconfirmed registrations: submittable from the end, flagged, still confir
   await A.checkIn("ann", "maths", at("09:05"));
   await A.resolveStudent("t1", { sessionId: maths, studentId: "ben", outcome: "absent", note: "" }, at("09:20"));
   await A.resolveStudent("t1", { sessionId: maths, studentId: "cal", outcome: "absent", note: "" }, at("09:20"));
-  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:59") }), /Confirm who is in the class first/);
+  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:59") }), /once the lesson ends/);
   const sub = await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:00") });
   assert.equal(sub.unconfirmed, 1);
   assert.equal((await rec(maths, "ann")).confirmState, "unconfirmed");
@@ -220,7 +226,7 @@ test("unconfirmed registrations: submittable from the end, flagged, still confir
 test("from the end of the lesson the tutor may submit with students unmarked; they stay unaccounted and can be marked after", { skip: !HAVE }, async () => {
   await seed();
   await A.checkIn("ann", "maths", at("09:05"));
-  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:59") }), /Account for every student first/);
+  await assert.rejects(A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("09:59") }), /once the lesson ends/);
   const sub = await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:00") });
   assert.equal(sub.status, "submitted"); assert.equal(sub.unresolved, 2);
   const ben = await rec(maths, "ben");
@@ -259,6 +265,49 @@ test("auto-submit: keeps registrations, leaves the unaccounted unresolved, tells
   await A.explain("t1", { sessionId: maths, text: "Internet dropped at the end of the lesson." });
   assert.match((await db().doc("attendanceSessions/" + maths).get()).data().tutorExplanation.text, /Internet/);
 });
+
+test("edit window: the tutor fixes times and states until 15 minutes after the end; strikes follow the arrival time", { skip: !HAVE }, async () => {
+  await seed();
+  await A.checkIn("ann", "maths", at("09:20"));            // late: strike 1
+  await A.resolveStudent("t1", { sessionId: maths, studentId: "ben", outcome: "absent", note: "" }, at("09:20"));
+  await A.confirmPresence("t1", { sessionId: maths, studentId: "ann", outcome: "confirm" }, at("09:25"));
+  await assert.rejects(A.editRecord("t2", { sessionId: maths, studentId: "ann", state: "in_class", arrivedAt: "09:05" }, at("09:30")), /not your register/);
+  await assert.rejects(A.editRecord("t1", { sessionId: maths, studentId: "ann", state: "in_class", arrivedAt: "9.05" }, at("09:30")), /HH:MM/);
+  await assert.rejects(A.editRecord("t1", { sessionId: maths, studentId: "ann", state: "in_class", arrivedAt: "10:30" }, at("09:30")), /arrival time must be between/);
+  await assert.rejects(A.editRecord("t1", { sessionId: maths, studentId: "ann", state: "in_class", arrivedAt: "09:05", confirmedAt: "09:45" }, at("09:30")), /confirmation time/);
+  await assert.rejects(A.editRecord("t1", { sessionId: maths, studentId: "ann", state: "connectivity" }, at("09:30")), /registered themselves/);
+  // Ann really came in at 09:05 (her link was slow): on time, strike reversed, original time kept.
+  await A.editRecord("t1", { sessionId: maths, studentId: "ann", state: "in_class", arrivedAt: "09:05", confirmedAt: "09:12", note: "Joined at 09:05" }, at("09:30"));
+  const ann = await rec(maths, "ann");
+  assert.equal(ann.status, "present"); assert.equal(ann.checkIn.at.toMillis(), at("09:05")); assert.equal(ann.checkIn.originalAt.toMillis(), at("09:20"));
+  assert.equal(ann.tutorConfirm.at.toMillis(), at("09:12")); assert.equal(ann.tutorConfirm.originalAt.toMillis(), at("09:25")); assert.equal(ann.tutorConfirm.minutesAfterCheckIn, 7);
+  assert.equal((await strike(maths + "_ann")).status, "reversed");
+  assert.equal((await db().doc("attendanceStudents/ann").get()).data().years.y2026.active, 0);
+  // The tutor submits right after the lesson, then Ben, marked absent, turns out to have come in late.
+  await A.resolveStudent("t1", { sessionId: maths, studentId: "cal", outcome: "absent", note: "" }, at("09:40"));
+  await A.submitRegister(maths, { method: "manual", uid: "t1", name: "Tess", now: at("10:00") });
+  await A.editRecord("t1", { sessionId: maths, studentId: "ben", state: "in_class", arrivedAt: "09:32", confirmedAt: "09:33" }, at("10:05"));
+  const ben = await rec(maths, "ben");
+  assert.equal(ben.status, "late"); assert.equal(ben.checkIn.source, "tutor"); assert.equal(ben.checkIn.minutesLate, 32); assert.equal(ben.confirmState, "confirmed");
+  assert.equal(ben.resolution, null); assert.equal(ben.supersededResolution.outcome, "absent"); assert.equal(ben.absenceConfirmedAt, null);
+  assert.equal((await strike(maths + "_ben")).status, "active", "late arrival after the edit: strike");
+  assert.equal((await strike(maths + "_ben")).number, 1);
+  // Ann's arrival moved back to 09:20: the reversed strike is restored, not duplicated.
+  await assert.rejects(A.editRecord("t1", { sessionId: maths, studentId: "ann", state: "in_class", arrivedAt: "09:20" }, at("10:06")), /before they arrived/);
+  await A.editRecord("t1", { sessionId: maths, studentId: "ann", state: "in_class", arrivedAt: "09:20", confirmedAt: "09:25" }, at("10:06"));
+  assert.equal((await strike(maths + "_ann")).status, "active");
+  assert.equal((await db().doc("attendanceStudents/ann").get()).data().years.y2026.active, 1);
+  const am = await db().collection("attendanceAmendments").where("sessionId", "==", maths).get();
+  assert.ok(am.docs.filter((d) => d.data().kind === "tutor_edit").length >= 2, "edits after submission are amendments");
+  // After the window: only the Studio Desk.
+  await A.finalizeRegister(maths, at("10:15"));
+  assert.ok((await rec(maths, "cal")).absenceConfirmedAt, "Cal stays absent: final now");
+  assert.equal((await rec(maths, "ben")).absenceConfirmedAt, null, "Ben is no longer absent: no notice");
+  await assert.rejects(A.editRecord("t1", { sessionId: maths, studentId: "ben", state: "absent" }, at("10:15")), /could be edited until 10:15/);
+  await A.editRecord("desk", { sessionId: maths, studentId: "cal", state: "in_class", arrivedAt: "09:10" }, at("11:00"));
+  assert.equal((await rec(maths, "cal")).status, "present");
+});
+
 
 test("Studio Desk: correction reverses the strike with a reason; cancelled lessons; audit trail", { skip: !HAVE }, async () => {
   await seed();
