@@ -1,16 +1,16 @@
 {
-  "name": "Paisley Studio",
-  "short_name": "Paisley Studio",
-  "description": "British Curriculum online homeschooling. Enrolment, tutor applications, and admin — all in one app.",
-  "start_url": "/",
-  "scope": "/",
+  "id": "/admin/",
+  "name": "Paisley Studio Desk",
+  "short_name": "Studio Desk",
+  "description": "Paisley Studio administration: enrolments, tutors, students, messages and more.",
+  "start_url": "/admin/",
+  "scope": "/admin/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#F1F9F7",
   "theme_color": "#245F5A",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/admin/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/admin/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }

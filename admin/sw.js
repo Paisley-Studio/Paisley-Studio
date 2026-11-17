@@ -1,7 +1,7 @@
-// Paisley Studio Service Worker
+// Paisley Studio Desk (admin app) Service Worker. Registered by admin/index.html with scope /admin/
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v9-boards'; // Bumped to force browsers to drop the old broken cache
+const CACHE_NAME = 'paisley-admin-v1'; // admin app (installable Studio Desk); scope /admin/
 const CACHE_URLS = ['./', './index.html'];
 
 // Hosts that must NEVER be intercepted by the service worker.
@@ -35,7 +35,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k.indexOf('paisley-admin-') === 0 && k !== CACHE_NAME).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });

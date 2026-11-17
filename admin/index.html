@@ -7,7 +7,14 @@
 <meta name="description" content="Paisley Studio administration dashboard. Manage enrolments, tutor applications, messages, newsletter subscribers, and Key Stage fees in one place." />
 <meta name="robots" content="noindex, nofollow" />
 <meta name="theme-color" content="#245F5A" />
-<link rel="manifest" href="/manifest.json" />
+<!-- Installable admin app (Studio Desk): own manifest + service worker, scope /admin/ -->
+<link rel="manifest" href="/admin/manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="/admin/icon-192.png" />
+<link rel="apple-touch-icon" href="/admin/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Studio Desk" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <link rel="canonical" href="https://paisleystudio.online/studio-desk.html" />
 
 <meta property="og:title" content="Studio Desk — Paisley Studio Admin Dashboard" />
@@ -4762,5 +4769,69 @@ function refreshAllNow(){
 </script>
 
 <script src="/js/ui/emoji-picker.js?v=1"></script>
+
+<!-- Install the Studio Desk as an app on phones (Android: install prompt; iPhone: Share > Add to Home Screen) -->
+<style>
+  .ps-install{position:fixed; right:16px; bottom:16px; z-index:9999; display:none; align-items:center; gap:10px;
+    background:var(--brand-deep); color:#fff; border:0; border-radius:999px; padding:11px 16px; font:600 14px var(--font);
+    box-shadow:0 8px 24px rgba(15,26,20,.22); cursor:pointer;}
+  .ps-install.show{display:inline-flex;}
+  .ps-install .ps-x{margin-left:4px; opacity:.75; padding:0 2px;}
+  .ps-ios{position:fixed; left:16px; right:16px; bottom:16px; z-index:9999; display:none; background:var(--surface); color:var(--ink);
+    border:1px solid var(--line); border-radius:14px; padding:14px 16px; font:500 14px/1.5 var(--font); box-shadow:0 8px 24px rgba(15,26,20,.18);}
+  .ps-ios.show{display:block;}
+  .ps-ios b{color:var(--brand-deep);}
+  .ps-ios button{float:right; background:none; border:0; color:var(--muted); font-size:16px; cursor:pointer;}
+</style>
+<button type="button" class="ps-install" id="psInstallBtn" aria-label="Install the Studio Desk app">
+  <i class="fas fa-mobile-screen-button"></i><span>Install app</span><span class="ps-x" id="psInstallClose" aria-label="Dismiss"><i class="fas fa-xmark"></i></span>
+</button>
+<div class="ps-ios" id="psIosHint" role="note">
+  <button type="button" id="psIosClose" aria-label="Dismiss"><i class="fas fa-xmark"></i></button>
+  <i class="fas fa-mobile-screen-button"></i> Install the <b>Studio Desk</b>: tap <i class="fas fa-arrow-up-from-bracket"></i> <b>Share</b>, then <b>Add to Home Screen</b>.
+</div>
+<script>
+(function(){
+  // The app's scope is /admin/, so make sure the page sits inside it.
+  if (location.pathname === '/admin') { try { history.replaceState(null, '', '/admin/' + location.search + location.hash); } catch (e) {} }
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('/admin/sw.js', { scope: '/admin/' }).catch(function(e){ console.warn('[admin-app] SW', e); });
+    });
+  }
+
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  if (standalone) return;
+
+  function dismissed(){ try { return localStorage.getItem('psAdminInstallDismissed') === '1'; } catch (e) { return false; } }
+  function dismiss(){ try { localStorage.setItem('psAdminInstallDismissed', '1'); } catch (e) {} }
+
+  var btn = document.getElementById('psInstallBtn');
+  var deferred = null;
+
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferred = e;
+    if (!dismissed()) btn.classList.add('show');
+  });
+  btn.addEventListener('click', function(ev){
+    if (ev.target.closest('#psInstallClose')) { btn.classList.remove('show'); dismiss(); return; }
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.finally(function(){ deferred = null; btn.classList.remove('show'); });
+  });
+  window.addEventListener('appinstalled', function(){ btn.classList.remove('show'); deferred = null; });
+
+  // iPhone/iPad Safari has no install prompt: show the Add to Home Screen hint once.
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS && !dismissed()) {
+    var hint = document.getElementById('psIosHint');
+    hint.classList.add('show');
+    document.getElementById('psIosClose').addEventListener('click', function(){ hint.classList.remove('show'); dismiss(); });
+  }
+})();
+</script>
 </body>
 </html>
