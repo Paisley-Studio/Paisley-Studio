@@ -549,6 +549,7 @@
         var an = node.dataset.asset;
         menu(x, y, [
           { icon: 'fa-code', label: 'Put it in my code', fn: function () { useAsset(an); } },
+          { icon: 'fa-pen', label: 'Rename', fn: function () { renameAsset(an); } },
           { icon: 'fa-trash', label: 'Delete', danger: true, fn: function () { deleteAsset(an); } }
         ]);
         return;
@@ -616,18 +617,28 @@
     }
     function makeFolder(d) {
       var same = folders().filter(function (x) { return x.toLowerCase() === d.toLowerCase(); })[0];
-      if (same) {
-        openDirs[same] = true; paintTree();
-        if (MEDIA_DIR.test(baseOf(same)) && canUpload()) { toast('The folder ' + same + ' is already here. Pick ' + pickWord(same) + ' to add.'); pickInto(same); }
-        else toast('That folder already exists.');
-        return;
-      }
+      if (same) { openDirs[same] = true; paintTree(); return toast('There is already a folder called ' + same + '.'); }
       if (file(d)) return toast('There is already a file called ' + d + '.');
       P.folders = (P.folders || []).concat([d]); openDirs[d] = true; dirtyMeta = true; afterFiles();
-      if (MEDIA_DIR.test(baseOf(d))) {
-        if (canUpload()) { toast('Folder ' + d + ' made. Pick ' + pickWord(d) + ' from your device to put in it.'); pickInto(d); }
-        else toast('Folder ' + d + ' made.');
-      }
+      toast('Folder ' + d + ' made.' + (MEDIA_DIR.test(baseOf(d)) && canUpload() ? ' Press its Upload button to add ' + pickWord(d) + '.' : ''));
+    }
+    /* Rename in place: a plain name keeps it in its folder; pages/x moves it there; /x moves it to the top. */
+    function placeOf(raw, old) {
+      raw = String(raw || '').trim().replace(/\\/g, '/');
+      var n = cleanName(raw); if (!n) return '';
+      if (raw.charAt(0) === '/' || raw.indexOf('/') !== -1) return n;
+      return dirOf(old) ? cleanName(dirOf(old) + '/' + n) : n;
+    }
+    function renameAsset(n) {
+      var a = (P.assets || []).filter(function (x) { return x.name === n; })[0]; if (!a) return;
+      ask({ title: 'Rename', text: dirOf(n) ? 'It stays in ' + dirOf(n) + '/. Type a folder in front to move it, or / for the top.' : 'Type a folder in front to move it, for example images/' + baseOf(n), value: baseOf(n), ok: 'Rename', selectBase: true }).then(function (v) {
+        if (v == null) return;
+        var to = placeOf(v, n); if (!to || to === n) return;
+        var ext = /\.\w+$/.exec(baseOf(n)); if (ext && !/\.\w+$/.test(baseOf(to))) to += ext[0];
+        if (assetTaken(to)) return toast('There is already something called ' + to + '.');
+        a.name = to; if (dirOf(to)) openDirs[dirOf(to)] = true;
+        dirtyMeta = true; afterFiles(); toast('Renamed to ' + to + '. Change the name in your code too.');
+      });
     }
 
     /* ---------- uploads: pictures, video, sound and fonts from the device ----------
@@ -727,9 +738,9 @@
       });
     }
     function renameFile(n) {
-      ask({ title: 'Rename', text: 'You can move it into a folder too: src/' + baseOf(n), value: n, ok: 'Rename', selectBase: true }).then(function (v) {
+      ask({ title: 'Rename', text: dirOf(n) ? 'It stays in ' + dirOf(n) + '/. Type a folder in front to move it, for example src/' + baseOf(n) + ', or /' + baseOf(n) + ' for the top.' : 'You can move it into a folder too: src/' + baseOf(n), value: baseOf(n), ok: 'Rename', selectBase: true }).then(function (v) {
         if (v == null) return;
-        var to = cleanName(v); if (!to || to === n) return;
+        var to = placeOf(v, n); if (!to || to === n) return;
         var bad = validName(to, n); if (bad) return toast(bad);
         moveFile(n, to); afterFiles();
       });
@@ -768,9 +779,10 @@
       if (P.entry === n) P.entry = L.defaultEntry(P.lang, P.files) || '';
     }
     function renameFolder(d) {
-      ask({ title: 'Rename folder', value: d, ok: 'Rename', selectBase: true }).then(function (v) {
+      ask({ title: 'Rename folder', text: dirOf(d) ? 'It stays in ' + dirOf(d) + '/.' : '', value: baseOf(d), ok: 'Rename', selectBase: true }).then(function (v) {
         if (v == null) return;
-        var to = cleanName(v); if (!to || to === d) return;
+        var to = placeOf(v, d); if (!to || to === d) return;
+        if (to.indexOf(d + '/') === 0) return toast('A folder cannot go inside itself.');
         if (folders().indexOf(to) !== -1) return toast('That folder already exists.');
         P.files.filter(function (f) { return f.name.indexOf(d + '/') === 0; }).forEach(function (f) { moveFile(f.name, to + f.name.slice(d.length)); });
         (P.assets || []).forEach(function (a) { if (a.name.indexOf(d + '/') === 0) a.name = to + a.name.slice(d.length); });
@@ -1607,7 +1619,7 @@
       uploadList([].slice.call(e.dataTransfer.files), dn ? dn.dataset.dir : null);
     });
     app.addEventListener('contextmenu', function (e) { var n = e.target.closest('.ai-node'); if (!n || !P || !P.canEdit) return; e.preventDefault(); nodeMenu(n, e.clientX, e.clientY); });
-    app.addEventListener('dblclick', function (e) { var n = e.target.closest('.ai-node[data-file]'); if (n && P && P.canEdit) renameFile(n.dataset.file); });
+    app.addEventListener('dblclick', function (e) { var n = e.target.closest('.ai-node[data-file],.ai-node[data-asset]'); if (n && P && P.canEdit) { if (n.dataset.asset) renameAsset(n.dataset.asset); else renameFile(n.dataset.file); } });
     app.addEventListener('keydown', function (e) {
       var n = e.target.closest && e.target.closest('.ai-node');
       if (n && P) {

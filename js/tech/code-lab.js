@@ -798,7 +798,7 @@
     }
     function makeFile(n, dir) {
       /* "images", "Videos" or "sounds" typed as a file name means a folder for uploads, not images.html. */
-      if (!/\.\w+$/.test(n) && MEDIA_DIR.test(baseOf(n))) { curFolder = dir || ''; makeFolder(n); return; }
+      if (!/\.\w+$/.test(n) && MEDIA_DIR.test(baseOf(n))) { makeFolder(n, dir || ''); return; }
       if (dir && n.indexOf('/') === -1) n = dir + '/' + n;
       if (!/\.\w+$/.test(n)) n += '.html';
       if (taken(n)) { setStatus('There is already a file called ' + n, 'err'); return; }
@@ -809,26 +809,30 @@
       suggestLinks(f);
       if (cm) cm.focus();
     }
+    /* The toolbar's New folder always makes it at the top of the project (type pages/extra for one inside
+       another). Nothing opens by itself: the folder appears in the list with its own Upload button. */
     function addFolder() {
-      askName('Folder name, for example images or pages' + (curFolder ? ' (inside ' + curFolder + '/)' : ''), '').then(function (n) { if (n) makeFolder(n); });
+      askName('Folder name, for example images, videos or pages', '').then(function (n) { if (n) makeFolder(n, ''); });
     }
-    function makeFolder(n) {
-      if (curFolder && n.indexOf('/') === -1) n = curFolder + '/' + n;
+    function makeFolder(n, parent) {
+      if (parent && n.indexOf('/') === -1) n = parent + '/' + n;
       var same = allFolders().filter(function (d) { return d.toLowerCase() === n.toLowerCase(); })[0];
-      if (same) {
-        /* It is already there: open it and offer its upload, which is what the builder wanted. */
-        openFolder[same] = true; curFolder = same; renderTree();
-        if (opts.uploadAsset && MEDIA_DIR.test(baseOf(same))) { setStatus('Folder ' + same + ' is already here. Pick ' + pickWord(same) + ' to add.', 'ok'); pickInto(same); }
-        else setStatus('That folder already exists.', 'err');
-        return;
-      }
+      if (same) { openFolder[same] = true; renderTree(); setStatus('There is already a folder called ' + same + '.', 'err'); return; }
       if (taken(n)) { setStatus('There is already a file called ' + n, 'err'); return; }
-      folders.push(n); delete deleted[n]; openFolder[n] = true; curFolder = n; structural();
-      if (opts.uploadAsset) {
-        setStatus('Folder ' + n + ' made. Press its Upload button to add ' + pickWord(n) + ' from your computer.', 'ok', true);
-        /* A pictures or videos folder opens the file picker straight away (if the browser allows it). */
-        if (MEDIA_DIR.test(baseOf(n))) pickInto(n);
-      }
+      folders.push(n); delete deleted[n]; openFolder[n] = true; structural();
+      setStatus('Folder ' + n + ' made.' + (opts.uploadAsset ? ' Press its Upload button to add ' + pickWord(n) + '.' : ''), 'ok', true);
+    }
+    /* Rename in place: a plain name keeps the thing in its folder. A name with a folder in front
+       (pages/about.html) moves it there, and a / in front (/about.html) moves it to the top. */
+    function askPlace(oldName, isDir) {
+      var here = dirOf(oldName);
+      return dialog('New name for ' + baseOf(oldName) + (here ? '. It stays in ' + here + '/.' : '.') + ' To move it, type a folder in front, for example ' + (isDir ? 'pages/' : 'images/') + baseOf(oldName) + (here ? ', or /' + baseOf(oldName) + ' for the top.' : '.'), baseOf(oldName), 'Rename').then(function (raw) {
+        if (raw == null) return null;
+        raw = String(raw).trim().replace(/\\/g, '/');
+        var n = cleanName(raw); if (!n) return null;
+        if (raw.charAt(0) === '/' || raw.indexOf('/') !== -1) return n;
+        return here ? cleanName(here + '/' + n) : n;
+      });
     }
     /* What a folder is for, from its name: images, videos, sounds or anything. */
     var MEDIA_DIR = /^(images?|imgs?|pictures?|pics?|photos?|videos?|movies?|clips?|media|assets|sounds?|audio|music)$/i;
@@ -850,7 +854,7 @@
     function keepExt(n, old) { var m = /\.\w+$/.exec(baseOf(old)); return /\.\w+$/.test(baseOf(n)) || !m ? n : n + m[0]; }
     function renameFile(name) {
       var f = file(name); if (!f) return;
-      askName('New name for ' + baseOf(f.name) + '. Put a folder in front to move it, for example pages/' + baseOf(f.name), f.name).then(function (n) {
+      askPlace(f.name).then(function (n) {
         if (n) n = keepExt(n, f.name);
         if (n && n !== f.name) moveFile(f, name, n);
       });
@@ -868,7 +872,7 @@
       setStatus('Renamed to ' + baseOf(n) + (fixed ? '. Links in ' + fixed + ' file' + (fixed === 1 ? '' : 's') + ' updated.' : ''), 'ok');
     }
     function renameFolder(dir) {
-      askName('New name for the folder ' + dir, dir).then(function (n) {
+      askPlace(dir, true).then(function (n) {
         if (!n || n === dir) return;
         if (n.indexOf(dir + '/') === 0) { setStatus('A folder cannot go inside itself.', 'err'); return; }
         if (allFolders().indexOf(n) !== -1 || taken(n)) { setStatus('There is already something called ' + n, 'err'); return; }
@@ -894,7 +898,7 @@
     }
     function renameAsset(name) {
       var a = assets.filter(function (x) { return x.name === name; })[0]; if (!a) return;
-      askName('New name for ' + baseOf(a.name) + '. Put a folder in front to move it, for example images/' + baseOf(a.name), a.name).then(function (n) {
+      askPlace(a.name).then(function (n) {
         if (n) n = keepExt(n, a.name);
         if (!n || n === a.name) return;
         if (taken(n, a)) { setStatus('There is already something called ' + n, 'err'); return; }
@@ -1095,7 +1099,7 @@
           /* Some computers give no type for .webp, .heic, .mov or fonts: name it from the ending so the upload is allowed. */
           var f = f0;
           if (!f0.type || f0.type === 'application/octet-stream') { try { f = new File([f0], f0.name, { type: t }); } catch (er) { f = f0; } }
-          var dir = target != null ? target : (curFolder || (/^image\//.test(t) ? 'images' : /^video\//.test(t) ? 'videos' : /^audio\//.test(t) ? 'sounds' : 'fonts'));
+          var dir = target != null ? target : homeFor(t);
           var n = cleanName((dir ? dir + '/' : '') + f.name); var k = 1;
           while (taken(n)) { n = cleanName((dir ? dir + '/' : '') + f.name.replace(/(\.\w+)?$/, '-' + (++k) + '$1')); }
           setStatus('Uploading ' + f.name + '…', '', true);
@@ -1106,6 +1110,12 @@
           }).catch(function (er) { setStatus('Upload of ' + f.name + ' failed: ' + upError(er), 'err', true); });
         });
       }, Promise.resolve()).then(function () { if (okCount > 1) setStatus('Added ' + okCount + ' files.', 'ok'); });
+    }
+    /* Where an upload with no folder chosen goes: an existing images / videos / sounds folder, else a new one. */
+    function homeFor(t) {
+      var w = /^image\//.test(t) ? 'pictures' : /^video\//.test(t) ? 'videos' : /^audio\//.test(t) ? 'sounds' : '';
+      var mine = w && allFolders().filter(function (d) { return MEDIA_DIR.test(baseOf(d)) && pickWord(d) === w; }).sort(function (a, b) { return a.split('/').length - b.split('/').length; })[0];
+      return mine || ({ pictures: 'images', videos: 'videos', sounds: 'sounds' }[w] || 'fonts');
     }
     function upError(er) {
       var c = (er && er.code) || '';
@@ -1121,7 +1131,7 @@
       return new Promise(function (done) {
         var rd = new FileReader();
         rd.onload = function () {
-          var dir = target != null ? target : curFolder;
+          var dir = target != null ? target : '';
           var n = cleanName((dir ? dir + '/' : '') + f.name);
           var existing = file(n) || files.filter(function (x) { return x.name.toLowerCase() === n.toLowerCase(); })[0];
           if (existing) { existing.content = String(rd.result || ''); delete docs[existing.name]; }
@@ -1161,7 +1171,7 @@
         else if (cmd === 'tree') hostEl.querySelector('.cl-shell').classList.toggle('cl-tree-open');
         else if (cmd === 'advanced') { flushSave(); opts.advanced(b); }
         else if (!canEdit) return;
-        else if (cmd === 'add') addFile(curFolder);
+        else if (cmd === 'add') addFile('');
         else if (cmd === 'folder') addFolder();
         return;
       }
