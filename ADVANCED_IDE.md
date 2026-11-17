@@ -86,6 +86,7 @@ Advanced projects are `techPractice` docs with `type: 'advanced'`:
 ```
 codeFiles   [{ name, lang, content }]   lang: html css js json md txt py java c cpp php
 codeFolders ['src', ...]
+codeAssets  [{ name: 'images/cat.png', url, storagePath, type, size }]   uploads, as in Code Lab
 codeActive  'main.py'
 ide         { v: 1, lang, entry, open: [names], template }
 ```
@@ -145,7 +146,7 @@ The service worker (`sw.js`) leaves `/tech/ide` and `js/tech/advanced-ide/` alon
 - Python packages are the ones Pyodide ships; anything else fails with ModuleNotFoundError and a hint.
 - PHP runs as a script (CLI-style). Output that is HTML can be opened as a page; there is no web server, forms or sessions.
 - Live checks for C/C++ and PHP start once their runtime has downloaded (it downloads automatically when a project in that language opens, unless switched off in Settings).
-- Uploading pictures or other binary files into an Advanced project is not supported yet (Code Lab's uploads are).
+- Pictures, video, sound and fonts upload into `techWork/{uid}/adv_{projectId}/` (Explorer Upload button, a folder's Upload pill, or drag and drop) and are listed in `codeAssets`; the web preview resolves them like Code Lab. SVG is refused. Code files picked or dropped become ordinary files. Typing `images` or `videos` as a new file name makes a folder instead.
 - Formatting is available for HTML, CSS, JavaScript and JSON only.
 
 ## Tested

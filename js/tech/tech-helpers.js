@@ -1239,6 +1239,7 @@
         mounted[kind] = lib.mount(hostEl, {
           build: b, me: me, canEdit: canEdit, files: b.files || [], title: b.title, onSave: moduleSave(kind === 'code' ? 'Code saved' : 'Saved'),
           /* Pictures, video and sound for the Code IDE's folders (same Storage folder as other project files). */
+          maxUploadMb: 25, /* storage.rules: techBuilds files stay under 25 MB */
           uploadAsset: kind === 'code' && canEdit && firebase.storage ? function (f) {
             var path = 'techBuilds/' + b.studentId + '/' + b.id + '/code_' + Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
             var r = firebase.storage().ref(path);

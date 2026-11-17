@@ -47,7 +47,8 @@
   var MAX_FILE_BYTES = 200 * 1024;
   var MAX_ASSETS = 60;
   var MAX_ASSET_BYTES = 50 * 1024 * 1024;
-  var UP_ACCEPT = 'image/*,video/*,audio/*,font/*,.ttf,.otf,.woff,.woff2';
+  var UP_ACCEPT = 'image/*,video/*,audio/*,font/*,.ttf,.otf,.woff,.woff2,.webp,.heic,.mov,.mp4,.mp3,.wav';
+  var CODE_ACCEPT = '.html,.htm,.css,.js,.mjs,.json,.md,.txt';
   var LANGS = {
     html: { label: 'HTML', icon: 'fab fa-html5', color: '#E34F26', mode: 'htmlmixed' },
     css: { label: 'CSS', icon: 'fab fa-css3-alt', color: '#1572B6', mode: 'css' },
@@ -92,6 +93,22 @@
     var out = [];
     parts.forEach(function (p) { if (!p || p === '.') return; if (p === '..') out.pop(); else out.push(p); });
     return out.join('/');
+  }
+  /* What an uploaded file is, by its type or (when the computer gives none) its ending:
+     an upload MIME type, 'code' for a file to edit, 'svg' (refused), or '' for anything else. */
+  var EXT_TYPES = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon',
+    avif: 'image/avif', heic: 'image/heic', heif: 'image/heif',
+    mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', ogv: 'video/ogg', '3gp': 'video/3gpp', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
+    ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2'
+  };
+  function typeOfFile(f) {
+    var ext = (/\.(\w+)$/.exec(String(f.name || '').toLowerCase()) || [])[1] || '', t = String(f.type || '').toLowerCase();
+    if (ext === 'svg' || /svg/.test(t)) return 'svg';
+    if (/^(html?|css|js|mjs|json|md|txt)$/.test(ext)) return 'code';
+    if (/^(image|video|audio|font)\//.test(t)) return t;
+    return EXT_TYPES[ext] || '';
   }
   function reEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
@@ -350,6 +367,7 @@
     /* Live mode: what this browser last saw on the server, per file. */
     var base = {}; files.forEach(function (f) { base[f.name] = f.content; });
 
+    function upAccept() { return (opts.uploadAsset ? UP_ACCEPT + ',' : '') + CODE_ACCEPT; }
     hostEl.innerHTML =
       '<div class="cl-shell' + (docMode ? ' cl-docmode' : '') + '">' +
         '<div class="cl-head">' +
@@ -368,9 +386,9 @@
         '</div>' +
         '<div class="cl-body">' +
           (docMode ? '' : '<aside class="cl-tree" aria-label="Project files"><div class="cl-tree-acts">' +
-            (canEdit ? '<button type="button" class="cl-btn" data-clcmd="add" title="New file"><i class="fas fa-file-circle-plus"></i></button>' +
-              '<button type="button" class="cl-btn" data-clcmd="folder" title="New folder"><i class="fas fa-folder-plus"></i></button>' +
-              (opts.uploadAsset ? '<label class="cl-btn cl-uplabel" title="Upload pictures, videos or sounds from your computer" style="margin:0"><i class="fas fa-upload"></i><input type="file" class="cl-upin" multiple hidden accept="' + UP_ACCEPT + '"></label>' : '') : '') +
+            (canEdit ? '<button type="button" class="cl-btn" data-clcmd="add" title="New file: about.html, style.css, game.js"><i class="fas fa-file-circle-plus"></i> File</button>' +
+              '<button type="button" class="cl-btn" data-clcmd="folder" title="New folder, for example images or videos"><i class="fas fa-folder-plus"></i> Folder</button>' +
+              '<label class="cl-btn cl-uplabel" title="' + (opts.uploadAsset ? 'Upload pictures, videos, sounds or code files from your device' : 'Upload code files (HTML, CSS, JS) from your device') + '" style="margin:0" tabindex="0" role="button"><i class="fas fa-upload"></i> Upload<input type="file" class="cl-upin" multiple hidden accept="' + upAccept() + '"></label>' : '') +
             '</div><div class="cl-tree-list"></div><div class="cl-tree-note"></div></aside>') +
           '<div class="cl-edit-wrap"><div class="cl-suggest" role="status" hidden></div><div class="cl-edit-host"><textarea class="cl-fallback" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"' + (canEdit ? '' : ' readonly') + ' aria-label="Code"></textarea></div>' +
             '<div class="cl-meta"><span class="cl-lang"></span><span class="cl-status" role="status"></span></div></div>' +
@@ -413,22 +431,22 @@
         var depth = d ? d.split('/').length : 0, pad = 'padding-left:' + (0.4 + depth * 0.85) + 'rem';
         return sub.map(function (x) {
           var open = openFolder[x] !== false;
-          return '<div class="cl-node cl-dir' + (curFolder === x ? ' on' : '') + '" style="' + pad + '" data-dir="' + esc(x) + '"><i class="fas fa-folder' + (open ? '-open' : '') + '"></i> ' + esc(baseOf(x)) +
+          return '<div class="cl-node cl-dir' + (curFolder === x ? ' on' : '') + '" style="' + pad + '" data-dir="' + esc(x) + '"><i class="fas fa-folder' + (open ? '-open' : '') + '"></i> <span class="cl-dn">' + esc(baseOf(x)) + '</span>' +
             (canEdit && opts.uploadAsset ? '<button type="button" class="cl-up" data-clnode="upto" data-p="' + esc(x) + '" title="Upload ' + esc(pickWord(x)) + ' from your computer into ' + esc(x) + '/" aria-label="Upload into ' + esc(x) + '"><i class="fas fa-upload"></i> Upload</button>' : '') +
             (canEdit ? '<span class="cl-node-acts"><button type="button" data-clnode="newin" data-p="' + esc(x) + '" title="New file here" aria-label="New file in ' + esc(x) + '"><i class="fas fa-plus"></i></button><button type="button" data-clnode="renamedir" data-p="' + esc(x) + '" title="Rename folder" aria-label="Rename folder ' + esc(x) + '"><i class="fas fa-pen"></i></button><button type="button" data-clnode="deldir" data-p="' + esc(x) + '" title="Delete folder" aria-label="Delete folder ' + esc(x) + '"><i class="fas fa-trash"></i></button></span>' : '') + '</div>' +
             (open ? itemsIn(x) : '');
         }).join('') + fs.map(function (f) {
-          return '<div class="cl-node cl-file' + (f.name === activeName ? ' on' : '') + '" style="' + pad + '" data-file="' + esc(f.name) + '"' + (canEdit ? ' title="Double-click to rename"' : '') + '>' + langIcon(f.lang) + ' ' + esc(baseOf(f.name)) +
+          return '<div class="cl-node cl-file' + (f.name === activeName ? ' on' : '') + '" style="' + pad + '" data-file="' + esc(f.name) + '"' + (canEdit ? ' title="Double-click to rename"' : '') + '>' + langIcon(f.lang) + ' <span class="cl-dn">' + esc(baseOf(f.name)) + '</span>' +
             (canEdit ? '<span class="cl-node-acts"><button type="button" data-clnode="rename" data-p="' + esc(f.name) + '" title="Rename or move" aria-label="Rename ' + esc(f.name) + '"><i class="fas fa-pen"></i></button><button type="button" data-clnode="del" data-p="' + esc(f.name) + '" title="Delete" aria-label="Delete ' + esc(f.name) + '"><i class="fas fa-trash"></i></button></span>' : '') + '</div>';
         }).join('') + as.map(function (a) {
           var ic = /^image\//.test(a.type) ? 'fa-image' : /^video\//.test(a.type) ? 'fa-film' : /^audio\//.test(a.type) ? 'fa-music' : 'fa-file';
-          return '<div class="cl-node cl-asset" style="' + pad + '" data-asset="' + esc(a.name) + '" title="Click to use it in your code"><i class="fas ' + ic + '"></i> ' + esc(baseOf(a.name)) +
+          return '<div class="cl-node cl-asset" style="' + pad + '" data-asset="' + esc(a.name) + '" title="Click to use it in your code"><i class="fas ' + ic + '"></i> <span class="cl-dn">' + esc(baseOf(a.name)) + '</span>' +
             '<span class="cl-node-acts"><button type="button" data-clnode="useasset" data-p="' + esc(a.name) + '" title="Insert into code" aria-label="Insert ' + esc(a.name) + '"><i class="fas fa-code"></i></button>' +
             (canEdit ? '<button type="button" data-clnode="renameasset" data-p="' + esc(a.name) + '" title="Rename or move" aria-label="Rename ' + esc(a.name) + '"><i class="fas fa-pen"></i></button><button type="button" data-clnode="delasset" data-p="' + esc(a.name) + '" title="Delete" aria-label="Delete ' + esc(a.name) + '"><i class="fas fa-trash"></i></button>' : '') + '</span></div>';
         }).join('');
       }
       treeEl.innerHTML = '<div class="cl-node cl-dir cl-root' + (curFolder === '' ? ' on' : '') + '" data-dir=""><i class="fas fa-box-archive"></i> ' + esc(opts.title || 'My project') + '</div>' + itemsIn('');
-      var n = q('.cl-tree-note'); if (n) n.textContent = assets.length ? 'Click a picture or video to put it in your code.' : (opts.uploadAsset && canEdit ? 'Make a folder (for example images or videos), press its Upload button and pick files from your computer.' : '');
+      var n = q('.cl-tree-note'); if (n) n.textContent = assets.length ? 'Click a picture or video to put it in your code.' : (opts.uploadAsset && canEdit ? 'Make a folder (for example images or videos), press its Upload button and pick files from your device. You can also drag files here.' : (canEdit ? 'Upload or drag HTML, CSS and JS files here.' : ''));
     }
     function renderCrumb() {
       var f = activeFile();
@@ -779,6 +797,8 @@
       askName('New file name, for example about.html, game.js or style.css' + (dir ? ' (it goes in ' + dir + '/)' : ''), '').then(function (n) { if (n) makeFile(n, dir); });
     }
     function makeFile(n, dir) {
+      /* "images", "Videos" or "sounds" typed as a file name means a folder for uploads, not images.html. */
+      if (!/\.\w+$/.test(n) && MEDIA_DIR.test(baseOf(n))) { curFolder = dir || ''; makeFolder(n); return; }
       if (dir && n.indexOf('/') === -1) n = dir + '/' + n;
       if (!/\.\w+$/.test(n)) n += '.html';
       if (taken(n)) { setStatus('There is already a file called ' + n, 'err'); return; }
@@ -794,7 +814,15 @@
     }
     function makeFolder(n) {
       if (curFolder && n.indexOf('/') === -1) n = curFolder + '/' + n;
-      if (allFolders().indexOf(n) !== -1) { setStatus('That folder already exists.', 'err'); return; }
+      var same = allFolders().filter(function (d) { return d.toLowerCase() === n.toLowerCase(); })[0];
+      if (same) {
+        /* It is already there: open it and offer its upload, which is what the builder wanted. */
+        openFolder[same] = true; curFolder = same; renderTree();
+        if (opts.uploadAsset && MEDIA_DIR.test(baseOf(same))) { setStatus('Folder ' + same + ' is already here. Pick ' + pickWord(same) + ' to add.', 'ok'); pickInto(same); }
+        else setStatus('That folder already exists.', 'err');
+        return;
+      }
+      if (taken(n)) { setStatus('There is already a file called ' + n, 'err'); return; }
       folders.push(n); delete deleted[n]; openFolder[n] = true; curFolder = n; structural();
       if (opts.uploadAsset) {
         setStatus('Folder ' + n + ' made. Press its Upload button to add ' + pickWord(n) + ' from your computer.', 'ok', true);
@@ -810,7 +838,7 @@
     }
     function acceptFor(dir) {
       var w = dir == null ? '' : pickWord(dir);
-      return w === 'pictures' ? 'image/*' : w === 'videos' ? 'video/*' : w === 'sounds' ? 'audio/*' : UP_ACCEPT;
+      return w === 'pictures' ? 'image/*,.webp,.heic' : w === 'videos' ? 'video/*,.mov,.mp4,.webm' : w === 'sounds' ? 'audio/*,.mp3,.wav' : upAccept();
     }
     var upDir = null;
     function pickInto(dir) {
@@ -1042,27 +1070,84 @@
     var upIn = q('.cl-upin');
     /* The toolbar's upload goes to the folder that is selected; a folder's own Upload button goes there. */
     var upLabel = q('.cl-uplabel');
-    if (upLabel) upLabel.addEventListener('click', function (e) { if (e.target !== upIn) { upDir = null; upIn.accept = UP_ACCEPT; } });
+    if (upLabel) upLabel.addEventListener('click', function (e) { if (e.target !== upIn) { upDir = null; upIn.accept = upAccept(); } });
+    if (upLabel) upLabel.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); upDir = null; upIn.accept = upAccept(); upIn.click(); } });
     if (upIn) upIn.addEventListener('change', function (e) {
       var list = [].slice.call(e.target.files || []); e.target.value = '';
-      var target = upDir; upDir = null; upIn.accept = UP_ACCEPT;
-      list.reduce(function (p, f) {
+      var target = upDir; upDir = null; upIn.accept = upAccept();
+      uploadList(list, target);
+    });
+    /* Files from the device: pictures, video, sound and fonts. Code files (.html .css .js ...) dropped
+       or picked become ordinary project files the builder can edit. */
+    var maxUp = Math.min(MAX_ASSET_BYTES, (opts.maxUploadMb || 50) * 1024 * 1024), maxUpMb = Math.round(maxUp / 1048576);
+    function uploadList(list, target) {
+      if (!canEdit) return;
+      var okCount = 0;
+      list.reduce(function (p, f0) {
         return p.then(function () {
-          if (assets.length >= MAX_ASSETS) { setStatus('A project can hold ' + MAX_ASSETS + ' uploads.', 'err'); return; }
-          if (f.size > MAX_ASSET_BYTES) { setStatus(f.name + ' is over 50 MB.', 'err'); return; }
-          if (!/^(image|video|audio|font)\//.test(f.type || '') && !/\.(ttf|otf|woff2?)$/i.test(f.name)) { setStatus(f.name + ': upload pictures, video, sound or fonts.', 'err'); return; }
-          var dir = target != null ? target : (curFolder || (/^image\//.test(f.type) ? 'images' : /^video\//.test(f.type) ? 'videos' : /^audio\//.test(f.type) ? 'sounds' : 'fonts'));
-          var n = cleanName(dir + '/' + f.name); var k = 1;
-          while (taken(n)) { n = cleanName(dir + '/' + f.name.replace(/(\.\w+)?$/, '-' + (++k) + '$1')); }
+          var t = typeOfFile(f0);
+          if (t === 'code') return addCodeFile(f0, target).then(function (ok) { if (ok) okCount++; });
+          if (!opts.uploadAsset) { setStatus(f0.name + ': pictures and videos cannot be uploaded here.', 'err', true); return; }
+          if (assets.length >= MAX_ASSETS) { setStatus('A project can hold ' + MAX_ASSETS + ' uploads.', 'err', true); return; }
+          if (t === 'svg') { setStatus(f0.name + ': SVG pictures cannot be uploaded. Save it as PNG or JPG and try again.', 'err', true); return; }
+          if (!t) { setStatus(f0.name + ': upload pictures (PNG, JPG, GIF, WEBP), videos (MP4, WEBM), sounds (MP3, WAV) or fonts, or code files (HTML, CSS, JS).', 'err', true); return; }
+          if (f0.size > maxUp) { setStatus(f0.name + ' is too big (' + Math.round(f0.size / 1048576) + ' MB). The limit is ' + maxUpMb + ' MB.', 'err', true); return; }
+          /* Some computers give no type for .webp, .heic, .mov or fonts: name it from the ending so the upload is allowed. */
+          var f = f0;
+          if (!f0.type || f0.type === 'application/octet-stream') { try { f = new File([f0], f0.name, { type: t }); } catch (er) { f = f0; } }
+          var dir = target != null ? target : (curFolder || (/^image\//.test(t) ? 'images' : /^video\//.test(t) ? 'videos' : /^audio\//.test(t) ? 'sounds' : 'fonts'));
+          var n = cleanName((dir ? dir + '/' : '') + f.name); var k = 1;
+          while (taken(n)) { n = cleanName((dir ? dir + '/' : '') + f.name.replace(/(\.\w+)?$/, '-' + (++k) + '$1')); }
           setStatus('Uploading ' + f.name + '…', '', true);
           return Promise.resolve(opts.uploadAsset(f, n)).then(function (r) {
-            assets.push({ name: n, url: r.url, storagePath: r.storagePath || '', type: f.type || '', size: f.size });
-            delete deleted[n]; openFolder[dirOf(n)] = true;
-            return structural().then(function () { setStatus('Uploaded ' + baseOf(n) + '. Click it to use it.', 'ok'); });
-          }).catch(function (er) { setStatus('Upload failed: ' + ((er && er.message) || er), 'err', true); });
+            assets.push({ name: n, url: r.url, storagePath: r.storagePath || '', type: f.type || t, size: f.size });
+            delete deleted[n]; openFolder[dirOf(n)] = true; okCount++;
+            return structural().then(function () { setStatus('Uploaded ' + baseOf(n) + '. Click it to put it in your code.', 'ok'); });
+          }).catch(function (er) { setStatus('Upload of ' + f.name + ' failed: ' + upError(er), 'err', true); });
         });
-      }, Promise.resolve());
-    });
+      }, Promise.resolve()).then(function () { if (okCount > 1) setStatus('Added ' + okCount + ' files.', 'ok'); });
+    }
+    function upError(er) {
+      var c = (er && er.code) || '';
+      if (/unauthorized|permission/.test(c)) return 'this kind of file is not allowed, or it is over ' + maxUpMb + ' MB. Pictures, videos, sounds and fonts only.';
+      if (/canceled/.test(c)) return 'cancelled.';
+      if (/retry-limit|network/.test(c) || (er && /network/i.test(er.message || ''))) return 'the internet connection dropped. Try again.';
+      if (/quota/.test(c)) return 'storage is full. Tell your coach.';
+      return (er && er.message) || String(er);
+    }
+    function addCodeFile(f, target) {
+      if (files.length >= MAX_FILES) { setStatus('A project can hold ' + MAX_FILES + ' files.', 'err', true); return Promise.resolve(false); }
+      if (f.size > MAX_FILE_BYTES) { setStatus(f.name + ' is too big for a code file (200 KB at most).', 'err', true); return Promise.resolve(false); }
+      return new Promise(function (done) {
+        var rd = new FileReader();
+        rd.onload = function () {
+          var dir = target != null ? target : curFolder;
+          var n = cleanName((dir ? dir + '/' : '') + f.name);
+          var existing = file(n) || files.filter(function (x) { return x.name.toLowerCase() === n.toLowerCase(); })[0];
+          if (existing) { existing.content = String(rd.result || ''); delete docs[existing.name]; }
+          else { files.push({ name: n, lang: langOf(n), content: String(rd.result || '') }); delete deleted[n]; }
+          activeName = existing ? existing.name : n; openFolder[dirOf(activeName)] = true; loadActive();
+          structural().then(function () { setStatus((existing ? 'Replaced ' : 'Added ') + baseOf(activeName) + '.', 'ok'); done(true); }, function () { done(false); });
+        };
+        rd.onerror = function () { setStatus('Could not read ' + f.name, 'err', true); done(false); };
+        rd.readAsText(f);
+      });
+    }
+    /* Drag files from the computer onto the file list. */
+    var treeBox = q('.cl-tree');
+    if (treeBox && canEdit) {
+      treeBox.addEventListener('dragover', function (e) {
+        if (!e.dataTransfer || [].indexOf.call(e.dataTransfer.types || [], 'Files') === -1) return;
+        e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; treeBox.classList.add('cl-drop');
+      });
+      treeBox.addEventListener('dragleave', function (e) { if (!treeBox.contains(e.relatedTarget)) treeBox.classList.remove('cl-drop'); });
+      treeBox.addEventListener('drop', function (e) {
+        if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        e.preventDefault(); treeBox.classList.remove('cl-drop');
+        var d = e.target.closest && e.target.closest('[data-dir]');
+        uploadList([].slice.call(e.dataTransfer.files), d ? d.dataset.dir : null);
+      });
+    }
 
     /* ---------- clicks ---------- */
     hostEl.addEventListener('click', function (e) {
@@ -1211,18 +1296,22 @@
       '.cl-shell:fullscreen{width:100vw;height:100vh;background:#fff}',
       'html.cl-noscroll,html.cl-noscroll body{overflow:hidden}',
       '@media(max-width:860px){.cl-shell.cl-full .cl-body{grid-template-rows:minmax(0,1fr) 40vh}}',
-      '.cl-body{display:grid;grid-template-columns:200px minmax(0,1fr) minmax(0,1fr);height:min(72vh,620px);min-height:380px}',
+      '.cl-body{display:grid;grid-template-columns:230px minmax(0,1fr) minmax(0,1fr);height:min(72vh,620px);min-height:380px}',
       '.cl-docmode .cl-body{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}',
-      '.cl-body.cl-stacked{grid-template-columns:200px minmax(0,1fr);grid-template-rows:1fr 1fr}.cl-body.cl-stacked .cl-tree{grid-row:1 / span 2}',
+      '.cl-body.cl-stacked{grid-template-columns:230px minmax(0,1fr);grid-template-rows:1fr 1fr}.cl-body.cl-stacked .cl-tree{grid-row:1 / span 2}',
       '.cl-tree{border-right:1px solid var(--line,rgba(38,51,49,.12));background:#FAFCFB;display:flex;flex-direction:column;min-width:0;overflow:hidden}',
-      '.cl-tree-acts{display:flex;gap:.25rem;padding:.4rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08))}',
+      '.cl-tree-acts{display:flex;flex-wrap:wrap;gap:.25rem;padding:.4rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08))}.cl-tree-acts .cl-btn{padding:.3rem .45rem;font-size:.68rem}',
       '.cl-tree-list{flex:1;overflow:auto;padding:.25rem 0}',
       '.cl-tree-note{padding:.4rem .6rem;font-size:.68rem;color:var(--muted,#5A6E6A);font-weight:600;line-height:1.35}',
       '.cl-node{position:relative;display:flex;align-items:center;gap:.4rem;padding:.3rem .5rem;font-size:.78rem;font-weight:700;color:var(--ink,#263331);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-node i{width:14px;text-align:center;color:var(--brand-deep,#245F5A);opacity:.8;flex:none}.cl-dir i{color:#C08A00}.cl-asset i{color:#7048E8}',
       '.cl-node i.cl-li,.cl-crumb i.cl-li{opacity:1;font-size:.95em}.CodeMirror-hint .cl-h-ic{width:1.1em;text-align:center;margin-right:.35em}',
       '.cl-node:hover{background:var(--sage,#E5F2EF)}.cl-node.on{background:#DDEFEA;color:var(--brand-deep,#245F5A)}',
-      '.cl-node-acts{margin-left:auto;display:none;gap:.1rem}.cl-node:hover .cl-node-acts,.cl-node.on .cl-node-acts{display:inline-flex}',
+      '.cl-node-acts{margin-left:auto;display:none;gap:.1rem;flex:none}.cl-node:hover .cl-node-acts,.cl-node.on .cl-node-acts{display:inline-flex}',
+      /* Touch screens have no hover: keep a folder's buttons showing so new file / upload can be found. */
+      '@media(hover:none){.cl-dir .cl-node-acts{display:inline-flex}.cl-node-acts button{padding:.25rem .35rem;font-size:.8rem}}',
+      '.cl-dir>.cl-dn,.cl-file>.cl-dn,.cl-asset>.cl-dn{overflow:hidden;text-overflow:ellipsis;min-width:0}',
+      '.cl-tree.cl-drop{outline:2px dashed var(--brand,#55BFB3);outline-offset:-4px;background:#EAF7F4}',
       '.cl-node-acts button{border:0;background:transparent;padding:.1rem .25rem;cursor:pointer;color:var(--muted,#5A6E6A);font-size:.7rem}.cl-node-acts button:hover{color:var(--brand-deep,#245F5A)}',
       '.cl-suggest{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.45rem .6rem;background:#FFF7E6;border-bottom:1px solid rgba(192,138,0,.3);font-size:.76rem;font-weight:700;color:#5c4300}.cl-suggest[hidden]{display:none}.cl-suggest>span{flex:1;min-width:180px}',
       '.cl-edit-wrap{display:flex;flex-direction:column;border-right:1px solid var(--line,rgba(38,51,49,.12));min-width:0;min-height:0}',
@@ -1251,12 +1340,12 @@
       'body .CodeMirror-hints{z-index:3000!important;max-width:min(460px,90vw)}body .emmet-abbreviation-preview{z-index:3000!important}body li.CodeMirror-hint-active{background:#245F5A!important;color:#fff!important}.CodeMirror-hint{overflow:hidden;text-overflow:ellipsis}',
       '.emmet-abbreviation-preview{z-index:1000;background:#fff;border:1px solid #D5E3DF;border-radius:8px;padding:.4rem .6rem;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px}',
       '@media(max-width:860px){.cl-body,.cl-body.cl-stacked{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(300px,1fr) 300px;height:auto}.cl-docmode .cl-body{grid-template-columns:minmax(0,1fr)}',
-      '  .cl-tree{display:none;position:absolute;z-index:20;top:42px;left:0;bottom:0;width:240px;box-shadow:8px 0 24px rgba(0,0,0,.12)}.cl-tree-open .cl-tree{display:flex}.cl-treebtn{display:inline-flex}',
+      '  .cl-tree{display:none;position:absolute;z-index:20;top:42px;left:0;bottom:0;width:min(280px,85%);box-shadow:8px 0 24px rgba(0,0,0,.12)}.cl-tree-open .cl-tree{display:flex}.cl-treebtn{display:inline-flex}',
       '  .cl-edit-wrap{border-right:0;border-bottom:1px solid var(--line,rgba(38,51,49,.12));min-height:300px}}',
       '@media(prefers-reduced-motion:reduce){.cl-btn,.cl-node{transition:none}}'
     ].join('\n');
     document.head.appendChild(st);
   }
 
-  g.CodeLab = { mount: mount, buildPreview: buildPreview, load: load, merge3: merge3, mdHtml: mdHtml, langOf: langOf };
+  g.CodeLab = { mount: mount, buildPreview: buildPreview, load: load, merge3: merge3, mdHtml: mdHtml, langOf: langOf, typeOfFile: typeOfFile };
 })(window);

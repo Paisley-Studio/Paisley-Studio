@@ -124,6 +124,8 @@ button{cursor:pointer}
 .ai-node .more{opacity:0;border:0;background:none;color:var(--muted);width:24px;height:24px;border-radius:6px;flex:none}
 .ai-node:hover .more,.ai-node:focus-within .more,.ai-node.on .more{opacity:1}
 .ai-node .more:hover{background:var(--hover);color:var(--text)}
+.ai-upto{flex:none;display:inline-flex;align-items:center;gap:.25rem;border:1px solid rgba(192,138,0,.5);background:rgba(245,200,66,.14);color:#C08A00;border-radius:99px;padding:.05rem .45rem;font:inherit;font-size:.62rem;font-weight:800;cursor:pointer}.ai-upto:hover{background:#F5C842;color:#3d2c00}
+#aiSideBody.ai-drop{outline:2px dashed var(--brand);outline-offset:-4px}
 .ai-node input{flex:1;min-width:0;height:24px;border-radius:6px;border:1px solid var(--brand);background:var(--bg);padding:0 .35rem;font-size:.82rem;outline:none}
 .ai-ic{width:16px;text-align:center;font-size:.92rem;flex:none}
 .ai-badge{display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 2px;border-radius:4px;background:var(--c);color:#fff;font:800 .52rem/1 var(--font);letter-spacing:-.02em;flex:none}

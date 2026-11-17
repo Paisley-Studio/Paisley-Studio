@@ -515,7 +515,7 @@
     /* ---------- explorer ---------- */
     function folders() {
       var set = {};
-      (P.folders || []).concat(P.files.map(function (f) { return dirOf(f.name); })).forEach(function (d) { var p = ''; if (!d) return; d.split('/').forEach(function (x) { p = p ? p + '/' + x : x; set[p] = 1; }); });
+      (P.folders || []).concat(P.files.map(function (f) { return dirOf(f.name); }), (P.assets || []).map(function (a) { return dirOf(a.name); })).forEach(function (d) { var p = ''; if (!d) return; d.split('/').forEach(function (x) { p = p ? p + '/' + x : x; set[p] = 1; }); });
       return Object.keys(set).sort();
     }
     function paintTree() {
@@ -528,22 +528,37 @@
         return dirs.filter(function (x) { return dirOf(x) === d; }).map(function (x) {
           var open = openDirs[x] !== false;
           return '<div class="ai-node' + (open ? ' open' : '') + '" style="' + pad + '" data-dir="' + esc(x) + '" tabindex="0" role="treeitem" aria-expanded="' + open + '"><i class="fas fa-chevron-right chev"></i><i class="fas fa-folder' + (open ? '-open' : '') + ' ai-dir-ic"></i><span class="nm">' + esc(baseOf(x)) + '</span>' +
+            (P.canEdit && canUpload() ? '<button type="button" class="ai-upto" data-upto="' + esc(x) + '" title="Upload ' + esc(pickWord(x)) + ' from your device into ' + esc(x) + '/"><i class="fas fa-upload"></i> Upload</button>' : '') +
             (P.canEdit ? '<button type="button" class="more" data-more aria-label="Folder actions"><i class="fas fa-ellipsis"></i></button>' : '') + '</div>' + (open ? items(x, depth + 1) : '');
         }).join('') + P.files.filter(function (f) { return dirOf(f.name) === d; }).sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (f) {
           return '<div class="ai-node' + (f.name === active ? ' on' : '') + '" style="' + pad + '" data-file="' + esc(f.name) + '" tabindex="0" role="treeitem" title="' + esc(f.name) + '"><span class="chev"></span>' + L.icon(f.lang) + '<span class="nm">' + esc(baseOf(f.name)) + '</span>' +
             (f.name === P.entry ? '<span class="tag" title="Run starts here">Run</span>' : '') + (P.canEdit ? '<button type="button" class="more" data-more aria-label="File actions"><i class="fas fa-ellipsis"></i></button>' : '') + '</div>';
+        }).join('') + (P.assets || []).filter(function (a) { return dirOf(a.name) === d; }).sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (a) {
+          var ic = /^image\//.test(a.type) ? 'fa-image' : /^video\//.test(a.type) ? 'fa-film' : /^audio\//.test(a.type) ? 'fa-music' : 'fa-font';
+          return '<div class="ai-node ai-asset" style="' + pad + '" data-asset="' + esc(a.name) + '" tabindex="0" role="treeitem" title="Click to put ' + esc(a.name) + ' in your code"><span class="chev"></span><i class="fas ' + ic + ' ai-ic" style="color:#7048E8" aria-hidden="true"></i><span class="nm">' + esc(baseOf(a.name)) + '</span>' +
+            (P.canEdit ? '<button type="button" class="more" data-more aria-label="Upload actions"><i class="fas fa-ellipsis"></i></button>' : '') + '</div>';
         }).join('');
       }
       body.innerHTML = '<div class="ai-tree" role="tree">' + (P.files.length || dirs.length ? items('', 0) : '<div class="ai-empty-side">No files yet. Use the buttons above to add one.</div>') + '</div>' +
-        (P.canEdit ? '<div class="ai-note" style="padding:.8rem .9rem 0">' + P.files.length + ' of ' + MAX_FILES + ' files. Double-click a file to rename it; right-click for more.</div>' : '');
+        (P.canEdit ? '<div class="ai-note" style="padding:.8rem .9rem 0">' + P.files.length + ' of ' + MAX_FILES + ' files. Double-click a file to rename it; right-click for more.' +
+          (canUpload() ? ' To add pictures or videos: make a folder (for example images), press its Upload button, or drag files from your computer onto this list. Click a picture to put it in your code.' : ' Drag code files from your computer onto this list to add them.') + '</div>' : '');
     }
     function nodeMenu(node, x, y) {
       if (!P.canEdit) return;
+      if (node.dataset.asset) {
+        var an = node.dataset.asset;
+        menu(x, y, [
+          { icon: 'fa-code', label: 'Put it in my code', fn: function () { useAsset(an); } },
+          { icon: 'fa-trash', label: 'Delete', danger: true, fn: function () { deleteAsset(an); } }
+        ]);
+        return;
+      }
       if (node.dataset.dir) {
         var d = node.dataset.dir;
         menu(x, y, [
           { icon: 'fa-file-circle-plus', label: 'New file here', fn: function () { newFile(d); } },
-          { icon: 'fa-folder-plus', label: 'New folder here', fn: function () { newFolder(d); } }, '-',
+          { icon: 'fa-folder-plus', label: 'New folder here', fn: function () { newFolder(d); } },
+          { icon: 'fa-upload', label: canUpload() ? 'Upload ' + pickWord(d) + ' here' : 'Upload code files here', fn: function () { pickInto(d); } }, '-',
           { icon: 'fa-pen', label: 'Rename folder', fn: function () { renameFolder(d); } },
           { icon: 'fa-trash', label: 'Delete folder', danger: true, fn: function () { deleteFolder(d); } }
         ]);
@@ -581,7 +596,11 @@
       var base = (inDir ? inDir + '/' : '');
       ask({ title: 'New file', text: 'Name it with its extension: .py, .java, .c, .h, .cpp, .php, .html, .css, .js, .txt. Use a slash for a folder, like src/game.' + defaultExt() + '.', value: base + (P.lang === 'java' ? 'Helper.java' : 'untitled.' + defaultExt()), ok: 'Create', selectBase: true }).then(function (v) {
         if (v == null) return;
-        var n = cleanName(v); if (n && !/\.[^./]+$/.test(n)) n += '.' + defaultExt();
+        var n = cleanName(v);
+        /* "images" or "videos" (with or without the suggested ending) is a folder for uploads, not images.py. */
+        var stem = baseOf(n).replace(new RegExp('\\.' + defaultExt() + '$'), '');
+        if (n && MEDIA_DIR.test(stem) && (!/\.[^./]+$/.test(n) || stem !== baseOf(n))) { makeFolder((dirOf(n) ? dirOf(n) + '/' : '') + stem); return; }
+        if (n && !/\.[^./]+$/.test(n)) n += '.' + defaultExt();
         var bad = validName(n); if (bad) return toast(bad);
         var lang = L.langOf(n, P.lang);
         P.files.push({ name: n, lang: lang, content: starterFor(n, lang) });
@@ -592,9 +611,119 @@
     function newFolder(inDir) {
       ask({ title: 'New folder', text: 'Folders keep a bigger project tidy.', value: (inDir ? inDir + '/' : '') + 'folder', ok: 'Create', selectBase: true }).then(function (v) {
         if (v == null) return;
-        var d = cleanName(v); if (!d) return;
-        if (folders().indexOf(d) !== -1) return toast('That folder already exists.');
-        P.folders = (P.folders || []).concat([d]); openDirs[d] = true; dirtyMeta = true; afterFiles();
+        var d = cleanName(v); if (d) makeFolder(d);
+      });
+    }
+    function makeFolder(d) {
+      var same = folders().filter(function (x) { return x.toLowerCase() === d.toLowerCase(); })[0];
+      if (same) {
+        openDirs[same] = true; paintTree();
+        if (MEDIA_DIR.test(baseOf(same)) && canUpload()) { toast('The folder ' + same + ' is already here. Pick ' + pickWord(same) + ' to add.'); pickInto(same); }
+        else toast('That folder already exists.');
+        return;
+      }
+      if (file(d)) return toast('There is already a file called ' + d + '.');
+      P.folders = (P.folders || []).concat([d]); openDirs[d] = true; dirtyMeta = true; afterFiles();
+      if (MEDIA_DIR.test(baseOf(d))) {
+        if (canUpload()) { toast('Folder ' + d + ' made. Pick ' + pickWord(d) + ' from your device to put in it.'); pickInto(d); }
+        else toast('Folder ' + d + ' made.');
+      }
+    }
+
+    /* ---------- uploads: pictures, video, sound and fonts from the device ----------
+       Stored under techWork/{uid}/adv_{projectId}/ (storage.rules: the builder's own class-work
+       folder) and listed in codeAssets, like Code Lab. Code files picked or dropped become files. */
+    var MEDIA_DIR = /^(images?|imgs?|pictures?|pics?|photos?|videos?|movies?|clips?|media|assets|sounds?|audio|music)$/i;
+    var MAX_ASSETS = 60, MAX_UP = 50 * 1024 * 1024;
+    var UP_ACCEPT = 'image/*,video/*,audio/*,font/*,.ttf,.otf,.woff,.woff2,.webp,.heic,.mov,.mp4,.mp3,.wav';
+    var CODE_ACCEPT = '.html,.htm,.css,.js,.json,.md,.txt,.csv,.py,.java,.c,.h,.cpp,.hpp,.php';
+    var TEXT_EXT = /\.(html?|css|m?js|json|md|txt|csv|py|java|c|h|cpp|cc|cxx|hpp|hh|hxx|php|in|dat)$/i;
+    function canUpload() { return !!(g.firebase && firebase.storage && me.uid); }
+    function pickWord(dir) {
+      var b = baseOf(dir || '');
+      return /^(images?|imgs?|pictures?|pics?|photos?)$/i.test(b) ? 'pictures' : /^(videos?|movies?|clips?)$/i.test(b) ? 'videos' : /^(sounds?|audio|music)$/i.test(b) ? 'sounds' : 'files';
+    }
+    var upIn = document.createElement('input'), upDir = null;
+    upIn.type = 'file'; upIn.multiple = true; upIn.hidden = true; app.appendChild(upIn);
+    function pickInto(dir) {
+      if (!P || !P.canEdit) return;
+      var w = dir == null ? '' : pickWord(dir);
+      upDir = dir == null ? null : dir;
+      upIn.accept = !canUpload() ? CODE_ACCEPT : w === 'pictures' ? 'image/*,.webp,.heic' : w === 'videos' ? 'video/*,.mov,.mp4,.webm' : w === 'sounds' ? 'audio/*,.mp3,.wav' : UP_ACCEPT + ',' + CODE_ACCEPT;
+      try { upIn.click(); } catch (e) { }
+    }
+    upIn.addEventListener('change', function () {
+      var list = [].slice.call(upIn.files || []); upIn.value = '';
+      var dir = upDir; upDir = null; uploadList(list, dir);
+    });
+    function assetTaken(n) { var low = n.toLowerCase(); return P.files.some(function (f) { return f.name.toLowerCase() === low; }) || (P.assets || []).some(function (a) { return a.name.toLowerCase() === low; }); }
+    function upError(er) {
+      var c = (er && er.code) || '';
+      if (/unauthorized|permission/.test(c)) return 'this kind of file is not allowed, or it is over 50 MB.';
+      if (/retry-limit|network/.test(c)) return 'the internet connection dropped. Try again.';
+      return (er && er.message) || String(er);
+    }
+    function uploadList(list, target) {
+      if (!P || !P.canEdit || !list.length) return;
+      list.reduce(function (pr, f0) {
+        return pr.then(function () {
+          if (TEXT_EXT.test(f0.name)) return addTextFile(f0, target);
+          var t = g.CodeLab && g.CodeLab.typeOfFile ? g.CodeLab.typeOfFile(f0) : (f0.type || '');
+          if (!canUpload()) { toast(f0.name + ': pictures and videos cannot be uploaded here.'); return; }
+          if (t === 'svg') { toast(f0.name + ': SVG pictures cannot be uploaded. Save it as PNG or JPG.'); return; }
+          if (!/^(image|video|audio|font)\//.test(t)) { toast(f0.name + ': upload pictures, videos, sounds, fonts or code files.'); return; }
+          if ((P.assets || []).length >= MAX_ASSETS) { toast('A project can hold ' + MAX_ASSETS + ' uploads.'); return; }
+          if (f0.size > MAX_UP) { toast(f0.name + ' is over 50 MB.'); return; }
+          var f = f0;
+          if (!f0.type || f0.type === 'application/octet-stream') { try { f = new File([f0], f0.name, { type: t }); } catch (e) { } }
+          var dir = target != null ? target : (/^image\//.test(t) ? 'images' : /^video\//.test(t) ? 'videos' : /^audio\//.test(t) ? 'sounds' : 'fonts');
+          var n = cleanName((dir ? dir + '/' : '') + f.name), k = 1;
+          while (assetTaken(n)) n = cleanName((dir ? dir + '/' : '') + f.name.replace(/(\.\w+)?$/, '-' + (++k) + '$1'));
+          var path = 'techWork/' + me.uid + '/adv_' + P.id + '/' + Date.now() + '_' + baseOf(n);
+          var ref = firebase.storage().ref(path), pid = P.id;
+          toast('Uploading ' + f.name + '…');
+          return ref.put(f, { contentType: f.type || t, cacheControl: 'public,max-age=31536000' }).then(function () { return ref.getDownloadURL(); }).then(function (url) {
+            if (!P || P.id !== pid) return;
+            P.assets = (P.assets || []).concat([{ name: n, url: url, storagePath: path, type: f.type || t, size: f.size }]);
+            openDirs[dirOf(n)] = true; dirtyMeta = true; afterFiles(); saveNow(true);
+            toast('Uploaded ' + baseOf(n) + '. Click it to put it in your code.');
+          }).catch(function (er) { toast('Upload of ' + f.name + ' failed: ' + upError(er)); });
+        });
+      }, Promise.resolve());
+    }
+    function addTextFile(f, target) {
+      if (P.files.length >= MAX_FILES) { toast('A project can have ' + MAX_FILES + ' files at most.'); return Promise.resolve(); }
+      if (f.size > MAX_FILE) { toast(f.name + ' is over 200 KB.'); return Promise.resolve(); }
+      return f.text().then(function (txt) {
+        var n = cleanName((target ? target + '/' : '') + f.name), had = file(n);
+        if (had) { if (models[n]) models[n].setValue(txt); had.content = txt; }
+        else { P.files.push({ name: n, lang: L.langOf(n, P.lang), content: txt }); saved[n] = null; }
+        if (dirOf(n)) openDirs[dirOf(n)] = true;
+        afterFiles(); openFile(n); toast((had ? 'Replaced ' : 'Added ') + n);
+      }, function () { toast('Could not read ' + f.name); });
+    }
+    function relPath(from, to) {
+      var a = from ? from.split('/') : [], b = to.split('/');
+      while (a.length && b.length > 1 && a[0] === b[0]) { a.shift(); b.shift(); }
+      return a.map(function () { return '..'; }).concat(b).join('/');
+    }
+    function useAsset(n) {
+      var a = (P.assets || []).filter(function (x) { return x.name === n; })[0]; if (!a) return;
+      var gr = G(), cur = gr.active ? file(gr.active) : null, rel = relPath(cur ? dirOf(cur.name) : '', a.name);
+      var isImg = /^image\//.test(a.type), isVid = /^video\//.test(a.type), isAud = /^audio\//.test(a.type);
+      var text = cur && cur.lang === 'css' ? (isImg ? 'background-image: url("' + rel + '");' : 'url("' + rel + '")')
+        : cur && cur.lang === 'html' ? (isImg ? '<img src="' + rel + '" alt="' + baseOf(n).replace(/\.\w+$/, '') + '">' : isVid ? '<video src="' + rel + '" controls></video>' : isAud ? '<audio src="' + rel + '" controls></audio>' : rel)
+        : '"' + rel + '"';
+      if (cur && gr.ed && P.canEdit) {
+        gr.ed.executeEdits('pz-asset', [{ range: gr.ed.getSelection(), text: text, forceMoveMarkers: true }]); gr.ed.focus();
+        toast('Added ' + baseOf(n) + ' to ' + baseOf(cur.name) + '.');
+      } else if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { toast('Copied: ' + text); }, function () { toast(text); });
+      else toast(text);
+    }
+    function deleteAsset(n) {
+      confirmBox({ title: 'Delete ' + baseOf(n) + '?', text: 'Code that uses it will show a broken picture.', ok: 'Delete', danger: true }).then(function (yes) {
+        if (!yes) return;
+        P.assets = (P.assets || []).filter(function (a) { return a.name !== n; }); dirtyMeta = true; afterFiles();
       });
     }
     function renameFile(n) {
@@ -644,15 +773,19 @@
         var to = cleanName(v); if (!to || to === d) return;
         if (folders().indexOf(to) !== -1) return toast('That folder already exists.');
         P.files.filter(function (f) { return f.name.indexOf(d + '/') === 0; }).forEach(function (f) { moveFile(f.name, to + f.name.slice(d.length)); });
+        (P.assets || []).forEach(function (a) { if (a.name.indexOf(d + '/') === 0) a.name = to + a.name.slice(d.length); });
         P.folders = (P.folders || []).map(function (x) { return x === d || x.indexOf(d + '/') === 0 ? to + x.slice(d.length) : x; });
         dirtyMeta = true; afterFiles();
       });
     }
     function deleteFolder(d) {
       var inside = P.files.filter(function (f) { return f.name.indexOf(d + '/') === 0; });
+      var media = (P.assets || []).filter(function (a) { return a.name.indexOf(d + '/') === 0; }).length;
+      if (media) inside = inside.concat(new Array(media));
       confirmBox({ title: 'Delete the folder ' + baseOf(d) + '?', text: inside.length ? 'Its ' + inside.length + ' file' + (inside.length === 1 ? '' : 's') + ' will be deleted too. This cannot be undone.' : 'The folder is empty.', ok: 'Delete', danger: true }).then(function (yes) {
         if (!yes) return;
-        inside.forEach(function (f) { removeFile(f.name); });
+        inside.forEach(function (f) { if (f) removeFile(f.name); });
+        P.assets = (P.assets || []).filter(function (a) { return a.name.indexOf(d + '/') !== 0; });
         P.folders = (P.folders || []).filter(function (x) { return x !== d && x.indexOf(d + '/') !== 0; });
         dirtyMeta = true; afterFiles();
       });
@@ -686,7 +819,7 @@
       acts.innerHTML = '';
       if (sideView === 'explorer') {
         title.textContent = P ? P.title : 'Explorer';
-        if (P && P.canEdit) acts.innerHTML = '<button type="button" class="ai-btn icon" data-side="newfile" title="New file (Alt+N)"><i class="fas fa-file-circle-plus"></i></button><button type="button" class="ai-btn icon" data-side="newfolder" title="New folder"><i class="fas fa-folder-plus"></i></button><button type="button" class="ai-btn icon" data-side="collapse" title="Collapse folders"><i class="fas fa-minus"></i></button>';
+        if (P && P.canEdit) acts.innerHTML = '<button type="button" class="ai-btn icon" data-side="newfile" title="New file (Alt+N)"><i class="fas fa-file-circle-plus"></i></button><button type="button" class="ai-btn icon" data-side="newfolder" title="New folder (for example images or videos)"><i class="fas fa-folder-plus"></i></button><button type="button" class="ai-btn icon" data-side="upload" title="Upload pictures, videos or code files from your device"><i class="fas fa-upload"></i></button><button type="button" class="ai-btn icon" data-side="collapse" title="Collapse folders"><i class="fas fa-minus"></i></button>';
         paintTree();
       } else if (sideView === 'search') {
         title.textContent = 'Search';
@@ -1035,7 +1168,7 @@
     }
     function runWeb(entry, quiet) {
       var html = entry && /\.html?$/i.test(entry) ? entry : (P.entry && /\.html?$/i.test(P.entry) ? P.entry : null);
-      var page = g.CodeLab.buildPreview(P.files.map(function (f) { return { name: f.name, lang: f.lang, content: f.content }; }), html || (P.files.filter(function (f) { return f.lang === 'html'; })[0] || {}).name || '', []);
+      var page = g.CodeLab.buildPreview(P.files.map(function (f) { return { name: f.name, lang: f.lang, content: f.content }; }), html || (P.files.filter(function (f) { return f.lang === 'html'; })[0] || {}).name || '', P.assets || []);
       var body = q('#aiPrevBody');
       if (hasHtml()) showPrev(true);
       var frame = document.createElement('iframe');
@@ -1129,6 +1262,7 @@
         title: P.title,
         codeFiles: P.files.map(function (f) { return { name: f.name, lang: f.lang, content: f.content }; }),
         codeFolders: (P.folders || []).slice(0, 60),
+        codeAssets: (P.assets || []).slice(0, MAX_ASSETS),
         codeActive: P.active || P.entry || '',
         ide: { v: 1, lang: P.lang, entry: P.entry || '', open: groups[0].tabs.slice(0, 20), template: P.template || '' }
       };
@@ -1188,7 +1322,8 @@
       P = {
         id: doc.id, title: doc.title || 'Untitled project', lang: lang, template: ide.template || '',
         files: (doc.codeFiles || []).map(function (f) { var n = cleanName(f.name) || 'untitled.txt'; return { name: n, lang: f.lang && L.LANGS[f.lang] ? f.lang : L.langOf(n, lang), content: String(f.content || '') }; }),
-        folders: (doc.codeFolders || []).map(cleanName).filter(Boolean), entry: ide.entry || '', active: doc.codeActive || '',
+        folders: (doc.codeFolders || []).map(cleanName).filter(Boolean),
+        assets: (doc.codeAssets || []).filter(function (a) { return a && a.name && /^https:\/\//.test(a.url || ''); }).map(function (a) { return Object.assign({}, a); }), entry: ide.entry || '', active: doc.codeActive || '',
         canEdit: doc.studentId === me.uid && me.role === 'student', owner: doc.studentName || 'this builder', updatedMs: msOf(doc.updatedAt)
       };
       saved = {}; P.files.forEach(function (f) { saved[f.name] = f.content; });
@@ -1398,13 +1533,16 @@
 
     /* ---------- events ---------- */
     app.addEventListener('click', function (e) {
-      var t = e.target.closest('button,[data-file],[data-dir],[data-hit],[data-goto],[data-st],[data-cmd]'); if (!t || !app.contains(t)) return;
+      var t = e.target.closest('button,[data-file],[data-dir],[data-asset],[data-hit],[data-goto],[data-st],[data-cmd]'); if (!t || !app.contains(t)) return;
       if (t.dataset.view) { showSide(t.dataset.view, true); return; }
       if (t.dataset.side === 'newfile') return newFile('');
       if (t.dataset.side === 'newfolder') return newFolder('');
+      if (t.dataset.side === 'upload') return pickInto(null);
+      if (t.dataset.upto != null) { openDirs[t.dataset.upto] = true; return pickInto(t.dataset.upto); }
       if (t.dataset.side === 'collapse') { folders().forEach(function (d) { openDirs[d] = false; }); paintTree(); return; }
       if (t.matches('[data-more]')) { var node = t.closest('.ai-node'), r = t.getBoundingClientRect(); nodeMenu(node, r.left, r.bottom + 4); return; }
       if (t.dataset.file) { openFile(t.dataset.file); return; }
+      if (t.dataset.asset) { useAsset(t.dataset.asset); return; }
       if (t.dataset.dir) { openDirs[t.dataset.dir] = openDirs[t.dataset.dir] === false; paintTree(); return; }
       if (t.dataset.hit) { var h = t.dataset.hit.split('|'); openFile(h[0], null, { line: +h[1], col: +h[2], sel: new monaco.Selection(+h[1], +h[2], +h[1], +h[2] + +h[3]) }); return; }
       if (t.dataset.goto) { var gt = t.dataset.goto.split('|'); openFile(gt[0], null, { line: +gt[1], col: +gt[2] }); return; }
@@ -1455,6 +1593,19 @@
       if (P && P.canEdit && anyDirty()) { setSave('saving'); Promise.race([saveNow(true), new Promise(function (r) { setTimeout(r, 4000); })]).then(go); } else go();
     }
     q('#aiLive').classList.toggle('on', S.livePreview);
+    /* Drag files from the computer onto the explorer: onto a folder puts them in it. */
+    app.addEventListener('dragover', function (e) {
+      if (!P || !P.canEdit || !e.target.closest('#aiSideBody') || !e.dataTransfer || [].indexOf.call(e.dataTransfer.types || [], 'Files') === -1) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; q('#aiSideBody').classList.add('ai-drop');
+    });
+    app.addEventListener('dragleave', function (e) { var sb = q('#aiSideBody'); if (sb && !sb.contains(e.relatedTarget)) sb.classList.remove('ai-drop'); });
+    app.addEventListener('drop', function (e) {
+      var sb = q('#aiSideBody'); if (sb) sb.classList.remove('ai-drop');
+      if (!P || !P.canEdit || !e.target.closest('#aiSideBody') || !e.dataTransfer || !e.dataTransfer.files.length) return;
+      e.preventDefault();
+      var dn = e.target.closest('[data-dir]');
+      uploadList([].slice.call(e.dataTransfer.files), dn ? dn.dataset.dir : null);
+    });
     app.addEventListener('contextmenu', function (e) { var n = e.target.closest('.ai-node'); if (!n || !P || !P.canEdit) return; e.preventDefault(); nodeMenu(n, e.clientX, e.clientY); });
     app.addEventListener('dblclick', function (e) { var n = e.target.closest('.ai-node[data-file]'); if (n && P && P.canEdit) renameFile(n.dataset.file); });
     app.addEventListener('keydown', function (e) {

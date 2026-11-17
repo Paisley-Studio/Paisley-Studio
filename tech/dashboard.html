@@ -439,11 +439,11 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../js/tech/writing-studio.js?v=tech13"></script>
-<script src="../js/tech/code-lab.js?v=tech19"></script>
+<script src="../js/tech/code-lab.js?v=tech20"></script>
 <script src="../js/tech/advanced-ide/ide-entry.js?v=1"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=4"></script>
-<script src="../js/tech/tech-helpers.js?v=tech20"></script>
+<script src="../js/tech/tech-helpers.js?v=tech21"></script>
 <script src="../js/tech/tech-work.js?v=10"></script>
 <script src="../js/tech/tech-groups.js?v=3"></script>
 <script src="../js/tech/tech-classes.js?v=15"></script>
@@ -1151,14 +1151,16 @@ function openPractice(id){
         '<button class="btn light" type="button" id="prHelp"'+(p.helpRequested?' disabled':'')+'>'+(p.helpRequested?'Help requested':'Ask my coach for help')+'</button>'+
         '<button class="btn light" type="button" id="prRetry">Start again</button>'+
         '<button class="btn light" type="button" id="prDel">Delete</button></div><div class="msg" id="prMsg" role="status"></div></section>';
-    const tool=host.querySelector('#prTool'), fake={id:p.id,studentId:p.studentId,codeFiles:p.codeFiles,codeActive:p.codeActive,writingHtml:p.writingHtml,files:[]};
-    if(p.type==='code'&&window.CodeLab) mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,advanced:window.PaisleyIDEEntry&&ideOn()?b=>PaisleyIDEEntry.launch({from:p.id,origin:b}):null});
+    const tool=host.querySelector('#prTool'), fake={id:p.id,studentId:p.studentId,codeFiles:p.codeFiles,codeFolders:p.codeFolders||[],codeAssets:p.codeAssets||[],codeActive:p.codeActive,writingHtml:p.writingHtml,files:[]};
+    /* Pictures, videos and sounds for a code practice go in the builder's own class-work Storage folder. */
+    const upload=f=>{ const path='techWork/'+p.studentId+'/pr_'+p.id+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const r=firebase.storage().ref(path); return r.put(f,{contentType:f.type||undefined,cacheControl:'public,max-age=31536000'}).then(()=>r.getDownloadURL()).then(url=>({url,storagePath:path})); };
+    if(p.type==='code'&&window.CodeLab) mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,uploadAsset:firebase.storage?upload:null,advanced:window.PaisleyIDEEntry&&ideOn()?b=>PaisleyIDEEntry.launch({from:p.id,origin:b}):null});
     else if(p.type==='writing'&&window.WritingStudio) mod=WritingStudio.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,files:[]});
     const q=s=>host.querySelector(s);
     if(q('#prSave')) q('#prSave').onclick=()=>save({text:q('#prText').value.slice(0,20000)}).catch(e=>{ q('#prMsg').textContent=T.errMsg(e); });
     q('#prDone').onclick=()=>{ const done=!p.done; save({done}).then(()=>{ if(done) log('practice_done','Finished practice: '+(p.title||''),{practiceId:id,missionId:p.missionId}); paint(); }); };
     q('#prHelp').onclick=()=>save({helpRequested:true}).then(()=>{ log('help_requested','Asked for help with practice: '+(p.title||''),{practiceId:id}); paint(); });
-    q('#prRetry').onclick=()=>{ if(!confirm('Clear this practice and start again?')) return; save({codeFiles:p.type==='code'?[{name:'index.html',lang:'html',content:'<!DOCTYPE html>\n<html>\n<body>\n</body>\n</html>'}]:[],writingHtml:'',text:'',done:false}).then(paint); };
+    q('#prRetry').onclick=()=>{ if(!confirm('Clear this practice and start again?')) return; save({codeFiles:p.type==='code'?[{name:'index.html',lang:'html',content:'<!DOCTYPE html>\n<html>\n<body>\n</body>\n</html>'}]:[],codeFolders:[],codeAssets:[],writingHtml:'',text:'',done:false}).then(paint); };
     q('#prDel').onclick=()=>{ if(!confirm('Delete this practice?')) return; ref.delete().then(()=>go('practice')); };
   }
   unsub=ref.onSnapshot(s=>{
