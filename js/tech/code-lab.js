@@ -54,8 +54,10 @@
                          uploadAsset(file) -> Promise<{ url, storagePath }>,
                          collab: { ref, presence, me: { uid, name } },
                          mode: 'code' | 'doc', title, draftKey,
-                         advanced(button) })   adds an "Advanced IDE" button (Practice uses it)
-     -> { destroy(), flush() -> Promise, state() }
+                         advanced(button),     adds an "Advanced IDE" button (Practice uses it)
+                         share(body, close) })  adds a Share button; the page fills the sheet it opens
+     -> { destroy(), flush() -> Promise, state(), setShare(state), shareBody() }
+        setShare('' | 'requested' | 'approved' | 'declined') marks the Share button
    CodeLab.buildPreview(files, active, assets) -> html
    CodeLab.load() -> Promise   (warms the editor libraries)
    CodeLab.checkUpload(file) -> Promise<{ ok, type, reason }>
@@ -571,6 +573,8 @@
             /* Only where the page asks for it (Practice): opens the Advanced Paisley IDE. */
             (typeof opts.advanced === 'function' && !docMode && g.PaisleyIDEEntry ? g.PaisleyIDEEntry.button({ compact: true, label: 'Advanced IDE' }).replace(' data-advanced-ide', ' data-clcmd="advanced"') : '') +
             (docMode ? '' : '<button type="button" class="cl-btn cl-icon" data-clcmd="layout" title="Side by side / stacked" aria-label="Change layout"><i class="fas fa-table-columns"></i></button>') +
+            /* Where the page asks for it (class work, practice): ask to publish, then copy the link. */
+            (typeof opts.share === 'function' ? '<button type="button" class="cl-btn cl-sharebtn" data-clcmd="share" title="Share your work: ask to publish, then copy the link"><i class="fas fa-globe"></i> <span>Share</span></button>' : '') +
             '<button type="button" class="cl-btn cl-icon" data-clcmd="theme"></button>' +
             '<button type="button" class="cl-btn cl-icon cl-fullbtn" data-clcmd="full" title="Full screen" aria-label="Full screen" aria-pressed="false"><i class="fas fa-expand"></i></button>' +
             (canEdit && !collab ? '<button type="button" class="cl-btn cl-save" data-clcmd="save"><i class="fas fa-floppy-disk"></i> Save</button>' : '') +
@@ -1254,6 +1258,39 @@
       setTimeout(function () { if (dead) return; loadRuntime().then(function (R) { if (!dead) R.warm('cpp').catch(function () { }); }).catch(function () { }); }, 1200);
     }
 
+    /* ---------- share sheet ----------
+       Opens inside the IDE (it keeps full screen); the page fills the body and repaints it as the
+       publish state changes. The page's own click handlers see the sheet's buttons (it sits in the host). */
+    var shareBox = null;
+    function closeShare() {
+      if (!shareBox) return;
+      shareBox.remove(); shareBox = null;
+      document.removeEventListener('keydown', shareKey, true);
+      var b = q('[data-clcmd="share"]'); if (b) b.focus();
+    }
+    function shareKey(e) { if (e.key === 'Escape' && shareBox) { e.preventDefault(); e.stopPropagation(); closeShare(); } }
+    function openShare() {
+      if (typeof opts.share !== 'function') return;
+      if (canEdit) flushSave();
+      if (shareBox) { closeShare(); return; }
+      shareBox = document.createElement('div');
+      shareBox.className = 'cl-dlg'; shareBox.setAttribute('role', 'dialog'); shareBox.setAttribute('aria-modal', 'true'); shareBox.setAttribute('aria-label', 'Share your work');
+      shareBox.innerHTML = '<div class="cl-dlg-box cl-sharebox"><div class="cl-share-h"><span class="cl-share-ic"><i class="fas fa-globe"></i></span><div><b>Share your work</b><small>Your coach or the Studio Desk checks it first. Then you get a link for friends and family.</small></div>' +
+        '<button type="button" class="cl-btn cl-icon" data-clshare="close" aria-label="Close"><i class="fas fa-xmark"></i></button></div><div class="cl-share-b"></div></div>';
+      (q('.cl-shell') || hostEl).appendChild(shareBox);
+      shareBox.addEventListener('mousedown', function (e) { if (e.target === shareBox) closeShare(); });
+      shareBox.querySelector('[data-clshare="close"]').addEventListener('click', closeShare);
+      document.addEventListener('keydown', shareKey, true);
+      try { opts.share(shareBox.querySelector('.cl-share-b'), closeShare); } catch (e) { console.warn('share sheet:', e); }
+      var f = shareBox.querySelector('.cl-share-b button, .cl-share-b input'); if (f) f.focus();
+    }
+    function setShare(st) {
+      var b = q('[data-clcmd="share"]'); if (!b) return;
+      b.classList.toggle('on', st === 'approved'); b.classList.toggle('wait', st === 'requested');
+      b.querySelector('i').className = 'fas ' + (st === 'requested' ? 'fa-hourglass-half' : 'fa-globe');
+      b.querySelector('span').textContent = st === 'approved' ? 'Shared' : (st === 'requested' ? 'Asked' : 'Share');
+    }
+
     /* ---------- files, folders, uploads ---------- */
     /* Questions are asked inside the IDE, not with prompt()/confirm(): those boxes make the browser leave full screen. */
     function dialog(msg, value, okLabel) {
@@ -1670,6 +1707,7 @@
         else if (cmd === 'full') toggleFull();
         else if (cmd === 'tree') hostEl.querySelector('.cl-shell').classList.toggle('cl-tree-open');
         else if (cmd === 'advanced') { flushSave(); opts.advanced(b); }
+        else if (cmd === 'share') openShare();
         else if (!canEdit) return;
         else if (cmd === 'add') addFile('');
         else if (cmd === 'folder') addFolder();
@@ -1777,12 +1815,15 @@
     return {
       flush: function () { return flushSave(); },
       state: function () { return payload(); },
+      setShare: setShare,
+      shareBody: function () { return shareBox ? shareBox.querySelector('.cl-share-b') : null; },
       refresh: function () { if (cm) cm.refresh(); },
       destroy: function () {
         if (dead) return;
         if (dirty && canEdit) flushSave();
         if (dirty && canEdit) writeDraftNow();
         dead = true;
+        closeShare();
         [saveTimer, previewTimer, statusTimer, presTimer, draftTimer].forEach(function (t) { if (t) clearTimeout(t); });
         if (beat) clearInterval(beat);
         unsubs.forEach(function (u) { try { u(); } catch (e) { } });
@@ -1865,6 +1906,21 @@
       '.cl-dlg-box input{width:100%;box-sizing:border-box;padding:.55rem .7rem;border:1px solid var(--k-line2);border-radius:9px;font:13px ui-monospace,Menlo,Consolas,monospace;color:var(--k-text);background:var(--k-bg);outline:none}',
       '.cl-dlg-box input:focus{border-color:var(--k-accent);box-shadow:0 0 0 3px rgba(0,180,240,.2)}',
       '.cl-dlg-acts{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.8rem}',
+      '.cl-sharebtn.on{color:var(--k-accent-text);border-color:var(--k-line2);background:var(--k-on)}.cl-sharebtn.wait{color:var(--k-warn)}',
+      '.cl-sharebox{width:min(500px,100%);padding:0;overflow:hidden;animation:clShareIn .3s cubic-bezier(.2,.9,.3,1.15) both}',
+      '.cl-share-h{display:flex;gap:.7rem;align-items:flex-start;padding:1rem 1rem .85rem;border-bottom:1px solid var(--k-line)}',
+      '.cl-share-h>div{flex:1;min-width:0}.cl-share-h b{display:block;font-size:.98rem}.cl-share-h small{display:block;color:var(--k-muted);font-size:.78rem;line-height:1.4;margin-top:.15rem}',
+      '.cl-share-ic{flex:0 0 auto;width:36px;height:36px;border-radius:10px;background:var(--k-on);color:var(--k-accent-text);display:grid;place-items:center}',
+      '.cl-share-b{padding:1rem;font-size:.86rem;line-height:1.5}',
+      '.cl-share-b p{margin:0 0 .7rem}',
+      '.cl-share-b .cl-shr-state{display:inline-flex;align-items:center;gap:.4rem;font-size:.74rem;font-weight:700;padding:.25rem .6rem;border-radius:20px;background:var(--k-on);color:var(--k-accent-text);margin-bottom:.6rem}',
+      '.cl-share-b .cl-shr-state.wait{background:rgba(255,184,107,.14);color:var(--k-warn)}.cl-share-b .cl-shr-state.no{background:rgba(255,107,107,.12);color:var(--k-err)}',
+      '.cl-share-b .cl-shr-note{border-left:3px solid var(--k-warn);background:var(--k-panel2);padding:.55rem .7rem;border-radius:8px;margin:0 0 .7rem}',
+      '.cl-share-b .cl-shr-link{display:flex;gap:.4rem;margin:.2rem 0 .7rem}',
+      '.cl-share-b .cl-shr-link input{flex:1;min-width:0;padding:.5rem .65rem;border:1px solid var(--k-line2);border-radius:8px;background:var(--k-bg);color:var(--k-text);font:12px ui-monospace,Menlo,Consolas,monospace}',
+      '.cl-share-b .cl-shr-acts{display:flex;gap:.45rem;flex-wrap:wrap}',
+      '.cl-share-b a.cl-btn{text-decoration:none}',
+      '@keyframes clShareIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}',
       '.cl-shell.cl-full .cl-body,.cl-shell.cl-full .cl-body.cl-stacked{height:auto;flex:1;min-height:0}',
       '.cl-shell:fullscreen{width:100vw;height:100vh}',
       'html.cl-noscroll,html.cl-noscroll body{overflow:hidden}',

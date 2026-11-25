@@ -31,6 +31,7 @@ const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 
 const { templates } = require("./email-templates");
+const freeze = require("./dev-freeze");
 
 
 /* ---------------------------------------------------------
@@ -75,8 +76,13 @@ function getTransporter() {
   return cachedTransporter;
 }
 
-async function sendEmail(to, subject, html, attachments, headers) {
+/* opts.area: what the email is about (homework, exams, classes...) when the running
+   function does more than one thing; developer mode's freeze uses it (dev-freeze.js). */
+async function sendEmail(to, subject, html, attachments, headers, opts) {
   if (!to) return { sent: false, reason: "no recipient" };
+  try {
+    if (await freeze.holdEmail(to, subject, opts && opts.area)) return { sent: false, held: true, reason: "held by developer mode" };
+  } catch (e) { console.warn("sendEmail: freeze check failed, sending anyway:", e.message); }
   const transporter = getTransporter();
   if (!transporter) {
     console.warn("sendEmail: SMTP not configured, skipping send to", to);
@@ -103,8 +109,11 @@ async function sendEmail(to, subject, html, attachments, headers) {
    These show up as badge counters / toasts in the portals.
 --------------------------------------------------------- */
 async function addPersonalNotification(data) {
+  if (await freeze.holdNotification("personalNotifications", data.recipientId, data.recipientType, data)) return null;
+  const checked = await freeze.isOn();
   return admin.firestore().collection("personalNotifications").add({
     ...data,
+    ...(checked ? { freezeChecked: true } : {}),
     read: false,
     emailSent: false,
     createdAt: admin.firestore.FieldValue.serverTimestamp()

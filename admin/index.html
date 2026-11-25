@@ -70,7 +70,7 @@
 <script src="../js/classroom/paper-handins.js?v=hand1"></script>
 <script src="../js/classroom/resources-folder.js?v=boards3"></script>
 <script src="../js/classroom/work-helpers.js?v=handin1"></script>
-<script src="../js/classroom/work-tools.js?v=tools2"></script>
+<script src="../js/classroom/work-tools.js?v=tools3"></script>
 <script src="../js/classroom/publish-helpers.js?v=tools1"></script>
 <script src="../js/classroom/publish-ui.js?v=restore2"></script>
 <script src="../js/classroom/ink-grader.js?v=conv1"></script>
@@ -85,16 +85,18 @@
 <script src="../js/admin/subject-names.js?v=1"></script>
 <script src="../js/tech/tech-helpers.js?v=tech21"></script>
 <script src="../js/tech/tech-manage.js?v=tech11"></script>
-<script src="../js/tech/tech-work.js?v=11"></script>
+<script src="../js/tech/tech-work.js?v=12"></script>
 <script src="../js/tech/tech-groups.js?v=3"></script>
 <script src="../js/tech/tech-classes.js?v=16"></script>
 <script src="../js/tech/tech-timetable.js?v=1"></script>
 <script src="../js/tech/tech-homework.js?v=due2"></script>
 <script src="../js/tech/writing-studio.js?v=tech13"></script>
-<script src="../js/tech/code-lab.js?v=tech22"></script>
+<script src="../js/tech/code-lab.js?v=tech23"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/admin/tech-controls.js?v=2"></script>
 <script src="../js/admin/tech.js?v=tech21"></script>
+<script src="../js/admin/dev-mode.js?v=1"></script>
+<script src="../js/admin/studio-docs.js?v=1"></script>
 <link rel="stylesheet" href="../js/parent/parent-ads.css?v=4" />
 
 <style>
@@ -1042,6 +1044,22 @@
       </section>
 
       <section class="view" id="view-settings">
+        <style>
+          .set-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1.1rem;background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;padding:.4rem;width:max-content;max-width:100%}
+          .set-tab{display:inline-flex;align-items:center;gap:.5rem;font:inherit;font-weight:800;font-size:.82rem;padding:.6rem 1rem;border-radius:10px;border:none;background:none;color:var(--muted);cursor:pointer;transition:background .2s,color .2s}
+          .set-tab i{color:var(--brand)}
+          .set-tab:hover{background:var(--paper);color:var(--ink)}
+          .set-tab.active{background:var(--brand);color:#fff}.set-tab.active i{color:#fff}
+          .set-pane{display:none}.set-pane.active{display:block;animation:fadeIn .35s ease}
+        </style>
+        <div class="set-tabs" role="tablist" aria-label="Settings">
+          <button type="button" class="set-tab active" role="tab" aria-selected="true" data-set="dev"><i class="fas fa-screwdriver-wrench" aria-hidden="true"></i> Developer mode</button>
+          <button type="button" class="set-tab" role="tab" aria-selected="false" data-set="docs"><i class="fas fa-book" aria-hidden="true"></i> How Paisley Studio works</button>
+          <button type="button" class="set-tab" role="tab" aria-selected="false" data-set="data"><i class="fas fa-database" aria-hidden="true"></i> Data sources</button>
+        </div>
+        <div class="set-pane active" id="setPane-dev" role="tabpanel"><div id="devModeHost"></div></div>
+        <div class="set-pane" id="setPane-docs" role="tabpanel"><div id="studioDocsHost"></div></div>
+        <div class="set-pane" id="setPane-data" role="tabpanel">
         <div class="panel" style="max-width:620px;">
           <div class="panel-head"><div><h3>Data source</h3><div class="sub">How this dashboard gets its numbers</div></div></div>
           <div class="detail-row"><div class="k">Enrolment form</div><div class="v">enrolment.html → Firestore "enrolments"</div></div>
@@ -1052,13 +1070,14 @@
           <div class="detail-row"><div class="k">Newsletter</div><div class="v">Footer form, all pages → Firestore "newsletter"</div></div>
           <div class="detail-row"><div class="k">Tutor accounts</div><div class="v">admin/tutors.html → Firestore "tutorAccounts" + Firebase Auth</div></div>
           <div class="detail-row"><div class="k">Notes / notices / timetables</div><div class="v">Notes &amp; Notices → Firestore "notes", "notifications", "timetables"</div></div>
-          <div class="detail-row"><div class="k">Live classes</div><div class="v">Live Classes → Firestore "liveClasses" → live-class.html (Jitsi Meet)</div></div>
+          <div class="detail-row"><div class="k">Live classes</div><div class="v">Live Classes → Firestore "liveClasses" → live-class.html (Cloudflare RealtimeKit)</div></div>
           <div class="detail-row"><div class="k">Grading rights</div><div class="v">Student Management → Firestore "gradingGrants"</div></div>
           <div class="detail-row"><div class="k">Storage</div><div class="v">Firebase Firestore (cloud, live)</div></div>
           <div class="detail-row"><div class="k">Authentication</div><div class="v">Firebase Auth (email &amp; password)</div></div>
           <div style="margin-top:1.3rem; display:flex; gap:.7rem; flex-wrap:wrap;">
             <button class="btn btn-ghost btn-sm" id="exportBtn" type="button"><i class="fas fa-download" aria-hidden="true"></i> Export current view as JSON</button>
           </div>
+        </div>
         </div>
       </section>
 
@@ -1322,7 +1341,7 @@ const titles = {
   studentmgmt: ['Student Management', 'Accounts, results, homework, exams and submissions'],
   content: ['Timetable & Notices', 'Announcements and timetables by Key Stage'],
   liveclasses: ['Live Classes', 'Schedule and run Jitsi Meet sessions'],
-  settings: ['Settings', 'Dashboard configuration'],
+  settings: ['Settings', 'Developer mode, the Studio handbook and data sources'],
 };
 
 document.querySelectorAll('.nav-item').forEach(btn=>{
@@ -1341,6 +1360,32 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
 document.getElementById('menuToggle').addEventListener('click', ()=>{
   document.getElementById('sidebar').classList.toggle('open');
 });
+
+// Settings: Developer mode (maintenance banner, freeze), the Studio handbook, data sources.
+(function(){
+  const navBtn = document.querySelector('.nav-item[data-view="settings"]');
+  let dev = null, docs = null, tab = 'dev';
+  function open(which){
+    tab = which;
+    document.querySelectorAll('.set-tab').forEach(b=>{ const on = b.dataset.set===which; b.classList.toggle('active', on); b.setAttribute('aria-selected', on?'true':'false'); });
+    document.querySelectorAll('.set-pane').forEach(p=>p.classList.toggle('active', p.id==='setPane-'+which));
+    const u = firebase.auth().currentUser; if(!u) return;
+    if(which==='dev' && !dev){
+      const host = document.getElementById('devModeHost');
+      if(typeof AdminDevMode==='undefined'){ host.innerHTML='<div class="panel" style="color:#b8362a;font-weight:700">Developer mode failed to load. Check that js/admin/dev-mode.js is deployed.</div>'; return; }
+      dev = AdminDevMode.mount(host, { uid: u.uid, name: 'Studio Desk' });
+    }
+    if(which==='docs' && !docs){
+      const host = document.getElementById('studioDocsHost');
+      if(typeof StudioDocs==='undefined'){ host.innerHTML='<div class="panel" style="color:#b8362a;font-weight:700">The handbook failed to load. Check that js/admin/studio-docs.js is deployed.</div>'; return; }
+      docs = StudioDocs.mount(host);
+    }
+  }
+  document.querySelectorAll('.set-tab').forEach(b=>b.addEventListener('click', ()=>open(b.dataset.set)));
+  navBtn.addEventListener('click', ()=>open(tab));
+  /* Leaving Settings ends any banner preview. */
+  document.querySelectorAll('.nav-item').forEach(b=>{ if(b!==navBtn) b.addEventListener('click', ()=>{ if(window.PaisleySiteStatus) PaisleySiteStatus.preview(null); }); });
+})();
 
 // Remote Students: remote admissions, parents, delivery monitoring and grading.
 // Mounted fresh each time the tab opens so listeners never stack.
@@ -4833,5 +4878,6 @@ function refreshAllNow(){
   }
 })();
 </script>
+<script src="/js/ui/site-status.js?v=1" defer></script>
 </body>
 </html>

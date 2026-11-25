@@ -165,6 +165,11 @@ exports.runCode                       = codeRunner.runCode;
 const uploadGuard = require("./upload-guard");
 exports.checkTechUpload               = uploadGuard.checkTechUpload;
 
+// Developer mode (Admin > Settings): the freeze's safety net. The holds themselves live in dev-freeze.js.
+const devMode = require("./dev-mode");
+exports.onFreezePersonalNotification = devMode.onFreezePersonalNotification;
+exports.onFreezeTechNotification    = devMode.onFreezeTechNotification;
+
 const attendance = require("./attendance");
 exports.attendanceToday               = attendance.attendanceToday;
 exports.attendanceCheckIn             = attendance.attendanceCheckIn;

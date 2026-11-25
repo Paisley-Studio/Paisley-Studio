@@ -743,6 +743,8 @@
         if (!g.CodeLab) { edEl.innerHTML = '<div class="tc-empty">Paisley VS Code is not loaded on this page.</div>'; return; }
         editor = g.CodeLab.mount(edEl, {
           build: build, me: me, canEdit: want, title: label, onSave: onSave,
+          /* The Share button in the IDE's title bar: the same publish-on-review as the panel beside it. */
+          share: isBuilder ? function (body) { wireShare(body); paintShare(body); } : null,
           uploadAsset: want ? function (f) {
             var path = 'techWork/' + student.id + '/' + l.id + '/' + Date.now() + '_' + f.name.replace(/[^\w.\-]/g, '_');
             var r = firebase.storage().ref(path);
@@ -753,6 +755,40 @@
       }
     }
     var seed, seeding = null, carriedNote = false;
+    /* ---- Share sheet inside the IDE (CodeLab opts.share) ---- */
+    function paintShare(body) {
+      body = body || (editor && editor.shareBody && editor.shareBody());
+      if (!body) return;
+      var st = (data && data.publishState) || '', url = shareLink(data), open = o.publishOpen === true, h;
+      if (st === 'approved' && url) h = '<span class="cl-shr-state"><i class="fas fa-circle-check"></i> Published</span><p>Anyone with this link can see your work. When you change it here, the link shows the new version within a few seconds.</p>' +
+        '<div class="cl-shr-link"><input type="text" readonly value="' + esc(url) + '" aria-label="Share link" onclick="this.select()"><button type="button" class="cl-btn cl-run" data-twshare="copy" data-url="' + esc(url) + '"><i class="fas fa-copy"></i> Copy</button></div>' +
+        '<div class="cl-shr-acts"><a class="cl-btn" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i> Open</a><button type="button" class="cl-btn" data-twshare="down"><i class="fas fa-eye-slash"></i> Take it down</button></div>';
+      else if (st === 'approved') h = '<p><i class="fas fa-spinner fa-spin"></i> Approved. Making your link…</p>';
+      else if (st === 'requested') h = '<span class="cl-shr-state wait"><i class="fas fa-hourglass-half"></i> Publish request sent</span><p>Your coach or the Studio Desk will look at it. You get a notification when your link is ready.</p><div class="cl-shr-acts"><button type="button" class="cl-btn" data-tw="unpub">Cancel the request</button></div>';
+      else if (st === 'declined') h = '<span class="cl-shr-state no"><i class="fas fa-rotate-left"></i> Not published yet</span>' + (data.publishNote ? '<div class="cl-shr-note">' + esc(data.publishNote) + (data.publishDecidedByName ? '<br><small>' + esc(data.publishDecidedByName) + '</small>' : '') + '</div>' : '') +
+        (open ? '<p>Fix it, then ask again.</p><div class="cl-shr-acts"><button type="button" class="cl-btn cl-run" data-tw="pubreq"><i class="fas fa-paper-plane"></i> I fixed it, ask again</button></div>' : '<p>Sharing is switched off for this lesson now.</p>');
+      else if (!open) h = '<span class="cl-shr-state no"><i class="fas fa-lock"></i> Not switched on yet</span><p>Sharing is not switched on for this lesson. Ask your coach: they can switch it on for this lesson or for the whole class.</p>';
+      else if (!canAskPublish(data)) h = '<p>Hand your work in first (<b>Hand in for marking</b>, beside the editor). Then press Share again and ask to publish it.</p>';
+      else h = '<p>Proud of it? Ask to publish it. Your coach or the Studio Desk checks it, then you get a link to share with friends and family. Only your first name is shown.</p><div class="cl-shr-acts"><button type="button" class="cl-btn cl-run" data-tw="pubreq"><i class="fas fa-paper-plane"></i> Ask to publish</button></div>';
+      body.innerHTML = h;
+    }
+    function wireShare(body) {
+      body.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-twshare]'); if (!b) return;
+        if (b.dataset.twshare === 'copy') { copyText(b.dataset.url, b); return; }
+        if (b.dataset.twshare === 'down') {
+          /* Two presses, never confirm(): it would drop the IDE out of full screen. */
+          if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = '<i class="fas fa-eye-slash"></i> Press again: the link stops working'; return; }
+          b.disabled = true;
+          ref.update({ publishState: 'unpublished', updatedAt: FV().serverTimestamp() }).catch(function (er) { b.disabled = false; b.textContent = 'Could not take it down: ' + T.errMsg(er); });
+        }
+      });
+    }
+    function syncShare() {
+      if (!editor || !editor.setShare) return;
+      editor.setShare((data && data.publishState) || '');
+      paintShare();
+    }
     /* The lesson's language (task.lang: web, py, java, c, cpp, php) decides the first file. */
     var LANG_FILE = { py: ['main.py', 'py'], java: ['Main.java', 'java'], c: ['main.c', 'c'], cpp: ['main.cpp', 'cpp'], php: ['index.php', 'php'] };
     function familyOf(lang) { return LANG_FILE[lang] ? lang : 'web'; }
@@ -819,7 +855,7 @@
     var unsub = ref.onSnapshot(function (s) {
       if (dead) return;
       data = s.exists ? s.data() : null; loaded = true;
-      paintHead(); paintQs(); mountEditor();
+      paintHead(); paintQs(); mountEditor(); syncShare();
     }, function (e) {
       if (dead) return;
       /* No doc yet reads as permission-denied for a builder's own missing doc in some setups: start empty. */

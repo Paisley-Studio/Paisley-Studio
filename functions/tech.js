@@ -59,6 +59,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const { render, PORTALS, templates } = require("./email-templates");
 const notifications = require("./notifications");
+const freeze = require("./dev-freeze");
 const { SMTP_SECRETS } = require("./work-shared");
 
 const LOCATION = "us-central1";
@@ -99,6 +100,7 @@ const LINKS = {
 async function techNotify(recipientId, recipientRole, type, title, message, extra) {
   if (!recipientId) return false;
   const x = extra || {};
+  if (await freeze.holdNotification("techNotifications", recipientId, recipientRole, { type, title, message })) return false;
   const doc = {
     recipientId, recipientRole, type, title: String(title || "").slice(0, 140), message: String(message || "").slice(0, 400),
     studentId: x.studentId || "", buildId: x.buildId || "", chatId: x.chatId || "",
@@ -108,6 +110,7 @@ async function techNotify(recipientId, recipientRole, type, title, message, extr
     link: x.link || LINKS[recipientRole] || "/tech",
     read: false, createdAt: FV().serverTimestamp()
   };
+  if (await freeze.isOn()) doc.freezeChecked = true;
   const col = admin.firestore().collection("techNotifications");
   try {
     if (x.id) await col.doc(String(x.id).replace(/[^\w-]/g, "_").slice(0, 300) + "_" + recipientId).create(doc);

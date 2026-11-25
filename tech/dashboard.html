@@ -451,12 +451,12 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../js/tech/writing-studio.js?v=tech13"></script>
-<script src="../js/tech/code-lab.js?v=tech22"></script>
+<script src="../js/tech/code-lab.js?v=tech23"></script>
 <script src="../js/tech/advanced-ide/ide-entry.js?v=1"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=4"></script>
 <script src="../js/tech/tech-helpers.js?v=tech21"></script>
-<script src="../js/tech/tech-work.js?v=11"></script>
+<script src="../js/tech/tech-work.js?v=12"></script>
 <script src="../js/tech/tech-groups.js?v=3"></script>
 <script src="../js/tech/tech-classes.js?v=16"></script>
 <script src="../js/tech/tech-timetable.js?v=1"></script>
@@ -1198,6 +1198,20 @@ function practicePubHtml(p){
   else h+='<p>Proud of it? Ask to publish it. Your coach or the Studio Desk checks it first, then you get a link to share'+(prog?', and anyone can run your program on the page':'')+'.</p><button type="button" class="tc-btn sm" data-prpub="req"><i class="fas fa-paper-plane"></i> Ask to publish</button>';
   return h+'</div>';
 }
+/* The same, inside the IDE's Share sheet (CodeLab opts.share). No confirm() there: it drops full screen. */
+function practiceSheet(p){
+  const st=p.publishState||'', url=T.safeUrl(p.shareUrl);
+  const prog=/\.(py|java|c|cpp|cc|php)$/i.test((p.codeFiles||[]).map(f=>f.name).join(' '));
+  if(st==='approved'&&url) return '<span class="cl-shr-state"><i class="fas fa-circle-check"></i> Published</span><p>Anyone with this link can see it'+(prog?' and run your program':'')+'. It updates as you keep working.</p>'+
+    '<div class="cl-shr-link"><input type="text" readonly value="'+esc(url)+'" aria-label="Share link" onclick="this.select()"><button type="button" class="cl-btn cl-run" data-prshare="copy" data-url="'+esc(url)+'"><i class="fas fa-copy"></i> Copy</button></div>'+
+    '<div class="cl-shr-acts"><a class="cl-btn" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i> Open</a><button type="button" class="cl-btn" data-prshare="down"><i class="fas fa-eye-slash"></i> Take it down</button></div>';
+  if(st==='approved') return '<p><i class="fas fa-spinner fa-spin"></i> Approved. Making your link…</p>';
+  if(st==='requested') return '<span class="cl-shr-state wait"><i class="fas fa-hourglass-half"></i> Publish request sent</span><p>Your coach or the Studio Desk will look at it. You get a notification when your link is ready.</p><div class="cl-shr-acts"><button type="button" class="cl-btn" data-prpub="unpub">Cancel the request</button></div>';
+  if(st==='declined') return '<span class="cl-shr-state no"><i class="fas fa-rotate-left"></i> Not published yet</span>'+(p.publishNote?'<div class="cl-shr-note">'+esc(p.publishNote)+(p.publishDecidedByName?'<br><small>'+esc(p.publishDecidedByName)+'</small>':'')+'</div>':'')+
+    (S.practicePub?'<div class="cl-shr-acts"><button type="button" class="cl-btn cl-run" data-prpub="req"><i class="fas fa-paper-plane"></i> I fixed it, ask again</button></div>':'<p>Sharing practice projects is switched off right now.</p>');
+  if(!S.practicePub) return '<span class="cl-shr-state no"><i class="fas fa-lock"></i> Not switched on yet</span><p>Sharing practice projects is not switched on yet. The Studio Desk switches it on; ask your coach.</p>';
+  return '<p>Proud of it? Ask to publish it. Your coach or the Studio Desk checks it first, then you get a link to share'+(prog?', and anyone can run your program on the page':'')+'. Only your first name is shown.</p><div class="cl-shr-acts"><button type="button" class="cl-btn cl-run" data-prpub="req"><i class="fas fa-paper-plane"></i> Ask to publish</button></div>';
+}
 function openPractice(id){
   const el=$('view');
   el.innerHTML='<button class="back" type="button" data-back><i class="fas fa-arrow-left"></i> Practice</button><div id="prHost"><div class="empty">Opening…</div></div>';
@@ -1223,7 +1237,20 @@ function openPractice(id){
     const tool=host.querySelector('#prTool'), fake={id:p.id,studentId:p.studentId,codeFiles:p.codeFiles,codeFolders:p.codeFolders||[],codeAssets:p.codeAssets||[],codeActive:p.codeActive,writingHtml:p.writingHtml,files:[],codeAt:p.updatedAt,updatedAt:p.updatedAt};
     /* Pictures, videos and sounds for a code practice go in the builder's own class-work Storage folder. */
     const upload=f=>{ const path='techWork/'+p.studentId+'/pr_'+p.id+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const r=firebase.storage().ref(path); return r.put(f,{contentType:f.type||undefined,cacheControl:'public,max-age=31536000'}).then(()=>r.getDownloadURL()).then(url=>({url,storagePath:path})); };
-    if(p.type==='code'&&window.CodeLab) mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,uploadAsset:firebase.storage?upload:null,advanced:window.PaisleyIDEEntry&&ideOn()?b=>PaisleyIDEEntry.launch({from:p.id,origin:b}):null});
+    if(p.type==='code'&&window.CodeLab){
+      mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,uploadAsset:firebase.storage?upload:null,advanced:window.PaisleyIDEEntry&&ideOn()?b=>PaisleyIDEEntry.launch({from:p.id,origin:b}):null,
+        share:body=>{
+          body.innerHTML=practiceSheet(p);
+          body.addEventListener('click',e=>{
+            const b=e.target.closest('[data-prshare]'); if(!b) return;
+            if(b.dataset.prshare==='copy'){ TechWork.copyText(b.dataset.url,b); return; }
+            if(b.dataset.sure!=='1'){ b.dataset.sure='1'; b.innerHTML='<i class="fas fa-eye-slash"></i> Press again: the link stops working'; return; }
+            b.disabled=true;
+            ref.update({publishState:'unpublished',updatedAt:FV().serverTimestamp()}).catch(er=>{ b.disabled=false; b.textContent='Could not take it down: '+T.errMsg(er); });
+          });
+        }});
+      if(mod.setShare) mod.setShare(p.publishState||'');
+    }
     else if(p.type==='writing'&&window.WritingStudio) mod=WritingStudio.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,files:[]});
     const q=s=>host.querySelector(s);
     if(q('#prSave')) q('#prSave').onclick=()=>save({text:q('#prText').value.slice(0,20000)}).catch(e=>{ q('#prMsg').textContent=T.errMsg(e); });
@@ -1256,6 +1283,7 @@ function openPractice(id){
     const first=!p; const prevNote=p&&p.coachNote; p=Object.assign({id:s.id},s.data());
     if(first||prevNote!==p.coachNote) paint();
     else { const pb=host.querySelector('#prPubBox'); if(pb) pb.innerHTML=practicePubHtml(p); }
+    if(mod&&mod.setShare){ mod.setShare(p.publishState||''); const sb=mod.shareBody&&mod.shareBody(); if(sb) sb.innerHTML=practiceSheet(p); }
   },e=>{ host.innerHTML=emptyBox('Could not open',esc(T.errMsg(e))); });
   S.pr={destroy(){ dead=true; if(unsub) unsub(); if(mod){ try{ mod.destroy(); }catch(e){} } }};
 }
@@ -1298,5 +1326,6 @@ document.addEventListener('click',async e=>{
 })();
 </script>
 <script src="/js/ui/emoji-picker.js?v=1"></script>
+<script src="/js/ui/site-status.js?v=1" defer></script>
 </body>
 </html>

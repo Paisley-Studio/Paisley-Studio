@@ -21,6 +21,7 @@ const SMTP_FROM = defineSecret("SMTP_FROM");
 const SMTP_SECRETS = [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM];
 
 const sendEmail = notifications.sendEmail;
+const freeze = require("./dev-freeze");
 
 function subjectKey(v) {
   return String(v || "")
@@ -50,7 +51,10 @@ function toDate(ts) {
 --------------------------------------------------------- */
 async function notify(recipientId, recipientType, fields) {
   if (!recipientId) return null;
+  if (await freeze.holdNotification("personalNotifications", recipientId, recipientType, fields)) return null;
+  const checked = await freeze.isOn();
   return db().collection("personalNotifications").add({
+    ...(checked ? { freezeChecked: true } : {}),
     recipientId,
     recipientType,
     type: fields.type,
@@ -202,8 +206,12 @@ function isVisibleTo(item, audience, liveStatus) {
    Returns true only for the call that actually created it. */
 async function notifyOnce(docId, recipientId, recipientType, fields) {
   if (!recipientId || !docId) return false;
+  /* Held by developer mode: as if it had been sent, so callers skip the email too. */
+  if (await freeze.holdNotification("personalNotifications", recipientId, recipientType, fields)) return false;
+  const checked = await freeze.isOn();
   try {
     await db().collection("personalNotifications").doc(docId).create({
+      ...(checked ? { freezeChecked: true } : {}),
       recipientId,
       recipientType,
       type: fields.type,

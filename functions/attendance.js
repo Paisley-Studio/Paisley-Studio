@@ -38,6 +38,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const W = require("./work-shared");
+const freeze = require("./dev-freeze");
 const { templates } = require("./email-templates");
 
 if (!admin.apps.length) admin.initializeApp();
@@ -837,6 +838,8 @@ async function adminsList() {
   return out;
 }
 async function queueNotice(n) {
+  /* Developer mode's freeze: the notice (and so its email) is held, not queued. */
+  if (await freeze.holdNotification("attendanceNotifications", n.recipientId, n.recipientRole, { type: "attendance_" + n.kind, title: n.title, message: n.message })) return false;
   const ref = db().collection("attendanceNotifications").doc(n.id);
   const doc = {
     kind: n.kind, audience: n.audience, recipientId: n.recipientId, recipientRole: n.recipientRole, recipientName: n.recipientName || "",
@@ -985,6 +988,9 @@ async function deliver(id) {
   catch (e) { res = { sent: false, reason: e.message }; }
   if (res && res.sent) {
     await ref.update({ emailStatus: "sent", sentAt: FV().serverTimestamp(), lastError: "" });
+  } else if (res && res.held) {
+    /* Developer mode held it: final, never retried later. */
+    await ref.update({ emailStatus: "held", lastError: "Held by developer mode" });
   } else {
     const wait = Math.min(6 * 3600000, 5 * 60000 * Math.pow(2, claimed.attempts - 1));
     await ref.update({ emailStatus: "failed", lastError: String((res && res.reason) || "send failed").slice(0, 300), nextAttemptAt: ts(Date.now() + wait) });

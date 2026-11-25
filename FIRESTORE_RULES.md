@@ -93,6 +93,9 @@ user and denied access.
 | `serverConfig` | set in the Firebase console only (`codeRunner`: the execution-service URL and key) | nobody (Cloud Functions only) | nobody |
 | `codeRunUsage` | Cloud Functions only (`runCode` rate limits) | nobody | Cloud Functions only |
 | `lmsSettings` | Cloud Functions only (`renameSubject`) | get: anyone (subject names); list: signed in | Cloud Functions only |
+| `siteStatus` | admin, `maintenance` only, keys `on` (bool), `title` (<= 80), `message` (<= 400), `startsAt`, `endsAt`, `tone`, `updatedAt`, `updatedBy` | get: anyone, signed out too (the maintenance banner, `js/ui/site-status.js`); list: admin | admin |
+| `devMode` | admin, `freeze` only (developer mode's freeze) | admin | admin |
+| `devHeld` | Cloud Functions only (what the freeze held) | admin | admin may delete; nobody updates |
 | `subjectRenames` | Cloud Functions only | admin | nobody |
 | `tutorChats/{studentId}_{tutorId}` | the student or the tutor, only when `students.tutorIds`/`tutorId` links them (student account must be OK); admin | the two members, admin | student: `studentReadAt` + `last*` only; tutor: `tutorReadAt` + `last*` only; admin. Delete: admin |
 | `tutorChats/{id}/messages` | a member writing as themselves (`senderRole` student/tutor, or admin), still linked, text 1–3000, `createdAt == request.time` | the two members, admin | admin only |

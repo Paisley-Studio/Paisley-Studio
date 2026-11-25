@@ -340,7 +340,7 @@ async function notifyStudentsOfWork({ kind, item, cid, entity, only, ids }) {
     if (!created) continue; // already told — a retry must not email twice
     if (s.email) {
       const t = templates.workPosted({ student: s, kind, item, dueAt: when });
-      await W.sendEmail(s.email, t.subject, t.html);
+      await W.sendEmail(s.email, t.subject, t.html, undefined, undefined, { area: isHomework ? "homework" : (isLesson ? "classes" : "exams") });
     }
     for (const p of await W.parentsOfStudent(s.id)) {
       const pTitle = isHomework ? `New homework for ${s.name || "your child"}`
