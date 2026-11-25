@@ -90,10 +90,14 @@
       '<button type="button" class="tc-btn sm" data-tw="copy" data-url="' + esc(url) + '"><i class="fas fa-copy"></i> Copy link</button>' +
       '<a class="tc-btn light sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i> Open</a></div>';
   }
-  /* What the builder (and their family) see about publishing this work. */
-  function publishHtml(d, isBuilder, who) {
+  /* What the builder (and their family) see about publishing this work. open: the coach or the Studio
+     Desk switched publishing on for this lesson or its class (techLessons / techCourses.allowPublish);
+     without it there is no Ask to publish button (the rules refuse the request too). */
+  function publishHtml(d, isBuilder, who, open) {
     if (!canAskPublish(d)) return '';
-    var st = d.publishState || '', url = shareLink(d), h = '<div class="tw-pub' + (st === 'approved' ? ' on' : '') + '"><div class="hd"><i class="fas fa-globe"></i> <b>Share it with friends and family</b></div>';
+    var st = d.publishState || '';
+    if (open === false && ['requested', 'approved', 'declined'].indexOf(st) === -1) return '';
+    var url = shareLink(d), h = '<div class="tw-pub' + (st === 'approved' ? ' on' : '') + '"><div class="hd"><i class="fas fa-globe"></i> <b>Share it with friends and family</b></div>';
     if (st === 'approved' && url) h += '<p>' + (isBuilder ? 'Published! Anyone with this link can see your work.' : 'Published. Anyone with this link can see ' + esc(who) + '’s work.') + '</p>' + linkBox(url) + (isBuilder ? '<button type="button" class="tc-btn light sm" data-tw="unpub" style="margin-top:.5rem"><i class="fas fa-eye-slash"></i> Take it down</button>' : '');
     else if (st === 'approved') h += '<p><i class="fas fa-spinner fa-spin"></i> Making the link…</p>';
     else if (st === 'requested') h += '<p><span class="tc-pill mid"><i class="fas fa-hourglass-half"></i> Publish request sent</span> ' + (isBuilder ? 'Your coach or the Studio Desk will look at it.' : 'Waiting for the coach.') + '</p>' + (isBuilder ? '<button type="button" class="tc-btn light sm" data-tw="unpub">Cancel the request</button>' : '');
@@ -178,6 +182,15 @@
     if (!d || d.status !== 'Graded' && !d.nextAllowed) return '';
     return d.nextAllowed ? '<span class="tc-pill good"><i class="fas fa-lock-open"></i> Next lesson open</span>' : '<span class="tc-pill mid"><i class="fas fa-lock"></i> Next lesson not open yet</span>';
   }
+  /* "Python", "Java", "C++", "Web page"...: what a piece of code work is written in. */
+  function codeLangLabel(files) {
+    var names = (files || []).map(function (f) { return String((f && f.name) || '').toLowerCase(); });
+    var has = function (re) { return names.some(function (n) { return re.test(n); }); };
+    var out = [];
+    if (has(/\.py$/)) out.push('Python'); if (has(/\.java$/)) out.push('Java'); if (has(/\.(cpp|cc|cxx)$/)) out.push('C++'); else if (has(/\.c$/)) out.push('C');
+    if (has(/\.php$/)) out.push('PHP'); if (has(/\.html?$/)) out.push('Web page'); else if (has(/\.js$/)) out.push('JavaScript');
+    return out.join(' + ') || 'Code';
+  }
   function hasWork(d, kind) {
     if (!d) return false;
     if (kind === 'writing') return String(d.writingHtml || '').replace(/<[^>]+>/g, '').trim().length > 0 || /<img/i.test(d.writingHtml || '');
@@ -249,7 +262,9 @@
         var div = document.createElement('div'); div.innerHTML = T.cleanHtml(d.writingHtml || '');
         return snapCard(title, wrapText(div.textContent || '', 84), false);
       }
-      var f = (d.codeFiles || []).filter(function (x) { return /\.html?$/i.test(x.name); })[0] || (d.codeFiles || [])[0] || { name: '', content: '' };
+      var isProg = function (x) { return /\.(py|java|c|cpp|cc|php)$/i.test(x.name); };
+      var f = (d.codeFiles || []).filter(function (x) { return /\.html?$/i.test(x.name); })[0] || (d.codeFiles || []).filter(function (x) { return isProg(x) && /^main\.|^index\./i.test(String(x.name).split('/').pop()); })[0] ||
+        (d.codeFiles || []).filter(isProg)[0] || (d.codeFiles || [])[0] || { name: '', content: '' };
       return snapCard(title + (f.name ? ' · ' + f.name : ''), String(f.content || '').split('\n'), true);
     };
     var html = '';
@@ -686,7 +701,7 @@
       }
       headEl.innerHTML = '<div class="tw-bar">' + statePill(st) + (data && data.submittedAt ? '<span class="tw-note">Handed in ' + esc(fmt(data.submittedAt)) + '</span>' : '') + '<span class="grow"></span>' + right + '</div>' +
         '<div class="tw-msg" id="twMsg" role="status"' + (carriedNote && !data ? ' style="color:var(--brand-deep,#245F5A);margin:.5rem 0">Your code from the lesson before is here. Carry on from where you stopped.' : '>') + '</div>' +
-        feedbackHtml(data, isBuilder ? 'You' : first) + publishHtml(data, isBuilder, first) +
+        feedbackHtml(data, isBuilder ? 'You' : first) + publishHtml(data, isBuilder, first, o.publishOpen === true) +
         (!isBuilder && !data ? '<div class="tc-empty">' + esc(first) + ' has not started this yet.</div>' : '') +
         (liveEdit() ? '<p class="tw-note" style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)"><i class="fas fa-rotate"></i> Your work is published. Keep improving it here: it saves as you ' + (kind === 'writing' ? 'write' : 'type') + ' and your link shows the new version within a few seconds. The work your coach marked stays as it was.</p>' : '') +
         (keepWorking() ? '<p class="tw-note" style="margin:0 0 .6rem;color:var(--brand-deep,#245F5A)"><i class="fas fa-circle-info"></i> ' +
@@ -738,14 +753,21 @@
       }
     }
     var seed, seeding = null, carriedNote = false;
+    /* The lesson's language (task.lang: web, py, java, c, cpp, php) decides the first file. */
+    var LANG_FILE = { py: ['main.py', 'py'], java: ['Main.java', 'java'], c: ['main.c', 'c'], cpp: ['main.cpp', 'cpp'], php: ['index.php', 'php'] };
+    function familyOf(lang) { return LANG_FILE[lang] ? lang : 'web'; }
     function startCode() {
-      var t = l.task || {}, own = String(t.starter || '').trim() ? { codeFiles: [{ name: 'index.html', lang: 'html', content: String(t.starter).replace(/\s+$/, '') + '\n' }], codeActive: 'index.html' } : null;
+      var t = l.task || {}, want = familyOf(t.lang), lf = LANG_FILE[want] || ['index.html', 'html'];
+      var own = String(t.starter || '').trim() ? { codeFiles: [{ name: lf[0], lang: lf[1], content: String(t.starter).replace(/\s+$/, '') + '\n' }], codeActive: lf[0] }
+        : (want !== 'web' && g.CodeLab && g.CodeLab.starterCode ? { codeFiles: [{ name: lf[0], lang: lf[1], content: g.CodeLab.starterCode(lf[1], lf[0]) }], codeActive: lf[0] } : null);
       var ids = (o.carryFrom || []).slice(0, 8);
       if (t.startFrom === 'starter' || !ids.length) return Promise.resolve(own);
       return Promise.all(ids.map(function (id) {
         return WORK().doc(workId(student.id, id)).get().then(function (s) { return s.exists ? s.data() : null; }, function () { return null; });
       })).then(function (list) {
-        var prev = list.filter(function (d) { return d && (d.codeFiles || []).some(function (f) { return String(f.content || '').trim(); }); })[0];
+        /* Carry on only from code in the same language: a Python lesson never opens with last week's web page. */
+        var sameLang = function (f) { var lg = f.lang || (g.CodeLab ? g.CodeLab.langOf(f.name) : 'html'); return want === 'web' ? /^(html|css|js)$/.test(lg) : lg === lf[1]; };
+        var prev = list.filter(function (d) { return d && (d.codeFiles || []).some(function (f) { return String(f.content || '').trim() && sameLang(f); }); })[0];
         if (!prev) return own;
         return { carried: true, codeFiles: prev.codeFiles.map(function (f) { return { name: f.name, lang: f.lang, content: String(f.content || '') }; }), codeFolders: (prev.codeFolders || []).slice(), codeAssets: (prev.codeAssets || []).slice(), codeActive: prev.codeActive || 'index.html' };
       });
@@ -932,7 +954,7 @@
         '<input type="search" data-hq placeholder="Search builder or lesson…" aria-label="Search" value="' + esc(S.q) + '"></div>' +
         (list.length ? '<div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Builder</th><th>Lesson</th><th>Class</th><th>State</th><th>Handed in</th><th>Score</th><th></th></tr></thead><tbody>' + list.map(function (r) {
           var s = byId[r.studentId], name = (s && s.name) || r.studentName || 'Builder';
-          return '<tr><td><b>' + esc(name) + '</b></td><td>' + esc(r.lessonTitle || '') + '<div class="cr-note">' + (r.kind === 'writing' ? 'Writing' : 'Code') + '</div></td><td class="cr-note">' + esc(r.courseName || '') + (r.topicTitle ? ' · ' + esc(r.topicTitle) : '') + '</td>' +
+          return '<tr><td><b>' + esc(name) + '</b></td><td>' + esc(r.lessonTitle || '') + '<div class="cr-note">' + (r.kind === 'writing' ? 'Writing' : 'Code · ' + esc(codeLangLabel(handedInView(r).codeFiles))) + '</div></td><td class="cr-note">' + esc(r.courseName || '') + (r.topicTitle ? ' · ' + esc(r.topicTitle) : '') + '</td>' +
             '<td>' + statePill(r.status) + (r.lessonId ? ' ' + nextPill(r) : '') + (r.publishState === 'requested' ? ' <span class="tc-pill mid"><i class="fas fa-globe"></i> Wants to publish</span>' : r.publishState === 'approved' ? ' <span class="tc-pill good"><i class="fas fa-globe"></i> Published</span>' : '') + '</td><td class="cr-note">' + esc(fmt(r.submittedAt)) + '</td><td>' + esc(scoreText(r) || '–') + '</td>' +
             '<td><button type="button" class="cr-btn sm' + (r.status === 'Submitted' ? ' primary' : '') + '" data-open="' + esc(r.id) + '"><i class="fas ' + (r.status === 'Submitted' ? 'fa-pen-nib' : 'fa-eye') + '"></i> ' + (r.status === 'Submitted' ? 'Open and mark' : 'Open') + '</button></td></tr>';
         }).join('') + '</tbody></table></div>' :
@@ -956,6 +978,6 @@
 
   g.TechWork = {
     kindOf: kindOf, workId: workId, taskQs: taskQs, answersHtml: answersHtml, statePill: statePill, feedbackHtml: feedbackHtml, scoreText: scoreText, hasWork: hasWork, style: style,
-    takeSnapshot: takeSnapshot, publishHtml: publishHtml, shareLink: shareLink, copyText: copyText, shareRowsHtml: shareRowsHtml, decidePublish: decidePublish, allowNext: allowNext, renewWork: renewWork, renewedOpen: renewedOpen, handedInView: handedInView, openHandIn: openHandIn, mountResults: mountResults, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
+    takeSnapshot: takeSnapshot, publishHtml: publishHtml, shareLink: shareLink, copyText: copyText, linkBox: linkBox, codeLangLabel: codeLangLabel, shareRowsHtml: shareRowsHtml, decidePublish: decidePublish, allowNext: allowNext, renewWork: renewWork, renewedOpen: renewedOpen, handedInView: handedInView, openHandIn: openHandIn, mountResults: mountResults, mountLessonWork: mountLessonWork, mountHandIns: mountHandIns, openWorkView: openWorkView, openMarking: openMarking, workPdf: workPdf, textBlocks: textBlocks
   };
 })(window);

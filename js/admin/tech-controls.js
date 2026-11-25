@@ -57,6 +57,10 @@
     if (!document.getElementById('tcx-css')) { var st = document.createElement('style'); st.id = 'tcx-css'; st.textContent = CSS; document.head.appendChild(st); }
     var students = o.students || [], saved = null, draft = null, dead = false, q = '', filter = 'all', busy = false;
     var ref = db.collection('techSettings').doc('advancedIde');
+    /* Publishing practice projects: one switch, saved straight away to techSettings/portal.practicePublish
+       (firestore.rules techPracticePublishOk reads it). Class work is switched on per lesson or class by coaches. */
+    var portalRef = db.collection('techSettings').doc('portal'), pubOn = null;
+    var unsubPortal = portalRef.onSnapshot(function (s) { pubOn = s.exists && s.data().practicePublish === true; if (draft && !busy) paint(); }, function () { });
     var unsub = ref.onSnapshot(function (s) {
       var d = s.exists ? s.data() : {};
       saved = { enabled: d.enabled === true, levels: (d.levels || []).filter(function (l) { return LEVELS.indexOf(l) > -1; }), students: (d.students || []).slice(), updatedAt: d.updatedAt, updatedByName: d.updatedByName || '' };
@@ -98,7 +102,9 @@
       var per = {}; LEVELS.forEach(function (l) { per[l] = all.filter(function (s) { return levelOf(s) === l; }).length; });
       var admitted = all.filter(function (s) { return s.admittedFrom; }).length;
       el.innerHTML = '<div class="tcx">' +
-        '<div class="cr-bar"><div><h3>Controls</h3><div class="cr-sub">Decide which builders see the Advanced Paisley IDE. It stays hidden from everyone until you switch it on.</div></div></div>' +
+        '<div class="cr-bar"><div><h3>Controls</h3><div class="cr-sub">Decide which builders see the Advanced Paisley IDE, and whether builders may ask to publish their practice projects.</div></div></div>' +
+        '<div class="tcx-card tcx-head"><span class="ic"><i class="fas fa-globe"></i></span><div class="t"><b>Publishing practice projects</b><span>Builders get an Ask to publish button on their Practice lab and Advanced IDE projects (Python, Java, C, C++, PHP and web pages). Nothing goes public until you or their coach approve it in Showcase or Practice; then they get a link to share. Class work is switched on per lesson or per class by coaches.</span></div>' +
+          '<label class="tcx-switch"><input type="checkbox" id="tcxPub"' + (pubOn ? ' checked' : '') + (pubOn === null ? ' disabled' : '') + ' aria-label="Let builders ask to publish practice projects"> <span>' + (pubOn ? 'On' : 'Off') + '</span></label></div>' +
         '<div class="tcx-card tcx-head"><span class="ic"><i class="fas fa-terminal"></i></span><div class="t"><b>Advanced Paisley IDE</b><span>Python, Java, C, C++, PHP and the web, with real code runs. Builders find it in Practice, on Home and in Code Lab practice.</span></div>' +
           '<label class="tcx-switch"><input type="checkbox" id="tcxOn"' + (draft.enabled ? ' checked' : '') + ' aria-label="Switch the Advanced IDE on"> <span>' + (draft.enabled ? 'On' : 'Off') + '</span></label></div>' +
         '<div class="tcx-card"><h4><i class="fas fa-layer-group"></i> By level</h4><p>Every active builder on a ticked level gets it, including builders who join that level later. Builders with no level count as Intermediate.</p>' +
@@ -121,6 +127,13 @@
     function shown() { return Array.prototype.map.call(el.querySelectorAll('[data-pick]'), function (i) { return i.dataset.pick; }); }
     function onChange(e) {
       var t = e.target;
+      if (t.id === 'tcxPub') {
+        var want = t.checked; t.disabled = true;
+        portalRef.set({ practicePublish: want, updatedAt: FV().serverTimestamp() }, { merge: true })
+          .then(function () { flash(want ? 'Builders can now ask to publish their practice projects.' : 'Publish requests from practice are off. Published projects stay up until you remove them.'); },
+            function (er) { t.checked = !want; t.disabled = false; flash('Could not save: ' + T.errMsg(er), true); });
+        return;
+      }
       if (t.id === 'tcxOn') draft.enabled = t.checked;
       else if (t.dataset.level) { var l = t.dataset.level; draft.levels = draft.levels.filter(function (x) { return x !== l; }); if (t.checked) draft.levels.push(l); }
       else if (t.dataset.pick) { var id = t.dataset.pick; draft.students = draft.students.filter(function (x) { return x !== id; }); if (t.checked) draft.students.push(id); }
@@ -151,7 +164,7 @@
     el.innerHTML = '<div class="cr-empty">Loading controls…</div>';
     return {
       setStudents: function (list) { students = list || []; if (!busy) paint(); },
-      destroy: function () { dead = true; unsub(); el.removeEventListener('change', onChange); el.removeEventListener('input', onInput); el.removeEventListener('click', onClick); }
+      destroy: function () { dead = true; unsub(); unsubPortal(); el.removeEventListener('change', onChange); el.removeEventListener('input', onInput); el.removeEventListener('click', onClick); }
     };
   }
 

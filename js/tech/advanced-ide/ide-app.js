@@ -159,34 +159,35 @@
     return monacoP;
   }
   function themes(monaco) {
+    /* The Paisley IDE palette: Black #05080B (base), Slate #0E1A24 (depth), Cyan #00B4F0 (accent), White (text + light). */
     monaco.editor.defineTheme('paisley-dark', {
       base: 'vs-dark', inherit: true,
       rules: [
-        { token: 'comment', foreground: '5F7A74', fontStyle: 'italic' }, { token: 'keyword', foreground: '7BCBC2' }, { token: 'string', foreground: 'F5C842' },
-        { token: 'number', foreground: 'F2A07B' }, { token: 'type', foreground: '8BD3E6' }, { token: 'type.identifier', foreground: '8BD3E6' },
-        { token: 'delimiter', foreground: 'A3B9B3' }, { token: 'tag', foreground: '55BFB3' }, { token: 'attribute.name', foreground: 'E8C872' },
-        { token: 'attribute.value', foreground: 'F5C842' }, { token: 'metatag', foreground: 'C5A3F0' }, { token: 'regexp', foreground: 'F28FAD' }
+        { token: 'comment', foreground: '5B7385', fontStyle: 'italic' }, { token: 'keyword', foreground: '00B4F0' }, { token: 'string', foreground: '9BE7C4' },
+        { token: 'number', foreground: 'FFB86B' }, { token: 'type', foreground: '7FDBFF' }, { token: 'type.identifier', foreground: '7FDBFF' },
+        { token: 'delimiter', foreground: '8FA3B3' }, { token: 'tag', foreground: '00B4F0' }, { token: 'attribute.name', foreground: 'A5E6FF' },
+        { token: 'attribute.value', foreground: '9BE7C4' }, { token: 'metatag', foreground: 'C6B3FF' }, { token: 'regexp', foreground: 'FF9DBB' }
       ],
       colors: {
-        'editor.background': '#0E1513', 'editor.foreground': '#D9E7E3', 'editorLineNumber.foreground': '#45605A', 'editorLineNumber.activeForeground': '#9FD9D1',
-        'editor.lineHighlightBackground': '#15201D', 'editor.lineHighlightBorder': '#15201D', 'editorCursor.foreground': '#55BFB3',
-        'editor.selectionBackground': '#245F5A99', 'editor.inactiveSelectionBackground': '#245F5A55', 'editor.findMatchHighlightBackground': '#F5C84233',
-        'editorIndentGuide.background1': '#1D2A27', 'editorIndentGuide.activeBackground1': '#2F4842', 'editorWidget.background': '#16211E', 'editorWidget.border': '#2A3E39',
-        'editorSuggestWidget.background': '#16211E', 'editorSuggestWidget.border': '#2A3E39', 'editorSuggestWidget.selectedBackground': '#245F5A', 'editorSuggestWidget.highlightForeground': '#55BFB3',
-        'editorHoverWidget.background': '#16211E', 'editorHoverWidget.border': '#2A3E39', 'scrollbarSlider.background': '#7BCBC222', 'scrollbarSlider.hoverBackground': '#7BCBC240',
-        'editorBracketMatch.background': '#245F5A66', 'editorBracketMatch.border': '#55BFB3', 'minimap.background': '#0E1513', 'editorGutter.background': '#0E1513',
-        'editorError.foreground': '#F0786A', 'editorWarning.foreground': '#E8A33D', 'input.background': '#0E1513', 'focusBorder': '#55BFB3'
+        'editor.background': '#05080B', 'editor.foreground': '#E8F1F6', 'editorLineNumber.foreground': '#3A5163', 'editorLineNumber.activeForeground': '#00B4F0',
+        'editor.lineHighlightBackground': '#0E1A24', 'editor.lineHighlightBorder': '#0E1A24', 'editorCursor.foreground': '#00B4F0',
+        'editor.selectionBackground': '#00B4F044', 'editor.inactiveSelectionBackground': '#00B4F022', 'editor.findMatchHighlightBackground': '#FFB86B33',
+        'editorIndentGuide.background1': '#122130', 'editorIndentGuide.activeBackground1': '#24455C', 'editorWidget.background': '#0E1A24', 'editorWidget.border': '#1D3446',
+        'editorSuggestWidget.background': '#0E1A24', 'editorSuggestWidget.border': '#1D3446', 'editorSuggestWidget.selectedBackground': '#00B4F033', 'editorSuggestWidget.highlightForeground': '#00B4F0',
+        'editorHoverWidget.background': '#0E1A24', 'editorHoverWidget.border': '#1D3446', 'scrollbarSlider.background': '#00B4F022', 'scrollbarSlider.hoverBackground': '#00B4F040',
+        'editorBracketMatch.background': '#00B4F033', 'editorBracketMatch.border': '#00B4F0', 'minimap.background': '#05080B', 'editorGutter.background': '#05080B',
+        'editorError.foreground': '#FF6B6B', 'editorWarning.foreground': '#FFB86B', 'input.background': '#05080B', 'focusBorder': '#00B4F0'
       }
     });
     monaco.editor.defineTheme('paisley-light', {
       base: 'vs', inherit: true,
       rules: [
-        { token: 'comment', foreground: '7D948F', fontStyle: 'italic' }, { token: 'keyword', foreground: '1E6B64', fontStyle: 'bold' }, { token: 'string', foreground: '9A6A00' },
-        { token: 'number', foreground: 'B4502B' }, { token: 'type', foreground: '1F6FA3' }, { token: 'tag', foreground: '1E6B64' }, { token: 'attribute.name', foreground: '9A6A00' }
+        { token: 'comment', foreground: '7A8C99', fontStyle: 'italic' }, { token: 'keyword', foreground: '0077A3', fontStyle: 'bold' }, { token: 'string', foreground: '1A7F5A' },
+        { token: 'number', foreground: 'B4501F' }, { token: 'type', foreground: '0E5A8A' }, { token: 'tag', foreground: '0077A3' }, { token: 'attribute.name', foreground: '8A5A00' }
       ],
       colors: {
-        'editor.background': '#FFFFFF', 'editor.lineHighlightBackground': '#F1F8F6', 'editorCursor.foreground': '#245F5A', 'editor.selectionBackground': '#7BCBC266',
-        'editorLineNumber.foreground': '#A7BAB5', 'editorLineNumber.activeForeground': '#245F5A', 'editorSuggestWidget.selectedBackground': '#DCEFEB', 'focusBorder': '#55BFB3'
+        'editor.background': '#FFFFFF', 'editor.foreground': '#05080B', 'editor.lineHighlightBackground': '#F0F7FB', 'editorCursor.foreground': '#0077A3', 'editor.selectionBackground': '#00B4F040',
+        'editorLineNumber.foreground': '#A9BAC6', 'editorLineNumber.activeForeground': '#0077A3', 'editorSuggestWidget.selectedBackground': '#DFF5FD', 'focusBorder': '#00B4F0'
       }
     });
   }
@@ -222,8 +223,11 @@
     return db.collection('techStudents').doc(uid).get().then(function (s) {
       if (s.exists && s.data().status === 'Active') {
         var st = s.data();
-        return db.collection('techSettings').doc('advancedIde').get().then(function (c) { return c.exists ? c.data() : null; }, function () { return null; }).then(function (cfg) {
-          return { uid: uid, role: 'student', name: st.name || '', coachId: st.coachId || '', skillLevel: st.skillLevel || '', ideAccess: ideAllowed(cfg, uid, st) };
+        return Promise.all([
+          db.collection('techSettings').doc('advancedIde').get().then(function (c) { return c.exists ? c.data() : null; }, function () { return null; }),
+          db.collection('techSettings').doc('portal').get().then(function (c) { return c.exists ? c.data() : {}; }, function () { return {}; })
+        ]).then(function (r) {
+          return { uid: uid, role: 'student', name: st.name || '', coachId: st.coachId || '', skillLevel: st.skillLevel || '', ideAccess: ideAllowed(r[0], uid, st), practicePublish: r[1].practicePublish === true };
         });
       }
       if (s.exists) return { uid: uid, role: 'pending', name: s.data().name || '', coachId: s.data().coachId || '' };
@@ -337,6 +341,8 @@
             '<button type="button" class="ai-btn icon hide-s" id="aiSplitBtn" title="Split editor (Ctrl+\\)"><i class="fas fa-table-columns"></i></button>' +
             '<button type="button" class="ai-btn icon" id="aiPrevBtn" title="Preview" hidden><i class="fas fa-display"></i></button>' +
             '<button type="button" class="ai-btn icon hide-s" id="aiPanelBtn" title="Show or hide the panel (Ctrl+J)"><i class="fas fa-terminal"></i></button>' +
+            '<button type="button" class="ai-btn ghost hide-s" id="aiShare" title="Share: ask to publish this project" hidden><i class="fas fa-globe"></i><span class="lbl">Share</span></button>' +
+            '<button type="button" class="ai-btn icon" id="aiTheme" title="Light or dark"><i class="fas fa-sun"></i></button>' +
             '<button type="button" class="ai-btn icon" id="aiFull" title="Full screen (F11)"><i class="fas fa-expand"></i></button>' +
             '<button type="button" class="ai-btn icon" id="aiExit" title="Back to Tech Studio"><i class="fas fa-arrow-right-from-bracket"></i></button>' +
           '</div>' +
@@ -539,9 +545,10 @@
             (P.canEdit ? '<button type="button" class="more" data-more aria-label="Upload actions"><i class="fas fa-ellipsis"></i></button>' : '') + '</div>';
         }).join('');
       }
-      body.innerHTML = '<div class="ai-tree" role="tree">' + (P.files.length || dirs.length ? items('', 0) : '<div class="ai-empty-side">No files yet. Use the buttons above to add one.</div>') + '</div>' +
+      body.innerHTML = (P.canEdit ? '<div class="ai-uprow"><button type="button" class="ai-btn ghost" data-side="upload"><i class="fas fa-upload"></i> Upload' + (canUpload() ? ' pictures, sounds or files' : ' files') + '</button></div>' : '') +
+        '<div class="ai-tree" role="tree">' + (P.files.length || dirs.length ? items('', 0) : '<div class="ai-empty-side">No files yet. Use the buttons above to add one.</div>') + '</div>' +
         (P.canEdit ? '<div class="ai-note" style="padding:.8rem .9rem 0">' + P.files.length + ' of ' + MAX_FILES + ' files. Double-click a file to rename it; right-click for more.' +
-          (canUpload() ? ' To add pictures or videos: make a folder (for example images), press its Upload button, or drag files from your computer onto this list. Click a picture to put it in your code.' : ' Drag code files from your computer onto this list to add them.') + '</div>' : '');
+          (canUpload() ? ' To add pictures, videos or sounds: press Upload, use a folder\u2019s Upload button, or drag files from your computer onto this list. Click a picture to put it in your code. Python, C, C++ and PHP can open them too, for example open("images/cat.png", "rb").' : ' Drag code files from your computer onto this list to add them.') + '</div>' : '');
     }
     function nodeMenu(node, x, y) {
       if (!P.canEdit) return;
@@ -685,8 +692,13 @@
           if (!/^(image|video|audio|font)\//.test(t)) { toast(f0.name + ': upload pictures, videos, sounds, fonts or code files.'); return; }
           if ((P.assets || []).length >= MAX_ASSETS) { toast('A project can hold ' + MAX_ASSETS + ' uploads.'); return; }
           if (f0.size > MAX_UP) { toast(f0.name + ' is over 50 MB.'); return; }
+          /* A picture must really be a picture: a script renamed cat.png never leaves the computer
+             (functions/upload-guard.js checks again on the server). */
+          return (g.CodeLab && g.CodeLab.checkUpload ? g.CodeLab.checkUpload(f0) : Promise.resolve({ ok: true, type: t })).then(function (chk) {
+          if (!chk.ok) { toast(chk.reason); return; }
+          t = chk.type || t;
           var f = f0;
-          if (!f0.type || f0.type === 'application/octet-stream') { try { f = new File([f0], f0.name, { type: t }); } catch (e) { } }
+          if (f0.type !== t) { try { f = new File([f0], f0.name, { type: t }); } catch (e) { } }
           var dir = target != null ? target : (/^image\//.test(t) ? 'images' : /^video\//.test(t) ? 'videos' : /^audio\//.test(t) ? 'sounds' : 'fonts');
           var n = cleanName((dir ? dir + '/' : '') + f.name), k = 1;
           while (assetTaken(n)) n = cleanName((dir ? dir + '/' : '') + f.name.replace(/(\.\w+)?$/, '-' + (++k) + '$1'));
@@ -699,6 +711,7 @@
             openDirs[dirOf(n)] = true; dirtyMeta = true; afterFiles(); saveNow(true);
             toast('Uploaded ' + baseOf(n) + '. Click it to put it in your code.');
           }).catch(function (er) { toast('Upload of ' + f.name + ' failed: ' + upError(er)); });
+          });
         });
       }, Promise.resolve());
     }
@@ -866,7 +879,7 @@
         body.querySelector('.ai-set').onchange = function () {
           S.theme = q('#sTheme').value; S.fontSize = Math.max(10, Math.min(28, +q('#sFont').value || 14)); S.tabSize = +q('#sTab').value;
           S.wordWrap = q('#sWrap').checked; S.minimap = q('#sMini').checked; S.autoSave = q('#sAuto').checked; S.liveInput = q('#sLive').checked; S.warm = q('#sWarm').checked;
-          writeSettings(S); applySettings();
+          writeSettings(S); applySettings(); paintTheme();
         };
       } else if (sideView === 'keys') {
         title.textContent = 'Keyboard shortcuts';
@@ -1073,7 +1086,8 @@
       tSys('run', 'fa-play', 'Running <b>' + esc(entry) + '</b> · ' + esc(langName(r)), new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       setRunning(true);
       var started = false;
-      runner.run({ lang: r, files: P.files.map(function (x) { return { name: x.name, content: x.content }; }), entry: entry, stdin: stdinText, live: live }, {
+      var binsP = r !== 'java' && g.CodeLab && g.CodeLab.binaryFiles && (P.assets || []).length ? g.CodeLab.binaryFiles(P.assets) : Promise.resolve([]);
+      binsP.then(function (bins) { return runner.run({ lang: r, files: P.files.map(function (x) { return { name: x.name, content: x.content }; }).concat(bins), entry: entry, stdin: stdinText, live: live }, {
         out: function (stream, text) { runText += text; tPrint(text, stream === 'stderr' ? 'err' : 'out'); },
         echo: function (text) { tPrint(text + '\n', 'echo'); },
         input: function () { askInput(); },
@@ -1082,7 +1096,7 @@
           if (p === 'compile') tSys('', 'fa-gears', runner.state('cpp') === 'ready' ? 'Compiling with Clang…' : 'Getting the C/C++ compiler ready (the first time takes a little while)…');
           if (p === 'remote') tSys('', 'fa-cloud-arrow-up', 'Sending your code to the Paisley code runner…');
         }
-      }).then(function (res) {
+      }); }).then(function (res) {
         setRunning(false);
         finishRun(res || {}, r, entry, (performance.now() - t0) / 1000);
       });
@@ -1336,7 +1350,8 @@
         files: (doc.codeFiles || []).map(function (f) { var n = cleanName(f.name) || 'untitled.txt'; return { name: n, lang: f.lang && L.LANGS[f.lang] ? f.lang : L.langOf(n, lang), content: String(f.content || '') }; }),
         folders: (doc.codeFolders || []).map(cleanName).filter(Boolean),
         assets: (doc.codeAssets || []).filter(function (a) { return a && a.name && /^https:\/\//.test(a.url || ''); }).map(function (a) { return Object.assign({}, a); }), entry: ide.entry || '', active: doc.codeActive || '',
-        canEdit: doc.studentId === me.uid && me.role === 'student', owner: doc.studentName || 'this builder', updatedMs: msOf(doc.updatedAt)
+        canEdit: doc.studentId === me.uid && me.role === 'student', owner: doc.studentName || 'this builder', updatedMs: msOf(doc.updatedAt),
+        pub: { state: doc.publishState || '', url: /^https:\/\//.test(doc.shareUrl || '') ? doc.shareUrl : '', note: doc.publishNote || '', by: doc.publishDecidedByName || '' }
       };
       saved = {}; P.files.forEach(function (f) { saved[f.name] = f.content; });
       Object.keys(models).forEach(function (n) { models[n].dispose(); }); models = {};
@@ -1346,6 +1361,7 @@
       q('#aiName').textContent = P.title; q('#aiName').disabled = !P.canEdit;
       q('#aiLangChip').innerHTML = L.icon(P.lang) + ' ' + esc(L.info(P.lang).label);
       q('#aiRo').hidden = P.canEdit;
+      syncShare();
       document.title = P.title + ' · Advanced Paisley IDE';
       if (!P.canEdit) banner('<i class="fas fa-eye"></i><span>You are viewing ' + esc(P.owner) + '’s project. You can run it; changes are not saved.</span>');
       else {
@@ -1543,6 +1559,45 @@
       });
     }
 
+    /* ---------- share: ask to publish (the Studio Desk switches it on; a coach or admin approves) ---------- */
+    function syncShare() {
+      var b = q('#aiShare'); if (!b) return;
+      var st = P && P.pub ? P.pub.state : '';
+      b.hidden = !(P && P.canEdit && (me.practicePublish || ['requested', 'approved', 'declined'].indexOf(st) > -1));
+      b.classList.toggle('on', st === 'approved');
+      b.title = st === 'approved' ? 'Published: copy your link' : st === 'requested' ? 'Publish request sent' : 'Share: ask to publish this project';
+    }
+    function shareBox() {
+      if (!P) return;
+      var pid = P.id;
+      (store.load ? store.load(pid).catch(function () { return null; }) : Promise.resolve(null)).then(function (d) {
+        if (d && P && P.id === pid) { P.pub = { state: d.publishState || '', url: /^https:\/\//.test(d.shareUrl || '') ? d.shareUrl : '', note: d.publishNote || '', by: d.publishDecidedByName || '' }; syncShare(); }
+        var st = P.pub.state, url = P.pub.url, body;
+        if (st === 'approved' && url) body = '<p>Published! Anyone with this link can see your project and press Run to try it. It updates as you keep working.</p><div class="ai-field"><input id="aiShareUrl" readonly value="' + esc(url) + '"><button type="button" class="ai-btn primary" data-sh="copy"><i class="fas fa-copy"></i> Copy</button></div><div class="row"><a class="ai-btn ghost" href="' + esc(url) + '" target="_blank" rel="noopener">Open</a><button type="button" class="ai-btn stop" data-sh="unpub">Take it down</button><button type="button" class="ai-btn ghost" data-no>Close</button></div>';
+        else if (st === 'approved') body = '<p>Making your link…</p><div class="row"><button type="button" class="ai-btn ghost" data-no>Close</button></div>';
+        else if (st === 'requested') body = '<p>Your publish request is with your coach and the Studio Desk. You will get a notification and a link as soon as it is approved.</p><div class="row"><button type="button" class="ai-btn ghost" data-sh="unpub">Cancel the request</button><button type="button" class="ai-btn primary" data-no>OK</button></div>';
+        else body = (st === 'declined' ? '<p><b>Not published yet.</b> ' + esc(P.pub.note || '') + (P.pub.by ? ' (' + esc(P.pub.by) + ')' : '') + '</p>' : '<p>Proud of it? Ask to publish it. Your coach or the Studio Desk checks it first, then you get a link to share with friends and family. Only your first name is shown, and anyone with the link can run your program.</p>') +
+          (me.practicePublish ? '<div class="row"><button type="button" class="ai-btn ghost" data-no>Not now</button><button type="button" class="ai-btn primary" data-sh="req"><i class="fas fa-paper-plane"></i> ' + (st === 'declined' ? 'I fixed it, ask again' : 'Ask to publish') + '</button></div>' : '<div class="row"><button type="button" class="ai-btn primary" data-no>OK</button></div>');
+        modal('<div class="ai-modal"><h3><i class="fas fa-globe" style="color:var(--brand)"></i> Share your project</h3>' + body + '</div>', {
+          init: function (bg, done) {
+            [].forEach.call(bg.querySelectorAll('[data-no]'), function (x) { x.onclick = done; });
+            bg.addEventListener('click', function (e) {
+              var b = e.target.closest('[data-sh]'); if (!b) return;
+              if (b.dataset.sh === 'copy') { var i = $('#aiShareUrl', bg); i.select(); (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject()).then(function () { b.innerHTML = '<i class="fas fa-check"></i> Copied'; }, function () { try { document.execCommand('copy'); b.innerHTML = '<i class="fas fa-check"></i> Copied'; } catch (x) { } }); return; }
+              b.disabled = true;
+              var want = b.dataset.sh === 'req' ? 'requested' : 'unpublished';
+              saveNow(true).then(function () { return store.save(pid, { publishState: want, publishRequestedAt: firebase.firestore.FieldValue.serverTimestamp() }); }).then(function () {
+                P.pub.state = want; if (want !== 'requested') P.pub.url = ''; syncShare(); done();
+                toast(want === 'requested' ? 'Sent. You will get a notification when it is approved.' : 'Done. The link no longer works.');
+              }, function (er) { b.disabled = false; toast('Could not send it: ' + errMsg(er)); });
+            });
+          }
+        });
+      });
+    }
+    function paintTheme() { var b = q('#aiTheme'); if (b) { b.innerHTML = '<i class="fas fa-' + (S.theme === 'light' ? 'moon' : 'sun') + '"></i>'; b.title = S.theme === 'light' ? 'Dark mode' : 'Light mode'; } }
+    paintTheme();
+
     /* ---------- events ---------- */
     app.addEventListener('click', function (e) {
       var t = e.target.closest('button,[data-file],[data-dir],[data-asset],[data-hit],[data-goto],[data-st],[data-cmd]'); if (!t || !app.contains(t)) return;
@@ -1581,6 +1636,8 @@
         case 'aiRun': run(); break;
         case 'aiStop': stop(); break;
         case 'aiFull': toggleFull(); break;
+        case 'aiTheme': S.theme = S.theme === 'light' ? 'dark' : 'light'; writeSettings(S); applySettings(); paintTheme(); break;
+        case 'aiShare': shareBox(); break;
         case 'aiSplitBtn': toggleSplit(); break;
         case 'aiPanelBtn': togglePanel(); break;
         case 'aiClosePanel': togglePanel(); break;

@@ -34,7 +34,7 @@
 
   var PDFLIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
   var CODELAB_URL = (function () {
-    try { return new URL('../tech/code-lab.js?v=tech17', document.currentScript.src).href; } catch (e) { return '/js/tech/code-lab.js?v=tech17'; }
+    try { return new URL('../tech/code-lab.js?v=tech22', document.currentScript.src).href; } catch (e) { return '/js/tech/code-lab.js?v=tech22'; }
   })();
   var MAX_CODE_BYTES = 700 * 1024;      /* a submission doc must stay well under Firestore's 1 MB */
   var ICT_RE = /(^|[^a-z])(ict|computing|computer\s*science|computer\s*studies|information\s*(and\s*)?communications?\s*technology|coding|programming)([^a-z]|$)/i;

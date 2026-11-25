@@ -339,3 +339,47 @@ test("anyone with a login can APPLY to coach, but nobody can make themselves Act
   await assertFails(asE("tutor1", "tutor1@x.com").doc("techBuilds/b1").get());
   await assertSucceeds(as("admin1").doc("techCoaches/mum").update({ status: "Active" }));
 });
+
+/* Publishing practice projects (Nov 2026): the builder may only ask, and only while the Studio Desk
+   has it on; the coach or an admin decides; guardians see a project once it is published. */
+test("practice publishing: ask only when switched on; staff decide; guardians see published work", async () => {
+  await seed(async (db) => {
+    await db.doc("techPractice/pub1").set({ studentId: "kid1", title: "Quiz game", type: "code", codeFiles: [{ name: "main.py", content: "print(1)" }] });
+    await db.doc("techSettings/portal").set({ practicePublish: false });
+  });
+  const ask = { publishState: "requested" };
+  await assertFails(as("kid1").doc("techPractice/pub1").update(ask));                      // switched off
+  await seed((db) => db.doc("techSettings/portal").set({ practicePublish: true }));
+  await assertSucceeds(as("kid1").doc("techPractice/pub1").update(ask));
+  await assertFails(as("kid1").doc("techPractice/pub1").update({ publishState: "approved" }));   // never self-approve
+  await assertFails(as("kid1").doc("techPractice/pub1").update({ shareUrl: "https://evil.example" }));
+  await assertFails(as("kid1").doc("techPractice/pub1").update({ publishNote: "ok", publishDecidedBy: "kid1" }));
+  await assertFails(as("kid1").doc("techPractice/new1").set({ studentId: "kid1", title: "x", type: "code", publishState: "approved" }));
+  await assertFails(as("mum").doc("techPractice/pub1").get());                               // not published yet
+  await assertFails(as("coach2").doc("techPractice/pub1").update({ publishState: "approved" }));  // not their builder
+  await assertFails(as("coach1").doc("techPractice/pub1").update({ publishState: "" }));                     // staff only approve, decline or take down
+  await assertSucceeds(as("coach1").doc("techPractice/pub1").update({ publishState: "approved", publishNote: "", publishDecidedBy: "coach1", publishDecidedByName: "Coach One" }));
+  await assertSucceeds(as("mum").doc("techPractice/pub1").get());                            // published: the family sees it
+  await assertFails(as("kid1").doc("techPractice/pub1").update(ask));                      // already approved
+  await assertSucceeds(as("kid1").doc("techPractice/pub1").update({ codeFiles: [{ name: "main.py", content: "print(2)" }] }));   // keeps working
+  await assertSucceeds(as("kid1").doc("techPractice/pub1").update({ publishState: "unpublished" }));   // takes it down
+  await seed((db) => db.doc("techSettings/portal").set({ practicePublish: false }));
+  await assertSucceeds(as("kid1").doc("techPractice/pub1").update({ title: "Quiz game 2" }));   // the switch only gates asking
+});
+
+/* Class work: Ask to publish needs publishing on for the lesson or its class. */
+test("class work publishing is switched on per lesson or per class", async () => {
+  await seed(async (db) => {
+    await db.doc("techCourses/cA").set({ name: "Coding", track: "beginner", allowPublish: false });
+    await db.doc("techLessons/lA").set({ courseId: "cA", status: "published", allowPublish: false });
+    await db.doc("techLessons/lB").set({ courseId: "cA", status: "published", allowPublish: true });
+    await db.doc("techLessonWork/kid1_lA").set({ studentId: "kid1", coachId: "coach1", lessonId: "lA", courseId: "cA", status: "Graded" });
+    await db.doc("techLessonWork/kid1_lB").set({ studentId: "kid1", coachId: "coach1", lessonId: "lB", courseId: "cA", status: "Graded" });
+  });
+  const ask = { publishState: "requested", publishRequestedAt: new Date(), updatedAt: new Date() };
+  await assertFails(as("kid1").doc("techLessonWork/kid1_lA").update(ask));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_lB").update(ask));
+  await seed((db) => db.doc("techCourses/cA").set({ name: "Coding", track: "beginner", allowPublish: true }));
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_lA").update(ask));      // on for the whole class
+  await assertSucceeds(as("kid1").doc("techLessonWork/kid1_lA").update({ publishState: "unpublished", updatedAt: new Date() }));
+});

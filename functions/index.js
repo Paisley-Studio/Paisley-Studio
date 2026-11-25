@@ -143,6 +143,7 @@ exports.onTechContentWritten          = tech.onTechContentWritten;
 exports.onTechLessonWritten           = tech.onTechLessonWritten;
 exports.submitTechQuiz                = tech.submitTechQuiz;
 exports.onTechLessonWorkWritten       = tech.onTechLessonWorkWritten;
+exports.onTechPracticeWritten         = tech.onTechPracticeWritten;
 exports.onTechLessonProgressWritten   = tech.onTechLessonProgressWritten;
 exports.onTechGroupWritten            = tech.onTechGroupWritten;
 exports.onTechGroupTaskWritten        = tech.onTechGroupTaskWritten;
@@ -161,6 +162,8 @@ exports.techShare                     = tech.techShare;
 // Advanced Paisley IDE: Java (and fallback) runs, forwarded to an isolated Judge0-compatible sandbox.
 const codeRunner = require("./code-runner");
 exports.runCode                       = codeRunner.runCode;
+const uploadGuard = require("./upload-guard");
+exports.checkTechUpload               = uploadGuard.checkTechUpload;
 
 const attendance = require("./attendance");
 exports.attendanceToday               = attendance.attendanceToday;

@@ -24,18 +24,42 @@
    version this browser saw), and each person's cursor shows to the others
    with their name, through collab.presence/{uid}.
 
+   Programs (Nov 2026): Python, Java, C, C++ and PHP files run in a Terminal,
+   on the Advanced IDE's engine (js/tech/advanced-ide/ide-runner.js, loaded on
+   the first run). A project changes as soon as it holds a program file: a
+   Run picker and the Terminal appear (beside the Preview when there is a web
+   page too). Input: the page cannot pause a program, so when one asks for
+   input the terminal asks the builder and runs it again with every answer so
+   far, with the same random seed. Errors get a plain-English tip and a Go to
+   line button (PaisleyLangs.explain). Uploaded pictures and sounds are real
+   files for the program. Java goes to the runCode function.
+
+   Look: the Paisley IDE palette (Black #05080B, Slate #0E1A24, Cyan #00B4F0,
+   White), dark or light (the sun/moon button, kept per browser), a welcome
+   that lifts blur-to-sharp when the editor is ready, file tabs, a status bar.
+
+   Never losing work: every change is also kept in localStorage until the save
+   lands, saved when the tab is hidden or closed, and offered back ("Bring them
+   back") if it never reached the server.
+
+   Uploads: CodeLab.checkUpload reads a file's first bytes; a script renamed
+   cat.png, an SVG, or a picture hiding web code is refused before upload
+   (functions/upload-guard.js checks again on the server).
+
    Safety: the preview iframe has allow-scripts only (no allow-same-origin),
    so student code runs in a null origin and cannot reach the page, cookies
-   or Firestore.
+   or Firestore. Programs run in the runner's opaque-origin sandbox too.
 
    CodeLab.mount(host, { build, me, canEdit, onSave(payload) -> Promise,
                          uploadAsset(file) -> Promise<{ url, storagePath }>,
                          collab: { ref, presence, me: { uid, name } },
-                         mode: 'code' | 'doc', title,
+                         mode: 'code' | 'doc', title, draftKey,
                          advanced(button) })   adds an "Advanced IDE" button (Practice uses it)
      -> { destroy(), flush() -> Promise, state() }
    CodeLab.buildPreview(files, active, assets) -> html
    CodeLab.load() -> Promise   (warms the editor libraries)
+   CodeLab.checkUpload(file) -> Promise<{ ok, type, reason }>
+   CodeLab.starterCode(lang, name), CodeLab.isProgram(file), CodeLab.binaryFiles(assets)
 ========================================================= */
 (function (g) {
   'use strict';
@@ -48,17 +72,29 @@
   var MAX_ASSETS = 60;
   var MAX_ASSET_BYTES = 50 * 1024 * 1024;
   var UP_ACCEPT = 'image/*,video/*,audio/*,font/*,.ttf,.otf,.woff,.woff2,.webp,.heic,.mov,.mp4,.mp3,.wav';
-  var CODE_ACCEPT = '.html,.htm,.css,.js,.mjs,.json,.md,.txt';
+  var CODE_ACCEPT = '.html,.htm,.css,.js,.mjs,.json,.md,.txt,.csv,.py,.java,.c,.h,.cpp,.hpp,.cc,.php';
+  /* run: the language runs as a program (in the terminal) through the Advanced IDE's sandboxed
+     runner (js/tech/advanced-ide/ide-runner.js), loaded the first time a program file appears. */
   var LANGS = {
     html: { label: 'HTML', icon: 'fab fa-html5', color: '#E34F26', mode: 'htmlmixed' },
     css: { label: 'CSS', icon: 'fab fa-css3-alt', color: '#1572B6', mode: 'css' },
     js: { label: 'JavaScript', icon: 'fab fa-js', color: '#E8B90C', mode: 'javascript' },
-    json: { label: 'JSON', icon: 'fas fa-code', color: '#8A6200', mode: { name: 'javascript', json: true } },
-    md: { label: 'Markdown', icon: 'fab fa-markdown', color: '#3D4A48', mode: 'markdown' },
-    txt: { label: 'Text', icon: 'fas fa-file-lines', color: '#5A6E6A', mode: 'text/plain' }
+    json: { label: 'JSON', icon: 'fas fa-code', color: '#C08A00', mode: { name: 'javascript', json: true } },
+    md: { label: 'Markdown', icon: 'fab fa-markdown', color: '#5B7385', mode: 'markdown' },
+    txt: { label: 'Text', icon: 'fas fa-file-lines', color: '#5B7385', mode: 'text/plain' },
+    py: { label: 'Python', icon: 'fab fa-python', color: '#3776AB', mode: 'python', run: 'python' },
+    java: { label: 'Java', icon: 'fab fa-java', color: '#E76F00', mode: 'text/x-java', run: 'java' },
+    c: { label: 'C', badge: 'C', color: '#5C6BC0', mode: 'text/x-csrc', run: 'c' },
+    cpp: { label: 'C++', badge: 'C++', color: '#00599C', mode: 'text/x-c++src', run: 'cpp' },
+    php: { label: 'PHP', icon: 'fab fa-php', color: '#777BB4', mode: 'application/x-httpd-php', run: 'php' }
   };
-  /* The language's own icon in its usual colour: HTML orange-red, CSS blue, JavaScript yellow. */
-  function langIcon(lang) { var m = LANGS[lang] || LANGS.txt; return '<i class="' + m.icon + ' cl-li" style="color:' + m.color + '" aria-hidden="true"></i>'; }
+  function isProgram(f) { return !!f && !!(LANGS[f.lang] || {}).run && !/\.(h|hpp|hh|hxx)$/i.test(f.name); }
+  /* The language's own icon in its usual colour: HTML orange-red, CSS blue, JavaScript yellow, Python blue. */
+  function langIcon(lang) {
+    var m = LANGS[lang] || LANGS.txt;
+    if (m.badge) return '<span class="cl-li cl-badge" style="--c:' + m.color + '" aria-hidden="true">' + m.badge + '</span>';
+    return '<i class="' + m.icon + ' cl-li" style="color:' + m.color + '" aria-hidden="true"></i>';
+  }
   var COLORS = ['#E8590C', '#7048E8', '#1C7ED6', '#D6336C', '#2B8A3E', '#F59F00', '#0C8599', '#5F3DC4'];
 
   function langOf(name) {
@@ -68,15 +104,34 @@
     if (/\.(js|mjs|jsx)$/.test(lower)) return 'js';
     if (/\.json$/.test(lower)) return 'json';
     if (/\.md$/.test(lower)) return 'md';
-    if (/\.txt$/.test(lower)) return 'txt';
-    return 'html';
+    if (/\.py$/.test(lower)) return 'py';
+    if (/\.java$/.test(lower)) return 'java';
+    if (/\.(c|h)$/.test(lower)) return 'c';
+    if (/\.(cpp|cc|cxx|hpp|hh|hxx)$/.test(lower)) return 'cpp';
+    if (/\.php$/.test(lower)) return 'php';
+    /* Unknown endings (.txt, .csv, data files) open as plain text, never as a web page. */
+    return 'txt';
   }
   function defaultFile(lang, name) {
     if (lang === 'html') return { name: name || 'index.html', lang: 'html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>My project</title>\n</head>\n<body>\n  <h1>Hello, studio!</h1>\n</body>\n</html>\n' };
     if (lang === 'css') return { name: name || 'style.css', lang: 'css', content: 'body {\n  font-family: sans-serif;\n  background: #F1F9F7;\n  color: #263331;\n  padding: 2rem;\n}\n' };
     if (lang === 'js') return { name: name || 'script.js', lang: 'js', content: 'console.log("Code Lab is alive");\n' };
     if (lang === 'md') return { name: name || 'notes.md', lang: 'md', content: '# Notes\n\n' };
+    if (STARTERS[lang]) return { name: name || STARTER_NAMES[lang], lang: lang, content: starterCode(lang, name || STARTER_NAMES[lang]) };
     return { name: name || 'notes.txt', lang: lang, content: '' };
+  }
+  /* Every starter runs straight away: press Run and see what it does. */
+  var STARTER_NAMES = { py: 'main.py', java: 'Main.java', c: 'main.c', cpp: 'main.cpp', php: 'index.php' };
+  var STARTERS = {
+    py: 'name = input("What is your name? ")\nprint("Hello, " + name + "! Welcome to Python.")\n',
+    java: 'import java.util.Scanner;\n\npublic class %CLASS% {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        System.out.print("What is your name? ");\n        String name = in.nextLine();\n        System.out.println("Hello, " + name + "! Welcome to Java.");\n    }\n}\n',
+    c: '#include <stdio.h>\n\nint main(void) {\n    char name[50];\n    printf("What is your name? ");\n    scanf("%49s", name);\n    printf("Hello, %s! Welcome to C.\\n", name);\n    return 0;\n}\n',
+    cpp: '#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string name;\n    cout << "What is your name? ";\n    getline(cin, name);\n    cout << "Hello, " << name << "! Welcome to C++." << endl;\n    return 0;\n}\n',
+    php: '<?php\n$name = readline("What is your name? ");\necho "Hello, $name! Welcome to PHP.\\n";\n'
+  };
+  function starterCode(lang, name) {
+    var cls = baseOf(name || '').replace(/\.\w+$/, '').replace(/\W/g, '') || 'Main';
+    return String(STARTERS[lang] || '').replace('%CLASS%', cls);
   }
   function cleanName(s) {
     return String(s || '').trim().replace(/\\/g, '/').split('/').map(function (p) { return p.replace(/[^\w.\-]/g, '_').replace(/^\.+$/, ''); })
@@ -106,11 +161,72 @@
   function typeOfFile(f) {
     var ext = (/\.(\w+)$/.exec(String(f.name || '').toLowerCase()) || [])[1] || '', t = String(f.type || '').toLowerCase();
     if (ext === 'svg' || /svg/.test(t)) return 'svg';
-    if (/^(html?|css|js|mjs|json|md|txt)$/.test(ext)) return 'code';
+    if (/^(html?|css|js|mjs|json|md|txt|csv|py|java|c|h|cpp|cc|cxx|hpp|hh|php|in|dat)$/.test(ext)) return 'code';
     if (/^(image|video|audio|font)\//.test(t)) return t;
     return EXT_TYPES[ext] || '';
   }
   function reEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  /* ---------------------------------------------------------
+     Upload check: a picture must really be a picture.
+     The first bytes of a file say what it is, whatever its name
+     says. A script renamed cat.png, an SVG (which can carry code),
+     or a picture with web code hidden inside is refused before it
+     is uploaded. functions/upload-guard.js checks the same again on
+     the server and deletes anything that slips through.
+     checkUpload(file) -> Promise<{ ok, type, reason }>
+     --------------------------------------------------------- */
+  var SIGS = [
+    ['image/png', [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]], ['image/jpeg', [0xFF, 0xD8, 0xFF]], ['image/gif', 'GIF87a'], ['image/gif', 'GIF89a'],
+    ['image/bmp', 'BM'], ['image/x-icon', [0, 0, 1, 0]], ['video/webm', [0x1A, 0x45, 0xDF, 0xA3]], ['audio/ogg', 'OggS'], ['audio/flac', 'fLaC'],
+    ['audio/mpeg', 'ID3'], ['font/woff', 'wOFF'], ['font/woff2', 'wOF2'], ['font/otf', 'OTTO'], ['font/ttf', [0, 1, 0, 0]], ['font/ttf', 'true']
+  ];
+  function ascii(b, from, to) { var s = ''; for (var i = from; i < to && i < b.length; i++) s += String.fromCharCode(b[i]); return s; }
+  function startsWith(b, sig, at) {
+    at = at || 0;
+    var arr = typeof sig === 'string' ? sig.split('').map(function (c) { return c.charCodeAt(0); }) : sig;
+    for (var i = 0; i < arr.length; i++) if (b[at + i] !== arr[i]) return false;
+    return true;
+  }
+  function sniffBytes(b) {
+    for (var i = 0; i < SIGS.length; i++) if (startsWith(b, SIGS[i][1])) return SIGS[i][0];
+    if (startsWith(b, 'RIFF')) { var k = ascii(b, 8, 12); if (k === 'WEBP') return 'image/webp'; if (k === 'WAVE') return 'audio/wav'; if (k === 'AVI ') return 'video/x-msvideo'; }
+    if (ascii(b, 4, 8) === 'ftyp') {
+      var brand = ascii(b, 8, 12).toLowerCase();
+      if (/^avi[fs]/.test(brand)) return 'image/avif';
+      if (/^(hei[cxms]|hev[cxms]|mif1|msf1)/.test(brand)) return 'image/heic';
+      if (/^(m4a|m4b|f4a)/.test(brand)) return 'audio/mp4';
+      if (/^qt/.test(brand)) return 'video/quicktime';
+      if (/^3g/.test(brand)) return 'video/3gpp';
+      return 'video/mp4';
+    }
+    if (b[0] === 0xFF && (b[1] & 0xF6) === 0xF0) return 'audio/aac';
+    if (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0) return 'audio/mpeg';
+    return '';
+  }
+  /* Web code hidden in a file (a "polyglot"): refused whatever the file looks like at the start. */
+  var HIDDEN_CODE = /<script|<\?php|<html|<iframe|<svg|<object|<embed|javascript:/i;
+  function kindWord(t) { return { image: 'a picture', video: 'a video', audio: 'a sound', font: 'a font' }[String(t).split('/')[0]] || 'something else'; }
+  function readHead(f, n) {
+    var part = f.slice ? f.slice(0, n) : f;
+    if (part.arrayBuffer) return part.arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
+    return new Promise(function (res, rej) { var rd = new FileReader(); rd.onload = function () { res(new Uint8Array(rd.result)); }; rd.onerror = function () { rej(rd.error); }; rd.readAsArrayBuffer(part); });
+  }
+  function checkUpload(f) {
+    var claimed = typeOfFile(f);
+    if (claimed === 'svg') return Promise.resolve({ ok: false, reason: f.name + ': SVG pictures can carry code, so they cannot be uploaded. Save it as PNG or JPG and try again.' });
+    return readHead(f, 65536).then(function (b) {
+      var found = sniffBytes(b);
+      if (!found) return { ok: false, reason: f.name + ' is not a real picture, video, sound or font (what is inside does not match its name), so it was not uploaded.' };
+      var fk = found.split('/')[0], ck = claimed ? claimed.split('/')[0] : '';
+      /* mp4, webm and ogg hold sound or video, so either name is honest. */
+      var av = /^(audio|video)$/.test(fk) && /^(audio|video)$/.test(ck) && /(mp4|webm|ogg|quicktime|3gpp|matroska|x-m4a)/.test(found + ' ' + claimed);
+      if (ck && ck !== fk && !av) return { ok: false, reason: f.name + ' is named like ' + kindWord(claimed) + ' but it is really ' + kindWord(found) + '. Upload the real file.' };
+      var text = ''; for (var i = 0; i < b.length; i += 8192) text += String.fromCharCode.apply(null, b.subarray(i, Math.min(b.length, i + 8192)));
+      if (HIDDEN_CODE.test(text)) return { ok: false, reason: f.name + ' has web code hidden inside it, so it was not uploaded.' };
+      return { ok: true, type: ck === fk && claimed ? claimed : (av && claimed ? claimed : found) };
+    }, function () { return { ok: false, reason: 'Could not read ' + f.name + '.' }; });
+  }
 
   /* ---------------------------------------------------------
      Libraries (lazy)
@@ -119,10 +235,11 @@
   var EMMET_URL = 'https://cdn.jsdelivr.net/npm/@emmetio/codemirror-plugin@1.2.4/dist/browser.min.js';
   var CM_SCRIPTS = [
     ['mode/xml/xml.min.js', 'mode/javascript/javascript.min.js', 'mode/css/css.min.js', 'mode/markdown/markdown.min.js',
+      'mode/python/python.min.js', 'mode/clike/clike.min.js',
       'addon/hint/show-hint.min.js', 'addon/edit/closetag.min.js', 'addon/edit/closebrackets.min.js', 'addon/edit/matchbrackets.min.js',
       'addon/fold/xml-fold.min.js', 'addon/selection/active-line.min.js', 'addon/comment/comment.min.js', 'addon/search/searchcursor.min.js'],
     ['mode/htmlmixed/htmlmixed.min.js', 'addon/hint/xml-hint.min.js', 'addon/hint/css-hint.min.js', 'addon/hint/javascript-hint.min.js', 'addon/hint/anyword-hint.min.js', 'addon/edit/matchtags.min.js'],
-    ['addon/hint/html-hint.min.js']
+    ['addon/hint/html-hint.min.js', 'mode/php/php.min.js']
   ];
   function loadScript(src) {
     return new Promise(function (res, rej) {
@@ -149,6 +266,70 @@
       .catch(function (e) { libs = null; throw e; });
     return libs;
   }
+
+  /* ---------------------------------------------------------
+     Running programs (Python, Java, C, C++, PHP)
+     The same engine as the Advanced IDE: a sandboxed, opaque-origin
+     iframe whose workers run Pyodide, Clang/WASI and php-wasm; Java
+     goes to the runCode function. One runner per page, shared by
+     every IDE on it, loaded the first time a program runs.
+     --------------------------------------------------------- */
+  var RUNTIME_JS = ['/js/tech/advanced-ide/ide-langs.js?v=3', '/js/tech/advanced-ide/ide-runner.js?v=3'];
+  var runtimeP = null, RUNNER = null, RUN_LISTENERS = [];
+  function loadRuntime() {
+    if (runtimeP) return runtimeP;
+    runtimeP = (g.PaisleyLangs ? Promise.resolve() : loadScript(RUNTIME_JS[0]))
+      .then(function () { return g.PaisleyRunner ? null : loadScript(RUNTIME_JS[1]); })
+      .then(function () {
+        if (!RUNNER) RUNNER = g.PaisleyRunner.create({ onProgress: function (lang, info) { RUN_LISTENERS.slice().forEach(function (fn) { try { fn(lang, info); } catch (e) { } }); } });
+        return RUNNER;
+      })
+      .catch(function (e) { runtimeP = null; throw e; });
+    return runtimeP;
+  }
+  /* Uploaded pictures and sounds become real files for the program (open("images/cat.png", "rb")). */
+  var BIN_CACHE = {};
+  function binaryFiles(list) {
+    var total = 0;
+    var want = (list || []).filter(function (a) {
+      if (!a || !/^https:\/\//.test(a.url || '') || !/^(image|audio)\//.test(a.type || '') || (a.size || 0) > 8 * 1048576) return false;
+      total += a.size || 0; return total <= 24 * 1048576;
+    });
+    return Promise.all(want.map(function (a) {
+      var p = BIN_CACHE[a.url] || (BIN_CACHE[a.url] = fetch(a.url, { credentials: 'omit' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).catch(function (e) { delete BIN_CACHE[a.url]; throw e; }));
+      return p.then(function (buf) { return { name: a.name, binary: true, bytes: new Uint8Array(buf.slice(0)) }; }, function () { return null; });
+    })).then(function (r) { return r.filter(Boolean); });
+  }
+  /* Words offered as you type in each program language, on top of the words already in the file. */
+  var PROG_WORDS = {
+    py: 'print input len range int str float bool list dict set tuple def return if elif else for while in not and or import from as class self True False None try except finally raise with lambda pass break continue global append extend insert remove pop sort sorted reverse keys values items get split join strip lower upper replace format enumerate zip min max sum abs round open read write readlines random randint choice shuffle uniform math sqrt floor ceil pi time sleep isdigit isalpha startswith endswith find count __name__ __main__',
+    java: 'public private protected static void main String System.out.println System.out.print System.out.printf class int double boolean char long float new return if else for while do switch case default break continue Scanner nextInt nextLine next nextDouble hasNextLine ArrayList HashMap import java.util.Scanner java.util.ArrayList java.util.HashMap java.util.Random length size add get put remove contains equals charAt substring toUpperCase toLowerCase Math.random Math.max Math.min Math.abs Math.pow Math.sqrt Integer.parseInt Double.parseDouble this extends implements interface try catch finally throw throws null true false final',
+    c: '#include stdio.h stdlib.h string.h math.h time.h printf scanf fgets puts putchar getchar int main void return char float double long short unsigned const if else for while do switch case default break continue struct typedef sizeof malloc calloc free strlen strcpy strcat strcmp NULL rand srand time sqrt pow abs',
+    cpp: '#include iostream string vector map set algorithm cmath using namespace std cout cin endl getline string vector push_back pop_back size empty begin end sort auto int main void return char float double long bool true false const if else for while do switch case break continue class struct public private protected new delete nullptr this rand srand time sqrt pow abs',
+    php: 'echo print function return if elseif else foreach for while do switch case break continue as array count strlen strtoupper strtolower str_replace explode implode trim isset empty unset true false null class new public private protected static readline fgets STDIN intval floatval rand mt_rand date in_array array_push array_keys json_encode json_decode printf sprintf'
+  };
+  PROG_WORDS.c = PROG_WORDS.c.split(' '); PROG_WORDS.cpp = PROG_WORDS.cpp.split(' '); PROG_WORDS.py = PROG_WORDS.py.split(' '); PROG_WORDS.java = PROG_WORDS.java.split(' '); PROG_WORDS.php = PROG_WORDS.php.split(' ');
+
+  /* ---------------------------------------------------------
+     Look: the Paisley IDE palette, dark or light, kept per browser.
+     Black #05080B base, Slate #0E1A24 depth, Cyan #00B4F0 accent,
+     White for text and the light theme.
+     --------------------------------------------------------- */
+  var THEME_KEY = 'pz-cl-theme';
+  function readTheme() { try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } }
+  function setTheme(t) {
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) { }
+    document.documentElement.setAttribute('data-cl-theme', t);
+    [].forEach.call(document.querySelectorAll('.cl-shell'), function (s) { s.setAttribute('data-theme', t); });
+    [].forEach.call(document.querySelectorAll('[data-clcmd="theme"]'), function (b) { themeButton(b, t); });
+  }
+  function themeButton(b, t) { b.innerHTML = '<i class="fas fa-' + (t === 'light' ? 'moon' : 'sun') + '"></i>'; b.title = t === 'light' ? 'Dark mode' : 'Light mode'; b.setAttribute('aria-label', b.title); }
+  /* The opening: the first IDE on a page gets the full welcome, later ones a short fade. */
+  var WELCOMED = false;
+  var REDUCED = !!(g.matchMedia && g.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsSet(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
+  function msOf(ts) { if (!ts) return 0; if (typeof ts === 'number') return ts; if (ts.toMillis) return ts.toMillis(); if (ts.seconds) return ts.seconds * 1000; return +new Date(ts) || 0; }
 
   /* HTML tags offered as you type a word on its own (d -> div): picking one writes the whole tag,
      opening and closing, with the cursor where the content goes (| marks it). Most used first. */
@@ -341,6 +522,7 @@
      The IDE
      --------------------------------------------------------- */
   var FULL = { key: '', at: 0 };   /* the last full-screen IDE, so a re-draw keeps it full screen */
+  var MOUNTS = 0;
   function mount(hostEl, opts) {
     if (!hostEl) throw new Error('CodeLab.mount: missing host element');
     injectStyle();
@@ -368,39 +550,62 @@
     var base = {}; files.forEach(function (f) { base[f.name] = f.content; });
 
     function upAccept() { return (opts.uploadAsset ? UP_ACCEPT + ',' : '') + CODE_ACCEPT; }
+    var theme = readTheme();
+    document.documentElement.setAttribute('data-cl-theme', theme);
+    var cinematic = !WELCOMED && !docMode && !REDUCED; WELCOMED = true;
     hostEl.innerHTML =
-      '<div class="cl-shell' + (docMode ? ' cl-docmode' : '') + '">' +
+      '<div class="cl-shell cl-booting' + (docMode ? ' cl-docmode' : '') + (cinematic ? ' cl-cine' : '') + '" data-theme="' + theme + '">' +
+        /* The welcome: painted at once, lifted when the editor is ready (blur to sharp, like the Advanced IDE). */
+        '<div class="cl-splash" aria-hidden="true"><div class="cl-sp-in">' +
+          '<div class="cl-sp-logo"><i class="fas fa-code"></i></div>' +
+          '<div class="cl-sp-k">Paisley Tech Studio</div>' +
+          '<div class="cl-sp-t"><span>Paisley</span> <span class="ac">VS Code</span></div>' +
+          '<div class="cl-sp-s">Your ideas. Your code. Let’s build.</div>' +
+          '<div class="cl-sp-bar"><i></i></div><div class="cl-sp-l">Opening the editor</div></div></div>' +
         '<div class="cl-head">' +
           (docMode ? '' : '<button type="button" class="cl-btn cl-treebtn" data-clcmd="tree" title="Files" aria-label="Show files"><i class="fas fa-folder-tree"></i></button>') +
-          (docMode ? '' : '<span class="cl-brand" title="Paisley VS Code"><i class="fas fa-code"></i><b>Paisley VS Code</b></span>') +
+          (docMode ? '' : '<span class="cl-brand" title="Paisley VS Code"><span class="lg"><i class="fas fa-code"></i></span><b>Paisley <span>VS Code</span></b></span>') +
           '<div class="cl-crumb" aria-live="polite"></div>' +
           '<div class="cl-people" aria-label="Who is here"></div>' +
           '<div class="cl-actions">' +
             /* Only where the page asks for it (Practice): opens the Advanced Paisley IDE. */
             (typeof opts.advanced === 'function' && !docMode && g.PaisleyIDEEntry ? g.PaisleyIDEEntry.button({ compact: true, label: 'Advanced IDE' }).replace(' data-advanced-ide', ' data-clcmd="advanced"') : '') +
-            (docMode ? '' : '<button type="button" class="cl-btn" data-clcmd="layout" title="Side by side / stacked" aria-label="Change layout"><i class="fas fa-table-columns"></i></button>') +
-            '<button type="button" class="cl-btn cl-fullbtn" data-clcmd="full" title="Full screen" aria-label="Full screen" aria-pressed="false"><i class="fas fa-expand"></i></button>' +
+            (docMode ? '' : '<button type="button" class="cl-btn cl-icon" data-clcmd="layout" title="Side by side / stacked" aria-label="Change layout"><i class="fas fa-table-columns"></i></button>') +
+            '<button type="button" class="cl-btn cl-icon" data-clcmd="theme"></button>' +
+            '<button type="button" class="cl-btn cl-icon cl-fullbtn" data-clcmd="full" title="Full screen" aria-label="Full screen" aria-pressed="false"><i class="fas fa-expand"></i></button>' +
             (canEdit && !collab ? '<button type="button" class="cl-btn cl-save" data-clcmd="save"><i class="fas fa-floppy-disk"></i> Save</button>' : '') +
-            '<button type="button" class="cl-btn cl-run" data-clcmd="run" title="Run" aria-label="Run"><i class="fas fa-play"></i> Run</button>' +
+            /* What Run starts: the file you are looking at; the picker opens another one. */
+            (docMode ? '' : '<label class="cl-runwrap" hidden title="What Run starts"><i class="fas fa-file-code"></i><select class="cl-runsel" aria-label="File to run"></select></label>') +
+            '<button type="button" class="cl-btn cl-stop" data-clcmd="stop" title="Stop" hidden><i class="fas fa-stop"></i> Stop</button>' +
+            '<button type="button" class="cl-btn cl-run" data-clcmd="run" title="Run (Ctrl+Enter)" aria-label="Run"><i class="fas fa-play"></i> Run</button>' +
           '</div>' +
         '</div>' +
         '<div class="cl-body">' +
-          (docMode ? '' : '<aside class="cl-tree" aria-label="Project files"><div class="cl-tree-acts">' +
-            (canEdit ? '<button type="button" class="cl-btn" data-clcmd="add" title="New file: about.html, style.css, game.js"><i class="fas fa-file-circle-plus"></i> File</button>' +
+          (docMode ? '' : '<aside class="cl-tree" aria-label="Project files"><div class="cl-tree-h">Explorer</div><div class="cl-tree-acts">' +
+            (canEdit ? '<button type="button" class="cl-btn" data-clcmd="add" title="New file: main.py, about.html, style.css, game.js"><i class="fas fa-file-circle-plus"></i> File</button>' +
               '<button type="button" class="cl-btn" data-clcmd="folder" title="New folder, for example images or videos"><i class="fas fa-folder-plus"></i> Folder</button>' +
-              '<label class="cl-btn cl-uplabel" title="' + (opts.uploadAsset ? 'Upload pictures, videos, sounds or code files from your device' : 'Upload code files (HTML, CSS, JS) from your device') + '" style="margin:0" tabindex="0" role="button"><i class="fas fa-upload"></i> Upload<input type="file" class="cl-upin" multiple hidden accept="' + upAccept() + '"></label>' : '') +
+              '<label class="cl-btn cl-uplabel" title="' + (opts.uploadAsset ? 'Upload pictures, videos, sounds or code files from your device' : 'Upload code files from your device') + '" style="margin:0" tabindex="0" role="button"><i class="fas fa-upload"></i> Upload<input type="file" class="cl-upin" multiple hidden accept="' + upAccept() + '"></label>' : '') +
             '</div><div class="cl-tree-list"></div><div class="cl-tree-note"></div></aside>') +
-          '<div class="cl-edit-wrap"><div class="cl-suggest" role="status" hidden></div><div class="cl-edit-host"><textarea class="cl-fallback" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"' + (canEdit ? '' : ' readonly') + ' aria-label="Code"></textarea></div>' +
+          '<div class="cl-edit-wrap">' + (docMode ? '' : '<div class="cl-tabs" role="tablist" aria-label="Open files"></div>') + '<div class="cl-banner" role="status" hidden></div><div class="cl-suggest" role="status" hidden></div><div class="cl-edit-host"><textarea class="cl-fallback" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"' + (canEdit ? '' : ' readonly') + ' aria-label="Code"></textarea></div>' +
             '<div class="cl-meta"><span class="cl-lang"></span><span class="cl-status" role="status"></span></div></div>' +
-          '<div class="cl-preview-wrap"><iframe class="cl-preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer" title="Live preview"></iframe>' +
+          '<div class="cl-preview-wrap">' +
+            (docMode ? '' : '<div class="cl-otabs" role="tablist" hidden><button type="button" class="cl-otab" data-clcmd="otab" data-o="term" role="tab"><i class="fas fa-terminal"></i> Terminal</button><button type="button" class="cl-otab" data-clcmd="otab" data-o="prev" role="tab"><i class="fas fa-display"></i> Preview</button></div>') +
+            '<div class="cl-prevpane"><iframe class="cl-preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer" title="Live preview"></iframe>' +
             (docMode ? '' : '<details class="cl-console"><summary><i class="fas fa-terminal"></i> Console <span class="cl-count"></span></summary><div class="cl-log"></div></details>') + '</div>' +
+            (docMode ? '' : '<div class="cl-termpane" hidden><div class="cl-term" tabindex="0" aria-live="polite" aria-label="Program output"></div>' +
+              '<form class="cl-inrow" hidden><label class="cl-inq" for="clIn' + (++MOUNTS) + '"><i class="fas fa-keyboard"></i> Your program is waiting for you. Type your answer and press Enter.</label>' +
+              '<div class="cl-inline"><i class="fas fa-chevron-right"></i><input id="clIn' + MOUNTS + '" class="cl-in" autocomplete="off" spellcheck="false"><button type="submit" class="cl-btn cl-run">Send</button></div></form></div>') +
+          '</div>' +
         '</div>' +
       '</div>';
 
     var q = function (s) { return hostEl.querySelector(s); };
     var crumbEl = q('.cl-crumb'), langEl = q('.cl-lang'), statusEl = q('.cl-status'), frame = q('.cl-preview'), bodyEl = q('.cl-body'),
-      treeEl = q('.cl-tree-list'), peopleEl = q('.cl-people'), logEl = q('.cl-log'), countEl = q('.cl-count'), fallback = q('.cl-fallback');
+      treeEl = q('.cl-tree-list'), peopleEl = q('.cl-people'), logEl = q('.cl-log'), countEl = q('.cl-count'), fallback = q('.cl-fallback'),
+      tabsEl = q('.cl-tabs'), termEl = q('.cl-term'), bannerEl = q('.cl-banner');
+    themeButton(q('[data-clcmd="theme"]'), theme);
     var cm = null, docs = {}, applying = false;
+    var openTabs = [];
 
     /* ---------- status ---------- */
     var statusTimer = null;
@@ -446,13 +651,32 @@
         }).join('');
       }
       treeEl.innerHTML = '<div class="cl-node cl-dir cl-root' + (curFolder === '' ? ' on' : '') + '" data-dir=""><i class="fas fa-box-archive"></i> ' + esc(opts.title || 'My project') + '</div>' + itemsIn('');
-      var n = q('.cl-tree-note'); if (n) n.textContent = assets.length ? 'Click a picture or video to put it in your code.' : (opts.uploadAsset && canEdit ? 'Make a folder (for example images or videos), press its Upload button and pick files from your device. You can also drag files here.' : (canEdit ? 'Upload or drag HTML, CSS and JS files here.' : ''));
+      var n = q('.cl-tree-note'); if (n) n.textContent = assets.length ? 'Click a picture or video to put it in your code.' : (opts.uploadAsset && canEdit ? 'Make a folder (for example images or videos), press its Upload button and pick files from your device. You can also drag files here.' : (canEdit ? 'Upload or drag code files here: HTML, CSS, JavaScript, Python, Java, C, C++ or PHP.' : ''));
     }
     function renderCrumb() {
       var f = activeFile();
       crumbEl.innerHTML = f ? langIcon(f.lang) + ' ' + esc(f.name) : '';
-      langEl.textContent = f ? (LANGS[f.lang] || LANGS.txt).label + (cm && canEdit ? (f.lang === 'html' ? ' · Type a tag (d → div), Enter or Tab writes it' : '') + ' · Ctrl+Space for suggestions' + (f.lang === 'html' || f.lang === 'css' ? ' · Emmet: ul>li*3 then Tab' : '') : '') : '';
+      langEl.textContent = f ? (LANGS[f.lang] || LANGS.txt).label + (cm && canEdit ? (f.lang === 'html' ? ' · Type a tag (d → div), Enter or Tab writes it' : '') + ' · Ctrl+Space for suggestions' + (f.lang === 'html' || f.lang === 'css' ? ' · Emmet: ul>li*3 then Tab' : '') + (isProgram(f) ? ' · Ctrl+Enter runs it' : '') : '') : '';
+      renderTabs(); syncRunUi();
     }
+    /* Open files as tabs above the editor, like VS Code. */
+    function renderTabs() {
+      if (!tabsEl) return;
+      if (openTabs.indexOf(activeName) === -1 && file(activeName)) openTabs.push(activeName);
+      openTabs = openTabs.filter(function (n, i) { return file(n) && openTabs.indexOf(n) === i; });
+      tabsEl.innerHTML = openTabs.map(function (n) {
+        var f = file(n);
+        return '<button type="button" class="cl-tab' + (n === activeName ? ' on' : '') + '" role="tab" aria-selected="' + (n === activeName) + '" data-file="' + esc(n) + '" title="' + esc(n) + '">' + langIcon(f.lang) + '<span>' + esc(baseOf(n)) + '</span>' +
+          (openTabs.length > 1 ? '<span class="x" data-clnode="closetab" data-p="' + esc(n) + '" role="button" aria-label="Close ' + esc(n) + '"><i class="fas fa-xmark"></i></span>' : '') + '</button>';
+      }).join('');
+      var on = tabsEl.querySelector('.cl-tab.on'); if (on && on.scrollIntoView) try { on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) { }
+    }
+    function closeTab(n) {
+      var i = openTabs.indexOf(n); if (i === -1 || openTabs.length < 2) return;
+      openTabs.splice(i, 1);
+      if (activeName === n) { activeName = openTabs[Math.min(i, openTabs.length - 1)]; loadActive(); } else renderTabs();
+    }
+    function retab(from, to) { openTabs = openTabs.map(function (n) { return n === from ? to : n; }); }
 
     /* ---------- editor ---------- */
     function cmMode(f) { return (LANGS[f.lang] || LANGS.txt).mode; }
@@ -462,9 +686,14 @@
     }
     function loadActive() {
       var f = activeFile(); if (!f) return;
-      if (cm) { applying = true; cm.swapDoc(docFor(f)); applying = false; cm.setOption('readOnly', canEdit ? false : 'nocursor'); }
+      if (cm) {
+        applying = true; cm.swapDoc(docFor(f)); applying = false; cm.setOption('readOnly', canEdit ? false : 'nocursor');
+        /* Python, Java, C, C++ and PHP are written with four spaces; web files with two. */
+        var four = !!(LANGS[f.lang] || {}).run; cm.setOption('indentUnit', four ? 4 : 2); cm.setOption('tabSize', four ? 4 : 2);
+      }
       else { fallback.value = f.content; fallback.scrollTop = 0; }
       renderTree(); renderCrumb(); paintRemoteCursors(); schedulePreview();
+      if (!docMode) warmFor(f);
     }
     /* Suggestions must sit inside the IDE while it is full screen, or the browser hides them. */
     function hintBox() { var sh = hostEl.querySelector('.cl-shell'); return sh && sh.classList.contains('cl-full') ? sh : document.body; }
@@ -474,20 +703,22 @@
       try {
         if ((r = pathHint(ed))) return r;
         if (inner === 'xml' && !/tag|attribute|string|comment/.test(tok.type || '') && (r = tagHint(ed, projectItems))) return r;
-        if (inner === 'xml' && CMg.hint.html) r = CMg.hint.html(ed, o);
+        var lang = (activeFile() || {}).lang;
+        if (PROG_WORDS[lang] && inner !== 'xml' && inner !== 'css' && inner !== 'javascript') r = jsHint(ed, PROG_WORDS[lang]);
+        else if (inner === 'xml' && CMg.hint.html) r = CMg.hint.html(ed, o);
         else if (inner === 'css' && CMg.hint.css) r = CMg.hint.css(ed, o);
         else if (inner === 'javascript') r = jsHint(ed);
       } catch (e) { r = null; }
       if (!r || !r.list || !r.list.length) r = CMg.hint.anyword ? CMg.hint.anyword(ed, o) : null;
       return r;
     }
-    function jsHint(ed) {
+    function jsHint(ed, words) {
       var cur = ed.getCursor(), line = ed.getLine(cur.line), end = cur.ch, start = end;
-      while (start && /[\w$.]/.test(line.charAt(start - 1))) start--;
+      while (start && /[\w$.#]/.test(line.charAt(start - 1))) start--;
       var word = line.slice(start, end); if (!word) return null;
       var seen = {}, list = [];
       var own = (ed.getValue().match(/[A-Za-z_$][\w$]{2,}/g) || []);
-      JS_WORDS.concat(own).forEach(function (w) { if (!seen[w] && w !== word && w.toLowerCase().indexOf(word.toLowerCase()) === 0) { seen[w] = 1; list.push(w); } });
+      (words || JS_WORDS).concat(own).forEach(function (w) { if (!seen[w] && w !== word && w.toLowerCase().indexOf(word.toLowerCase()) === 0) { seen[w] = 1; list.push(w); } });
       return { list: list.slice(0, 40), from: g.CodeMirror.Pos(cur.line, start), to: g.CodeMirror.Pos(cur.line, end) };
     }
     function startEditor(CMg) {
@@ -553,6 +784,7 @@
       if (inner === 'xml') go = (/[\w!]/.test(typed) && !/tag|attribute|string|comment/.test(tok.type || '') && !!tagHint(ed, projectItems)) || typed === '<' || (typed === ' ' && /^<\w/.test(ed.getLine(ed.getCursor().line).slice(0, ed.getCursor().ch).split('>').pop() || '')) || (/\w/.test(typed) && /tag|attribute/.test(tok.type || ''));
       else if (inner === 'css') go = /[\w-]/.test(typed) && !/comment/.test(tok.type || '');
       else if (inner === 'javascript' || lang === 'js') go = /[\w.$]/.test(typed) && !/comment|string/.test(tok.type || '');
+      else if (PROG_WORDS[lang]) go = /[\w.$#]/.test(typed) && !/comment|string/.test(tok.type || '') && !!jsHint(ed, PROG_WORDS[lang]) && jsHint(ed, PROG_WORDS[lang]).list.length > 0;
       if (go) ed.showHint({ hint: smartHint, container: hintBox(), completeSingle: false, closeCharacters: /[\s()\[\]{};:>,"']/ });
     }
     fallback.addEventListener('input', function () {
@@ -575,7 +807,38 @@
       setStatus(collab ? 'Syncing…' : 'Unsaved', '', true);
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(flushSave, collab ? 450 : 1500);
+      writeDraft();
       schedulePreview();
+    }
+    /* Work is never lost: every change is also kept in this browser until the save lands, and
+       offered back on the next visit if it never did (offline, the tab closed mid-save). */
+    var draftKey = canEdit && !collab && (opts.draftKey || build.id) ? 'pz-cl-draft-' + (opts.draftKey || build.id) : '', draftTimer = null;
+    function simpleFiles() { return files.map(function (f) { return { name: f.name, lang: f.lang, content: f.content }; }); }
+    function writeDraft() {
+      if (!draftKey) return;
+      if (draftTimer) clearTimeout(draftTimer);
+      draftTimer = setTimeout(function () { draftTimer = null; if (dirty) lsSet(draftKey, { at: Date.now(), files: simpleFiles(), folders: folders.slice(), active: activeName }); }, 400);
+    }
+    function clearDraft() { if (!draftKey) return; if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; } lsSet(draftKey, null); }
+    function offerDraft() {
+      if (!draftKey || !bannerEl) return;
+      var d = lsGet(draftKey);
+      if (!d || !Array.isArray(d.files) || !d.files.length) return;
+      if (JSON.stringify(d.files) === JSON.stringify(simpleFiles()) || (d.at || 0) <= msOf(build.codeAt || build.updatedAt)) { clearDraft(); return; }
+      var mins = Math.max(1, Math.round((Date.now() - d.at) / 60000));
+      bannerEl.innerHTML = '<i class="fas fa-clock-rotate-left"></i><span>You have changes from ' + (mins < 60 ? mins + ' min' : Math.round(mins / 60) + ' h') + ' ago that did not reach the server.</span>' +
+        '<button type="button" class="cl-btn cl-run" data-cldraft="1">Bring them back</button><button type="button" class="cl-btn" data-cldraft="0">Discard</button>';
+      bannerEl.hidden = false;
+      bannerEl.onclick = function (e) {
+        var b = e.target.closest('[data-cldraft]'); if (!b) return;
+        bannerEl.hidden = true;
+        if (b.dataset.cldraft !== '1') { clearDraft(); return; }
+        files = d.files.map(function (f) { var n = cleanName(f.name) || 'untitled.txt'; return { name: n, lang: f.lang || langOf(n), content: String(f.content || '') }; });
+        folders = (d.folders || folders).map(cleanName).filter(Boolean);
+        docs = {}; activeName = file(d.active) ? d.active : files[0].name; openTabs = [activeName];
+        loadActive(); dirty = true; flushSave();
+        setStatus('Your changes are back.', 'ok');
+      };
     }
     function payload() {
       return {
@@ -594,10 +857,12 @@
       saving = true; dirty = false;
       pending = (collab ? pushCollab() : Promise.resolve(save(payload()))).then(function () {
         saving = false; pending = null;
+        if (!dirty) clearDraft();
         setStatus(collab ? 'Saved for everyone' : 'Saved', 'ok');
       }).catch(function (e) {
         saving = false; dirty = true; pending = null;
-        setStatus('Not saved: ' + ((e && e.message) || e) + '. Retrying…', 'err', true);
+        writeDraft();
+        setStatus('Not saved: ' + ((e && e.message) || e) + '. Your work is kept in this browser. Retrying…', 'err', true);
         saveTimer = setTimeout(flushSave, 5000);
       });
       return pending;
@@ -770,6 +1035,225 @@
     }
     window.addEventListener('message', onMessage);
 
+    /* ---------- programs: Python, Java, C, C++, PHP ----------
+       A project changes as soon as it holds a program file: the Run picker shows what runs,
+       and a Terminal (beside the Preview when there is a web page too) shows the output.
+       This page cannot pause a program while it waits for typing, so when a program asks for
+       input the terminal asks the builder, then runs it again with every answer so far
+       (random numbers keep the same seed, so the run plays out the same way). */
+    var outMode = 'prev', lastProg = '', answers = [], runSeed = 0, running = false, runTok = 0, runFile = null;
+    function hasHtml() { return files.some(function (f) { return f.lang === 'html'; }); }
+    function programs() { return files.filter(isProgram); }
+    function mainProgram() { var p = programs(); return (p.filter(function (f) { return /^main\./i.test(baseOf(f.name)); })[0] || p[0] || null); }
+    /* What Run starts: the program you are looking at; a web file runs the page; otherwise the last program run, or main. */
+    function runTarget() {
+      var a = activeFile();
+      if (isProgram(a)) return a.name;
+      if (a && /^(html|css|js)$/.test(a.lang) && hasHtml()) return '@web';
+      if (isProgram(file(lastProg))) return lastProg;
+      var m = mainProgram();
+      return m ? m.name : '@web';
+    }
+    function setOut(mode) {
+      if (docMode) return;
+      outMode = mode;
+      var pp = q('.cl-prevpane'), tp = q('.cl-termpane');
+      if (pp) pp.hidden = mode !== 'prev';
+      if (tp) tp.hidden = mode !== 'term';
+      [].forEach.call(hostEl.querySelectorAll('.cl-otab'), function (b) { var on = b.dataset.o === mode; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+      if (mode === 'term' && termEl && !termEl.childNodes.length) termEmpty();
+    }
+    function syncRunUi() {
+      if (docMode) return;
+      var progs = programs(), web = hasHtml(), shell = q('.cl-shell');
+      shell.classList.toggle('cl-prog', progs.length > 0);
+      var ot = q('.cl-otabs'); if (ot) ot.hidden = !(progs.length && web);
+      if (progs.length && !web && outMode !== 'term') setOut('term');
+      else if (!progs.length && outMode !== 'prev') setOut('prev');
+      var wrap = q('.cl-runwrap'), sel = q('.cl-runsel');
+      if (!wrap || !sel) return;
+      wrap.hidden = !progs.length;
+      if (!progs.length) return;
+      var t = runTarget();
+      var opts2 = (web ? [['@web', 'Web page (preview)']] : []).concat(progs.map(function (f) { return [f.name, f.name]; }));
+      sel.innerHTML = opts2.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === t ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
+    }
+    function langName(r) { return { python: 'Python 3', java: 'Java', c: 'C', cpp: 'C++', php: 'PHP 8' }[r] || r; }
+    function termEmpty() {
+      if (!termEl) return;
+      termEl.innerHTML = '<div class="cl-term-empty"><b><i class="fas fa-terminal"></i> Your program’s output shows here.</b> Press <kbd>Run</kbd> (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>).<ul>' +
+        '<li>When your program asks a question (like <code>input()</code>), a box appears here. Type your answer and press Enter.</li>' +
+        '<li>Errors come with a tip in plain English and a button that jumps to the line.</li>' +
+        '<li>Pictures and sounds you upload are files your program can open, for example <code>images/cat.png</code>.</li></ul></div>';
+    }
+    function tPrint(text, cls) {
+      if (!termEl) return;
+      var e = termEl.querySelector('.cl-term-empty'); if (e) termEl.innerHTML = '';
+      var last = termEl.lastChild;
+      if (last && last.nodeType === 1 && last.tagName === 'SPAN' && last.className === 'cl-t ' + (cls || 'out')) last.textContent += text;
+      else { var s = document.createElement('span'); s.className = 'cl-t ' + (cls || 'out'); s.textContent = text; termEl.appendChild(s); }
+      if (termEl.childNodes.length > 3000) termEl.removeChild(termEl.firstChild);
+      termEl.scrollTop = termEl.scrollHeight;
+    }
+    function tSys(kind, icon, html) {
+      if (!termEl) return;
+      var e = termEl.querySelector('.cl-term-empty'); if (e) termEl.innerHTML = '';
+      var last = termEl.lastChild;
+      if (last && last.tagName === 'SPAN' && !/\n$/.test(last.textContent)) tPrint('\n');
+      var d = document.createElement('div'); d.className = 'cl-sys ' + (kind || ''); d.innerHTML = '<i class="fas ' + icon + '"></i><span>' + html + '</span>';
+      termEl.appendChild(d); termEl.scrollTop = termEl.scrollHeight;
+    }
+    function tHint(text, at, extra) {
+      if (!termEl || (!text && !extra)) return;
+      var d = document.createElement('div'); d.className = 'cl-hint';
+      d.innerHTML = '<i class="fas fa-lightbulb"></i><div>' + (text ? esc(text) : '') + (at ? ' <button type="button" class="cl-btn" data-clcmd="goto" data-f="' + esc(at.file) + '" data-l="' + (+at.line || 1) + '"><i class="fas fa-arrow-right"></i> Go to ' + esc(baseOf(at.file)) + ', line ' + (+at.line || 1) + '</button>' : '') + (extra || '') + '</div>';
+      termEl.appendChild(d); termEl.scrollTop = termEl.scrollHeight;
+    }
+    /* "File "x.py", line 5" / "in index.php:7" / "Main.java:12" / "main.c:4:2" */
+    function locate(text) {
+      var s = String(text || ''), m, hits = [];
+      var re = /File "([^"]+)", line (\d+)|in ([\w./\-]+\.php)(?: on line |:)(\d+)|\(([\w]+\.java):(\d+)\)|([\w./\-]+\.java):(\d+)|([\w./\-]+\.(?:c|cpp|cc|h|hpp)):(\d+):(\d+)/g;
+      while ((m = re.exec(s))) {
+        var fn = m[1] || m[3] || m[5] || m[7] || m[9], ln = +(m[2] || m[4] || m[6] || m[8] || m[10]);
+        if (fn && file(fn)) hits.push({ file: fn, line: ln });
+      }
+      return hits.length ? hits[hits.length - 1] : null;
+    }
+    function gotoLine(name, line) {
+      if (!file(name)) return;
+      if (activeName !== name) { activeName = name; curFolder = dirOf(name); loadActive(); }
+      if (!cm) return;
+      var ln = Math.max(0, Math.min(cm.lineCount() - 1, (+line || 1) - 1));
+      cm.setCursor({ line: ln, ch: 0 }); cm.scrollIntoView({ line: ln, ch: 0 }, 80); cm.focus();
+      var h = cm.addLineClass(ln, 'background', 'cl-errline');
+      setTimeout(function () { try { cm.removeLineClass(h, 'background', 'cl-errline'); } catch (e) { } }, 2600);
+    }
+    function setRunning(on) {
+      running = on;
+      var r = q('.cl-head .cl-run'), s = q('.cl-head .cl-stop');
+      if (r) r.hidden = on; if (s) s.hidden = !on;
+    }
+    function hideAsk() { var row = q('.cl-inrow'); if (row) row.hidden = true; }
+    function askAnswer() {
+      var row = q('.cl-inrow'), inp = q('.cl-in'); if (!row) return;
+      row.hidden = false; inp.value = ''; setOut('term');
+      setTimeout(function () { try { inp.focus(); } catch (e) { } }, 30);
+      termEl.scrollTop = termEl.scrollHeight;
+    }
+    function doRun() {
+      var t = runTarget();
+      if (t === '@web' || !file(t)) { previewPage = null; setOut('prev'); renderPreview(true); setStatus('Running', 'ok'); return; }
+      runProgram(file(t), false);
+    }
+    function runProgram(f, again) {
+      if (!f || docMode) return;
+      runTok++;
+      if (running && RUNNER) { try { RUNNER.stop(); } catch (e) { } }
+      var tok = runTok, key = LANGS[f.lang].run, starved = false, out = '', javaOut = [];
+      lastProg = f.name; runFile = f.name;
+      if (!again) { answers = []; runSeed = Date.now(); }
+      if (canEdit && dirty) flushSave();
+      hideAsk(); setOut('term');
+      termEl.innerHTML = '';
+      tSys('run', 'fa-play', 'Running <b>' + esc(f.name) + '</b> · ' + esc(langName(key)) + (answers.length ? ' · with your ' + (answers.length === 1 ? 'answer' : answers.length + ' answers') : ''));
+      setRunning(true);
+      loadRuntime().then(function (R) {
+        if (tok !== runTok) return;
+        var st = key === 'java' ? 'ready' : R.state(key === 'c' ? 'cpp' : key);
+        if (st !== 'ready' && !again) tSys('', 'fa-cloud-arrow-down', key === 'python' ? 'Getting Python ready. The first time takes a little while (about 12 MB), then it is quick.' : key === 'php' ? 'Getting PHP ready. The first time takes a little while.' : key === 'java' ? '' : 'Getting the C/C++ compiler ready. The first time takes a little while.');
+        return (key === 'java' ? Promise.resolve([]) : binaryFiles(assets)).then(function (bins) {
+          if (tok !== runTok) return;
+          return R.run({ lang: key, files: files.map(function (x) { return { name: x.name, content: x.content }; }).concat(bins), entry: f.name, stdin: answers.length ? answers.join('\n') + '\n' : '', live: false, seed: runSeed }, {
+            out: function (s, t) {
+              if (tok !== runTok || starved) return;
+              if (key === 'java') { javaOut.push([s, t]); return; }
+              out += t; tPrint(t, s === 'stderr' ? 'err' : 'out');
+            },
+            echo: function (t) { if (tok === runTok && !starved) tPrint(t + '\n', 'echo'); },
+            starved: function () { starved = true; },
+            phase: function (p) {
+              if (tok !== runTok) return;
+              if (p === 'compile') tSys('', 'fa-gears', R.state('cpp') === 'ready' ? 'Compiling…' : 'Getting the C/C++ compiler ready (the first time takes a little while)…');
+              if (p === 'remote') tSys('', 'fa-cloud-arrow-up', 'Sending your code to the Paisley code runner…');
+            }
+          }).then(function (res) {
+            if (tok !== runTok) return;
+            res = res || {};
+            if (key === 'java') {
+              /* Java runs remotely with all its input at once: running out of input means it wants more. */
+              var all = javaOut.map(function (x) { return x[1]; }).join('');
+              if (/NoSuchElementException/.test(all) && /Scanner|System\.in/.test(files.filter(function (x) { return x.lang === 'java'; }).map(function (x) { return x.content; }).join('\n'))) starved = true;
+              javaOut.forEach(function (x) { if (!(starved && x[0] === 'stderr')) { out += x[1]; tPrint(x[1], x[0] === 'stderr' ? 'err' : 'out'); } });
+            }
+            setRunning(false);
+            finishProgram(res, f, key, starved, out);
+          });
+        });
+      }).catch(function (e) {
+        if (tok !== runTok) return;
+        setRunning(false);
+        tSys('bad', 'fa-triangle-exclamation', esc((e && e.message) || 'The code runner could not start.'));
+        tHint('Check your internet connection, then press Run again.');
+      });
+    }
+    function finishProgram(res, f, key, starved, out) {
+      var L = g.PaisleyLangs;
+      if (res.stopped) { tSys('bad', 'fa-stop', 'Stopped.'); return; }
+      if (starved && !res.failed && res.phase !== 'compile') {
+        tSys('ask', 'fa-keyboard', 'Your program is asking for something. Type it below and press Enter.');
+        askAnswer(); return;
+      }
+      if (res.notConfigured) {
+        tSys('bad', 'fa-cloud', 'Java could not run yet.');
+        tHint('Java runs on the Paisley code runner, a sealed server sandbox, and the Studio Desk has not switched it on yet. Python, C, C++, PHP and web pages run right here.');
+        return;
+      }
+      if (res.failed && key === 'java') {
+        tSys('bad', 'fa-cloud', 'Java could not run here.');
+        tHint(/not available on this page/i.test(res.message || '') ? 'Java runs on the Paisley code runner, which needs a Tech Studio sign-in. Read the code here, or ask the maker to show it to you running.' : (res.message || 'The Paisley code runner could not be reached. Check your connection and try again.'));
+        return;
+      }
+      if (res.failed) {
+        var offline = /download|network|fetch|load/i.test(res.message || '');
+        tSys('bad', 'fa-triangle-exclamation', offline ? esc(langName(key)) + ' could not be downloaded.' : esc(langName(key)) + ' stopped unexpectedly.');
+        tHint(offline ? 'Check your internet connection, then press Run again.' : 'It has been restarted with a clean slate' + (res.message ? ' (' + res.message + ')' : '') + '. Press Run to try again.');
+        return;
+      }
+      if (res.phase === 'compile') {
+        if (res.stderr) tPrint(res.stderr + (/\n$/.test(res.stderr) ? '' : '\n'), 'err');
+        var d = (res.diagnostics || []).filter(function (x) { return x.severity === 'error'; })[0] || (res.diagnostics || [])[0];
+        tSys('bad', 'fa-circle-xmark', 'Did not compile' + (d ? ': ' + esc(d.message) : '') + '.');
+        tHint((L && L.explain(f.lang, (d && d.message) || res.stderr)) || 'Fix the first error, then run again. Later errors often go away once the first one is fixed.', d && file(d.file) ? { file: d.file, line: d.line } : null);
+        return;
+      }
+      var ok = res.ok && !res.code;
+      if (ok) { tSys('ok', 'fa-circle-check', 'Finished.'); return; }
+      var at = res.file && res.line && file(res.file) ? { file: res.file, line: res.line } : locate(out);
+      tSys('bad', 'fa-circle-xmark', res.type && res.type !== 'runtime' && res.type !== 'crash' ? 'Stopped with ' + esc(res.type) + '.' : res.code ? 'Finished with exit code ' + res.code + '.' : 'The program stopped with an error.');
+      var hint = L ? L.explain(f.lang, out + '\n' + (res.message || '')) : '';
+      tHint(hint || (at ? 'Look at this line and the one above it.' : 'Read the red message from the bottom up: the last line says what went wrong.'), at);
+      if (at) gotoLine(at.file, at.line);
+    }
+    function stopRun() { if (running && RUNNER) RUNNER.stop(); hideAsk(); }
+    var inForm = q('.cl-inrow');
+    if (inForm) inForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = q('.cl-in').value, f = file(runFile);
+      if (!f) { hideAsk(); return; }
+      answers.push(String(v).slice(0, 2000));
+      runProgram(f, true);
+    });
+    function onRuntime(lang, info) { if (running && info && info.state === 'loading' && info.label) setStatus(info.label, '', true); else if (running && info && info.state === 'ready') setStatus(''); }
+    RUN_LISTENERS.push(onRuntime);
+    /* C and C++ compile in the tools worker, so opening a .c / .cpp file prepares the compiler at once and
+       Run is quick. Python and PHP start on the first Run (a second copy in the background would only cost memory). */
+    var warmed = {};
+    function warmFor(f) {
+      var key = f && (LANGS[f.lang] || {}).run; if ((key !== 'c' && key !== 'cpp') || warmed.cpp) return;
+      warmed.cpp = 1;
+      setTimeout(function () { if (dead) return; loadRuntime().then(function (R) { if (!dead) R.warm('cpp').catch(function () { }); }).catch(function () { }); }, 1200);
+    }
+
     /* ---------- files, folders, uploads ---------- */
     /* Questions are asked inside the IDE, not with prompt()/confirm(): those boxes make the browser leave full screen. */
     function dialog(msg, value, okLabel) {
@@ -794,7 +1278,7 @@
     function taken(n, except) { var low = n.toLowerCase(); return files.some(function (f) { return f !== except && f.name.toLowerCase() === low; }) || assets.some(function (a) { return a !== except && a.name.toLowerCase() === low; }); }
     function addFile(dir) {
       if (files.length >= MAX_FILES) { setStatus('A project can hold ' + MAX_FILES + ' files.', 'err'); return; }
-      askName('New file name, for example about.html, game.js or style.css' + (dir ? ' (it goes in ' + dir + '/)' : ''), '').then(function (n) { if (n) makeFile(n, dir); });
+      askName('New file name, for example main.py, about.html, game.js, style.css, Main.java or main.c' + (dir ? ' (it goes in ' + dir + '/)' : ''), '').then(function (n) { if (n) makeFile(n, dir); });
     }
     function makeFile(n, dir) {
       /* "images", "Videos" or "sounds" typed as a file name means a folder for uploads, not images.html. */
@@ -805,6 +1289,10 @@
       var lang = langOf(n), f = defaultFile(lang, n);
       if (lang === 'html') f.content = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>' + baseOf(n).replace(/\.\w+$/, '') + '</title>\n</head>\n<body>\n  \n</body>\n</html>\n';
       if (lang === 'css' || lang === 'js') f.content = '';
+      /* The first file of a program language gets a starter that runs; a second one starts empty
+         (a Java file always holds its class, or it cannot compile). */
+      if (STARTERS[lang]) f.content = lang === 'java' ? (files.some(function (x) { return x.lang === 'java'; }) ? 'public class ' + (baseOf(n).replace(/\.\w+$/, '').replace(/\W/g, '') || 'Helper') + ' {\n\n}\n' : starterCode('java', n))
+        : (files.some(function (x) { return x.lang === lang; }) || /\.(h|hpp|hh|hxx)$/i.test(n) ? '' : starterCode(lang, n));
       files.push(f); delete deleted[n]; activeName = n; loadActive(); structural();
       suggestLinks(f);
       if (cm) cm.focus();
@@ -864,6 +1352,7 @@
       var lang = langOf(n);
       deleted[f.name] = true; if (docs[f.name]) { docs[n] = docs[f.name]; delete docs[f.name]; }
       if (lang !== f.lang && docs[n]) delete docs[n];
+      retab(f.name, n); if (lastProg === f.name) lastProg = n;
       f.name = n; f.lang = lang; delete deleted[n];
       if (activeName === name) activeName = n;
       if (previewPage === name) previewPage = n;
@@ -883,6 +1372,7 @@
           map[f.name] = nn; deleted[f.name] = true; delete deleted[nn];
           if (docs[f.name]) { docs[nn] = docs[f.name]; delete docs[f.name]; }
           if (activeName === f.name) activeName = nn;
+          retab(f.name, nn);
           if (previewPage === f.name) previewPage = nn;
           f.name = nn;
         });
@@ -1096,9 +1586,14 @@
           if (t === 'svg') { setStatus(f0.name + ': SVG pictures cannot be uploaded. Save it as PNG or JPG and try again.', 'err', true); return; }
           if (!t) { setStatus(f0.name + ': upload pictures (PNG, JPG, GIF, WEBP), videos (MP4, WEBM), sounds (MP3, WAV) or fonts, or code files (HTML, CSS, JS).', 'err', true); return; }
           if (f0.size > maxUp) { setStatus(f0.name + ' is too big (' + Math.round(f0.size / 1048576) + ' MB). The limit is ' + maxUpMb + ' MB.', 'err', true); return; }
-          /* Some computers give no type for .webp, .heic, .mov or fonts: name it from the ending so the upload is allowed. */
+          setStatus('Checking ' + f0.name + '…', '', true);
+          /* What is inside must match the name: a script renamed cat.png never leaves the computer. */
+          return checkUpload(f0).then(function (chk) {
+          if (!chk.ok) { setStatus(chk.reason, 'err', true); return; }
+          /* The type stored is the one the file really is (some computers give none for .webp, .heic, .mov or fonts). */
           var f = f0;
-          if (!f0.type || f0.type === 'application/octet-stream') { try { f = new File([f0], f0.name, { type: t }); } catch (er) { f = f0; } }
+          if (f0.type !== chk.type) { try { f = new File([f0], f0.name, { type: chk.type }); } catch (er) { f = f0; } }
+          t = chk.type;
           var dir = target != null ? target : homeFor(t);
           var n = cleanName((dir ? dir + '/' : '') + f.name); var k = 1;
           while (taken(n)) { n = cleanName((dir ? dir + '/' : '') + f.name.replace(/(\.\w+)?$/, '-' + (++k) + '$1')); }
@@ -1108,6 +1603,7 @@
             delete deleted[n]; openFolder[dirOf(n)] = true; okCount++;
             return structural().then(function () { setStatus('Uploaded ' + baseOf(n) + '. Click it to put it in your code.', 'ok'); });
           }).catch(function (er) { setStatus('Upload of ' + f.name + ' failed: ' + upError(er), 'err', true); });
+          });
         });
       }, Promise.resolve()).then(function () { if (okCount > 1) setStatus('Added ' + okCount + ' files.', 'ok'); });
     }
@@ -1165,7 +1661,11 @@
       if (b.dataset.clcmd) {
         var cmd = b.dataset.clcmd;
         if (cmd === 'save') flushSave();
-        else if (cmd === 'run') { previewPage = null; renderPreview(true); setStatus('Running', 'ok'); }
+        else if (cmd === 'run') doRun();
+        else if (cmd === 'stop') stopRun();
+        else if (cmd === 'theme') setTheme(readTheme() === 'light' ? 'dark' : 'light');
+        else if (cmd === 'otab') setOut(b.dataset.o === 'term' ? 'term' : 'prev');
+        else if (cmd === 'goto') gotoLine(b.dataset.f, b.dataset.l);
         else if (cmd === 'layout') bodyEl.classList.toggle('cl-stacked');
         else if (cmd === 'full') toggleFull();
         else if (cmd === 'tree') hostEl.querySelector('.cl-shell').classList.toggle('cl-tree-open');
@@ -1179,6 +1679,7 @@
         e.stopPropagation();
         var p = b.dataset.p, a = b.dataset.clnode;
         if (a === 'useasset') useAsset(p);
+        else if (a === 'closetab') closeTab(p);
         else if (!canEdit) return;
         else if (a === 'rename') renameFile(p);
         else if (a === 'renamedir') renameFolder(p);
@@ -1239,15 +1740,39 @@
     var fullKey = (collab && collab.ref && collab.ref.path) || build.id || opts.title || '';
     if (FULL.key && FULL.key === fullKey && Date.now() - FULL.at < 2500) { FULL.key = ''; setFull(true); }
 
-    function onLeave(e) { if (dirty && canEdit) { flushSave(); e.preventDefault(); e.returnValue = ''; } }
+    function onLeave(e) { if (dirty && canEdit) { writeDraftNow(); flushSave(); e.preventDefault(); e.returnValue = ''; } }
     window.addEventListener('beforeunload', onLeave);
+    /* Leaving the tab, closing the laptop or switching app: save now, and keep a copy here. */
+    function writeDraftNow() { if (draftKey && dirty) lsSet(draftKey, { at: Date.now(), files: simpleFiles(), folders: folders.slice(), active: activeName }); }
+    function onHide() { if (document.visibilityState === 'hidden' && dirty && canEdit) { writeDraftNow(); flushSave(); } }
+    function onPageHide() { if (dirty && canEdit) { writeDraftNow(); flushSave(); } }
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+    var runSel = q('.cl-runsel');
+    if (runSel) runSel.addEventListener('change', function () {
+      var v = runSel.value;
+      if (v === '@web') { var pg = file('index.html') || files.filter(function (x) { return x.lang === 'html'; })[0]; if (pg) { activeName = pg.name; loadActive(); } }
+      else if (file(v)) { activeName = v; curFolder = dirOf(v); loadActive(); }
+    });
+    hostEl.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !(e.target.closest && e.target.closest('.cl-inrow,.cl-dlg'))) { e.preventDefault(); doRun(); }
+    });
 
     /* ---------- boot ---------- */
     renderTree(); loadActive();
     setTimeout(renderPreview, 80);
     setStatus('Loading the editor…', '', true);
-    load().then(function (CMg) { if (dead) return; startEditor(CMg); setStatus(''); })
-      .catch(function (e) { console.warn('Code Lab editor:', e); setStatus('Simple editor (the full editor could not load).', '', true); });
+    var shell0 = q('.cl-shell'), revealAt = Date.now() + (cinematic ? 1500 : 320);
+    function reveal() {
+      var wait = revealAt - Date.now();
+      if (wait > 0) { setTimeout(reveal, wait); return; }
+      if (dead || !shell0) return;
+      shell0.classList.add('cl-ready'); shell0.classList.remove('cl-booting');
+      setTimeout(function () { var sp = shell0.querySelector('.cl-splash'); if (sp) sp.remove(); if (cm) cm.refresh(); }, 700);
+    }
+    setTimeout(reveal, 8000);   /* never stuck behind the welcome, even if the editor library hangs */
+    load().then(function (CMg) { if (dead) return; startEditor(CMg); setStatus(''); reveal(); offerDraft(); })
+      .catch(function (e) { console.warn('Code Lab editor:', e); setStatus('Simple editor (the full editor could not load).', '', true); reveal(); offerDraft(); });
 
     return {
       flush: function () { return flushSave(); },
@@ -1256,13 +1781,18 @@
       destroy: function () {
         if (dead) return;
         if (dirty && canEdit) flushSave();
+        if (dirty && canEdit) writeDraftNow();
         dead = true;
-        [saveTimer, previewTimer, statusTimer, presTimer].forEach(function (t) { if (t) clearTimeout(t); });
+        [saveTimer, previewTimer, statusTimer, presTimer, draftTimer].forEach(function (t) { if (t) clearTimeout(t); });
         if (beat) clearInterval(beat);
         unsubs.forEach(function (u) { try { u(); } catch (e) { } });
         if (collab && collab.presence && canEdit && me.uid) collab.presence.doc(me.uid).delete().catch(function () { });
+        if (running && RUNNER) { runTok++; try { RUNNER.stop(); } catch (e) { } }
+        var li = RUN_LISTENERS.indexOf(onRuntime); if (li !== -1) RUN_LISTENERS.splice(li, 1);
         window.removeEventListener('message', onMessage);
         window.removeEventListener('beforeunload', onLeave);
+        document.removeEventListener('visibilitychange', onHide);
+        window.removeEventListener('pagehide', onPageHide);
         document.removeEventListener('fullscreenchange', onFsChange);
         if (isFull()) {
           document.documentElement.classList.remove('cl-noscroll');
@@ -1276,86 +1806,170 @@
     };
   }
 
-  /* ---------- Style ---------- */
+  /* ---------- Style ----------
+     The Paisley IDE palette (img/IDE-COLOR PALLETES.jpg): Black #05080B base, Slate #0E1A24 depth,
+     Cyan #00B4F0 accent, White for text and the light theme, and the black-to-cyan gradient. */
   var styled = false;
   function injectStyle() {
     if (styled) return; styled = true;
     var st = document.createElement('style');
     st.textContent = [
-      '.cl-shell{display:flex;flex-direction:column;border:1.5px solid var(--line,rgba(38,51,49,.12));border-radius:14px;overflow:hidden;background:#fff;position:relative}',
-      '.cl-head{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.4rem .5rem;background:var(--paper,#F1F9F7);border-bottom:1px solid var(--line,rgba(38,51,49,.12))}',
-      '.cl-brand{display:inline-flex;align-items:center;gap:.35rem;flex:none;padding:.22rem .6rem;border-radius:8px;background:var(--brand-deep,#245F5A);color:#fff;font-size:.74rem;font-weight:800;letter-spacing:.01em;white-space:nowrap}.cl-brand i{color:#F5C842}',
+      '.cl-shell{--k-bg:#05080B;--k-panel:#0E1A24;--k-panel2:#132636;--k-hover:rgba(0,180,240,.10);--k-on:rgba(0,180,240,.18);--k-line:rgba(255,255,255,.08);--k-line2:rgba(0,180,240,.32);--k-text:#E8F1F6;--k-muted:#8FA3B3;--k-faint:#5B7385;--k-accent:#00B4F0;--k-accent-text:#33C4F4;--k-term:#03060A;--k-err:#FF6B6B;--k-ok:#3DDC97;--k-warn:#FFB86B;--k-folder:#E8B04B;',
+      '  --t-kw:#00B4F0;--t-str:#9BE7C4;--t-num:#FFB86B;--t-com:#5B7385;--t-tag:#00B4F0;--t-attr:#A5E6FF;--t-def:#FFFFFF;--t-var2:#C3E8FF;--t-type:#7FDBFF;--t-prop:#C3E8FF;--t-op:#8FA3B3;--t-builtin:#FFD27A;--t-meta:#C6B3FF;',
+      '  display:flex;flex-direction:column;border:1px solid var(--k-line);border-radius:14px;overflow:hidden;background:var(--k-bg);color:var(--k-text);position:relative;box-shadow:0 10px 30px rgba(5,8,11,.18)}',
+      '.cl-shell[data-theme="light"]{--k-bg:#FFFFFF;--k-panel:#F3F8FB;--k-panel2:#E6F1F7;--k-hover:rgba(0,119,163,.07);--k-on:rgba(0,180,240,.16);--k-line:rgba(14,26,36,.12);--k-line2:rgba(0,150,200,.40);--k-text:#05080B;--k-muted:#4A5C6A;--k-faint:#8A9BA7;--k-accent:#00B4F0;--k-accent-text:#0077A3;--k-term:#F7FAFC;--k-err:#C62828;--k-ok:#1A7F5A;--k-warn:#9A5B00;--k-folder:#B7791F;',
+      '  --t-kw:#0077A3;--t-str:#1A7F5A;--t-num:#B4501F;--t-com:#7A8C99;--t-tag:#0077A3;--t-attr:#8A5A00;--t-def:#05080B;--t-var2:#0E4C6E;--t-type:#0E5A8A;--t-prop:#0E4C6E;--t-op:#4A5C6A;--t-builtin:#7A4A00;--t-meta:#6B3FA0;box-shadow:0 10px 30px rgba(14,26,36,.10)}',
+      /* the opening */
+      '.cl-splash{position:absolute;inset:0;z-index:40;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 38%,#0E1A24 0%,#05080B 68%);color:#fff;transition:opacity .6s ease,transform .7s cubic-bezier(.2,.7,.2,1),filter .6s;pointer-events:none}',
+      '.cl-shell[data-theme="light"] .cl-splash{background:radial-gradient(ellipse at 50% 38%,#E3F6FD 0%,#FFFFFF 70%);color:#05080B}',
+      '.cl-sp-in{text-align:center;padding:0 1rem}',
+      '.cl-sp-logo{width:54px;height:54px;margin:0 auto 1rem;border-radius:16px;display:grid;place-items:center;background:linear-gradient(135deg,#0E1A24,#00B4F0);color:#fff;font-size:1.3rem;box-shadow:0 0 0 1px rgba(0,180,240,.35),0 10px 30px rgba(0,180,240,.25);animation:clPop .6s cubic-bezier(.2,.7,.2,1) both}',
+      '.cl-sp-k{font-size:.64rem;font-weight:800;letter-spacing:.3em;text-transform:uppercase;color:#7FDBFF;animation:clRise .6s .1s both}.cl-shell[data-theme="light"] .cl-sp-k{color:#0077A3}',
+      '.cl-sp-t{margin:.45rem 0 0;font-size:clamp(1.3rem,3.4vw,2.1rem);font-weight:800;letter-spacing:.02em;line-height:1.1}.cl-sp-t span{display:inline-block;animation:clRise .7s .18s both}.cl-sp-t .ac{color:#00B4F0;animation-delay:.32s}.cl-shell[data-theme="light"] .cl-sp-t .ac{color:#0077A3}',
+      '.cl-sp-s{margin:.6rem 0 0;font-size:.9rem;font-weight:600;font-style:italic;opacity:.75;animation:clRise .7s .45s both}',
+      '.cl-sp-bar{width:min(220px,60vw);height:3px;margin:1.2rem auto 0;border-radius:3px;background:rgba(0,180,240,.16);overflow:hidden;position:relative;animation:clRise .5s .55s both}',
+      '.cl-sp-bar i{position:absolute;top:0;bottom:0;width:36%;border-radius:3px;background:linear-gradient(90deg,#0E1A24,#00B4F0,#E6F8FF);animation:clSlide 1.1s ease-in-out infinite}',
+      '.cl-sp-l{margin-top:.55rem;font-size:.7rem;font-weight:700;opacity:.6;animation:clRise .5s .6s both}',
+      '.cl-shell:not(.cl-cine) .cl-sp-logo,.cl-shell:not(.cl-cine) .cl-sp-k,.cl-shell:not(.cl-cine) .cl-sp-t span,.cl-shell:not(.cl-cine) .cl-sp-s,.cl-shell:not(.cl-cine) .cl-sp-bar,.cl-shell:not(.cl-cine) .cl-sp-l{animation-duration:.2s;animation-delay:0s}',
+      '.cl-shell.cl-booting>.cl-head,.cl-shell.cl-booting>.cl-body{opacity:0;filter:blur(6px);transform:scale(.99)}',
+      '.cl-shell>.cl-head,.cl-shell>.cl-body{transition:opacity .6s ease,filter .6s ease,transform .7s cubic-bezier(.2,.7,.2,1)}',
+      '.cl-shell.cl-ready .cl-splash{opacity:0;transform:scale(1.05);filter:blur(6px)}',
+      '.cl-docmode .cl-splash{display:none}.cl-docmode.cl-booting>.cl-head,.cl-docmode.cl-booting>.cl-body{opacity:1;filter:none;transform:none}',
+      '@keyframes clRise{from{opacity:0;transform:translateY(12px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}',
+      '@keyframes clPop{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:none}}',
+      '@keyframes clSlide{0%{left:-36%}100%{left:100%}}',
+      /* head */
+      '.cl-head{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.4rem .55rem;background:var(--k-panel);border-bottom:1px solid var(--k-line)}',
+      '.cl-head::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,#05080B,#0E1A24 30%,#00B4F0 72%,#E6F8FF);opacity:.9;pointer-events:none}',
+      '.cl-brand{display:inline-flex;align-items:center;gap:.45rem;flex:none;font-size:.78rem;font-weight:800;letter-spacing:.01em;white-space:nowrap;color:var(--k-text)}',
+      '.cl-brand .lg{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;background:linear-gradient(135deg,#0E1A24,#00B4F0);color:#fff;font-size:.68rem;box-shadow:0 0 0 1px rgba(0,180,240,.35)}.cl-brand b span{color:var(--k-accent-text)}',
       '@media(max-width:520px){.cl-brand b{display:none}}',
-      '.cl-up{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:.25rem;border:1px solid rgba(192,138,0,.45);background:#FFF7E6;color:#8A6200;border-radius:99px;padding:.05rem .45rem;font:inherit;font-size:.62rem;font-weight:800;cursor:pointer}.cl-up:hover{background:#F5C842;color:#3d2c00}.cl-up i{color:inherit!important;width:auto!important;opacity:1!important}',
-      '.cl-up + .cl-node-acts{margin-left:.2rem}',
-      '.cl-crumb{flex:1;min-width:120px;font-weight:800;font-size:.8rem;color:var(--brand-deep,#245F5A);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cl-crumb i{opacity:.75;margin-right:.2rem}',
-      '.cl-actions{display:flex;gap:.25rem;flex-wrap:wrap}',
-      '.cl-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;border:1.5px solid var(--line,rgba(38,51,49,.12));border-radius:8px;background:#fff;color:var(--brand-deep,#245F5A);font:inherit;font-weight:800;font-size:.72rem;cursor:pointer}',
-      '.cl-btn:hover{border-color:var(--brand,#55BFB3);background:var(--sage,#E5F2EF)}',
-      '.cl-btn.cl-save{background:var(--brand-deep,#245F5A);border-color:var(--brand-deep,#245F5A);color:#fff}',
-      '.cl-btn.cl-run{background:var(--brand,#55BFB3);border-color:var(--brand,#55BFB3);color:#04231f}',
+      '.cl-crumb{flex:1;min-width:120px;font-weight:700;font-size:.8rem;color:var(--k-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cl-crumb i{margin-right:.2rem}',
+      '.cl-actions{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}',
+      '.cl-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;padding:.36rem .62rem;border:1px solid var(--k-line);border-radius:8px;background:transparent;color:var(--k-text);font:inherit;font-weight:700;font-size:.74rem;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .12s}',
+      '.cl-btn:hover{border-color:var(--k-line2);background:var(--k-hover)}.cl-btn:active{transform:scale(.97)}.cl-btn:focus-visible{outline:2px solid var(--k-accent);outline-offset:1px}',
+      '.cl-btn.cl-icon{width:31px;padding:.36rem 0}',
+      '.cl-btn.cl-save{background:var(--k-panel2);border-color:var(--k-line2);color:var(--k-text)}',
+      '.cl-btn.cl-run{background:var(--k-accent);border-color:var(--k-accent);color:#05080B;font-weight:800}.cl-btn.cl-run:hover{background:#33C4F4;border-color:#33C4F4}',
+      '.cl-btn.cl-stop{background:rgba(255,107,107,.14);border-color:rgba(255,107,107,.45);color:var(--k-err)}',
+      '.cl-runwrap{display:inline-flex;align-items:center;gap:.3rem;height:31px;padding:0 .2rem 0 .5rem;border:1px solid var(--k-line);border-radius:8px;background:var(--k-bg);color:var(--k-muted);font-size:.72rem;margin:0}.cl-runwrap[hidden]{display:none}',
+      '.cl-runsel{border:0;background:transparent;color:var(--k-text);font:inherit;font-weight:700;font-size:.74rem;max-width:150px;padding:.2rem;cursor:pointer;outline:none}.cl-runsel option{background:var(--k-panel);color:var(--k-text)}',
       '.cl-treebtn{display:none}',
+      '.cl-up{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:.25rem;border:1px solid var(--k-line2);background:var(--k-on);color:var(--k-accent-text);border-radius:99px;padding:.05rem .45rem;font:inherit;font-size:.62rem;font-weight:800;cursor:pointer}.cl-up:hover{background:var(--k-accent);color:#05080B}.cl-up i{color:inherit!important;width:auto!important;opacity:1!important}',
+      '.cl-up + .cl-node-acts{margin-left:.2rem}',
+      /* full screen and dialogs */
       '.cl-shell.cl-full{position:fixed;inset:0;z-index:2000;border-radius:0;border:0}',
-      '.cl-dlg{position:fixed;inset:0;z-index:3200;background:rgba(15,26,20,.35);display:grid;place-items:center;padding:16px}',
-      '.cl-dlg-box{width:min(420px,100%);background:#fff;border:1px solid #D5E3DF;border-radius:14px;padding:1rem 1.1rem;box-shadow:0 18px 50px rgba(0,0,0,.2);font-family:inherit}',
-      '.cl-dlg-box p{margin:0 0 .7rem;font-size:.9rem;font-weight:600;color:#263331;line-height:1.4}',
-      '.cl-dlg-box input{width:100%;box-sizing:border-box;padding:.55rem .7rem;border:1px solid #D5E3DF;border-radius:9px;font:13px ui-monospace,Menlo,Consolas,monospace;color:#263331;outline:none}',
-      '.cl-dlg-box input:focus{border-color:#55BFB3;box-shadow:0 0 0 3px rgba(85,191,179,.2)}',
+      '.cl-dlg{position:fixed;inset:0;z-index:3200;background:rgba(5,8,11,.55);display:grid;place-items:center;padding:16px}',
+      '.cl-dlg-box{width:min(440px,100%);background:var(--k-panel);color:var(--k-text);border:1px solid var(--k-line2);border-radius:14px;padding:1rem 1.1rem;box-shadow:0 18px 50px rgba(0,0,0,.35);font-family:inherit}',
+      '.cl-dlg-box p{margin:0 0 .7rem;font-size:.9rem;font-weight:600;line-height:1.4}',
+      '.cl-dlg-box input{width:100%;box-sizing:border-box;padding:.55rem .7rem;border:1px solid var(--k-line2);border-radius:9px;font:13px ui-monospace,Menlo,Consolas,monospace;color:var(--k-text);background:var(--k-bg);outline:none}',
+      '.cl-dlg-box input:focus{border-color:var(--k-accent);box-shadow:0 0 0 3px rgba(0,180,240,.2)}',
       '.cl-dlg-acts{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.8rem}',
       '.cl-shell.cl-full .cl-body,.cl-shell.cl-full .cl-body.cl-stacked{height:auto;flex:1;min-height:0}',
-      '.cl-shell:fullscreen{width:100vw;height:100vh;background:#fff}',
+      '.cl-shell:fullscreen{width:100vw;height:100vh}',
       'html.cl-noscroll,html.cl-noscroll body{overflow:hidden}',
       '@media(max-width:860px){.cl-shell.cl-full .cl-body{grid-template-rows:minmax(0,1fr) 40vh}}',
-      '.cl-body{display:grid;grid-template-columns:230px minmax(0,1fr) minmax(0,1fr);height:min(72vh,620px);min-height:380px}',
+      /* layout */
+      '.cl-body{display:grid;grid-template-columns:230px minmax(0,1fr) minmax(0,1fr);height:min(72vh,620px);min-height:380px;background:var(--k-bg)}',
       '.cl-docmode .cl-body{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}',
       '.cl-body.cl-stacked{grid-template-columns:230px minmax(0,1fr);grid-template-rows:1fr 1fr}.cl-body.cl-stacked .cl-tree{grid-row:1 / span 2}',
-      '.cl-tree{border-right:1px solid var(--line,rgba(38,51,49,.12));background:#FAFCFB;display:flex;flex-direction:column;min-width:0;overflow:hidden}',
-      '.cl-tree-acts{display:flex;flex-wrap:wrap;gap:.25rem;padding:.4rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08))}.cl-tree-acts .cl-btn{padding:.3rem .45rem;font-size:.68rem}',
+      /* explorer */
+      '.cl-tree{border-right:1px solid var(--k-line);background:var(--k-panel);display:flex;flex-direction:column;min-width:0;overflow:hidden}',
+      '.cl-tree-h{padding:.5rem .7rem .2rem;font-size:.62rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--k-faint)}',
+      '.cl-tree-acts{display:flex;flex-wrap:wrap;gap:.25rem;padding:.35rem .45rem .45rem;border-bottom:1px solid var(--k-line)}.cl-tree-acts .cl-btn{padding:.3rem .45rem;font-size:.68rem}',
+      '.cl-tree-acts .cl-uplabel{border-color:var(--k-line2);color:var(--k-accent-text)}',
       '.cl-tree-list{flex:1;overflow:auto;padding:.25rem 0}',
-      '.cl-tree-note{padding:.4rem .6rem;font-size:.68rem;color:var(--muted,#5A6E6A);font-weight:600;line-height:1.35}',
-      '.cl-node{position:relative;display:flex;align-items:center;gap:.4rem;padding:.3rem .5rem;font-size:.78rem;font-weight:700;color:var(--ink,#263331);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.cl-node i{width:14px;text-align:center;color:var(--brand-deep,#245F5A);opacity:.8;flex:none}.cl-dir i{color:#C08A00}.cl-asset i{color:#7048E8}',
+      '.cl-tree-note{padding:.45rem .65rem;font-size:.68rem;color:var(--k-faint);font-weight:600;line-height:1.4;border-top:1px solid var(--k-line)}',
+      '.cl-node{position:relative;display:flex;align-items:center;gap:.4rem;padding:.28rem .5rem;font-size:.78rem;font-weight:600;color:var(--k-text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid transparent}',
+      '.cl-node i{width:14px;text-align:center;color:var(--k-muted);flex:none}.cl-dir i{color:var(--k-folder)}.cl-asset i{color:var(--k-accent)}',
       '.cl-node i.cl-li,.cl-crumb i.cl-li{opacity:1;font-size:.95em}.CodeMirror-hint .cl-h-ic{width:1.1em;text-align:center;margin-right:.35em}',
-      '.cl-node:hover{background:var(--sage,#E5F2EF)}.cl-node.on{background:#DDEFEA;color:var(--brand-deep,#245F5A)}',
+      '.cl-badge{display:inline-grid;place-items:center;min-width:16px;height:14px;padding:0 2px;border-radius:3px;background:var(--c);color:#fff;font:800 8px/1 system-ui,sans-serif;letter-spacing:-.02em;flex:none;vertical-align:middle}',
+      '.cl-node:hover{background:var(--k-hover)}.cl-node.on{background:var(--k-on);border-left-color:var(--k-accent)}',
+      '.cl-root{font-weight:800;color:var(--k-muted);text-transform:uppercase;font-size:.68rem;letter-spacing:.06em}',
       '.cl-node-acts{margin-left:auto;display:none;gap:.1rem;flex:none}.cl-node:hover .cl-node-acts,.cl-node.on .cl-node-acts{display:inline-flex}',
       /* Touch screens have no hover: keep a folder's buttons showing so new file / upload can be found. */
       '@media(hover:none){.cl-dir .cl-node-acts{display:inline-flex}.cl-node-acts button{padding:.25rem .35rem;font-size:.8rem}}',
       '.cl-dir>.cl-dn,.cl-file>.cl-dn,.cl-asset>.cl-dn{overflow:hidden;text-overflow:ellipsis;min-width:0}',
-      '.cl-tree.cl-drop{outline:2px dashed var(--brand,#55BFB3);outline-offset:-4px;background:#EAF7F4}',
-      '.cl-node-acts button{border:0;background:transparent;padding:.1rem .25rem;cursor:pointer;color:var(--muted,#5A6E6A);font-size:.7rem}.cl-node-acts button:hover{color:var(--brand-deep,#245F5A)}',
-      '.cl-suggest{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.45rem .6rem;background:#FFF7E6;border-bottom:1px solid rgba(192,138,0,.3);font-size:.76rem;font-weight:700;color:#5c4300}.cl-suggest[hidden]{display:none}.cl-suggest>span{flex:1;min-width:180px}',
-      '.cl-edit-wrap{display:flex;flex-direction:column;border-right:1px solid var(--line,rgba(38,51,49,.12));min-width:0;min-height:0}',
+      '.cl-tree.cl-drop{outline:2px dashed var(--k-accent);outline-offset:-4px;background:var(--k-hover)}',
+      '.cl-node-acts button{border:0;background:transparent;padding:.1rem .25rem;cursor:pointer;color:var(--k-muted);font-size:.7rem}.cl-node-acts button:hover{color:var(--k-accent-text)}',
+      /* editor */
+      '.cl-edit-wrap{display:flex;flex-direction:column;border-right:1px solid var(--k-line);min-width:0;min-height:0;background:var(--k-bg)}',
+      '.cl-tabs{display:flex;overflow-x:auto;overflow-y:hidden;background:var(--k-panel);border-bottom:1px solid var(--k-line);flex:none;scrollbar-width:thin}',
+      '.cl-tab{display:inline-flex;align-items:center;gap:.4rem;padding:.42rem .55rem .42rem .7rem;border:0;border-right:1px solid var(--k-line);border-top:2px solid transparent;background:transparent;color:var(--k-muted);font:inherit;font-size:.74rem;font-weight:700;white-space:nowrap;cursor:pointer;flex:none}',
+      '.cl-tab:hover{color:var(--k-text);background:var(--k-hover)}.cl-tab.on{background:var(--k-bg);color:var(--k-text);border-top-color:var(--k-accent)}',
+      '.cl-tab .x{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:4px;opacity:.45;font-size:.66rem}.cl-tab .x:hover{opacity:1;background:var(--k-hover)}',
+      '.cl-banner{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;padding:.45rem .6rem;background:rgba(255,184,107,.12);border-bottom:1px solid rgba(255,184,107,.35);font-size:.76rem;font-weight:700;color:var(--k-text)}.cl-banner[hidden]{display:none}.cl-banner>span{flex:1;min-width:180px}.cl-banner>i{color:var(--k-warn)}',
+      '.cl-suggest{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.45rem .6rem;background:var(--k-on);border-bottom:1px solid var(--k-line2);font-size:.76rem;font-weight:700;color:var(--k-text)}.cl-suggest[hidden]{display:none}.cl-suggest>span{flex:1;min-width:180px}',
       '.cl-edit-host{flex:1;min-height:0;position:relative}',
-      '.cl-edit-host .CodeMirror{height:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.55}',
-      '.cl-edit-host .CodeMirror-gutters{background:#F6FAF9;border-right:1px solid #E3EEEB}.cl-edit-host .CodeMirror-activeline-background{background:#F1F9F7}',
-      '.cl-fallback{width:100%;height:100%;padding:.8rem 1rem;border:0;outline:none;resize:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;line-height:1.55;background:#fff;color:var(--ink,#263331);tab-size:2;box-sizing:border-box}',
-      '.cl-meta{display:flex;justify-content:space-between;gap:.6rem;align-items:center;padding:.3rem .8rem;background:var(--paper,#F1F9F7);border-top:1px solid var(--line,rgba(38,51,49,.12));font-size:.68rem;color:var(--muted,#5A6E6A);font-weight:800}',
+      '.cl-edit-host .CodeMirror{height:100%;font-family:"JetBrains Mono","Cascadia Code",ui-monospace,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6;background:var(--k-bg);color:var(--k-text)}',
+      '.cl-shell .CodeMirror .CodeMirror-gutters{background:var(--k-bg);border-right:1px solid var(--k-line)}',
+      '.cl-shell .CodeMirror .CodeMirror-linenumber{color:var(--k-faint)}',
+      '.cl-shell .CodeMirror .CodeMirror-cursor{border-left:2px solid var(--k-accent)}',
+      '.cl-shell .CodeMirror .CodeMirror-activeline-background{background:var(--k-panel)}',
+      '.cl-shell .CodeMirror .CodeMirror-activeline .CodeMirror-gutter-elt{color:var(--k-accent-text)}',
+      '.cl-shell .CodeMirror .CodeMirror-selected,.cl-shell .CodeMirror-focused .CodeMirror-selected{background:rgba(0,180,240,.26)}',
+      '.cl-shell .CodeMirror .CodeMirror-matchingbracket{color:var(--k-accent)!important;background:rgba(0,180,240,.14);outline:1px solid var(--k-line2)}',
+      '.cl-shell .CodeMirror .CodeMirror-matchingtag{background:rgba(0,180,240,.15)}',
+      '.cl-shell .CodeMirror .cl-errline{background:rgba(255,107,107,.18)}',
+      '.cl-shell .CodeMirror .cm-keyword{color:var(--t-kw)}.cl-shell .CodeMirror .cm-string,.cl-shell .CodeMirror .cm-string-2{color:var(--t-str)}',
+      '.cl-shell .CodeMirror .cm-number,.cl-shell .CodeMirror .cm-atom{color:var(--t-num)}.cl-shell .CodeMirror .cm-comment{color:var(--t-com);font-style:italic}',
+      '.cl-shell .CodeMirror .cm-tag{color:var(--t-tag)}.cl-shell .CodeMirror .cm-attribute,.cl-shell .CodeMirror .cm-qualifier{color:var(--t-attr)}',
+      '.cl-shell .CodeMirror .cm-def{color:var(--t-def);font-weight:600}.cl-shell .CodeMirror .cm-variable{color:var(--k-text)}.cl-shell .CodeMirror .cm-variable-2{color:var(--t-var2)}',
+      '.cl-shell .CodeMirror .cm-variable-3,.cl-shell .CodeMirror .cm-type{color:var(--t-type)}.cl-shell .CodeMirror .cm-property{color:var(--t-prop)}',
+      '.cl-shell .CodeMirror .cm-operator,.cl-shell .CodeMirror .cm-bracket,.cl-shell .CodeMirror .cm-punctuation{color:var(--t-op)}.cl-shell .CodeMirror .cm-builtin{color:var(--t-builtin)}',
+      '.cl-shell .CodeMirror .cm-meta{color:var(--t-meta)}.cl-shell .CodeMirror .cm-header{color:var(--t-tag);font-weight:800}.cl-shell .CodeMirror .cm-link{color:var(--t-tag)}.cl-shell .CodeMirror .cm-error{color:var(--k-err)}',
+      '.cl-fallback{width:100%;height:100%;padding:.8rem 1rem;border:0;outline:none;resize:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;line-height:1.55;background:var(--k-bg);color:var(--k-text);tab-size:2;box-sizing:border-box}',
+      '.cl-meta{display:flex;justify-content:space-between;gap:.6rem;align-items:center;padding:.3rem .8rem;background:var(--k-panel);border-top:1px solid var(--k-line);font-size:.68rem;color:var(--k-muted);font-weight:700}',
       '.cl-status{text-align:right}',
-      '.cl-preview-wrap{position:relative;min-width:0;min-height:0;background:#fff;display:flex;flex-direction:column}',
+      /* output: preview and terminal */
+      '.cl-preview-wrap{position:relative;min-width:0;min-height:0;background:var(--k-panel);display:flex;flex-direction:column}',
+      '.cl-otabs{display:flex;gap:0;background:var(--k-panel);border-bottom:1px solid var(--k-line);flex:none}.cl-otabs[hidden]{display:none}',
+      '.cl-otab{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .85rem;border:0;border-top:2px solid transparent;background:transparent;color:var(--k-muted);font:inherit;font-size:.74rem;font-weight:800;cursor:pointer}.cl-otab.on{color:var(--k-text);background:var(--k-bg);border-top-color:var(--k-accent)}',
+      '.cl-prevpane{flex:1;display:flex;flex-direction:column;min-height:0}.cl-prevpane[hidden],.cl-termpane[hidden]{display:none}',
       '.cl-preview{flex:1;width:100%;min-height:200px;border:0;display:block;background:#fff}',
-      '.cl-console{border-top:1px solid var(--line,rgba(38,51,49,.12));background:#1E2725;color:#D8E6E2;font-size:.74rem}',
-      '.cl-console summary{cursor:pointer;padding:.35rem .7rem;font-weight:800;color:#BFE3DA}',
+      '.cl-console{border-top:1px solid var(--k-line);background:var(--k-term);color:var(--k-text);font-size:.74rem}',
+      '.cl-console summary{cursor:pointer;padding:.35rem .7rem;font-weight:800;color:var(--k-accent-text)}',
       '.cl-log{max-height:150px;overflow:auto;padding:0 .7rem .5rem;font-family:ui-monospace,Menlo,Consolas,monospace}',
-      '.cl-logrow{padding:.15rem 0;border-bottom:1px solid rgba(255,255,255,.06);white-space:pre-wrap;word-break:break-word}.cl-logrow.error{color:#FF8A80}.cl-logrow.warn{color:#FFD166}',
+      '.cl-logrow{padding:.15rem 0;border-bottom:1px solid var(--k-line);white-space:pre-wrap;word-break:break-word}.cl-logrow.error{color:var(--k-err)}.cl-logrow.warn{color:var(--k-warn)}',
+      '.cl-termpane{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--k-term)}',
+      '.cl-term{flex:1;overflow:auto;padding:.7rem .85rem;font:12.5px/1.6 "JetBrains Mono","Cascadia Code",ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;color:var(--k-text);outline:none}',
+      '.cl-t.err{color:var(--k-err)}.cl-t.echo{color:var(--k-accent-text);font-weight:700}',
+      '.cl-sys{display:flex;align-items:center;gap:.5rem;margin:.35rem 0;padding:.3rem .55rem;border-radius:7px;background:var(--k-panel);font-family:inherit;font-size:.74rem;font-weight:700;color:var(--k-muted);white-space:normal}',
+      '.cl-sys.run i{color:var(--k-accent)}.cl-sys.ok{color:var(--k-ok)}.cl-sys.bad{color:var(--k-err)}.cl-sys.ask{color:var(--k-accent-text);background:var(--k-on)}',
+      '.cl-hint{display:flex;gap:.55rem;margin:.35rem 0 .6rem;padding:.55rem .65rem;border-radius:9px;border:1px solid var(--k-line2);background:var(--k-on);font-family:Quicksand,system-ui,sans-serif;font-size:.8rem;font-weight:600;line-height:1.45;white-space:normal;color:var(--k-text)}.cl-hint>i{color:#FFD27A;margin-top:.15rem}.cl-hint .cl-btn{margin-top:.4rem;font-size:.7rem}',
+      '.cl-term-empty{font-family:Quicksand,system-ui,sans-serif;white-space:normal;color:var(--k-muted);font-size:.82rem;line-height:1.5}.cl-term-empty b{color:var(--k-text)}.cl-term-empty ul{margin:.5rem 0 0;padding-left:1.1rem}.cl-term-empty li{margin:.2rem 0}',
+      '.cl-term-empty code,.cl-term-empty kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem;padding:.05rem .3rem;border-radius:4px;background:var(--k-panel);border:1px solid var(--k-line)}',
+      '.cl-inrow{flex:none;border-top:1px solid var(--k-line2);background:var(--k-panel);padding:.5rem .6rem}.cl-inrow[hidden]{display:none}',
+      '.cl-inq{display:block;font-size:.74rem;font-weight:800;color:var(--k-accent-text);margin-bottom:.35rem}',
+      '.cl-inline{display:flex;align-items:center;gap:.4rem}.cl-inline>i{color:var(--k-accent)}',
+      '.cl-in{flex:1;min-width:0;padding:.45rem .6rem;border:1px solid var(--k-line2);border-radius:8px;background:var(--k-bg);color:var(--k-text);font:13px ui-monospace,Menlo,Consolas,monospace;outline:none}.cl-in:focus{border-color:var(--k-accent);box-shadow:0 0 0 3px rgba(0,180,240,.2)}',
+      /* live coding together */
       '.cl-people{display:flex;gap:.3rem;flex-wrap:wrap}',
-      '.cl-person{display:inline-flex;align-items:center;gap:.3rem;padding:.15rem .5rem .15rem .15rem;border-radius:99px;background:#fff;border:1.5px solid var(--c);font-size:.68rem;font-weight:800;color:var(--ink,#263331)}',
+      '.cl-person{display:inline-flex;align-items:center;gap:.3rem;padding:.15rem .5rem .15rem .15rem;border-radius:99px;background:var(--k-bg);border:1.5px solid var(--c);font-size:.68rem;font-weight:800;color:var(--k-text)}',
       '.cl-person b{width:18px;height:18px;border-radius:50%;background:var(--c);color:#fff;display:grid;place-items:center;font-size:.62rem}',
       '.cl-rcur{position:relative;border-left:2px solid var(--c);margin-left:-1px;height:1.3em;display:inline-block;vertical-align:text-bottom}',
       '.cl-rtag{position:absolute;bottom:100%;left:-2px;background:var(--c);color:#fff;font:700 10px/1.4 sans-serif;padding:0 4px;border-radius:3px 3px 3px 0;white-space:nowrap;pointer-events:none;z-index:5}',
-      '.cl-rline{background:rgba(28,126,214,.06)}',
-      '.CodeMirror-hints{z-index:1000;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15)}',
-      '.CodeMirror-hint-active{background:#245F5A}',
+      '.cl-rline{background:rgba(0,180,240,.07)}',
+      /* suggestions (drawn on the page, or inside the IDE when full screen) */
+      '.CodeMirror-hints{z-index:1000;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25)}',
+      'html[data-cl-theme="dark"] .CodeMirror-hints{background:#0E1A24;border:1px solid rgba(0,180,240,.3)}html[data-cl-theme="dark"] .CodeMirror-hint{color:#E8F1F6}',
       '.CodeMirror-hint .cl-h-tag{display:inline-block;min-width:4.5em;font-weight:700}.CodeMirror-hint .cl-h-snip{margin-left:.8em;opacity:.6;font-size:11.5px}',
       /* Above the practice pop-up (600) and full screen (2000); CodeMirror's own sheet loads later and sets 10. */
-      'body .CodeMirror-hints{z-index:3000!important;max-width:min(460px,90vw)}body .emmet-abbreviation-preview{z-index:3000!important}body li.CodeMirror-hint-active{background:#245F5A!important;color:#fff!important}.CodeMirror-hint{overflow:hidden;text-overflow:ellipsis}',
-      '.emmet-abbreviation-preview{z-index:1000;background:#fff;border:1px solid #D5E3DF;border-radius:8px;padding:.4rem .6rem;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px}',
+      'body .CodeMirror-hints{z-index:3000!important;max-width:min(460px,90vw)}body .emmet-abbreviation-preview{z-index:3000!important}body li.CodeMirror-hint-active{background:#00B4F0!important;color:#05080B!important}.CodeMirror-hint{overflow:hidden;text-overflow:ellipsis}',
+      '.emmet-abbreviation-preview{z-index:1000;background:#fff;border:1px solid #D6E9F4;border-radius:8px;padding:.4rem .6rem;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px}',
+      'html[data-cl-theme="dark"] .emmet-abbreviation-preview{background:#0E1A24;border-color:rgba(0,180,240,.3);color:#E8F1F6}',
+      /* small screens */
       '@media(max-width:860px){.cl-body,.cl-body.cl-stacked{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(300px,1fr) 300px;height:auto}.cl-docmode .cl-body{grid-template-columns:minmax(0,1fr)}',
-      '  .cl-tree{display:none;position:absolute;z-index:20;top:42px;left:0;bottom:0;width:min(280px,85%);box-shadow:8px 0 24px rgba(0,0,0,.12)}.cl-tree-open .cl-tree{display:flex}.cl-treebtn{display:inline-flex}',
-      '  .cl-edit-wrap{border-right:0;border-bottom:1px solid var(--line,rgba(38,51,49,.12));min-height:300px}}',
-      '@media(prefers-reduced-motion:reduce){.cl-btn,.cl-node{transition:none}}'
+      '  .cl-tree{display:none;position:absolute;z-index:20;top:44px;left:0;bottom:0;width:min(280px,85%);box-shadow:8px 0 24px rgba(0,0,0,.3)}.cl-tree-open .cl-tree{display:flex}.cl-treebtn{display:inline-flex}',
+      '  .cl-edit-wrap{border-right:0;border-bottom:1px solid var(--k-line);min-height:300px}}',
+      '@media(prefers-reduced-motion:reduce){.cl-btn,.cl-node{transition:none}.cl-shell>.cl-head,.cl-shell>.cl-body,.cl-splash{transition:opacity .2s!important;filter:none!important;transform:none!important}.cl-splash *{animation:none!important}}'
     ].join('\n');
     document.head.appendChild(st);
   }
 
-  g.CodeLab = { mount: mount, buildPreview: buildPreview, load: load, merge3: merge3, mdHtml: mdHtml, langOf: langOf, typeOfFile: typeOfFile };
+  g.CodeLab = {
+    mount: mount, buildPreview: buildPreview, load: load, merge3: merge3, mdHtml: mdHtml, langOf: langOf, typeOfFile: typeOfFile,
+    checkUpload: checkUpload, sniffBytes: sniffBytes, isProgram: isProgram, loadRuntime: loadRuntime, binaryFiles: binaryFiles, LANGS: LANGS, starterCode: starterCode, STARTER_NAMES: STARTER_NAMES,
+    theme: readTheme, setTheme: setTheme
+  };
 })(window);

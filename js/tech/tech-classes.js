@@ -548,7 +548,8 @@
     var topicId0 = item ? item.topicId : o.topicId;
     var gate0 = (item && item.gate) || { watch: true, quiz: true, work: true, pass: DEFAULT_PASS };
     if (gate0.pass == null) gate0 = Object.assign({}, gate0, { pass: DEFAULT_PASS });
-    var starter0 = (item && item.task && item.task.starter) || '', startFrom0 = (item && item.task && item.task.startFrom) || 'previous';
+    var starter0 = (item && item.task && item.task.starter) || '', startFrom0 = (item && item.task && item.task.startFrom) || 'previous', lang0 = (item && item.task && item.task.lang) || 'web';
+    var CODE_LANGS = [['web', 'A web page (HTML, CSS, JavaScript)', 'index.html'], ['py', 'Python', 'main.py'], ['java', 'Java', 'Main.java'], ['c', 'C', 'main.c'], ['cpp', 'C++', 'main.cpp'], ['php', 'PHP', 'index.php']];
     m.body.innerHTML =
       '<div class="cr-row2"><div class="cr-field"><label for="tcT">Title (optional)</label><input type="text" id="tcT" maxlength="160" placeholder="Leave empty to call it ' + (isTest ? 'Practice test' : 'Lesson') + ' 1, 2, 3…" value="' + esc(item ? item.title : '') + '"></div>' +
       '<div class="cr-field"><label for="tcTop">Topic</label><select id="tcTop">' + topics.map(function (t) { return '<option value="' + esc(t.id) + '"' + (t.id === topicId0 ? ' selected' : '') + '>' + esc(t.title) + '</option>'; }).join('') + '</select></div></div>' +
@@ -562,18 +563,20 @@
       '<div class="tc-section"><i class="fas fa-circle-question"></i> ' + (isTest ? 'Questions' : 'Quiz to test understanding (optional)') + '</div><div class="cr-note" style="margin-bottom:.5rem">Options are up to you. A written answer needs no options or answer: builders type it and you read it in Results. Multiple choice, true or false, and short answers with accepted answers are marked automatically. Builders can try again.</div><div id="tcQs"></div>' +
       '<div class="tc-section"><i class="fas fa-laptop-code"></i> Practice for this lesson</div>' +
       '<div class="cr-note" style="margin-bottom:.5rem">Attach a practice tool to this ' + (isTest ? 'test' : 'lesson') + '. Under the videos, builders get a Practise button that opens it full size with your requirements beside it: Paisley VS Code (autocomplete, Emmet, folders, picture and video uploads, full screen) or the writing pad. The pop-up carries the class, topic and lesson name. Add questions for a short quiz or test beside the work: builders answer them there and hand them in with the work, and you mark both with ink in Results > Class work hand-ins. Their family sees your feedback.</div>' +
-      '<div class="cr-row2"><div class="cr-field"><label for="tcTaskT">Practice tool</label><select id="tcTaskT">' + [['', 'None'], ['code', 'Paisley VS Code (HTML, CSS, JavaScript)'], ['writing', 'Writing pad']].map(function (p) { var cur = item && item.task && g.TechWork ? g.TechWork.kindOf(item.task) : ''; return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></div><div></div></div>' +
+      '<div class="cr-row2"><div class="cr-field"><label for="tcTaskT">Practice tool</label><select id="tcTaskT">' + [['', 'None'], ['code', 'Paisley VS Code (web pages, Python, Java, C, C++, PHP)'], ['writing', 'Writing pad']].map(function (p) { var cur = item && item.task && g.TechWork ? g.TechWork.kindOf(item.task) : ''; return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></div><div></div></div>' +
       '<div class="cr-field" id="tcTaskBox"><label for="tcTask">Requirements (what they should make)</label><textarea id="tcTask" rows="4" maxlength="3000" placeholder="e.g. Make a page with a heading, a picture of your favourite animal and a button that changes the colour.">' + esc((item && item.task && item.task.brief) || '') + '</textarea><div class="cr-note" style="margin-top:.3rem">Optional. Without it they practise what the lesson showed.</div></div>' +
-      '<div class="cr-field" id="tcStartBox"><label>What Paisley VS Code opens with</label>' +
+      '<div class="cr-field" id="tcStartBox"><label for="tcLang">Language</label><select id="tcLang" style="margin-bottom:.6rem">' + CODE_LANGS.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === lang0 ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
+        '<label>What Paisley VS Code opens with</label>' +
         '<div style="display:grid;gap:.4rem;margin:.1rem 0 .55rem">' +
           '<label style="display:flex;gap:.5rem;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:700;font-size:.86rem"><input type="radio" name="tcStartFrom" value="previous"' + (startFrom0 !== 'starter' ? ' checked' : '') + ' style="margin-top:.2rem"><span>Carry on from their code in the lesson before<small style="display:block;font-weight:500;font-size:.8rem;color:var(--muted,#5A6E6A)">Each builder continues their own code from the last practice in this class. Someone with nothing before gets the starting code below (or a blank index.html).</small></span></label>' +
           '<label style="display:flex;gap:.5rem;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:700;font-size:.86rem"><input type="radio" name="tcStartFrom" value="starter"' + (startFrom0 === 'starter' ? ' checked' : '') + ' style="margin-top:.2rem"><span>Start everyone with the code below<small style="display:block;font-weight:500;font-size:.8rem;color:var(--muted,#5A6E6A)">Use this when the lesson needs a fresh start.</small></span></label>' +
         '</div>' +
-        '<label for="tcStarter" style="text-transform:none;letter-spacing:0">Starting code for index.html (optional)</label>' +
+        '<label for="tcStarter" id="tcStarterL" style="text-transform:none;letter-spacing:0">Starting code for index.html (optional)</label>' +
         '<textarea id="tcStarter" rows="9" maxlength="60000" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;white-space:pre;tab-size:2" placeholder="<!DOCTYPE html>&#10;<html>&#10;<body>&#10;  <h1>My page</h1>&#10;</body>&#10;</html>">' + esc(starter0) + '</textarea>' +
         '<div class="cr-note" style="margin-top:.3rem">Leave it empty for a plain index.html. Put CSS in a &lt;style&gt; tag and JavaScript in a &lt;script&gt; tag, or let builders add their own files.</div></div>' +
       '<div class="cr-field" id="tcTaskQBox"><label>Questions to answer with the work (optional)</label><div class="cr-note" style="margin-bottom:.45rem">A short quiz or test that goes with the work, for example “Which tag makes a link?” or “Explain what your code does”. Builders answer beside the work and hand everything in together; you read and mark the answers with the work (they are not marked automatically).</div><div id="tcTaskQs"></div>' +
       '<button type="button" class="cr-btn sm" id="tcTaskQAdd"><i class="fas fa-plus"></i> Add a question</button></div>' +
+      '<label class="cr-field" id="tcPubBox" style="display:flex;gap:.55rem;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:700;font-size:.88rem"><input type="checkbox" id="tcPub"' + (item && item.allowPublish ? ' checked' : '') + ' style="margin-top:.2rem"><span><i class="fas fa-globe"></i> Builders may ask to publish this work<small style="display:block;font-weight:500;font-size:.8rem;color:var(--muted,#5A6E6A)">After handing in they see Ask to publish. You or the Studio Desk review it first; once approved they get a link to share, and Python, Java, C, C++ and PHP run on the public page too.' + (cls.allowPublish ? ' (Already on for the whole class.)' : '') + '</small></span></label>' +
       '<div class="tc-section"><i class="fas fa-flag-checkered"></i> To finish this ' + word + '</div>' +
       '<div class="cr-note" style="margin-bottom:.5rem">Lessons open in order: a builder finishes each lesson before the next one opens, because each builds on the one before. A builder passes the class (and unlocks the next class, with a celebration and an email to their family) when every lesson in it is finished. Tick what finishing this ' + word + ' takes. A step the ' + word + ' does not have is skipped, and with nothing ticked, opening it is enough.</div>' +
       '<div class="cr-field" style="display:grid;gap:.45rem">' +
@@ -584,7 +587,7 @@
     var $ = function (s) { return m.body.querySelector(s); };
     var notes = isTest ? null : notesEditor($('#tcNotes'), item && item.notes);
     var qs = questionBuilder($('#tcQs'), item && item.questions, key);
-    var syncTask = function () { var on = $('#tcTaskT').value ? '' : 'none'; $('#tcTaskBox').style.display = on; $('#tcTaskQBox').style.display = on; $('#tcStartBox').style.display = $('#tcTaskT').value === 'code' ? '' : 'none'; };
+    var syncTask = function () { var on = $('#tcTaskT').value ? '' : 'none'; $('#tcTaskBox').style.display = on; $('#tcTaskQBox').style.display = on; $('#tcPubBox').style.display = on; $('#tcStartBox').style.display = $('#tcTaskT').value === 'code' ? '' : 'none'; };
     /* Tab in the starting code indents instead of leaving the box. */
     $('#tcStarter').addEventListener('keydown', function (e) {
       if (e.key !== 'Tab' || e.shiftKey) return;
@@ -606,6 +609,9 @@
     $('#tcTaskQAdd').onclick = function () { readTq(); tq.push({ id: newQid(), text: '' }); dirty = true; paintTq(); var ins = m.body.querySelectorAll('[data-tqid]'); if (ins.length) ins[ins.length - 1].focus(); };
     $('#tcTaskQs').addEventListener('click', function (e) { var b = e.target.closest('[data-tqdel]'); if (!b) return; readTq(); tq.splice(Number(b.dataset.tqdel), 1); dirty = true; paintTq(); });
     $('#tcTaskT').addEventListener('change', syncTask); syncTask();
+    /* The starting code goes into the language's first file: index.html, main.py, Main.java, main.c, main.cpp or index.php. */
+    var syncLang = function () { var x = CODE_LANGS.filter(function (c) { return c[0] === $('#tcLang').value; })[0] || CODE_LANGS[0]; $('#tcStarterL').textContent = 'Starting code for ' + x[2] + ' (optional)'; $('#tcStarter').placeholder = x[0] === 'web' ? '<!DOCTYPE html>\n<html>\n<body>\n  <h1>My page</h1>\n</body>\n</html>' : 'Leave empty to start with a short program that asks a name and says hello.'; };
+    $('#tcLang').addEventListener('change', function () { dirty = true; syncLang(); }); syncLang();
     m.body.addEventListener('input', function () { dirty = true; });
     function paintFiles() {
       $('#tcFiles').innerHTML = files.map(function (f, i) { return '<div class="tc-file"><i class="fas ' + (isPdf(f) ? 'fa-file-pdf' : 'fa-file') + '"></i><span class="nm">' + esc(f.name) + '</span><button type="button" class="cr-btn sm danger" data-fdel="' + i + '" aria-label="Remove ' + esc(f.name) + '"><i class="fas fa-xmark"></i></button></div>'; }).join('');
@@ -709,8 +715,9 @@
         notes: notesHtml, instructions: $('#tcIns').value.trim().slice(0, 3000), files: files.slice(0, 20),
         questions: built.questions, questionCount: built.questions.length,
         task: taskKind ? Object.assign({ brief: brief.slice(0, 3000), kind: taskKind, category: taskKind === 'writing' ? 'WRITING' : 'CODE', questions: taskQuestions },
-          taskKind === 'code' ? { starter: $('#tcStarter').value.replace(/\s+$/, '').slice(0, 60000), startFrom: (m.body.querySelector('input[name="tcStartFrom"]:checked') || {}).value === 'starter' ? 'starter' : 'previous' } : {}) : null,
+          taskKind === 'code' ? { lang: $('#tcLang').value || 'web', starter: $('#tcStarter').value.replace(/\s+$/, '').slice(0, 60000), startFrom: (m.body.querySelector('input[name="tcStartFrom"]:checked') || {}).value === 'starter' ? 'starter' : 'previous' } : {}) : null,
         gate: { watch: !isTest && $('#tcGW').checked, quiz: $('#tcGQ').checked, pass: passMark, work: $('#tcGK').checked },
+        allowPublish: !!taskKind && $('#tcPub').checked,
         updatedAt: FV().serverTimestamp()
       };
       if (status === 'published' && !(item && item.publishedAt)) d.publishedAt = FV().serverTimestamp();
@@ -853,6 +860,7 @@
       var c = S.course, m = CU.openModal({ title: 'Class settings' });
       var levelOpts = T.TRACKS.concat(c.track === 'advanced' ? ['advanced'] : []);
       m.body.innerHTML = '<div class="cr-field"><label for="tcN">Class name</label><input type="text" id="tcN" maxlength="120" value="' + esc(c.name) + '"></div>' +
+        '<label class="cr-field" style="display:flex;gap:.55rem;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:700;font-size:.88rem"><input type="checkbox" id="tcPubAll"' + (c.allowPublish ? ' checked' : '') + ' style="margin-top:.2rem"><span><i class="fas fa-globe"></i> Builders may ask to publish their work from every lesson in this class<small style="display:block;font-weight:500;font-size:.8rem;color:var(--muted,#5A6E6A)">They get an Ask to publish button after handing in. Nothing goes public until you or the Studio Desk approve it; then they get a link to share. You can also switch it on for single lessons.</small></span></label>' +
         '<div class="cr-field"><label for="tcL">Level</label><select id="tcL">' + levelOpts.map(function (t) { return '<option value="' + t + '"' + (t === c.track ? ' selected' : '') + '>' + esc(trackName(t)) + '</option>'; }).join('') + '</select>' +
           (c.track === 'advanced' ? '<div class="cr-note" style="margin-top:.3rem">This class is from before each level had its own classes, so intermediate and expert builders both see it. Choose one level to separate them.</div>' : '') + '</div>' +
         '';
@@ -866,7 +874,7 @@
         if (track !== c.track && !confirm('Move “' + c.name + '” to ' + trackName(track) + '? Builders on the old level stop seeing it, and only ' + trackName(track) + ' builders get its new lessons.')) return;
         b.disabled = true;
         var bt = db.batch(), now = FV().serverTimestamp();
-        var cu = { name: name, track: track, updatedAt: now };
+        var cu = { name: name, track: track, allowPublish: !!m.body.querySelector('#tcPubAll').checked, updatedAt: now };
         if (track !== c.track) cu.order = nextOrder(track); /* the end of its new level */
         bt.update(COURSES().doc(c.id), cu);
         if (track !== c.track) {
@@ -1525,6 +1533,8 @@
       document.documentElement.style.overflow = 'hidden';
       S.pop = pop; claimFloat();
       S.work = g.TechWork.mountLessonWork(pop.querySelector('.tc-pop-body'), { me: me, student: student, lesson: Object.assign({}, l, { courseName: l.courseName || S.course.name }), label: label, layout: 'pop',
+        /* Publishing is switched on per lesson or for the whole class (coaches and admins). */
+        publishOpen: l.allowPublish === true || S.course.allowPublish === true,
         /* Earlier code practices in this class, nearest first: a new practice carries on from the latest one. */
         carryFrom: (function () { var all = orderedItems(), i = all.findIndex(function (x) { return x.id === l.id; }); return all.slice(0, Math.max(0, i)).filter(function (x) { return x.task && !isWriting(x); }).reverse().map(function (x) { return x.id; }); })() });
       pop.addEventListener('click', function (e) {

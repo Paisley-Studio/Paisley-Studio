@@ -16,8 +16,8 @@
               sent as X-RapidAPI-Host)
    commands   optional overrides of the compile/run scripts used for multi-file programs
 
-   Who: active coaches and admins, and active builders the Studio Desk has given the Advanced IDE
-   (Admin > Tech Studio > Controls, techSettings/advancedIde).
+   Who: active coaches and admins, and every active builder (Paisley VS Code runs Java for all;
+   the Advanced IDE page itself stays behind Admin > Tech Studio > Controls).
    Limits: 40 files, 256 KB of source, 64 KB of input, 15 runs a minute and
    300 a day per person (codeRunUsage/{uid}, server only).
 ========================================================= */
@@ -109,7 +109,11 @@ function ideAllowed(cfg, uid, student) {
   const lvl = IDE_LEVELS.includes(student.skillLevel) ? student.skillLevel : "intermediate";
   return (Array.isArray(cfg.students) && cfg.students.includes(uid)) || (Array.isArray(cfg.levels) && cfg.levels.includes(lvl));
 }
-/* "" when allowed, else why not. Coaches and admins can always run (they review builders' work). */
+/* "" when allowed, else why not. Coaches and admins can always run (they review builders' work).
+   Every active builder may run Java too: Paisley VS Code (the beginners' IDE, open to all) runs
+   the same languages as the Advanced IDE. The Advanced IDE itself stays behind its switch
+   (ideAllowed: /tech/ide, the builder portal and advancedIdeAllowed() in firestore.rules);
+   the per-person limits below keep runs in check. */
 async function allowed(db, uid) {
   const [a, s, c] = await Promise.all([
     db.collection("admins").doc(uid).get(),
@@ -118,8 +122,7 @@ async function allowed(db, uid) {
   ]);
   if (a.exists || (c.exists && c.data().status === "Active")) return "";
   if (!(s.exists && s.data().status === "Active")) return "Only Tech Studio builders, coaches and admins can run code here.";
-  const cfg = await db.collection("techSettings").doc("advancedIde").get();
-  return ideAllowed(cfg.exists ? cfg.data() : null, uid, s.data()) ? "" : "The Advanced Paisley IDE has not been switched on for you. Your coach or the Studio Desk can turn it on.";
+  return "";
 }
 
 async function takeRun(db, uid, now) {

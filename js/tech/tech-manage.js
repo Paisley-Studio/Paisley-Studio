@@ -327,44 +327,90 @@
     return { destroy: function () { dead = true; unsubs.forEach(function (u) { u(); }); } };
   }
 
-  /* ---------------- practice (read-only + coach note) ---------------- */
+  /* ---------------- practice (read-only, runnable, coach note, publishing) ----------------
+     Coaches and admins see builders' practice like class work: code opens in a read-only
+     Paisley VS Code where they can run it (Python, Java, C, C++, PHP, web pages), writing reads
+     as an article, and publish requests are approved or declined here (TechWork.decidePublish). */
   var IDE_LANG = { py: 'Python', java: 'Java', c: 'C', cpp: 'C++', php: 'PHP', js: 'JavaScript', html: 'HTML', css: 'CSS' };
+  var P_FILTERS = [['all', 'All'], ['help', 'Asked for help'], ['publish', 'Publish requests'], ['published', 'Published']];
+  function practiceKind(p) {
+    if (p.type === 'advanced') return 'Advanced IDE · ' + (IDE_LANG[(p.ide || {}).lang] || 'code');
+    if (p.type === 'code') return 'Paisley VS Code' + (g.TechWork && g.TechWork.codeLangLabel ? ' · ' + g.TechWork.codeLangLabel(p.codeFiles) : '');
+    return p.type || '';
+  }
   function mountPractice(host, o) {
     T.injectStyle();
-    var students = o.students || [], unsubs = [], lists = {}, open = null, dead = false;
+    if (g.TechWork && g.TechWork.style) g.TechWork.style();
+    var students = o.students || [], unsubs = [], lists = {}, open = null, dead = false, f = 'all';
+    var lab = null, labEl = null, labSig = '';
     var who = function (id) { var s = students.filter(function (x) { return x.id === id; })[0]; return s ? s.name : ''; };
+    var msOf = function (t) { var d = T.toDate(t); return d ? d.getTime() : 0; };
+    function all() {
+      var out = [];
+      Object.keys(lists).forEach(function (k) { out = out.concat(lists[k]); });
+      return out.sort(function (a, b) { return (T.toDate(b.updatedAt) || 0) - (T.toDate(a.updatedAt) || 0); });
+    }
+    function pubBox(p) {
+      var st = p.publishState || '', url = T.safeUrl(p.shareUrl);
+      if (st === 'requested') return '<div class="tw-pubnote" style="margin:.2rem 0 .6rem"><b>' + esc(T.firstName(who(p.studentId) || p.studentName) || 'The builder') + ' asks to publish this.</b> Run it and look it over, then approve it for a public link (first name only), or decline it with a note so they can fix it.</div>' +
+        '<div class="tk-actions" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem"><button type="button" class="tk-btn sm" data-ppub="decline" data-pid="' + esc(p.id) + '"><i class="fas fa-rotate-left"></i> Decline</button><button type="button" class="tk-btn sm primary" data-ppub="approve" data-pid="' + esc(p.id) + '"><i class="fas fa-globe"></i> Approve publishing</button></div>';
+      if (st === 'approved') return '<div class="tw-pub on" style="margin:.2rem 0 .6rem"><div class="hd"><i class="fas fa-globe"></i> <b>Published</b></div>' + (url && g.TechWork ? g.TechWork.linkBox(url) : '<p>Making the link…</p>') + '<button type="button" class="tk-btn sm" style="margin-top:.5rem" data-ppub="unpublish" data-pid="' + esc(p.id) + '"><i class="fas fa-eye-slash"></i> Unpublish</button></div>';
+      if (st === 'declined') return '<div class="tw-pubnote" style="margin:.2rem 0 .6rem"><b>Publishing declined.</b> ' + esc(p.publishNote || '') + '</div>';
+      return '';
+    }
     function paint() {
       if (dead) return;
-      var all = [];
-      Object.keys(lists).forEach(function (k) { all = all.concat(lists[k]); });
-      all.sort(function (a, b) { return (T.toDate(b.updatedAt) || 0) - (T.toDate(a.updatedAt) || 0); });
-      if (!all.length) { host.innerHTML = '<div class="tk-empty">No practice work yet. Practice is never graded; it shows here so you can see what builders are trying.</div>'; return; }
-      host.innerHTML = '<div class="tk-list">' + all.map(function (p) {
+      var list = all();
+      var n = { all: list.length, help: list.filter(function (p) { return p.helpRequested; }).length, publish: list.filter(function (p) { return p.publishState === 'requested'; }).length, published: list.filter(function (p) { return p.publishState === 'approved'; }).length };
+      var shown = list.filter(function (p) { return f === 'all' || (f === 'help' ? p.helpRequested : f === 'publish' ? p.publishState === 'requested' : p.publishState === 'approved'); });
+      /* The open project's IDE survives a repaint while its work is unchanged. */
+      var keep = labEl && labEl.parentNode ? labEl : null; if (keep) keep.parentNode.removeChild(keep);
+      if (!list.length) { if (lab) { lab.destroy(); lab = null; } labEl = null; host.innerHTML = '<div class="tk-empty">No practice work yet. Practice is never graded; it shows here so you can see what builders are trying, run their code and answer help requests.</div>'; return; }
+      host.innerHTML = '<div class="tk-chips" style="display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 .8rem">' + P_FILTERS.map(function (x) { return '<button type="button" class="tk-btn sm' + (f === x[0] ? ' primary' : '') + '" data-pf="' + x[0] + '">' + esc(x[1]) + (n[x[0]] ? ' (' + n[x[0]] + ')' : '') + '</button>'; }).join('') + '</div>' +
+        (shown.length ? '<div class="tk-list">' + shown.map(function (p) {
         var isOpen = open === p.id;
-        var adv = p.type === 'advanced';
-        return '<div class="tk-box"><div style="display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center"><div><b>' + esc(p.title || 'Practice') + '</b> <span class="tk-pill">' + esc(adv ? 'Advanced IDE · ' + (IDE_LANG[(p.ide || {}).lang] || 'code') : (p.type || '')) + '</span>' +
+        var adv = p.type === 'advanced', code = (p.type === 'code' || adv) && (p.codeFiles || []).length;
+        return '<div class="tk-box"><div style="display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center"><div><b>' + esc(p.title || 'Practice') + '</b> <span class="tk-pill">' + esc(practiceKind(p)) + '</span>' +
           (p.helpRequested ? ' <span class="tk-pill warn">Asked for help</span>' : '') + (p.done ? ' <span class="tk-pill ok">Done</span>' : '') +
+          (p.publishState === 'requested' ? ' <span class="tk-pill warn"><i class="fas fa-globe"></i> Wants to publish</span>' : p.publishState === 'approved' ? ' <span class="tk-pill ok"><i class="fas fa-globe"></i> Published</span>' : '') +
           '<div class="tk-sub" style="margin:0">' + esc(who(p.studentId) || p.studentName || '') + (p.missionTitle ? ' · for ' + esc(p.missionTitle) : '') + ' · ' + esc(T.ago(p.updatedAt)) + '</div></div>' +
-          '<button type="button" class="tk-btn sm" data-popen="' + esc(p.id) + '">' + (isOpen ? 'Close' : 'Open') + '</button></div>' +
-          (isOpen ? '<div style="margin-top:.6rem">' + (p.instructions ? '<div class="tk-fb">' + esc(p.instructions) + '</div>' : '') +
-            /* Read only for staff; they can run it there, sandboxed away from their own sign-in. */
+          '<button type="button" class="tk-btn sm' + (isOpen ? '' : ' primary') + '" data-popen="' + esc(p.id) + '">' + (isOpen ? 'Close' : (code ? '<i class="fas fa-play"></i> Open and run' : 'Open')) + '</button></div>' +
+          (isOpen ? '<div style="margin-top:.6rem">' + (p.instructions ? '<div class="tk-fb">' + esc(p.instructions) + '</div>' : '') + pubBox(p) +
+            /* Read only for staff; they run it there, sandboxed away from their own sign-in. */
             (adv ? '<p style="margin:.2rem 0 .6rem"><a class="tk-btn sm" href="/tech/ide?p=' + encodeURIComponent(p.id) + '" target="_blank" rel="noopener"><i class="fas fa-terminal"></i> Open in the Advanced IDE</a></p>' : '') +
+            (code && g.CodeLab ? '<div data-plab="' + esc(p.id) + '"></div>' : (p.codeFiles || []).map(function (cf) { return '<details><summary>' + esc(cf.name) + '</summary><pre class="tk-code">' + esc(cf.content) + '</pre></details>'; }).join('')) +
             (p.writingHtml ? '<div class="tk-article" style="margin-top:.5rem">' + T.cleanHtml(p.writingHtml) + '</div>' : '') +
-            ((p.codeFiles || []).length ? p.codeFiles.map(function (f) { return '<details><summary>' + esc(f.name) + '</summary><pre class="tk-code">' + esc(f.content) + '</pre></details>'; }).join('') : '') +
             (p.text ? '<div class="tk-prose" style="margin-top:.5rem">' + esc(p.text) + '</div>' : '') +
             '<div class="tk-f" style="margin-top:.6rem"><label>Note to the builder</label><textarea data-pnote="' + esc(p.id) + '" maxlength="1500">' + esc(p.coachNote || '') + '</textarea></div>' +
             '<button type="button" class="tk-btn sm primary" data-psave="' + esc(p.id) + '">Save note' + (p.helpRequested ? ' and mark help given' : '') + '</button></div>' : '') +
           (!isOpen && p.coachNote ? '<div class="tk-fb coach" style="margin-top:.5rem">' + esc(p.coachNote) + '</div>' : '') + '</div>';
-      }).join('') + '</div>';
+      }).join('') + '</div>' : '<div class="tk-empty">Nothing here.</div>');
+      var ph = host.querySelector('[data-plab]'), cur = ph ? list.filter(function (x) { return x.id === ph.dataset.plab; })[0] : null;
+      if (!ph || !cur) { if (lab) { lab.destroy(); lab = null; } labEl = null; labSig = ''; return; }
+      var sig = cur.id + ':' + msOf(cur.updatedAt);
+      if (keep && sig === labSig) { ph.parentNode.replaceChild(keep, ph); return; }
+      if (lab) lab.destroy();
+      labEl = ph; labSig = sig;
+      lab = g.CodeLab.mount(ph, { build: { id: cur.id, codeFiles: cur.codeFiles || [], codeFolders: cur.codeFolders || [], codeAssets: cur.codeAssets || [], codeActive: (cur.ide && cur.ide.entry) || cur.codeActive || '' }, canEdit: false, title: who(cur.studentId) || cur.studentName || 'Practice' });
     }
     host.addEventListener('click', function (e) {
-      var t = e.target.closest('[data-popen],[data-psave]'); if (!t) return;
+      var t = e.target.closest('[data-popen],[data-psave],[data-pf],[data-ppub]'); if (!t) return;
+      if (t.dataset.pf) { f = t.dataset.pf; paint(); return; }
       if (t.dataset.popen) { open = open === t.dataset.popen ? null : t.dataset.popen; paint(); return; }
+      if (t.dataset.ppub) {
+        var p = all().filter(function (x) { return x.id === t.dataset.pid; })[0]; if (!p || !g.TechWork) return;
+        t.disabled = true;
+        g.TechWork.decidePublish(db.collection('techPractice').doc(p.id), p, t.dataset.ppub, o.me, who(p.studentId) || p.studentName)
+          .then(function (up) { t.disabled = false; if (up && t.dataset.ppub === 'approve') alert('Published. ' + (T.firstName(who(p.studentId) || p.studentName) || 'The builder') + ' gets a notification, and their family gets the link.'); })
+          .catch(function (er) { t.disabled = false; alert(T.errMsg(er)); });
+        return;
+      }
       var id = t.dataset.psave, note = host.querySelector('[data-pnote="' + id + '"]').value.trim().slice(0, 1500);
       t.disabled = true;
       db.collection('techPractice').doc(id).update({ coachNote: note, coachNoteBy: o.me.name || '', coachNoteAt: FV().serverTimestamp(), helpRequested: false, updatedAt: FV().serverTimestamp() })
         .then(function () { t.innerHTML = '<i class="fas fa-circle-check"></i> Saved'; }).catch(function (er) { t.disabled = false; alert(T.errMsg(er)); });
     });
+    if (o.filter) f = o.filter;
     var targets = o.studentId ? [o.studentId] : students.map(function (s) { return s.id; });
     if (o.me.role === 'admin' && !o.studentId) {
       unsubs.push(db.collection('techPractice').orderBy('updatedAt', 'desc').limit(120).onSnapshot(function (s) { lists = { all: s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }) }; paint(); }, function (e) { host.innerHTML = '<div class="tk-empty">' + esc(T.errMsg(e)) + '</div>'; }));
@@ -374,7 +420,7 @@
       });
     }
     paint();
-    return { destroy: function () { dead = true; unsubs.forEach(function (u) { u(); }); } };
+    return { destroy: function () { dead = true; if (lab) { lab.destroy(); lab = null; } unsubs.forEach(function (u) { u(); }); } };
   }
 
   g.TechManage = { editMission: editMission, editLive: editLive, mountActivity: mountActivity, mountPractice: mountPractice, modal: modal };

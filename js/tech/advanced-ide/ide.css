@@ -4,24 +4,24 @@
    a monospace face for code only.
 ========================================================= */
 :root{
-  --brand:#55BFB3;--brand-deep:#245F5A;--brand-soft:#7BCBC2;--gold:#F5C842;
+  --brand:#00B4F0;--brand-deep:#0077A3;--brand-soft:#7FDBFF;--gold:#7FDBFF;--black:#05080B;--slate:#0E1A24;--cyan:#00B4F0;
   --ok:#2EB872;--err:#F0786A;--warn:#E8A33D;
   --font:'Quicksand',system-ui,sans-serif;
   --mono:'JetBrains Mono','Cascadia Code','Fira Code',Consolas,'Courier New',monospace;
 }
 #aiApp,#aiApp[data-theme="dark"]{
-  --bg:#0E1513;--bg2:#111a18;--bg3:#16211e;--bg4:#1c2a26;--line:rgba(123,203,194,.10);--line2:rgba(123,203,194,.18);
-  --text:#D9E7E3;--muted:#8DA49E;--faint:#5E7670;--hover:rgba(123,203,194,.08);--on:rgba(85,191,179,.16);
-  --term:#0B110F;--shadow:0 18px 50px rgba(0,0,0,.45);
+  --bg:#05080B;--bg2:#0A121A;--bg3:#0E1A24;--bg4:#15283A;--line:rgba(0,180,240,.10);--line2:rgba(0,180,240,.20);
+  --text:#E8F1F6;--muted:#8FA3B3;--faint:#5B7385;--hover:rgba(0,180,240,.08);--on:rgba(0,180,240,.16);
+  --term:#03060A;--shadow:0 18px 50px rgba(0,0,0,.55);
 }
 #aiApp[data-theme="light"]{
-  --bg:#FFFFFF;--bg2:#F4F8F7;--bg3:#EAF3F1;--bg4:#DDEBE8;--line:rgba(36,95,90,.10);--line2:rgba(36,95,90,.18);
-  --text:#1D2A28;--muted:#5A6E6A;--faint:#8BA09B;--hover:rgba(36,95,90,.06);--on:rgba(85,191,179,.18);
-  --term:#F7FAF9;--shadow:0 18px 50px rgba(36,95,90,.16);
+  --bg:#FFFFFF;--bg2:#F3F8FB;--bg3:#E8F2F8;--bg4:#D6E9F4;--line:rgba(14,26,36,.10);--line2:rgba(14,26,36,.18);
+  --text:#05080B;--muted:#4A5C6A;--faint:#8A9BA7;--hover:rgba(0,119,163,.06);--on:rgba(0,180,240,.16);
+  --term:#F7FAFC;--shadow:0 18px 50px rgba(14,26,36,.16);
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{margin:0;height:100%;background:#0B0F0E;color:#D9E7E3;font-family:var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+html,body{margin:0;height:100%;background:#05080B;color:#E8F1F6;font-family:var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--brand);outline-offset:2px}
@@ -29,24 +29,24 @@ button{cursor:pointer}
 /* ---------------------------------------------------------
    Welcome sequence
 --------------------------------------------------------- */
-#aiIntro{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 40%,#13201d 0%,#0B0F0E 62%);overflow:hidden;transition:opacity .7s ease,transform .9s cubic-bezier(.2,.7,.2,1),filter .7s}
+#aiIntro{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 40%,#0E1A24 0%,#05080B 62%);overflow:hidden;transition:opacity .7s ease,transform .9s cubic-bezier(.2,.7,.2,1),filter .7s}
 #aiIntro.out{opacity:0;transform:scale(1.06);filter:blur(6px);pointer-events:none}
 #aiIntro canvas{position:absolute;inset:0;width:100%;height:100%}
 .ai-intro-inner{position:relative;text-align:center;padding:0 1.25rem;max-width:880px}
-.ai-mark{width:64px;height:64px;margin:0 auto 1.6rem;border-radius:18px;display:grid;place-items:center;background:rgba(85,191,179,.08);border:1px solid rgba(123,203,194,.22);color:var(--gold);font-size:1.6rem;opacity:0;transform:translateY(10px) scale(.9);transition:all .7s cubic-bezier(.2,.7,.2,1)}
+.ai-mark{width:64px;height:64px;margin:0 auto 1.6rem;border-radius:18px;display:grid;place-items:center;background:rgba(0,180,240,.08);border:1px solid rgba(0,180,240,.22);color:var(--gold);font-size:1.6rem;opacity:0;transform:translateY(10px) scale(.9);transition:all .7s cubic-bezier(.2,.7,.2,1)}
 .ai-kicker{font-size:.72rem;font-weight:800;letter-spacing:.32em;text-transform:uppercase;color:var(--brand-soft);opacity:0;transition:opacity .6s .15s}
-.ai-title{margin:.75rem 0 0;font-weight:800;font-size:clamp(1.55rem,4.6vw,3.2rem);line-height:1.12;letter-spacing:.06em;color:#F3FAF8}
+.ai-title{margin:.75rem 0 0;font-weight:800;font-size:clamp(1.55rem,4.6vw,3.2rem);line-height:1.12;letter-spacing:.06em;color:#FFFFFF}
 .ai-title .w{display:inline-block;opacity:0;transform:translateY(18px);filter:blur(6px);transition:opacity .7s,transform .8s cubic-bezier(.2,.7,.2,1),filter .7s}
 .ai-title .accent{color:var(--brand)}
-.ai-sub{margin:1.1rem auto 0;max-width:540px;font-size:clamp(.98rem,2.2vw,1.18rem);font-weight:600;font-style:italic;color:#A9C2BC;opacity:0;transform:translateY(8px);transition:opacity .8s,transform .8s}
+.ai-sub{margin:1.1rem auto 0;max-width:540px;font-size:clamp(.98rem,2.2vw,1.18rem);font-weight:600;font-style:italic;color:#A9BFCC;opacity:0;transform:translateY(8px);transition:opacity .8s,transform .8s}
 .ai-load{margin:2.4rem auto 0;width:min(320px,80vw);opacity:0;transition:opacity .5s}
-.ai-bar{height:3px;border-radius:3px;background:rgba(123,203,194,.14);overflow:hidden;position:relative}
+.ai-bar{height:3px;border-radius:3px;background:rgba(0,180,240,.14);overflow:hidden;position:relative}
 .ai-bar i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,var(--brand-deep),var(--brand));border-radius:3px;transition:width .35s}
 .ai-bar.indet i{width:34%;animation:aiSlide 1.3s ease-in-out infinite}
 @keyframes aiSlide{0%{left:-34%}100%{left:100%}}
-.ai-load p{margin:.7rem 0 0;font-size:.78rem;font-weight:600;color:#7E9690;min-height:1.2em}
-.ai-skip{position:absolute;right:1.2rem;bottom:1.2rem;z-index:2;background:none;border:1px solid rgba(123,203,194,.2);color:#9FB7B1;border-radius:999px;padding:.4rem .9rem;font-size:.76rem;font-weight:700;opacity:0;transition:opacity .4s .6s,background .2s,color .2s}
-.ai-skip:hover{background:rgba(85,191,179,.12);color:#fff}
+.ai-load p{margin:.7rem 0 0;font-size:.78rem;font-weight:600;color:#7E93A1;min-height:1.2em}
+.ai-skip{position:absolute;right:1.2rem;bottom:1.2rem;z-index:2;background:none;border:1px solid rgba(0,180,240,.2);color:#9FB3C1;border-radius:999px;padding:.4rem .9rem;font-size:.76rem;font-weight:700;opacity:0;transition:opacity .4s .6s,background .2s,color .2s}
+.ai-skip:hover{background:rgba(0,180,240,.12);color:#fff}
 #aiIntro.play .ai-mark{opacity:1;transform:none}
 #aiIntro.play .ai-kicker{opacity:1}
 #aiIntro.play .ai-title .w{opacity:1;transform:none;filter:none}
@@ -67,8 +67,8 @@ button{cursor:pointer}
 .ai-btn:active{transform:scale(.97)}
 .ai-btn[disabled]{opacity:.45;pointer-events:none}
 .ai-btn.icon{padding:0;width:32px}
-.ai-btn.primary{background:var(--brand);color:#05241f;border-color:var(--brand)}
-.ai-btn.primary:hover{background:#68cdc1;color:#05241f}
+.ai-btn.primary{background:var(--brand);color:#05080B;border-color:var(--brand)}
+.ai-btn.primary:hover{background:#33C4F4;color:#05080B}
 .ai-btn.stop{background:rgba(240,120,106,.14);color:var(--err);border-color:rgba(240,120,106,.32)}
 .ai-btn.ghost{border-color:var(--line2);color:var(--text)}
 .ai-btn.on{background:var(--on);color:var(--text)}
@@ -256,7 +256,7 @@ kbd{display:inline-block;font:700 .68rem/1 var(--font);padding:.22rem .38rem;bor
 .ai-term-empty ul{margin:.5rem 0 0;padding-left:1.1rem}
 .ai-inrow{display:flex;align-items:center;gap:.4rem;padding:.4rem .6rem;border-top:1px solid var(--line);background:var(--term)}
 .ai-inrow i.p{color:var(--brand);font-size:.8rem}
-.ai-inrow input{flex:1;min-width:0;height:30px;border:1px solid var(--brand);border-radius:8px;background:var(--bg);padding:0 .6rem;font:13px var(--mono);outline:none;box-shadow:0 0 0 3px rgba(85,191,179,.15)}
+.ai-inrow input{flex:1;min-width:0;height:30px;border:1px solid var(--brand);border-radius:8px;background:var(--bg);padding:0 .6rem;font:13px var(--mono);outline:none;box-shadow:0 0 0 3px rgba(0,180,240,.15)}
 .ai-inrow .ai-btn{height:30px;font-size:.76rem}
 .ai-probs{flex:1;overflow:auto;padding:.3rem .4rem}
 .ai-prob{display:flex;align-items:flex-start;gap:.55rem;width:100%;border:0;background:none;text-align:left;padding:.35rem .5rem;border-radius:7px;font-size:.8rem;color:var(--text)}
@@ -271,7 +271,7 @@ kbd{display:inline-block;font:700 .68rem/1 var(--font);padding:.22rem .38rem;bor
 .ai-stdin textarea:focus{border-color:var(--brand)}
 
 /* status bar */
-.ai-status{display:flex;align-items:center;gap:.2rem;padding:0 .5rem;background:var(--brand-deep);color:#DDF1EE;font-size:.72rem;font-weight:700;min-width:0;overflow:hidden}
+.ai-status{display:flex;align-items:center;gap:.2rem;padding:0 .5rem;background:var(--brand-deep);color:#DFF5FD;font-size:.72rem;font-weight:700;min-width:0;overflow:hidden}
 #aiApp[data-theme="light"] .ai-status{background:var(--brand-deep)}
 .ai-status button,.ai-status span{display:inline-flex;align-items:center;gap:.35rem;height:26px;padding:0 .5rem;border:0;background:none;color:inherit;font:inherit;white-space:nowrap;border-radius:0}
 .ai-status button:hover{background:rgba(255,255,255,.1)}
@@ -382,3 +382,20 @@ kbd{display:inline-block;font:700 .68rem/1 var(--font);padding:.22rem .38rem;bor
   #aiIntro,#aiIntro *,#aiApp{transition-duration:.01s!important;transition-delay:0s!important;animation:none!important}
   #aiApp{transform:none;filter:none}
 }
+
+/* ---------------------------------------------------------
+   The Paisley IDE palette (img/IDE-COLOR PALLETES.jpg): Black #05080B,
+   Slate #0E1A24, Cyan #00B4F0, White, and the black-to-cyan gradient.
+--------------------------------------------------------- */
+.ai-top{position:relative}
+.ai-top::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,#05080B,#0E1A24 30%,#00B4F0 72%,#E6F8FF);opacity:.9;pointer-events:none}
+.ai-brand .logo{background:linear-gradient(135deg,#0E1A24,#00B4F0);color:#fff;box-shadow:0 0 0 1px rgba(0,180,240,.35)}
+.ai-mark{background:linear-gradient(135deg,rgba(14,26,36,.9),rgba(0,180,240,.35))!important;color:#fff!important}
+#aiApp[data-theme="light"] .ai-brand b span,#aiApp[data-theme="light"] .ai-chip.ro{color:#0077A3}
+#aiApp[data-theme="light"] .ai-btn.primary{color:#05080B}
+#aiShare.on{background:var(--on);color:var(--text);border-color:var(--brand)}
+/* a labelled Upload everyone can find, like Paisley VS Code */
+.ai-uprow{padding:.55rem .7rem .25rem}
+.ai-uprow .ai-btn{width:100%;justify-content:flex-start;border-color:var(--line2);color:var(--brand)}
+#aiApp[data-theme="light"] .ai-uprow .ai-btn{color:#0077A3}
+.ai-uprow .ai-btn:hover{background:var(--on);color:var(--text)}

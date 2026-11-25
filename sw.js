@@ -1,7 +1,7 @@
 // Paisley Studio Service Worker
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v13-ide'; // bumped: the Advanced IDE is never intercepted; offline misses answer with a network error
+const CACHE_NAME = 'paisley-studio-v14-ide2'; // bumped: Paisley VS Code runs programs and uses the new IDE palette
 const CACHE_URLS = ['./', './index.html'];
 
 // Hosts that must NEVER be intercepted by the service worker.

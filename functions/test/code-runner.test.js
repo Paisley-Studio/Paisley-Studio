@@ -37,15 +37,13 @@ test("refuses anyone who is not an active builder, coach or admin", async () => 
   await assert.rejects(runCodeHandler({ auth: { uid: "stranger" }, data: { language: "java", files: [JAVA], entry: "Main.java" } }, { db, fetch: ok({}) }), (e) => e.code === "permission-denied");
 });
 
-test("builders need the Advanced IDE switched on for them (Admin > Tech Studio > Controls)", async () => {
-  const base = { "techStudents/kid": { status: "Active", skillLevel: "beginner" }, "techCoaches/coach": { status: "Active" }, "serverConfig/codeRunner": { url: "https://judge.example/" } };
+test("every active builder may run (Paisley VS Code runs Java for everyone), whatever the Advanced IDE switch says", async () => {
+  const base = { "techStudents/kid": { status: "Active", skillLevel: "beginner" }, "techStudents/paused": { status: "Inactive" }, "techCoaches/coach": { status: "Active" }, "serverConfig/codeRunner": { url: "https://judge.example/" } };
   const call = (db, uid) => runCodeHandler({ auth: { uid }, data: { language: "java", files: [JAVA], entry: "Main.java" } }, { db, fetch: ok({ stdout: "", status: { id: 3 } }) });
-  await assertRejectsCode(call(fakeDb(base), "kid"), "permission-denied", /not been switched on for you/);
-  await assertRejectsCode(call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: true, levels: ["intermediate"], students: [] } })), "kid"), "permission-denied");
-  await call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: true, levels: ["beginner"], students: [] } })), "kid");
-  await call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: true, levels: [], students: ["kid"] } })), "kid");
-  await assertRejectsCode(call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: false, levels: ["beginner"], students: ["kid"] } })), "kid"), "permission-denied");
-  await call(fakeDb(base), "coach");   // coaches review builders' work whatever the switch says
+  await call(fakeDb(base), "kid");
+  await call(fakeDb(Object.assign({}, base, { "techSettings/advancedIde": { enabled: false, levels: [], students: [] } })), "kid");
+  await assertRejectsCode(call(fakeDb(base), "paused"), "permission-denied");
+  await call(fakeDb(base), "coach");   // coaches review builders' work
 });
 async function assertRejectsCode(p, code, re) { await assert.rejects(p, (e) => e.code === code && (!re || re.test(e.message))); }
 

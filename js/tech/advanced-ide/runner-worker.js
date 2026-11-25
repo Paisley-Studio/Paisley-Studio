@@ -64,7 +64,9 @@ let interactive = false;
 let runId = 0;
 function nextLine() {
   if (queue.length) { const l = queue.shift(); post({ t: 'echo', id: runId, text: l }); return l; }
-  if (!interactive || !ctl) return null;
+  /* Not interactive and nothing left to read: the page hears that the program wanted more,
+     so Paisley VS Code can ask the builder and run again with the answer (it cannot pause here). */
+  if (!interactive || !ctl) { post({ t: 'starved', id: runId }); return null; }
   Atomics.store(ctl, 0, 0);
   post({ t: 'input', id: runId });
   Atomics.wait(ctl, 0, 0);
@@ -77,6 +79,10 @@ function setInput(text, live) {
   queue = t ? t.replace(/\n$/, '').split('\n') : [];
   interactive = !!live && !!ctl;
 }
+
+/* Uploaded pictures, sounds and data files arrive as { name, binary: true, bytes }. */
+function bytesOf(f) { return f.binary ? (f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes || 0)) : enc.encode(String(f.content || '')); }
+function safePath(n) { return String(n || '').split('/').every(p => p && p !== '.' && p !== '..'); }
 
 /* ---------- output, streamed ---------- */
 function streamer(stream) {
@@ -201,11 +207,11 @@ function loadPython(withJedi) {
 }
 function pyWriteFiles(py, files) {
   const keep = new Set();
-  files.filter(f => !f.binary).forEach(f => {
+  files.filter(f => safePath(f.name)).forEach(f => {
     const p = PY_ROOT + '/' + f.name;
     keep.add(p);
     py.FS.mkdirTree(p.slice(0, p.lastIndexOf('/')));
-    py.FS.writeFile(p, f.content);
+    py.FS.writeFile(p, f.binary ? bytesOf(f) : f.content);
   });
   /* forget files deleted in the IDE */
   (function walk(dir) {
@@ -232,6 +238,9 @@ async function runPython(m) {
   py.setStderr({ write: streamerBytes('stderr'), isatty: true });
   /* isatty false: otherwise input() writes its prompt to stderr, like a terminal would. */
   py.setStdin({ stdin: () => { const l = nextLine(); return l === null ? undefined : l + '\n'; }, isatty: false });
+  /* Paisley VS Code runs a program again with each answer typed; the same seed keeps
+     random choices the same between those runs. */
+  if (m.seed != null) py.runPython('import random as __pz_rnd; __pz_rnd.seed(' + Math.floor(Number(m.seed) || 0) + ')');
   const res = JSON.parse(py.globals.get('__pz_run')(PY_ROOT + '/' + m.entry));
   return res;
 }
@@ -316,16 +325,28 @@ async function runWasi(m) {
   }
   function dir(files) {
     const root = new Map();
-    files.filter(f => !f.binary).forEach(f => {
+    files.filter(f => safePath(f.name)).forEach(f => {
       const parts = f.name.split('/'); let d = root;
       parts.slice(0, -1).forEach(p => { if (!d.get(p)) d.set(p, new Directory(new Map())); d = d.get(p).contents; });
-      d.set(parts[parts.length - 1], new File(enc.encode(f.content)));
+      d.set(parts[parts.length - 1], new File(bytesOf(f)));
     });
     return root;
   }
   const wasi = new WASI([m.entry || 'program'], [], [new Stdin(), new Out('stdout'), new Out('stderr'), new PreopenDirectory('.', dir(m.files))]);
   const module = await WebAssembly.compile(m.wasm);
-  const inst = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: wasi.wasiImport });
+  /* With a seed (runs again with each typed answer), the wall clock starts from the same moment,
+     so srand(time(NULL)) picks the same numbers each time. */
+  let inst = null;
+  if (m.seed != null && wasi.wasiImport.clock_time_get) {
+    const real = wasi.wasiImport.clock_time_get;
+    let now = BigInt(Math.floor((Number(m.seed) || 0) / 1000)) * 1000000000n;
+    wasi.wasiImport.clock_time_get = (id, precision, ptr) => {
+      if (id !== 0 || !inst) return real(id, precision, ptr);
+      new DataView(inst.exports.memory.buffer).setBigUint64(ptr, now, true); now += 1000000n;
+      return 0;
+    };
+  }
+  inst = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: wasi.wasiImport });
   post({ t: 'started', id: runId });
   try {
     const code = wasi.start(inst);
@@ -376,10 +397,10 @@ async function phpFs(php, files) {
     names.forEach(n => { if (n === '.' || n === '..') return; const p = d + '/' + n; if (FS.isDir(FS.stat(p).mode)) { rm(p); FS.rmdir(p); } else FS.unlink(p); });
   })(PHP_ROOT);
   try { FS.mkdir(PHP_ROOT); } catch (e) {}
-  files.filter(f => !f.binary).forEach(f => {
+  files.filter(f => safePath(f.name)).forEach(f => {
     const p = PHP_ROOT + '/' + f.name, parts = f.name.split('/');
     let d = PHP_ROOT; parts.slice(0, -1).forEach(x => { d += '/' + x; try { FS.mkdir(d); } catch (e) {} });
-    FS.writeFile(p, /\.php$/i.test(f.name) ? phpSource(f.content) : f.content);
+    FS.writeFile(p, f.binary ? bytesOf(f) : /\.php$/i.test(f.name) ? phpSource(f.content) : f.content);
   });
 }
 function phpClean(s) { return String(s).replace(/php-wasm run script/g, 'the runner').replace(new RegExp(PHP_ROOT + '/', 'g'), ''); }
@@ -411,7 +432,8 @@ async function runPhp(m) {
   php.addEventListener('output', onOut); php.addEventListener('error', onErr);
   post({ t: 'started', id: runId });
   try {
-    const code = await php.run(PHP_PRELUDE + 'chdir(' + JSON.stringify(PHP_ROOT) + ');require ' + JSON.stringify(PHP_ROOT + '/' + m.entry) + ';');
+    const seed = m.seed != null ? 'mt_srand(' + Math.floor((Number(m.seed) || 0) % 2147483647) + ');' : '';
+    const code = await php.run(PHP_PRELUDE + seed + 'chdir(' + JSON.stringify(PHP_ROOT) + ');require ' + JSON.stringify(PHP_ROOT + '/' + m.entry) + ';');
     try { php.flush(); } catch (e) {}
     return { ok: !code, code: code || 0 };
   } finally {

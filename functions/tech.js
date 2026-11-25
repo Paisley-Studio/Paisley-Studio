@@ -1451,6 +1451,112 @@ async function publishEvent(wid, b, a) {
   }
 }
 
+/* ---------------------------------------------------------
+   Publishing practice projects (the Practice lab and the Advanced IDE).
+   The builder asks (publishState "requested", allowed by the rules only while
+   the Studio Desk has techSettings/portal.practicePublish on); their coach or an
+   admin approves or declines. Approved work gets a public copy at
+   techShowcase/pr_{practiceId}, shown at /tech/p/pr_{practiceId} with the
+   builder's first name only. Python, Java, C, C++ and PHP projects keep their
+   files, so the public page can run them in its sandbox. Saves refresh the copy.
+--------------------------------------------------------- */
+const practiceShowcaseId = (pid) => "pr_" + String(pid).replace(/[^\w-]/g, "_").slice(0, 200);
+const PRACTICE_CONTENT_KEYS = ["title", "codeFiles", "codeAssets", "codeActive", "writingHtml", "text", "ide"];
+const PRACTICE_LANG = { py: "Python", java: "Java", c: "C", cpp: "C++", php: "PHP", js: "JavaScript", html: "Web page", css: "Web page" };
+function practiceLanguage(p) {
+  const lang = p && p.ide && p.ide.lang;
+  if (PRACTICE_LANG[lang]) return PRACTICE_LANG[lang];
+  const names = ((p && p.codeFiles) || []).map((f) => String((f && f.name) || "").toLowerCase());
+  const has = (re) => names.some((n) => re.test(n));
+  return has(/\.py$/) ? "Python" : has(/\.java$/) ? "Java" : has(/\.(cpp|cc|cxx)$/) ? "C++" : has(/\.c$/) ? "C" : has(/\.php$/) ? "PHP" : has(/\.html?$/) ? "Web page" : "";
+}
+/* The parts of the public copy that follow the builder's saves. */
+function practiceShowcaseContent(p) {
+  const writing = p.type === "writing", notes = p.type === "research" || p.type === "ai";
+  let size = 0;
+  const code = writing || notes ? [] : (p.codeFiles || []).filter((f) => f && String(f.content || "").trim())
+    .filter((f) => (size += String(f.content).length) < 400000).slice(0, 60)
+    .map((f) => ({ name: String(f.name || ""), lang: f.lang || "", content: String(f.content) }));
+  return {
+    title: String(p.title || "My project").slice(0, 160),
+    language: practiceLanguage(p),
+    codeFiles: code, codeActive: (p.ide && p.ide.entry) || p.codeActive || "",
+    codeAssets: code.length ? (p.codeAssets || []).slice(0, 60).map((x) => ({ name: (x && x.name) || "", url: httpsOnly(x && x.url), type: (x && x.type) || "" })).filter((x) => x.url) : [],
+    writingHtml: writing ? String(p.writingHtml || "").slice(0, 200000) : "",
+    workText: notes ? String(p.text || "").slice(0, 4000) : "",
+    contentUpdatedAt: FV().serverTimestamp()
+  };
+}
+function practiceShowcase(p, s) {
+  const writing = p.type === "writing", notes = p.type === "research" || p.type === "ai";
+  return Object.assign(practiceShowcaseContent(p), {
+    description: "Made in the Practice lab at Paisley Tech Studio.",
+    category: writing ? "WRITING" : notes ? "RESEARCH" : "CODE", origin: "practice", displayName: first(s && s.name, "A Paisley student"),
+    images: [], sourceType: "practice", disciplines: [], skills: [],
+    publishedAt: FV().serverTimestamp()
+  });
+}
+async function practicePublishEvent(pid, b, a) {
+  const db = admin.firestore(), sid = a.studentId, s = await techStudent(sid);
+  if (!s) return;
+  const st = a.publishState || "", who = s.name || "A builder", kid = first(s.name, "Your child");
+  const what = a.title || "a practice project", lang = practiceLanguage(a);
+  const scId = practiceShowcaseId(pid), round = tsMs(a.publishRequestedAt) || tsMs(a.publishDecidedAt) || Date.now();
+  const extra = { studentId: sid, practiceId: pid };
+  if (st === "requested") {
+    const line = `${who} asks to publish “${what}”${lang ? " (" + lang + ")" : ""} from the Practice lab.`;
+    const coach = s.coachId || a.coachId;
+    if (coach) await techNotify(coach, "coach", "tech_publish", "Publish request", line, Object.assign({ id: `ppub_${pid}_${round}`, section: "practice" }, extra));
+    await notifyAdmins("tech_publish", "Publish request", line, Object.assign({ id: `ppub_${pid}_${round}`, section: "wall" }, extra));
+    return;
+  }
+  if (st === "approved") {
+    await db.collection("techShowcase").doc(scId).set(practiceShowcase(a, s));
+    const url = APP + "/tech/p/" + encodeURIComponent(scId);
+    await db.collection("techPractice").doc(pid).update({ shareId: scId, shareUrl: url, publishedAt: FV().serverTimestamp() });
+    const by = a.publishDecidedByName || "Your coach";
+    const fresh = await techNotify(sid, "student", "tech_publish", "Your project is published!", `${by} approved “${what}”. Share your link with friends and family.`, Object.assign({ id: `ppubok_${pid}_${round}`, section: "projects", link: LINKS.student + "#projects" }, extra));
+    if (fresh) await email(s.email, `Your project is published: ${what}`, {
+      preheader: "Share your link with friends and family.", heading: "Your project is published!",
+      intro: `Hi ${esc(first(s.name))}, ${esc(by)} approved “${esc(what)}”${lang ? " (" + esc(lang) + ")" : ""}.`,
+      body: `<p style="margin:0 0 8px;">Anyone with this link can see it${/^(Python|Java|C|C\+\+|PHP)$/.test(lang) ? " and press Run to try your program" : ""}. It is also in My projects, ready to copy.</p><p style="margin:0;word-break:break-all;"><a href="${esc(url)}" style="color:#0077A3;font-weight:700;">${esc(url)}</a></p>`,
+      cta: { label: "Open your published project", url }
+    });
+    for (const g of await guardiansOf(sid)) {
+      const gFresh = await techNotify(g.parentUid, "guardian", "tech_publish", `${kid}'s project is published`, `“${what}” is public now. Share the link with family and friends.`, Object.assign({ id: `ppubok_${pid}_${round}_${g.parentUid}`, section: "projects", link: LINKS.guardian + "#projects" }, extra));
+      if (gFresh) await email(g.email, `${kid}'s project is published: share it!`, {
+        preheader: `See what ${kid} made, and share it with family and friends.`, heading: `${kid}'s project is published!`,
+        intro: `Hi ${esc(first(g.name))}, ${esc(by)} approved ${esc(kid)}'s project “${esc(what)}” for publishing.`,
+        body: `<p style="margin:0 0 8px;">Share this link with family and friends. Only ${esc(kid)}'s first name is shown:</p><p style="margin:0 0 10px;word-break:break-all;"><a href="${esc(url)}" style="color:#0077A3;font-weight:700;">${esc(url)}</a></p><p style="margin:0;"><b>Keep encouraging them!</b> You can find this link again in Projects in the guardian portal.</p>`,
+        cta: { label: `See ${kid}'s project`, url }
+      });
+    }
+    await logActivity(sid, "work_published", `Published ${what}`, { studentName: s.name || "", by: "coach", origin: "practice" });
+    return;
+  }
+  /* declined or taken down: the public copy goes */
+  await db.collection("techShowcase").doc(scId).delete().catch(() => {});
+  if (b && b.shareUrl) await db.collection("techPractice").doc(pid).update({ shareUrl: "", shareId: "" }).catch(() => {});
+  if (st === "declined") {
+    const by = a.publishDecidedByName || "Your coach";
+    await techNotify(sid, "student", "tech_publish", "Not published yet", `${by} looked at “${what}”.${a.publishNote ? " " + String(a.publishNote).slice(0, 300) : ""} Fix it, then ask again.`, Object.assign({ id: `ppubno_${pid}_${round}`, section: "practice", link: LINKS.student + "#practice" }, extra));
+  }
+}
+exports.onTechPracticeWritten = onDocumentWritten(
+  { document: "techPractice/{pid}", region: LOCATION, secrets: SMTP_SECRETS },
+  async (event) => {
+    const pid = event.params.pid;
+    const b = event.data.before.exists ? event.data.before.data() : null;
+    const a = event.data.after.exists ? event.data.after.data() : null;
+    /* A deleted project takes its public copy with it. */
+    if (!a) { if (b && b.publishState === "approved") await admin.firestore().collection("techShowcase").doc(practiceShowcaseId(pid)).delete().catch(() => {}); return; }
+    if (((b && b.publishState) || "") !== (a.publishState || "")) { await practicePublishEvent(pid, b, a); return; }
+    if (b && a.publishState === "approved" && changedAny(b, a, PRACTICE_CONTENT_KEYS)) {
+      await refreshShowcase(practiceShowcaseId(pid), practiceShowcaseContent(a)).catch((e) => console.warn("practice showcase refresh:", e.message || e));
+    }
+  }
+);
+
 /* Builders added to a group hear who they are working with. */
 exports.onTechGroupWritten = onDocumentWritten(
   { document: "techGroups/{gid}", region: LOCATION },
@@ -2127,4 +2233,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workCleared, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf, buildShowcaseContent, liveWork, changedAny, BUILD_CONTENT_KEYS, WORK_CONTENT_KEYS };
+exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workCleared, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf, buildShowcaseContent, liveWork, changedAny, BUILD_CONTENT_KEYS, WORK_CONTENT_KEYS, practiceShowcase, practiceShowcaseContent, practiceShowcaseId, practiceLanguage, PRACTICE_CONTENT_KEYS };

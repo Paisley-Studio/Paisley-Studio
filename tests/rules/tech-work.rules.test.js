@@ -106,6 +106,9 @@ test("their coach and admins mark it; other coaches cannot see it; guardians rea
 });
 
 test("publishing: the builder asks, their coach or an admin decides", async () => {
+  /* Asking needs publishing switched on for the lesson (or its class) by a coach or admin. */
+  await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "requested", publishRequestedAt: new Date(), updatedAt: new Date() }));
+  await env.withSecurityRulesDisabled(async (ctx) => { await ctx.firestore().doc("techLessons/sent").set({ type: "lesson", courseId: "c1", status: "published", allowPublish: true }); });
   await assertSucceeds(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "requested", publishRequestedAt: new Date(), updatedAt: new Date() }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ publishState: "approved" }));
   await assertFails(as("kid1").doc("techLessonWork/kid1_sent").update({ shareUrl: "https://evil" }));

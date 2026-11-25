@@ -25,11 +25,11 @@ The IDE is **off for everyone** until the Studio Desk switches it on in Admin > 
 
 A builder has it when it is **enabled** and either **their level is ticked** or **they were picked by name**. A builder with no level counts as Intermediate, as everywhere else in Tech Studio. The picker lists every active builder, tagged "Admitted from Paisley" (`admittedFrom`) or "Applied". It can filter, pick everyone shown, and shows how many builders will have access before you save.
 
-The same test runs in four places, so hiding the button is never the only lock:
+The same test runs in three places, so hiding the button is never the only lock:
 - the builder portal (`ideOn()` in `tech/dashboard.html`, which follows the setting live);
 - `/tech/ide`, which refuses to open without access, and locks to read only if access is switched off while a builder is working (unsaved changes stay in the browser and are offered back later);
 - `firestore.rules` (`advancedIdeAllowed()`: creating or saving a `type: 'advanced'` practice doc, or turning another practice into one);
-- `runCode`.
+(`runCode` used to be the fourth. Since Nov 2026 it serves every active builder, because Paisley VS Code, which every builder has, runs Java too; its per-person limits still apply.)
 
 Coaches and admins can always open a builder's project read only, to review it.
 
@@ -76,7 +76,7 @@ COEP side effect: a builder's web page in the preview cannot embed third-party i
 
 - **Student code never runs on the Paisley origin or on a Paisley server.** Python, C, C++ and PHP run in Web Workers started inside an iframe with `sandbox="allow-scripts"`, which has an opaque origin: no cookies, no IndexedDB, no Firebase session, no access to the page. This matters when a coach or admin opens a builder's project and runs it. The workers are module workers started from a `data:` URL, because a `blob:` module worker cannot start from an opaque origin and Pyodide refuses classic workers.
 - The web preview is the same sandboxed iframe Code Lab uses.
-- Java goes to `runCode`, which checks the caller (active builder, active coach or admin), validates file names (nothing can climb out of the project), limits size (40 files, 256 KB of source, 64 KB of input) and rate (15 runs a minute, 300 a day per person, `codeRunUsage/{uid}`), then forwards to the execution service. The function itself never executes anything. The service URL and key live only on the server.
+- Java goes to `runCode`, which checks the caller (any active builder, active coach or admin), validates file names (nothing can climb out of the project), limits size (40 files, 256 KB of source, 64 KB of input) and rate (15 runs a minute, 300 a day per person, `codeRunUsage/{uid}`), then forwards to the execution service. The function itself never executes anything. The service URL and key live only on the server.
 - Runtime downloads go through the page (`fetchRuntime`), which fetches only the pinned runtime URLs, keeps them in Cache Storage (`paisley-ide-runtimes-v1`) and reports real progress. The first Python run downloads about 12 MB, C/C++ about 18 MB, PHP about 5 MB; later visits open them from the cache.
 
 ## Projects and permissions
@@ -110,6 +110,13 @@ How things behave together:
 Shortcuts: F5 / Ctrl+Enter Run · Shift+F5 Stop · Ctrl+S Save · Ctrl+P open a file · Ctrl+Shift+F search · Ctrl+B side bar · Ctrl+J panel · Ctrl+\ split · Alt+N new file · F11 full screen · F1 every editor command.
 
 Below 900 px the side bar becomes an overlay. Below 640 px the preview takes the editor's place, toggled with the Preview button.
+
+## Shared with Paisley VS Code (Nov 2026)
+
+- **Palette and themes.** The IDE palette from `img/IDE-COLOR PALLETES.jpg` (Black #05080B, Slate #0E1A24, Cyan #00B4F0, White) in `ide.css` and the Monaco themes; a sun/moon button in the title bar switches light and dark (also in Settings).
+- **Runner.** Paisley VS Code uses this runner too (`CodeLab.loadRuntime`). For it the worker posts `starved` when a non-live program runs out of input, and `run` takes a `seed` (Python `random.seed`, a fixed WASI wall clock, PHP `mt_srand`). Files may be `{ name, binary: true, bytes }`: uploaded pictures and sounds are written into the program's folder for Python, C/C++ (WASI) and PHP (`CodeLab.binaryFiles`, up to 8 MB each, 24 MB a run). Compiling sends only text files.
+- **Uploads.** A labelled Upload button at the top of the Explorer. `CodeLab.checkUpload` checks each file's real type first (no renamed scripts, no SVG, no hidden web code); `functions/upload-guard.js` checks again on the server.
+- **Share.** When the Studio Desk has practice publishing on (`techSettings/portal.practicePublish`), the owner sees Share: Ask to publish, the request's state, then the link to copy. Their coach or an admin approves; `onTechPracticeWritten` publishes `techShowcase/pr_{id}`, and the public page runs the program.
 
 ## Configuring Java (not done yet)
 

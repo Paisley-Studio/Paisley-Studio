@@ -221,12 +221,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="/firebase-config.js"></script>
 <script src="/js/tech/writing-studio.js?v=tech13"></script>
-<script src="/js/tech/code-lab.js?v=tech21"></script>
+<script src="/js/tech/code-lab.js?v=tech22"></script>
 <script src="/js/tech/upload-pad.js?v=tech7"></script>
 <script src="/js/ui/fast-video.js?v=4"></script>
 <script src="/js/tech/tech-helpers.js?v=tech21"></script>
-<script src="/js/tech/tech-work.js?v=10"></script>
-<script src="/js/tech/tech-classes.js?v=15"></script>
+<script src="/js/tech/tech-work.js?v=11"></script>
+<script src="/js/tech/tech-classes.js?v=16"></script>
 <script src="/js/tech/tech-timetable.js?v=1"></script>
 <script src="/js/tech/tech-homework.js?v=due2"></script>
 <script>
@@ -315,13 +315,15 @@ $('childSel').addEventListener('change',e=>selectChild(e.target.value));
 
 function selectChild(id){
   if(!S.kids[id]) return;
-  S.cid=id; S.builds=[]; S.work=[]; S.progress=null; S.openId=null;
+  S.cid=id; S.builds=[]; S.work=[]; S.pubPractice=[]; S.progress=null; S.openId=null;
   S.buildUnsubs.forEach(u=>u()); S.buildUnsubs=[];
   paintChildbar();
   S.buildUnsubs.push(db.collection('techBuilds').where('studentId','==',id).onSnapshot(s=>{
     S.builds=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>ms(b.updatedAt)-ms(a.updatedAt)); refresh();
   },e=>console.warn('builds',e)));
   S.buildUnsubs.push(db.collection('techLessonWork').where('studentId','==',id).onSnapshot(s=>{ S.work=s.docs.map(d=>Object.assign({id:d.id},d.data())); refresh(); },e=>console.warn('class work',e)));
+  /* Published practice projects only: guardians may read a practice doc once it is published (firestore.rules). */
+  S.buildUnsubs.push(db.collection('techPractice').where('studentId','==',id).where('publishState','==','approved').onSnapshot(s=>{ S.pubPractice=s.docs.map(d=>Object.assign({id:d.id},d.data())); refresh(); },e=>console.warn('published practice',e)));
   S.buildUnsubs.push(db.collection('techProgress').doc(id).onSnapshot(s=>{ S.progress=s.exists?s.data():null; refresh(); },()=>{}));
   S.buildUnsubs.push(db.collection('techActivity').where('studentId','==',id).orderBy('at','desc').limit(40).onSnapshot(s=>{ S.activity=s.docs.map(d=>d.data()); if(S.v==='activity') refresh(); },e=>console.warn('activity',e)));
   const h=(location.hash||'').slice(1);
@@ -365,7 +367,8 @@ function panel(title,html){ return '<div class="panel"><h3>'+esc(title)+'</h3>'+
 function shareItems(){
   const builds=S.builds.filter(b=>b.showcase==='approved').map(b=>({title:b.title,sub:originWord(b),url:T.shareUrl(b.id),at:ms(b.showcaseAt||b.updatedAt)}));
   const work=S.work.filter(d=>TechWork.shareLink(d)).map(d=>({title:d.lessonTitle||'Class work',sub:['Class work',d.courseName,d.topicTitle].filter(Boolean).join(' · '),url:TechWork.shareLink(d),at:ms(d.publishedAt||d.publishDecidedAt)}));
-  return builds.concat(work).sort((a,b)=>b.at-a.at);
+  const prac=(S.pubPractice||[]).filter(p=>T.safeUrl(p.shareUrl)).map(p=>({title:p.title||'Practice project',sub:[p.type==='advanced'?'Advanced IDE':'Practice lab',TechWork.codeLangLabel?TechWork.codeLangLabel(p.codeFiles):''].filter(x=>x&&x!=='Code').join(' · '),url:T.safeUrl(p.shareUrl),at:ms(p.publishedAt||p.publishDecidedAt)}));
+  return builds.concat(work,prac).sort((a,b)=>b.at-a.at);
 }
 
 /* ---------- views ---------- */

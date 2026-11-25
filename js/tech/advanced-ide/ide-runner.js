@@ -45,7 +45,7 @@
     'llvm.core.wasm': 75532134, 'llvm-resources.tar': 29665280
   };
   var CACHE = 'paisley-ide-runtimes-v1';
-  var WORKER_URL = '/js/tech/advanced-ide/runner-worker.js?v=2';
+  var WORKER_URL = '/js/tech/advanced-ide/runner-worker.js?v=3';
   var LANG_NAME = { python: 'Python', c: 'C', cpp: 'C/C++', php: 'PHP', java: 'Java' };
 
   function typeOf(url) {
@@ -175,6 +175,7 @@
         if (m.t === 'out') current.h.out && current.h.out(m.stream, m.text);
         else if (m.t === 'echo') current.h.echo && current.h.echo(m.text);
         else if (m.t === 'input') current.h.input && current.h.input();
+        else if (m.t === 'starved') current.h.starved && current.h.starved();
         else if (m.t === 'started') current.h.started && current.h.started();
         else if (m.t === 'done') finish(m.res);
         return;
@@ -257,7 +258,7 @@
             var id = ++seq;
             current = { id: id, role: 'run', h: h, resolve: resolve };
             setState(opts.lang, states[opts.lang] === 'ready' ? 'ready' : 'loading', { label: 'Starting ' + (LANG_NAME[opts.lang] || opts.lang), pct: null });
-            win.postMessage(Object.assign({ t: 'run', role: 'run', id: id, stdin: opts.stdin || '', live: !!opts.live, files: opts.files, entry: opts.entry }, msg), '*', transfer || []);
+            win.postMessage(Object.assign({ t: 'run', role: 'run', id: id, stdin: opts.stdin || '', live: !!opts.live, files: opts.files, entry: opts.entry, seed: opts.seed == null ? null : opts.seed }, msg), '*', transfer || []);
           });
         });
       };
@@ -268,7 +269,7 @@
         var compileDone;
         return new Promise(function (resolve) {
           compileDone = resolve;
-          compile(opts.lang, opts.files).then(function (r) {
+          compile(opts.lang, opts.files.filter(function (f) { return !f.binary; })).then(function (r) {
             if (stopped) return;
             current = null;
             if (!r.ok) return resolve({ ok: false, code: 1, phase: 'compile', diagnostics: r.diagnostics, stderr: r.stderr });

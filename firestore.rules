@@ -1272,6 +1272,11 @@ service cloud.firestore {
     function techWorkContentKeys() {
       return ['codeFiles', 'codeFolders', 'codeAssets', 'codeActive', 'codeAt', 'writingHtml', 'writingAt', 'updatedAt'];
     }
+    // Publishing class work is switched on per lesson or for a whole class.
+    function techPublishOpen(w) {
+      return get(/databases/$(database)/documents/techLessons/$(w.lessonId)).data.get('allowPublish', false) == true ||
+        (w.get('courseId', '') != '' && get(/databases/$(database)/documents/techCourses/$(w.courseId)).data.get('allowPublish', false) == true);
+    }
     match /techLessonWork/{id} {
       // The id is {uid}_{lessonId}, so a builder can also open their own work before it exists.
       allow read: if (isSignedIn() && id.matches(request.auth.uid + '_.+')) ||
@@ -1301,10 +1306,11 @@ service cloud.firestore {
           resource.data.get('handedIn', null) != null &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(techWorkContentKeys())) ||
         // Handed-in work: the builder may ask to publish it, or withdraw it (shareUrl comes only from functions).
+        // Asking needs publishing switched on for the lesson or its class (coaches and admins set allowPublish).
         (techStudentActive() && resource.data.studentId == request.auth.uid &&
           resource.data.status in ['Submitted', 'Graded', 'Corrections'] &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['publishState', 'publishRequestedAt', 'updatedAt']) &&
-          ((request.resource.data.publishState == 'requested' && resource.data.get('publishState', '') != 'approved') ||
+          ((request.resource.data.publishState == 'requested' && resource.data.get('publishState', '') != 'approved' && techPublishOpen(resource.data)) ||
             request.resource.data.publishState == 'unpublished')) ||
         // Published work: the builder edits its published version (live*), never the marked hand-in;
         // functions copy it to the public link (techShowcase/cw_{id}).
@@ -1454,21 +1460,40 @@ service cloud.firestore {
 
     // Practice: low-stakes experiments, kept apart from assessed builds.
     // The builder owns the work; their coach can read it and leave a note; admins see all.
+    // Publishing a practice project: the builder asks (publishState 'requested', only while the Studio
+    // Desk has practicePublish on in techSettings/portal) or takes it down ('unpublished'); their coach or
+    // an admin approves or declines; functions write the public copy (techShowcase/pr_{id}) and shareUrl.
+    function techPracticeStaffKeys() {
+      return ['coachNote', 'coachNoteBy', 'coachNoteAt', 'publishNote', 'publishDecidedBy', 'publishDecidedByName', 'publishDecidedAt', 'shareId', 'shareUrl', 'publishedAt'];
+    }
+    function techPracticePublishOk() {
+      return !('publishState' in request.resource.data.diff(resource.data).affectedKeys()) ||
+        request.resource.data.publishState == 'unpublished' ||
+        (request.resource.data.publishState == 'requested' && resource.data.get('publishState', '') != 'approved' &&
+          get(/databases/$(database)/documents/techSettings/portal).data.get('practicePublish', false) == true);
+    }
     match /techPractice/{id} {
+      // Guardians see a practice project only once it is published (it is public by then anyway).
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid) ||
-        isTechCoachOf(resource.data.studentId);
+        isTechCoachOf(resource.data.studentId) ||
+        (resource.data.get('publishState', '') == 'approved' && isTechGuardianOf(resource.data.studentId));
       allow create: if techStudentActive() &&
         request.resource.data.studentId == request.auth.uid &&
-        !request.resource.data.keys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt']) &&
+        !request.resource.data.keys().hasAny(techPracticeStaffKeys()) &&
+        request.resource.data.get('publishState', '') == '' &&
         (request.resource.data.get('type', '') != 'advanced' || advancedIdeAllowed());
       allow update: if isAdmin() ||
         (isSignedIn() && resource.data.studentId == request.auth.uid &&
           request.resource.data.studentId == resource.data.studentId &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coachNote', 'coachNoteBy', 'coachNoteAt']) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(techPracticeStaffKeys()) &&
+          techPracticePublishOk() &&
           ((request.resource.data.get('type', '') != 'advanced' && resource.data.get('type', '') != 'advanced') || advancedIdeAllowed())) ||
         (isTechCoachOf(resource.data.studentId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coachNote', 'coachNoteBy', 'coachNoteAt', 'helpRequested', 'updatedAt']));
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coachNote', 'coachNoteBy', 'coachNoteAt', 'helpRequested', 'updatedAt',
+            'publishState', 'publishNote', 'publishDecidedBy', 'publishDecidedByName', 'publishDecidedAt']) &&
+          (!('publishState' in request.resource.data.diff(resource.data).affectedKeys()) ||
+            request.resource.data.publishState in ['approved', 'declined', 'unpublished']));
       allow delete: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
     }
 

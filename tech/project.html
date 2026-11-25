@@ -52,6 +52,7 @@ details{margin-top:.6rem}summary{cursor:pointer;font-weight:800;color:var(--bran
 .state{text-align:center;padding:4rem 1rem;color:var(--muted)}
 .state h1{color:var(--brand-deep);font-size:1.5rem;margin-bottom:.4rem}
 .foot{text-align:center;color:var(--muted);font-size:.8rem;margin-top:2rem}
+.hint{margin:-.2rem 0 .8rem;color:var(--muted);font-size:.9rem;font-weight:600}.hint i{color:#00B4F0}
 @media(max-width:600px){.gallery img{height:180px}}
 </style>
 </head>
@@ -66,7 +67,7 @@ details{margin-top:.6rem}summary{cursor:pointer;font-weight:800;color:var(--bran
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="/firebase-config.js"></script>
 <script src="/js/tech/writing-studio.js?v=tech13"></script>
-<script src="/js/tech/code-lab.js?v=tech21"></script>
+<script src="/js/tech/code-lab.js?v=tech22"></script>
 <script>
 /* Public page for a published Tech Studio project: /tech/p/{buildId} (or ?id=).
    Reads techShowcase/{buildId} only, the public copy a coach or the Studio Desk makes when
@@ -95,19 +96,23 @@ function render(p){
   document.title=(p.title||'Student project')+' | Paisley Tech Studio';
   let main='';
   /* Each project type gets the presentation that suits it; mixed projects show every part they have. */
-  if(code.length&&window.CodeLab&&CodeLab.buildPreview) main+=section('Try it','<iframe class="run" id="run" sandbox="allow-scripts" referrerpolicy="no-referrer" title="Live project"></iframe>');
+  /* Programs (Python, Java, C, C++, PHP) open in a read-only Paisley VS Code: press Run and they run here,
+     sealed in a sandbox. Web pages keep the plain live page. */
+  const prog=window.CodeLab&&CodeLab.isProgram&&code.some(f=>CodeLab.isProgram({name:f.name,lang:f.lang||CodeLab.langOf(f.name)}));
+  if(prog) main+=section('Try it','<p class="hint"><i class="fas fa-play"></i> Press <b>Run</b> to start '+esc(p.displayName||'the maker')+'’s program. If it asks you something, type your answer in the box that appears.</p><div id="lab"></div>');
+  else if(code.length&&window.CodeLab&&CodeLab.buildPreview) main+=section('Try it','<iframe class="run" id="run" sandbox="allow-scripts" referrerpolicy="no-referrer" title="Live project"></iframe>');
   if(safe(p.previewUrl)) main+='<p style="margin-top:.8rem"><a class="btn" href="'+esc(safe(p.previewUrl))+'" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i> Open the live version</a></p>';
   if(p.writingHtml) main+=section(cat==='RESEARCH'?'The research':(cat==='WRITING'?'':'Write-up'),'<article class="article">'+clean(p.writingHtml)+'</article>');
   if(p.workText) main+=section(cat==='RESEARCH'?'Findings':'About the project','<div class="prose">'+esc(p.workText)+'</div>');
   if(images.length) main+=section(cat==='DESIGN'?'Gallery':'Images','<div class="gallery">'+images.map(x=>'<a href="'+esc(x.url)+'" target="_blank" rel="noopener noreferrer"><img src="'+esc(x.url)+'" alt="'+esc(x.name||p.title||'')+'" loading="lazy"></a>').join('')+'</div>');
   if(media.length) main+=section(cat==='MUSIC'?'Listen':'Watch','<div class="media">'+media.map(x=>/audio\/|\.(mp3|wav|m4a|ogg)(\?|$)/i.test((x.type||'')+' '+(x.name||x.url))?'<audio controls preload="metadata" src="'+esc(x.url)+'"></audio>':'<video controls preload="metadata" src="'+esc(x.url)+'"></video>').join('')+'</div>');
-  if(code.length) main+=section('The code',code.map(f=>'<details><summary>'+esc(f.name)+'</summary><pre>'+esc(f.content)+'</pre></details>').join(''));
+  if(code.length&&!prog) main+=section('The code',code.map(f=>'<details><summary>'+esc(f.name)+'</summary><pre>'+esc(f.content)+'</pre></details>').join(''));
   const r=p.reflection||{}, tools=(p.toolsUsed||[]).filter(t=>t&&!/^none$/i.test(t));
   const ai=(p.contribution?'<div><b>What I made myself.</b> '+esc(p.contribution)+'</div>':'')+
     (tools.length?'<div><b>AI tools used.</b><div class="tools" style="margin-top:.3rem">'+tools.map(t=>'<span>'+esc(t)+'</span>').join('')+'</div></div>':'')+
     (r.purpose?'<div><b>How I used AI.</b> '+esc(r.purpose)+'</div>':'')+
     (r.learned?'<div><b>What I learned.</b> '+esc(r.learned)+'</div>':'');
-  view.innerHTML='<section class="hero"><span class="kind"><i class="fas '+(ICON[cat]||ICON.Other)+'"></i> '+esc(LABEL[cat]||cat)+(p.origin==='self'?' · Self-led project':(p.origin==='class'?' · Class work':''))+'</span>'+
+  view.innerHTML='<section class="hero"><span class="kind"><i class="fas '+(ICON[cat]||ICON.Other)+'"></i> '+esc(LABEL[cat]||cat)+(p.language?' · '+esc(p.language):'')+(p.origin==='self'?' · Self-led project':(p.origin==='class'?' · Class work':(p.origin==='practice'?' · Practice lab':'')))+'</span>'+
       '<h1>'+esc(p.title||'Student project')+'</h1>'+(p.description?'<p>'+esc(p.description)+'</p>':'')+
       '<div class="by">By '+esc(p.displayName||'a Paisley student')+'</div>'+
       ((p.disciplines||[]).length||(p.skills||[]).length?'<div class="chips">'+(p.disciplines||[]).concat(p.skills||[]).map(x=>'<span class="chip">'+esc(x)+'</span>').join('')+'</div>':'')+'</section>'+
@@ -116,6 +121,8 @@ function render(p){
     '<p class="foot">Made at <a href="/tech">Paisley Tech Studio</a>, reviewed and approved by a Paisley coach. Only the maker’s first name is shown.</p>';
   const run=document.getElementById('run');
   if(run) run.srcdoc=CodeLab.buildPreview(code,p.codeActive,p.codeAssets||[]);
+  const lab=document.getElementById('lab');
+  if(lab) CodeLab.mount(lab,{build:{id:'showcase_'+id,codeFiles:code.map(f=>({name:f.name,lang:f.lang||CodeLab.langOf(f.name),content:f.content})),codeAssets:(p.codeAssets||[]).filter(a=>safe(a.url)),codeActive:p.codeActive||''},canEdit:false,title:p.title||'Project'});
   const cb=document.getElementById('copy'); cb.hidden=false;
   cb.onclick=()=>{ (navigator.clipboard?navigator.clipboard.writeText(location.href):Promise.reject()).then(()=>{ cb.innerHTML='<i class="fas fa-check"></i> Copied'; },()=>prompt('Copy this link',location.href)); };
 }

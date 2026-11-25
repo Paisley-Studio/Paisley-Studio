@@ -334,6 +334,18 @@ a{color:var(--brand-deep);font-weight:700;text-decoration:none}
 .share-row:first-of-type{border-top:0}.share-row .t b{color:var(--brand-deep)}
 .share-link{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}.share-link input{min-width:240px;padding:.45rem .7rem;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:.82rem;background:var(--paper)}
 .modal.wide{width:min(720px,100%)}
+/* Practice lab picker: carry on, or start a named project in a language */
+.pp-cont{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:1rem 1.1rem;margin:0 0 1rem;border-radius:16px;background:linear-gradient(120deg,#05080B,#0E1A24 55%,#0a3a52);color:#fff}
+.pp-cont-t{flex:1;min-width:200px;display:flex;flex-direction:column;gap:.1rem}.pp-cont-t .lbl{font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7FDBFF;margin:0}
+.pp-cont-t b{font-size:1.1rem}.pp-cont-t .muted{color:#A9BFCC;font-size:.82rem}
+.pp-cont .btn{background:#00B4F0;color:#05080B;border-color:#00B4F0}
+.pp-list{display:grid;gap:.3rem;margin-top:.5rem;max-height:240px;overflow:auto}
+.pp-new .lbl{display:block;font-weight:800;color:var(--brand-deep);margin-bottom:.5rem}
+.pp-langs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem}
+.pp-lang{position:relative;display:flex;flex-direction:column;gap:.15rem;padding:.75rem .8rem;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;background:var(--surface);transition:border-color .15s,box-shadow .15s}
+.pp-lang input{position:absolute;opacity:0;pointer-events:none}.pp-lang i{font-size:1.2rem;margin-bottom:.15rem}.pp-lang b{font-size:.92rem}.pp-lang span{font-size:.74rem;color:var(--muted);line-height:1.35}
+.pp-lang:has(input:checked){border-color:#00B4F0;box-shadow:0 0 0 3px rgba(0,180,240,.18)}.pp-lang:has(input:focus-visible){outline:2px solid #00B4F0;outline-offset:2px}
+.pr-rename{border:0;background:none;color:var(--muted);cursor:pointer;font-size:.8rem;padding:.2rem .35rem;border-radius:6px;vertical-align:middle}.pr-rename:hover{color:var(--brand-deep);background:var(--sage)}
 .self-tag{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .7rem;border-radius:6px;background:#FFF4D6;border:1px solid rgba(245,200,66,.6);color:#7a5c00;font-size:.68rem;font-weight:800;letter-spacing:.08em;margin-bottom:.6rem}
 .type-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.6rem}
 .type-card{position:relative;display:flex;flex-direction:column;gap:.2rem;padding:.8rem .9rem;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;background:var(--surface)}
@@ -439,14 +451,14 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../js/tech/writing-studio.js?v=tech13"></script>
-<script src="../js/tech/code-lab.js?v=tech21"></script>
+<script src="../js/tech/code-lab.js?v=tech22"></script>
 <script src="../js/tech/advanced-ide/ide-entry.js?v=1"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=4"></script>
 <script src="../js/tech/tech-helpers.js?v=tech21"></script>
-<script src="../js/tech/tech-work.js?v=10"></script>
+<script src="../js/tech/tech-work.js?v=11"></script>
 <script src="../js/tech/tech-groups.js?v=3"></script>
-<script src="../js/tech/tech-classes.js?v=15"></script>
+<script src="../js/tech/tech-classes.js?v=16"></script>
 <script src="../js/tech/tech-timetable.js?v=1"></script>
 <script src="../js/tech/tech-homework.js?v=due2"></script>
 <script>
@@ -542,7 +554,7 @@ function boot(){
   }});
   S.bubbles=T.mountBubbles({root:$('nav'),selector:'.nav[data-v]',uid:S.uid,role:'student',current:()=>S.v});
   S.unsubs.push(db.collection('techSettings').doc('advancedIde').onSnapshot(s=>{ S.ideCfg=s.exists?s.data():null; softRender(); },e=>{ S.ideCfg=null; console.warn('advanced ide settings',e); }));
-  S.unsubs.push(db.collection('techSettings').doc('portal').onSnapshot(s=>{ S.navVideo=s.exists?(s.data().navVideo||null):null; S.selfAll=s.exists&&s.data().selfProjects===true; syncCreate(); if(S.navVideo&&S.navVideo.url) FastVideo.preconnect(S.navVideo.url); softRender(); },e=>console.warn('settings',e)));
+  S.unsubs.push(db.collection('techSettings').doc('portal').onSnapshot(s=>{ S.navVideo=s.exists?(s.data().navVideo||null):null; S.selfAll=s.exists&&s.data().selfProjects===true; S.practicePub=s.exists&&s.data().practicePublish===true; syncCreate(); if(S.navVideo&&S.navVideo.url) FastVideo.preconnect(S.navVideo.url); softRender(); },e=>console.warn('settings',e)));
   /* Coach changes and guardian links arrive live. */
   S.unsubs.push(db.collection('techStudents').doc(S.uid).onSnapshot(s=>{
     if(!s.exists) return; const was=S.p.coachId; S.p=Object.assign({id:s.id},s.data());
@@ -737,6 +749,10 @@ function mountResults(){
 /* Class work that was approved for publishing, as share rows. */
 const pubWork=()=>S.work.filter(d=>TechWork.shareLink(d)).sort((a,b)=>(T.toDate(b.publishedAt||b.publishDecidedAt)||0)-(T.toDate(a.publishedAt||a.publishDecidedAt)||0));
 const workShare=d=>({title:d.lessonTitle||'Class work',sub:['Class work',d.courseName,d.topicTitle].filter(Boolean).join(' · '),url:TechWork.shareLink(d),editLesson:d.lessonId||''});
+/* Practice projects (Practice lab, Advanced IDE) the coach or Studio Desk published. */
+const pubPractice=()=>S.practice.filter(p=>p.publishState==='approved'&&T.safeUrl(p.shareUrl)).sort((a,b)=>(T.toDate(b.publishedAt||b.publishDecidedAt)||0)-(T.toDate(a.publishedAt||a.publishDecidedAt)||0));
+const practiceShare=p=>({title:p.title||'Practice project',sub:[p.type==='advanced'?'Advanced IDE':'Practice lab',TechWork.codeLangLabel?TechWork.codeLangLabel(p.codeFiles):''].filter(x=>x&&x!=='Code').join(' · '),url:T.safeUrl(p.shareUrl)});
+const allShares=()=>pubWork().map(workShare).concat(pubPractice().map(practiceShare));
 /* Edit and update: opens the lesson's practice on the published version; every save updates the link. */
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-twedit]'); if(!b) return; S.classLesson=b.dataset.twedit; S.classPractise=true; go('classes'); });
 /* Groups: teammates and shared tasks, coded together live. */
@@ -888,7 +904,7 @@ practice(){
       '<div class="quick-grid">'+PRACTICE_TYPES.map(t=>'<button class="quick-card" type="button" data-newpractice="'+t[0]+'"><i class="fas '+({code:'fa-code',writing:'fa-pen-nib',research:'fa-microscope',ai:'fa-robot'})[t[0]]+'"></i><b>'+t[1]+'</b></button>').join('')+
         (ideOn()?'<button class="quick-card ide-tool" type="button" data-advanced-ide><i class="fas fa-terminal"></i><b>Advanced Paisley IDE</b><span>Python, Java, C, C++, PHP and the web, with real runs.</span></button>':'')+'</div></section>'+
     (fromMissions.length?panelList('Practice from your missions',fromMissions.map(x=>'<button class="row" type="button" data-mpractice="'+esc(x.b.id)+'|'+x.i+'"><span class="ico"><i class="fas fa-flask"></i></span><span class="t"><b>'+esc(x.a.title||'Practice')+'</b><span>'+esc(x.m.title)+' · '+esc((x.a.instructions||'').slice(0,90))+'</span></span><span class="tags">'+((x.b.practiceIds||[]).some(p=>String(p).indexOf('m'+x.i+'_')===0)?'<span class="pill ok">Practised</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
-    (S.practice.length?panelList('My practice',S.practice.map(p=>'<button class="row" type="button" '+(p.type==='advanced'?(ideOn()?'data-advanced-ide data-project="'+esc(p.id)+'"':'data-idelocked'):'data-practice="'+esc(p.id)+'"')+'><span class="ico"><i class="fas '+(p.type==='advanced'?'fa-terminal':'fa-flask-vial')+'"></i></span><span class="t"><b>'+esc(p.title||'Practice')+'</b><span>'+esc(practiceLabel(p))+(p.missionTitle?' · '+esc(p.missionTitle):'')+' · '+esc(dateShort(p.updatedAt))+'</span></span><span class="tags">'+(p.done?'<span class="pill ok">Done</span>':'')+(p.helpRequested?'<span class="pill warn">Help asked</span>':'')+(p.coachNote?'<span class="pill gold">Coach note</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
+    (S.practice.length?panelList('My practice',S.practice.map(p=>'<button class="row" type="button" '+(p.type==='advanced'?(ideOn()?'data-advanced-ide data-project="'+esc(p.id)+'"':'data-idelocked'):'data-practice="'+esc(p.id)+'"')+'><span class="ico"><i class="fas '+(p.type==='advanced'?'fa-terminal':'fa-flask-vial')+'"></i></span><span class="t"><b>'+esc(p.title||'Practice')+'</b><span>'+esc(practiceLabel(p))+(p.missionTitle?' · '+esc(p.missionTitle):'')+' · '+esc(dateShort(p.updatedAt))+'</span></span><span class="tags">'+(p.done?'<span class="pill ok">Done</span>':'')+(p.helpRequested?'<span class="pill warn">Help asked</span>':'')+(p.coachNote?'<span class="pill gold">Coach note</span>':'')+(p.publishState==='approved'?'<span class="pill ok"><i class="fas fa-globe"></i> Published</span>':p.publishState==='requested'?'<span class="pill warn"><i class="fas fa-globe"></i> Publish asked</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
   '</div>';
 },
 
@@ -896,7 +912,7 @@ projects(){
   const F={all:()=>true,mission:b=>!T.isSelfLed(b),self:b=>T.isSelfLed(b),progress:b=>st(b)==='in_progress',review:b=>['submitted','under_review'].includes(st(b)),revision:b=>st(b)==='revision',approved:b=>['approved','mastered'].includes(st(b)),published:b=>b.showcase==='approved'};
   const LAB={all:'All',mission:'Missions',self:'Self-led',progress:'In progress',review:'Submitted',revision:'Revision',approved:'Approved',published:'Published'};
   const f=F[S.projFilter]?S.projFilter:'all';
-  const pw=pubWork(), pwHtml=pw.length?'<section class="panel" style="margin-bottom:1.2rem"><div class="panel-head"><h2>Published class work</h2></div>'+TechWork.shareRowsHtml(pw.map(workShare))+'<p class="note-line" style="margin:.6rem 0 0">Approved by your coach. Share the link with friends and family; only your first name is shown.</p></section>':'';
+  const pw=allShares(), pwHtml=pw.length?'<section class="panel" style="margin-bottom:1.2rem"><div class="panel-head"><h2>Published work</h2></div>'+TechWork.shareRowsHtml(pw)+'<p class="note-line" style="margin:.6rem 0 0">Approved by your coach or the Studio Desk. Share the link with friends and family; only your first name is shown. Programs (Python, Java, C, C++, PHP) can be run right on the page.</p></section>':'';
   if(!S.builds.length) return pwHtml||emptyBox('No projects yet','Your class work appears here once your coach approves it for publishing.','<button class="btn" type="button" data-newbuild><i class="fas fa-plus"></i> Create something</button>');
   const list=S.builds.filter(F[f]);
   return pwHtml+'<div class="chips" role="group" aria-label="Filter projects">'+Object.keys(LAB).map(k=>'<button class="chip'+(f===k?' on':'')+'" type="button" aria-pressed="'+(f===k)+'" data-projfilter="'+k+'">'+LAB[k]+'<em>'+S.builds.filter(F[k]).length+'</em></button>').join('')+'</div>'+
@@ -923,11 +939,11 @@ live(){
 },
 
 showcase(){
-  const pub=S.builds.filter(b=>b.showcase==='approved'), ready=S.builds.filter(b=>b.showcase!=='approved'&&['approved','mastered'].includes(st(b))), pw=pubWork();
+  const pub=S.builds.filter(b=>b.showcase==='approved'), ready=S.builds.filter(b=>b.showcase!=='approved'&&['approved','mastered'].includes(st(b))), pw=allShares();
   if(!pub.length&&!ready.length&&!pw.length) return emptyBox('Nothing to share yet','Hand in class work, then press Ask to publish. When your coach approves it you get a link to share.','<button class="btn" type="button" data-go="projects">My projects</button>');
   return '<div class="stack">'+
     (pub.length?'<section class="panel"><div class="panel-head"><h2>Published</h2></div>'+pub.map(b=>{ const u=T.shareUrl(b.id); return '<div class="share-row"><div class="t"><b>'+esc(b.title)+'</b> '+origin(b)+'</div><div class="share-link"><input readonly value="'+esc(u)+'" onclick="this.select()" aria-label="Share link"><button class="btn light sm" type="button" data-copy="'+esc(u)+'"><i class="fas fa-copy"></i> Copy</button><a class="btn light sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open</a></div></div>'; }).join('')+'</section>':'')+
-    (pw.length?'<section class="panel"><div class="panel-head"><h2>Published class work</h2></div>'+TechWork.shareRowsHtml(pw.map(workShare))+'</section>':'')+
+    (pw.length?'<section class="panel"><div class="panel-head"><h2>Published work</h2></div>'+TechWork.shareRowsHtml(pw)+'</section>':'')+
     (ready.length?panelList('Approved, not yet published',ready.map(b=>projectRow(b,'submit')).join('')):'')+
     '<p class="note-line" style="margin:0">Published pages show your first name and the work, nothing else. You can take a project down at any time.</p></div>';
 },
@@ -1121,7 +1137,12 @@ async function startPractice(d){
   const doc={studentId:S.uid,studentName:S.p.name||'',coachId:S.p.coachId||'',type:d.type||'code',title:String(d.title||((PRACTICE_TYPES.find(t=>t[0]===d.type)||[0,'Practice'])[1])).slice(0,120),
     instructions:String(d.instructions||'').slice(0,1500),missionId:d.missionId||'',missionTitle:d.missionTitle||'',buildId:d.buildId||'',activity:d.activity==null?null:d.activity,
     writingHtml:'',codeFiles:[],text:d.type==='code'||d.type==='writing'?'':String(d.starter||''),done:false,helpRequested:false,createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
-  if(d.type==='code') doc.codeFiles=[{name:'index.html',lang:'html',content:d.starter||'<!DOCTYPE html>\n<html>\n<body>\n  <h1>Hello!</h1>\n</body>\n</html>'}];
+  if(d.type==='code'){
+    const LF=PRACTICE_LANGS.find(x=>x[0]===d.lang)||PRACTICE_LANGS[0];
+    doc.codeFiles=LF[0]==='web'||!window.CodeLab?[{name:'index.html',lang:'html',content:d.starter||'<!DOCTYPE html>\n<html>\n<body>\n  <h1>Hello!</h1>\n</body>\n</html>'}]
+      :[{name:LF[2],lang:LF[3],content:CodeLab.starterCode(LF[3],LF[2])}];
+    doc.codeActive=doc.codeFiles[0].name;
+  }
   if(d.type==='writing'&&d.starter) doc.writingHtml='<p>'+esc(d.starter)+'</p>';
   try{
     const ref=await db.collection('techPractice').add(doc);
@@ -1130,6 +1151,52 @@ async function startPractice(d){
     kill(); S.v='practice'; S.openId=ref.id; setNav('practice'); try{ history.replaceState(null,'','#practice'); }catch(e){}
     render(); window.scrollTo(0,0);
   }catch(e){ alert('Could not start practice: '+T.errMsg(e)); }
+}
+/* The Practice lab: carry on with a coding project, or start a new one with a name and a language.
+   Projects are kept (techPractice), so coming back always offers the one you were working on. */
+const PRACTICE_LANGS=[['web','Web page','index.html','html','fab fa-html5','#E34F26','HTML, CSS and JavaScript, with a live preview'],['py','Python','main.py','py','fab fa-python','#3776AB','Programs, games and maths'],['java','Java','Main.java','java','fab fa-java','#E76F00','Classes and objects'],['c','C','main.c','c','fas fa-c','#5C6BC0','Close to the computer'],['cpp','C++','main.cpp','cpp','fas fa-plus','#00599C','Fast programs and games'],['php','PHP','index.php','php','fab fa-php','#777BB4','The language of many websites']];
+function practiceLangOf(p){ const L=(window.TechWork&&TechWork.codeLangLabel)?TechWork.codeLangLabel(p.codeFiles):''; return L&&L!=='Code'?L:'Web page'; }
+function practicePicker(){
+  const mine=S.practice.filter(p=>p.type==='code');
+  const m=document.createElement('div'); m.className='modal-bg';
+  const last=mine[0];
+  m.innerHTML='<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="ppHead"><h2 id="ppHead"><i class="fas fa-flask"></i> Practice lab</h2>'+
+    (last?'<div class="pp-cont"><div class="pp-cont-t"><span class="lbl">Carry on where you stopped</span><b>'+esc(last.title||'Coding experiment')+'</b><span class="muted">'+esc(practiceLangOf(last))+' · saved '+esc(dateShort(last.updatedAt))+'</span></div><button class="btn" type="button" data-ppopen="'+esc(last.id)+'"><i class="fas fa-play"></i> Continue</button></div>':'')+
+    (mine.length>1?'<details class="more" style="margin:.2rem 0 1rem"><summary>Your other projects ('+(mine.length-1)+')</summary><div class="pp-list">'+mine.slice(1,30).map(p=>'<button class="row" type="button" data-ppopen="'+esc(p.id)+'"><span class="ico"><i class="fas fa-code"></i></span><span class="t"><b>'+esc(p.title||'Coding experiment')+'</b><span>'+esc(practiceLangOf(p))+' · '+esc(dateShort(p.updatedAt))+'</span></span><i class="fas fa-chevron-right chev"></i></button>').join('')+'</div></details>':'')+
+    '<div class="pp-new"><span class="lbl" id="ppLangL">'+(mine.length?'Or start something new':'Start a new project')+'</span>'+
+      '<div class="pp-langs" role="radiogroup" aria-labelledby="ppLangL">'+PRACTICE_LANGS.map((x,i)=>'<label class="pp-lang"><input type="radio" name="ppL" value="'+x[0]+'"'+(i===0?' checked':'')+'><i class="'+x[4]+'" style="color:'+x[5]+'"></i><b>'+x[1]+'</b><span>'+x[6]+'</span></label>').join('')+'</div>'+
+      '<div class="field" style="margin:.9rem 0 0"><label for="ppName">Name your project</label><input id="ppName" maxlength="120" placeholder="For example: My quiz game"></div></div>'+
+    '<div class="actions"><button class="btn" type="button" id="ppGo"><i class="fas fa-wand-magic-sparkles"></i> Create project</button><button class="btn light" type="button" id="ppX">Cancel</button></div><div class="msg" id="ppMsg" role="status"></div></div>';
+  document.body.appendChild(m);
+  const close=()=>{ document.removeEventListener('keydown',onKey); m.remove(); };
+  const onKey=e=>{ if(e.key==='Escape') close(); };
+  document.addEventListener('keydown',onKey);
+  m.querySelector('#ppX').onclick=close;
+  m.addEventListener('click',e=>{
+    if(e.target===m){ close(); return; }
+    const o=e.target.closest('[data-ppopen]'); if(o){ close(); kill(); S.v='practice'; S.openId=o.dataset.ppopen; setNav('practice'); try{ history.replaceState(null,'','#practice'); }catch(x){} render(); window.scrollTo(0,0); }
+  });
+  m.querySelector('#ppGo').onclick=()=>{
+    const name=m.querySelector('#ppName').value.trim(), lang=(m.querySelector('input[name="ppL"]:checked')||{}).value||'web';
+    if(!name){ m.querySelector('#ppMsg').textContent='Give your project a name, so you can find it again.'; m.querySelector('#ppName').focus(); return; }
+    m.querySelector('#ppGo').disabled=true; close();
+    startPractice({type:'code',title:name,lang});
+  };
+  setTimeout(()=>{ const b=m.querySelector(last?'[data-ppopen]':'#ppName'); if(b) b.focus(); },30);
+}
+/* What the builder sees about publishing a practice project (the Studio Desk switches it on). */
+function practicePubHtml(p){
+  if(!['code','writing'].includes(p.type)) return '';
+  const st=p.publishState||'', url=T.safeUrl(p.shareUrl);
+  if(!S.practicePub&&!['requested','approved','declined'].includes(st)) return '';
+  const prog=/\.(py|java|c|cpp|cc|php)$/i.test((p.codeFiles||[]).map(f=>f.name).join(' '));
+  let h='<div class="tw-pub'+(st==='approved'?' on':'')+'" id="prPub"><div class="hd"><i class="fas fa-globe"></i> <b>Share it with friends and family</b></div>';
+  if(st==='approved'&&url) h+='<p>Published! Anyone with this link can see it'+(prog?' and run your program':'')+'. It updates as you keep working.</p>'+TechWork.linkBox(url)+'<button type="button" class="tc-btn light sm" data-prpub="unpub" style="margin-top:.5rem"><i class="fas fa-eye-slash"></i> Take it down</button>';
+  else if(st==='approved') h+='<p><i class="fas fa-spinner fa-spin"></i> Making the link…</p>';
+  else if(st==='requested') h+='<p><span class="tc-pill mid"><i class="fas fa-hourglass-half"></i> Publish request sent</span> Your coach or the Studio Desk will look at it.</p><button type="button" class="tc-btn light sm" data-prpub="unpub">Cancel the request</button>';
+  else if(st==='declined') h+='<div class="tw-pubnote"><b>Not published yet.</b>'+(p.publishNote?' '+esc(p.publishNote):'')+(p.publishDecidedByName?'<small> · '+esc(p.publishDecidedByName)+'</small>':'')+'</div>'+(S.practicePub?'<button type="button" class="tc-btn sm" data-prpub="req" style="margin-top:.5rem"><i class="fas fa-paper-plane"></i> I fixed it, ask again</button>':'');
+  else h+='<p>Proud of it? Ask to publish it. Your coach or the Studio Desk checks it first, then you get a link to share'+(prog?', and anyone can run your program on the page':'')+'.</p><button type="button" class="tc-btn sm" data-prpub="req"><i class="fas fa-paper-plane"></i> Ask to publish</button>';
+  return h+'</div>';
 }
 function openPractice(id){
   const el=$('view');
@@ -1140,10 +1207,12 @@ function openPractice(id){
   function paint(){
     if(mod){ try{ mod.destroy(); }catch(e){} mod=null; }
     const tools=byKind('aiTool').filter(t=>T.safeUrl(t.url));
-    host.innerHTML='<section class="panel"><div class="panel-head"><h2>'+esc(p.title)+'</h2><div class="pills"><span class="pill">Practice · not graded</span>'+(p.missionTitle?'<span class="pill">'+esc(p.missionTitle)+'</span>':'')+(p.done?'<span class="pill ok">Done</span>':'')+'</div></div>'+
+    if(window.TechWork&&TechWork.style) TechWork.style();
+    host.innerHTML='<section class="panel"><div class="panel-head"><h2><span id="prTitle">'+esc(p.title)+'</span> <button type="button" class="pr-rename" id="prRename" title="Rename this project" aria-label="Rename this project"><i class="fas fa-pen"></i></button></h2><div class="pills"><span class="pill">Practice · not graded</span>'+(p.missionTitle?'<span class="pill">'+esc(p.missionTitle)+'</span>':'')+(p.done?'<span class="pill ok">Done</span>':'')+'</div></div>'+
       (p.instructions?'<div class="note" style="margin-bottom:1rem">'+esc(p.instructions)+'</div>':'')+
       (p.coachNote?'<div class="note coach-note"><b>'+esc(p.coachNoteBy||'Your coach')+':</b> '+esc(p.coachNote)+'</div>':'')+
       (p.type==='ai'&&tools.length?'<div class="pills" style="margin:.4rem 0 1rem">'+tools.map(t=>'<a class="pill" href="'+esc(T.safeUrl(t.url))+'" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>&nbsp;'+esc(t.name||t.title)+'</a>').join('')+'</div>':'')+
+      '<div id="prPubBox">'+practicePubHtml(p)+'</div>'+
       '<div id="prTool"></div>'+
       ((p.type==='research'||p.type==='ai')?'<div class="field" style="margin-top:1rem"><label for="prText">'+(p.type==='ai'?'Your prompts, what the AI gave you, and what you think of it':'Your notes, sources and findings')+'</label><textarea id="prText" style="min-height:220px" maxlength="20000">'+esc(p.text||'')+'</textarea></div>':'')+
       '<div class="actions" style="flex-wrap:wrap">'+((p.type==='research'||p.type==='ai')?'<button class="btn" type="button" id="prSave">Save</button>':'')+
@@ -1151,7 +1220,7 @@ function openPractice(id){
         '<button class="btn light" type="button" id="prHelp"'+(p.helpRequested?' disabled':'')+'>'+(p.helpRequested?'Help requested':'Ask my coach for help')+'</button>'+
         '<button class="btn light" type="button" id="prRetry">Start again</button>'+
         '<button class="btn light" type="button" id="prDel">Delete</button></div><div class="msg" id="prMsg" role="status"></div></section>';
-    const tool=host.querySelector('#prTool'), fake={id:p.id,studentId:p.studentId,codeFiles:p.codeFiles,codeFolders:p.codeFolders||[],codeAssets:p.codeAssets||[],codeActive:p.codeActive,writingHtml:p.writingHtml,files:[]};
+    const tool=host.querySelector('#prTool'), fake={id:p.id,studentId:p.studentId,codeFiles:p.codeFiles,codeFolders:p.codeFolders||[],codeAssets:p.codeAssets||[],codeActive:p.codeActive,writingHtml:p.writingHtml,files:[],codeAt:p.updatedAt,updatedAt:p.updatedAt};
     /* Pictures, videos and sounds for a code practice go in the builder's own class-work Storage folder. */
     const upload=f=>{ const path='techWork/'+p.studentId+'/pr_'+p.id+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const r=firebase.storage().ref(path); return r.put(f,{contentType:f.type||undefined,cacheControl:'public,max-age=31536000'}).then(()=>r.getDownloadURL()).then(url=>({url,storagePath:path})); };
     if(p.type==='code'&&window.CodeLab) mod=CodeLab.mount(tool,{build:fake,me:me(),canEdit:true,onSave:save,uploadAsset:firebase.storage?upload:null,advanced:window.PaisleyIDEEntry&&ideOn()?b=>PaisleyIDEEntry.launch({from:p.id,origin:b}):null});
@@ -1160,15 +1229,33 @@ function openPractice(id){
     if(q('#prSave')) q('#prSave').onclick=()=>save({text:q('#prText').value.slice(0,20000)}).catch(e=>{ q('#prMsg').textContent=T.errMsg(e); });
     q('#prDone').onclick=()=>{ const done=!p.done; save({done}).then(()=>{ if(done) log('practice_done','Finished practice: '+(p.title||''),{practiceId:id,missionId:p.missionId}); paint(); }); };
     q('#prHelp').onclick=()=>save({helpRequested:true}).then(()=>{ log('help_requested','Asked for help with practice: '+(p.title||''),{practiceId:id}); paint(); });
-    q('#prRetry').onclick=()=>{ if(!confirm('Clear this practice and start again?')) return; save({codeFiles:p.type==='code'?[{name:'index.html',lang:'html',content:'<!DOCTYPE html>\n<html>\n<body>\n</body>\n</html>'}]:[],codeFolders:[],codeAssets:[],writingHtml:'',text:'',done:false}).then(paint); };
+    q('#prRetry').onclick=()=>{
+      if(!confirm('Clear this practice and start again? Everything in it is replaced by a fresh starter.')) return;
+      /* A fresh starter in the same language as before. */
+      const LF=PRACTICE_LANGS.find(x=>x[0]!=='web'&&(p.codeFiles||[]).some(f=>f.lang===x[3]));
+      const fresh=p.type!=='code'?[]:LF&&window.CodeLab?[{name:LF[2],lang:LF[3],content:CodeLab.starterCode(LF[3],LF[2])}]:[{name:'index.html',lang:'html',content:'<!DOCTYPE html>\n<html>\n<body>\n</body>\n</html>'}];
+      save({codeFiles:fresh,codeFolders:[],codeAssets:[],codeActive:fresh[0]?fresh[0].name:'',writingHtml:'',text:'',done:false}).then(paint);
+    };
+    q('#prRename').onclick=()=>{ const v=prompt('Name this project',p.title||''); if(v==null||!v.trim()) return; const title=v.trim().slice(0,120); save({title}).then(()=>{ const el=host.querySelector('#prTitle'); if(el) el.textContent=title; }).catch(e=>{ q('#prMsg').textContent=T.errMsg(e); }); };
     q('#prDel').onclick=()=>{ if(!confirm('Delete this practice?')) return; ref.delete().then(()=>go('practice')); };
   }
+  /* Publishing: ask, cancel or take down (the rules allow only these from the builder). */
+  host.addEventListener('click',e=>{
+    const b=e.target.closest('[data-prpub]'); if(!b||!p) return;
+    const k=b.dataset.prpub;
+    if(k==='unpub'&&p.publishState==='approved'&&!confirm('Take your project down? The link will stop working.')) return;
+    b.disabled=true;
+    Promise.resolve(mod&&mod.flush?mod.flush():null).then(()=>ref.update({publishState:k==='req'?'requested':'unpublished',publishRequestedAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()}))
+      .then(()=>{ if(k==='req') log('publish_requested','Asked to publish '+(p.title||'a practice project'),{practiceId:id}); })
+      .catch(er=>{ b.disabled=false; const m=host.querySelector('#prMsg'); if(m) m.textContent='Could not send it: '+T.errMsg(er); });
+  });
   unsub=ref.onSnapshot(s=>{
     if(dead) return;
     if(!s.exists){ host.innerHTML=emptyBox('Not found','This practice was deleted.'); return; }
     if(s.data().type==='advanced'){ dead=true; if(unsub) unsub(); if(ideOn()) PaisleyIDEEntry.launch({project:s.id}); else host.innerHTML=emptyBox('The Advanced IDE is switched off',IDE_LOCKED); return; }
     const first=!p; const prevNote=p&&p.coachNote; p=Object.assign({id:s.id},s.data());
     if(first||prevNote!==p.coachNote) paint();
+    else { const pb=host.querySelector('#prPubBox'); if(pb) pb.innerHTML=practicePubHtml(p); }
   },e=>{ host.innerHTML=emptyBox('Could not open',esc(T.errMsg(e))); });
   S.pr={destroy(){ dead=true; if(unsub) unsub(); if(mod){ try{ mod.destroy(); }catch(e){} } }};
 }
@@ -1194,7 +1281,7 @@ document.addEventListener('click',async e=>{
   else if(t.dataset.go){ go(t.dataset.go); }
   else if(t.dataset.projfilter){ S.projFilter=t.dataset.projfilter; render(true); }
   else if(t.dataset.mtab){ S.mtab=t.dataset.mtab; render(true); }
-  else if(t.dataset.newpractice){ startPractice({type:t.dataset.newpractice}); }
+  else if(t.dataset.newpractice){ if(t.dataset.newpractice==='code') practicePicker(); else startPractice({type:t.dataset.newpractice}); }
   else if(t.dataset.mpractice){
     const [bid,i]=t.dataset.mpractice.split('|'), b=S.builds.find(x=>x.id===bid), m=b&&item(b.missionId), a=m&&(m.practice||[])[Number(i)];
     if(a) startPractice({type:a.type,title:a.title,instructions:a.instructions,starter:a.starter,missionId:m.id,missionTitle:m.title,buildId:b.id,activity:Number(i)});
