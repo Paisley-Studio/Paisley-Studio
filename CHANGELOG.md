@@ -1,3 +1,18 @@
+# Freeze holds posts too, choose who gets a post, exam emails per role, Tech quiz emails (2026-11-26)
+
+- **What went wrong.** The freeze held bells and emails but not the content itself, so a posted exam still appeared for every student in Exam management. Worse, the exam editor's Publish button set an exam live without an audience map, which the system treated as "posted to every online student and tutor", sending it outside the posting step. Some bells were also written directly instead of through the freeze-checked helpers (they were removed afterwards by the safety net, but could flash up), and the Notices panel was not checked at all.
+- **Fixes.**
+  - While a freeze holds an area for students, posting releases the item only to the test students in that class (and their parents), never to the whole class. Tutors get it only if a tutor test account is picked. Logged in the Held list as "Post narrowed". The Publish review warns before you confirm. When the freeze is off, post again to reach everyone.
+  - Exams are created posted to nobody. The editor's button is now **Save and choose who gets it**, which opens Publish with the exam ticked. `onFlatExamPosted` ignores any exam that was never posted.
+  - Every exam bell now goes through `notifyOnce` (freeze checked), and so do account-approved, ticket-reply and tuition bells. Notices-panel items are freeze checked.
+- **Choose who gets a post** (Publish review): students (whole class, or tick particular students with search and Tick all), tutors (all who teach it, only the ones you tick, or none). Particular students get it like a tutor release: nobody else in the class sees it; their parents see it too.
+- **Freeze test accounts by class**: Developer mode now has **Choose by class**: filter students, parents of students, tutors, builders or coaches by portal, Key Stage, Year, subject and board, tick, add. Search by name is still there. Clear all.
+- **Exam emails per role.** Students: "Exam released", check with your parent; no paper. Parents: the paper attached, keep it and give it to your child when the exam opens; the child will be told when to sit and hand it in. Tutors: their own email (get ready to mark, you will see submissions arrive in the Classroom), no paper, no student wording, and only tutors who teach that subject, Key Stage and board (or the ones picked).
+- **Tech Studio**: `submitTechQuiz` was deployed without the SMTP secrets, so "lesson finished / next lesson open" emails to builders and guardians were skipped. Fixed. A scan of every function that sends email found no other.
+- Tests: new `functions/test/post-targets.test.js` (8). Functions 106 pass, the 5 known failures.
+- Versions: `publish-ui.js` targets1, `publish-helpers.js` targets1, `dev-mode.js` 3, `parent-helpers.js` 2; `sw.js` `paisley-studio-v15-dev3`.
+- Deploy: functions (all, since `publishing`, `index`, `tech`, `tuition`, `work-shared`, `email-templates` changed), then hosting.
+
 # Banner pill, family-facing published projects, Advanced IDE by graduation (2026-11-26)
 
 - **Maintenance banner** (`js/ui/site-status.js` v2, on all 47 pages): now a small floating pill by default (wrench, "Under maintenance", time left). Press it to open the full card; the card has Make smaller and Close. Close hides it for that update (a new save brings it back). Pill and card can be dragged anywhere with mouse or touch; the spot is remembered and kept on screen.

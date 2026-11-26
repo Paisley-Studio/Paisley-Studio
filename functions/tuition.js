@@ -36,7 +36,8 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 async function bell(recipientId, recipientType, type, title, message, entity, entityId) {
   if (!recipientId) return;
   try {
-    await admin.firestore().collection("personalNotifications").add({
+    /* Through the shared helper so developer mode's freeze can hold it. */
+    await require("./notifications").addPersonalNotification({
       recipientId, recipientType, type, title, message,
       relatedEntity: entity || "", relatedEntityId: entityId || "",
       read: false, emailSent: false, createdAt: FV().serverTimestamp()

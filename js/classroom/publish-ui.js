@@ -83,7 +83,24 @@
       '.pb-review h4{margin:.2rem 0 .3rem;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-deep,#245F5A)}',
       '.pb-warn{background:rgba(232,163,61,.13);border:1px solid rgba(232,163,61,.4);border-radius:12px;padding:.6rem .8rem;font-size:.82rem;margin-bottom:.8rem}',
       '.pb-info{background:rgba(74,144,217,.1);border:1px solid rgba(74,144,217,.35);color:#2b6cad;border-radius:12px;padding:.6rem .8rem;font-size:.82rem;margin-bottom:.8rem}',
-      '.pb-list{max-height:220px;overflow:auto}'
+      '.pb-list{max-height:220px;overflow:auto}',
+      '.pb-who{border:1px solid var(--line,rgba(38,51,49,.12));border-radius:14px;padding:.85rem .95rem;margin-bottom:.8rem;background:var(--surface,#fff)}',
+      '.pb-who h4{display:flex;align-items:center;gap:.45rem}',
+      '.pb-opts{display:flex;flex-wrap:wrap;gap:.45rem;margin:.35rem 0 .55rem}',
+      '.pb-opt{display:inline-flex;align-items:center;gap:.4rem;padding:.42rem .75rem;border:1.5px solid var(--line,rgba(38,51,49,.14));border-radius:99px;font-size:.8rem;font-weight:700;cursor:pointer;background:#fff}',
+      '.pb-opt:has(input:checked){border-color:var(--brand-deep,#245F5A);background:rgba(85,191,179,.12);color:var(--brand-deep,#245F5A)}',
+      '.pb-opt input{accent-color:var(--brand-deep,#245F5A);margin:0}',
+      '.pb-pick{border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;overflow:hidden}',
+      '.pb-pick-tools{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;padding:.5rem;background:var(--paper,#F1F9F7);border-bottom:1px solid var(--line,rgba(38,51,49,.08))}',
+      '.pb-pick-tools input[type=search]{flex:1;min-width:160px;padding:.42rem .6rem;border:1px solid var(--line,rgba(38,51,49,.15));border-radius:8px;font:inherit;font-size:.82rem}',
+      '.pb-pick-tools .cnt{font-size:.76rem;font-weight:800;color:var(--brand-deep,#245F5A);margin-left:auto}',
+      '.pb-pick-list{max-height:240px;overflow:auto}',
+      '.pb-pick-list label{display:flex;align-items:center;gap:.6rem;padding:.45rem .7rem;border-top:1px solid var(--line-soft,rgba(38,51,49,.06));font-size:.83rem;cursor:pointer}',
+      '.pb-pick-list label:hover{background:var(--paper,#F1F9F7)}',
+      '.pb-pick-list input{width:16px;height:16px;accent-color:var(--brand-deep,#245F5A)}',
+      '.pb-pick-list small{color:var(--muted,#5A6E6A);margin-left:auto;font-size:.72rem}',
+      '.pb-freeze{display:flex;gap:.6rem;align-items:flex-start;background:rgba(243,156,18,.1);border:1px solid rgba(243,156,18,.45);border-left:4px solid #F39C12;border-radius:12px;padding:.7rem .85rem;font-size:.83rem;margin-bottom:.8rem}',
+      '.pb-freeze i{color:#9A5B00;margin-top:.15rem}'
     ].join('\n');
     document.head.appendChild(st);
   }
@@ -182,7 +199,10 @@
         if (scope === 'remote') S.items = S.items.filter(function (it) { return it.audiencesEff.remote === true; });
         S.loaded = true;
       } catch (e) { S.hint = 'Could not load content: ' + (e.message || e); S.items = []; }
-      S.loading = false; S.selected = {}; render();
+      S.loading = false; S.selected = {};
+      /* Opened from an editor ("Save and choose who gets it"): that item comes ticked. */
+      if (opts.preselect && !S.preselected) { S.preselected = true; opts.preselect.forEach(function (pth) { if (S.items.some(function (i) { return i.path === pth; })) S.selected[pth] = true; }); }
+      render();
     }
 
     function visible() {
@@ -269,6 +289,108 @@
       return out;
     }
 
+    /* ---------- who exactly gets it ----------
+       Students: the whole class, or the ones the desk ticks (delivered by name, like a tutor's release).
+       Tutors: everyone who teaches it, only the ones ticked (only they are told), or none.
+       Developer mode's freeze narrows it further, on the server. */
+    function audOf(s) { var t = s && s.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
+    async function freezeState(types) {
+      try {
+        var d = await db.collection('devMode').doc('freeze').get();
+        if (!d.exists) return null;
+        var c = d.data() || {}, until = c.until && c.until.toMillis ? c.until.toMillis() : 0;
+        if (c.on !== true || (until && until < Date.now())) return null;
+        var areas = types.map(function (t) { return t === 'lesson' ? 'classes' : (t === 'assignment' ? 'homework' : 'exams'); });
+        if (!areas.some(function (a) { return c.areas && c.areas[a] === true; })) return null;
+        return c;
+      } catch (e) { return null; }
+    }
+    async function whoBox(host, picked, choice) {
+      var cids = Array.from(new Set(picked.map(function (i) { return i.cid; })));
+      var cls = cids.length === 1 ? (S.classrooms || []).filter(function (c) { return c.id === cids[0]; })[0] : null;
+      var studentAuds = choice.auds.filter(function (a) { return a !== 'tutors'; }), wantsTutors = choice.auds.indexOf('tutors') !== -1;
+      var W = { students: 'all', tutors: 'all', studentList: [], tutorList: [], pickS: {}, pickT: {}, q: '', qt: '' };
+      host.innerHTML = '<div class="cr-empty">Loading students and tutors…</div>';
+      var fz = await freezeState(picked.map(function (i) { return i.type; }));
+      if (cls && studentAuds.length) {
+        try { W.studentList = (await WH.loadEnrolled(cls)).filter(function (s) { return String(s.status || '').toLowerCase() !== 'suspended' && studentAuds.indexOf(audOf(s)) !== -1; }); } catch (e) { W.studentList = []; }
+      }
+      if (cls && wantsTutors) {
+        try {
+          var ts = await db.collection('tutorAccounts').where('subjects', 'array-contains', cls.subjectId).get();
+          W.tutorList = ts.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (t) {
+            if (String(t.status || '').toLowerCase() === 'suspended') return false;
+            return !(t.keyStages || []).length || t.keyStages.indexOf(cls.keyStage) !== -1;
+          }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+        } catch (e) { W.tutorList = []; }
+      }
+      function listHtml(kind) {
+        var all = kind === 's' ? W.studentList : W.tutorList, q = (kind === 's' ? W.q : W.qt).toLowerCase(), pick = kind === 's' ? W.pickS : W.pickT;
+        var rows = all.filter(function (x) { return !q || (String(x.name || '') + ' ' + String(x.email || '')).toLowerCase().indexOf(q) !== -1; });
+        var n = Object.keys(pick).length;
+        return '<div class="pb-pick"><div class="pb-pick-tools"><input type="search" data-wq="' + kind + '" placeholder="Search by name or email" value="' + esc(kind === 's' ? W.q : W.qt) + '">' +
+          '<button type="button" class="cr-btn sm" data-wall="' + kind + '">Tick all shown</button><button type="button" class="cr-btn sm" data-wnone="' + kind + '">Clear</button><span class="cnt">' + n + ' ticked</span></div>' +
+          '<div class="pb-pick-list">' + (rows.length ? rows.map(function (x) {
+            return '<label><input type="checkbox" data-wp="' + kind + '" value="' + esc(x.id) + '"' + (pick[x.id] ? ' checked' : '') + '><span>' + esc(x.name || 'No name') + '</span><small>' + esc(kind === 's' ? (audOf(x) === 'online' ? 'Online' : audOf(x) === 'remote' ? 'Remote' : 'Tuition') : (x.email || '')) + '</small></label>';
+          }).join('') : '<div class="cr-empty" style="padding:.8rem">Nobody matches.</div>') + '</div></div>';
+      }
+      function paint() {
+        var allowNames = fz ? (fz.allow || []).map(function (a) { return a.name || a.email || 'Test account'; }) : [];
+        var h = (fz ? '<div class="pb-freeze"><i class="fas fa-snowflake"></i><div><b>Developer mode freeze is on.</b> ' +
+            ((fz.audiences || {}).students ? 'Students get this only if they are one of your test accounts' + (allowNames.length ? ' (' + esc(allowNames.slice(0, 6).join(', ')) + (allowNames.length > 6 ? '…' : '') + ')' : ': you have none, so no student gets it') + '. ' : '') +
+            ((fz.audiences || {}).tutors ? 'Only tutor test accounts are told. ' : '') +
+            'Alerts and emails to frozen people are held. Admin > Settings > Developer mode changes this.</div></div>' : '');
+        if (studentAuds.length) {
+          h += '<div class="pb-who"><h4><i class="fas fa-user-graduate"></i> Students</h4>' +
+            (cls ? '<div class="pb-opts"><label class="pb-opt"><input type="radio" name="pbS" value="all"' + (W.students === 'all' ? ' checked' : '') + '> Everyone in the class (' + W.studentList.length + ')</label>' +
+              '<label class="pb-opt"><input type="radio" name="pbS" value="pick"' + (W.students === 'pick' ? ' checked' : '') + '> Only students I pick</label></div>' +
+              (W.students === 'pick' ? listHtml('s') + '<div class="cr-note" style="margin-top:.4rem">Only the ticked students and their parents get it. Nobody else in the class sees it.</div>' : '')
+              : '<div class="cr-note">Several classes are selected, so it goes to everyone in each class. To pick students, post one class at a time.</div>') + '</div>';
+        }
+        if (wantsTutors) {
+          h += '<div class="pb-who"><h4><i class="fas fa-chalkboard-user"></i> Tutors</h4><div class="pb-opts">' +
+            '<label class="pb-opt"><input type="radio" name="pbT" value="all"' + (W.tutors === 'all' ? ' checked' : '') + '> All tutors who teach it' + (cls ? ' (' + W.tutorList.length + ')' : '') + '</label>' +
+            (cls ? '<label class="pb-opt"><input type="radio" name="pbT" value="pick"' + (W.tutors === 'pick' ? ' checked' : '') + '> Only tutors I pick</label>' : '') +
+            '<label class="pb-opt"><input type="radio" name="pbT" value="none"' + (W.tutors === 'none' ? ' checked' : '') + '> No tutors</label></div>' +
+            (W.tutors === 'pick' ? listHtml('t') + '<div class="cr-note" style="margin-top:.4rem">Only the ticked tutors are told. They get their own email (get ready to mark); never the paper or the students’ email.</div>' : '') + '</div>';
+        }
+        host.innerHTML = h;
+      }
+      host.addEventListener('change', function (e) {
+        var t = e.target;
+        if (t.name === 'pbS') { W.students = t.value; paint(); }
+        else if (t.name === 'pbT') { W.tutors = t.value; paint(); }
+        else if (t.dataset.wp) { var m2 = t.dataset.wp === 's' ? W.pickS : W.pickT; if (t.checked) m2[t.value] = 1; else delete m2[t.value]; var c = t.closest('.pb-pick').querySelector('.cnt'); if (c) c.textContent = Object.keys(m2).length + ' ticked'; }
+      });
+      host.addEventListener('input', function (e) {
+        var k = e.target.dataset.wq; if (!k) return;
+        if (k === 's') W.q = e.target.value; else W.qt = e.target.value;
+        var pos = e.target.selectionStart; paint();
+        var i = host.querySelector('[data-wq="' + k + '"]'); if (i) { i.focus(); i.setSelectionRange(pos, pos); }
+      });
+      host.addEventListener('click', function (e) {
+        var a = e.target.closest('[data-wall],[data-wnone]'); if (!a) return;
+        var k = a.dataset.wall || a.dataset.wnone, m2 = k === 's' ? W.pickS : W.pickT;
+        if (a.dataset.wnone) Object.keys(m2).forEach(function (x) { delete m2[x]; });
+        else [].forEach.call(host.querySelectorAll('[data-wp="' + k + '"]'), function (b) { m2[b.value] = 1; });
+        paint();
+      });
+      paint();
+      return {
+        frozen: !!fz,
+        targets: function () {
+          var t = {};
+          if (W.students === 'pick') { var ss = Object.keys(W.pickS); if (!ss.length) throw new Error('Tick at least one student, or choose Everyone in the class.'); t.students = ss; }
+          if (wantsTutors) {
+            if (W.tutors === 'none') t.tutors = 'none';
+            else if (W.tutors === 'pick') { var tt = Object.keys(W.pickT); if (!tt.length) throw new Error('Tick at least one tutor, or choose All tutors / No tutors.'); t.tutors = tt; }
+            else t.tutors = 'all';
+          }
+          return t;
+        }
+      };
+    }
+
     async function review(choiceId) {
       var choice = CHOICES.filter(function (c) { return c.id === choiceId; })[0];
       var picked = S.items.filter(function (it) { return S.selected[it.path]; });
@@ -315,6 +437,7 @@
         (choice.id === 'all' ? '<div class="cr-note">Every item in the list will be visible to Online, Remote and Tutors.</div>' : '') +
         '</div>' +
         (alreadyRemoteWidening.length ? '<div class="pb-info"><i class="fas fa-circle-info"></i> <b>Audiences are additive.</b> ' + alreadyRemoteWidening.length + ' item' + (alreadyRemoteWidening.length === 1 ? '' : 's') + ' in this selection ' + (alreadyRemoteWidening.length === 1 ? 'is' : 'are') + ' already posted to Remote. Adding another audience does not remove Remote — the item stays visible to remote students unless it is explicitly retracted elsewhere.</div>' : '') +
+        '<div id="pbWho"></div>' +
         '<div class="box"><h4>Content</h4>Key Stage: <b>' + esc(ksList) + '</b><br>Subject / Year: <b>' + esc(subjList) + '</b><br>Topics: ' + esc(topicList.join(', ')) + '</div>' +
         '<h4>Will be posted (' + fresh.length + ')</h4><div class="pb-list"><ul>' + (fresh.length ? fresh.map(function (it) {
           return '<li>' + esc(it.title) + ' <span class="cr-note">— ' + esc(TYPE_LABEL[it.type]) + ', ' + esc(stateText(it)) + '</span></li>';
@@ -325,6 +448,7 @@
         (scheduled.length ? '<div class="cr-note">Scheduled lessons stay scheduled: they appear at their release time.</div>' : '') +
         (fresh.length ? '<div class="cr-note">Homework and exam notifications (and emails) are sent to the audience as soon as you confirm.</div>' : '') +
         (needsTick ? '<label style="display:flex;gap:.5rem;align-items:flex-start;margin-top:.8rem;font-size:.84rem"><input type="checkbox" id="pbAck" style="margin-top:.2rem"> <span>I have checked the audience and the ' + fresh.length + ' item' + (fresh.length === 1 ? '' : 's') + ' above and want to post them now.</span></label>' : '');
+      var who = await whoBox(m.body.querySelector('#pbWho'), fresh.length ? fresh : picked, choice);
       m.foot.innerHTML = '<span class="cr-err" id="pbErr"></span><button type="button" class="cr-btn" data-a="x">Cancel</button>' +
         '<button type="button" class="cr-btn primary" data-a="go"' + (fresh.length ? '' : ' disabled') + '><i class="fas fa-paper-plane"></i> ' + esc(choice.label) + '</button>';
       m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); };
@@ -332,9 +456,11 @@
       function sync() { var t = m.body.querySelector('#pbAck'); go.disabled = !fresh.length || (t && !t.checked); }
       sync(); var tick = m.body.querySelector('#pbAck'); if (tick) tick.onchange = sync;
       go.onclick = async function () {
+        var targets;
+        try { targets = who.targets(); } catch (er) { err.textContent = er.message; return; }
         go.disabled = true; err.textContent = ''; go.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Posting…';
         try {
-          var res = await firebase.functions().httpsCallable('publishClassroomContent')({ audience: choice.id, paths: fresh.map(function (i) { return i.path; }), requestId: requestId });
+          var res = await firebase.functions().httpsCallable('publishClassroomContent')({ audience: choice.id, paths: fresh.map(function (i) { return i.path; }), requestId: requestId, targets: targets });
           var d = res.data || {};
           // Items that were withdrawn earlier get their tutor-only resources back when they are posted again.
           (d.results || []).forEach(function (r) {
@@ -345,7 +471,8 @@
             firebase.firestore().collection('classroomResources').doc('wk_' + t + '_' + id).update({ withdrawn: false }).catch(function () {});
           });
           m.body.innerHTML = '<div class="cr-panel" style="margin:0"><h4 style="margin:0 0 .4rem;color:var(--brand-deep)"><i class="fas fa-circle-check" style="color:#1d8b57"></i> Done</h4>' +
-            '<div style="font-size:.88rem">Posted: <b>' + (d.published || 0) + '</b> · Already posted: ' + (d.already || 0) + ' · Skipped: ' + (d.skipped || 0) + (d.failed ? ' · <span style="color:var(--error)">Failed: ' + d.failed + '</span>' : '') + '</div>' +
+            '<div style="font-size:.88rem">Posted: <b>' + (d.published || 0) + '</b> · Already posted: ' + (d.already || 0) + ' · Skipped: ' + (d.skipped || 0) + (d.held ? ' · Held by the freeze: ' + d.held : '') + (d.failed ? ' · <span style="color:var(--error)">Failed: ' + d.failed + '</span>' : '') + '</div>' +
+            (d.frozen ? '<div class="pb-freeze" style="margin:.6rem 0 0"><i class="fas fa-snowflake"></i><div>The developer mode freeze was on: only your test accounts got it, and alerts to everyone else were held. When you finish testing and switch the freeze off, post it again to send it to everyone.</div></div>' : '') +
             ((d.results || []).filter(function (r) { return r.status === 'error' || r.status === 'skipped'; }).map(function (r) { return '<div class="cr-note">' + esc(r.path.split('/').pop()) + ': ' + esc(r.reason || r.status) + '</div>'; }).join('')) + '</div>';
           m.foot.innerHTML = '<button type="button" class="cr-btn primary" data-a="x">Close</button>';
           m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); };
@@ -390,10 +517,10 @@
   }
 
   /* Modal wrapper used by the per-classroom "Publish…" button. */
-  function openForClassroom(cls, user, onChange) {
+  function openForClassroom(cls, user, onChange, extra) {
     var m = CU.openModal({ title: 'Publish — ' + CU.displayName(cls) + ' Year ' + cls.year, wide: true });
     m.body.style.minHeight = '60vh';
-    mount(m.body, { user: user, classrooms: [cls], lockClassroom: cls.id, onChange: onChange });
+    mount(m.body, { user: user, classrooms: [cls], lockClassroom: cls.id, onChange: onChange, preselect: extra && extra.preselect });
     m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
     m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); if (onChange) onChange(); };
   }

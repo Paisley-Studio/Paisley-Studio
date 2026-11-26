@@ -856,11 +856,12 @@ function examPostedParent({ parentName, student, exam, examDate }) {
     subject: `New ${examType} for ${student && student.name ? student.name : 'your child'}: ${exam.title || 'Exam'}`,
     html: render({
       programme: programmeOf(student),
-      preheader: `${examType} — ${exam.title || 'Exam'} on ${fmtDateShort(examDate)}. The paper is attached.`,
-      heading: 'Exam posted',
+      preheader: `${examType}: ${exam.title || 'Exam'} on ${fmtDateShort(examDate)}. The paper is attached; please give it to your child when the exam opens.`,
+      heading: 'Exam released',
       intro: audienceIntro('parent', student, parentName),
       body: `
-        <p style="margin:0 0 14px;">${fa('fa-file-pen', BRAND.teal)}A new <strong>${esc(examType)}</strong> has just been posted for <strong>${esc((student && student.name) || 'your child')}</strong>. The exam paper is attached to this email so you can print it and hand it to them on the day.</p>
+        <p style="margin:0 0 14px;">${fa('fa-file-pen', BRAND.teal)}A new <strong>${esc(examType)}</strong> has been released for <strong>${esc((student && student.name) || 'your child')}</strong>. The exam paper is attached to this email.</p>
+        <p style="margin:0 0 14px;">Please keep the paper with you and give it to ${esc(firstName(student && student.name) || 'your child')} when the exam opens in the student portal on the exam date. ${esc(firstName(student && student.name) || 'Your child')} will be notified when it is time to sit it and when to hand in the completed paper.</p>
         ${detailList([
           ['fa-book', 'Subject', exam.subjectName || exam.subjectId || '—'],
           ['fa-file-lines', 'Exam', exam.title || '—'],
@@ -871,7 +872,7 @@ function examPostedParent({ parentName, student, exam, examDate }) {
             : null
         ])}
         ${exam.requirements ? `<p style="margin:0 0 6px;font-weight:800;color:${BRAND.deep};">Requirements</p><p style="margin:0 0 14px;white-space:pre-wrap;">${esc(exam.requirements)}</p>` : ''}
-        <p style="margin:0;font-size:13px;color:${BRAND.muted};">When the submission window opens, your child uploads the completed paper from their student portal. You can re-download the paper any time from the Exams section of the Parent Portal.</p>
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">When the submission window opens, your child uploads a photo or PDF of the completed paper from their student portal. You can download the paper again any time from the Exams section of the Parent Portal.</p>
       `,
       cta: { label: 'Open the Parent Portal', url: PORTALS.parent }
     })
@@ -882,14 +883,14 @@ function examPostedParent({ parentName, student, exam, examDate }) {
 function examPostedStudent({ student, exam, examDate }) {
   const examType = exam.examType || 'Exam';
   return {
-    subject: `Heads-up: ${examType} coming up — ${exam.title || 'Exam'}`,
+    subject: `Exam released: ${exam.title || examType}`,
     html: render({
       programme: programmeOf(student),
-      preheader: `A ${examType.toLowerCase()} has been posted for ${exam.subjectName || exam.subjectId || 'you'}. Ask your parent to print the paper.`,
-      heading: 'Exam posted',
+      preheader: `A ${examType.toLowerCase()} in ${exam.subjectName || exam.subjectId || 'your subject'} has been released. Check with your parent.`,
+      heading: 'Exam released',
       intro: `Hi ${esc(firstName(student && student.name))},`,
       body: `
-        <p style="margin:0 0 14px;">${fa('fa-file-pen', BRAND.teal)}A new <strong>${esc(examType)}</strong> has just been posted for you. Your parent has been emailed the exam paper so they can print it and give it to you on the day.</p>
+        <p style="margin:0 0 14px;">${fa('fa-file-pen', BRAND.teal)}A new <strong>${esc(examType)}</strong> has been released for you. Please check with your parent: they have the details.</p>
         ${detailList([
           ['fa-book', 'Subject', exam.subjectName || exam.subjectId || '—'],
           ['fa-file-lines', 'Exam', exam.title || '—'],
@@ -897,9 +898,38 @@ function examPostedStudent({ student, exam, examDate }) {
           ['fa-calendar-day', 'Exam date', fmtDateShort(examDate)]
         ])}
         ${exam.requirements ? `<p style="margin:0 0 6px;font-weight:800;color:${BRAND.deep};">Requirements</p><p style="margin:0 0 14px;white-space:pre-wrap;">${esc(exam.requirements)}</p>` : ''}
-        <p style="margin:0;font-size:13px;color:${BRAND.muted};">On the exam day, work through the printed paper. When the submission window opens in your portal you'll be able to upload a photo or PDF of your completed paper. Look out for a follow-up email from us.</p>
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">You will be notified when the exam opens in your portal and when to hand in your completed paper.</p>
       `,
       cta: { label: portalCta(student), url: studentPortal(student) }
+    })
+  };
+}
+
+/* 20b. Tutor: an exam in a subject they teach was released. No paper attached and no
+   student wording: they get ready to mark and see hand-ins arrive in the Classroom. */
+function examPostedTutor({ tutorName, exam, examDate, classLabel }) {
+  const examType = exam.examType || 'Exam';
+  return {
+    subject: `Exam released in ${classLabel || exam.subjectName || 'your subject'}: ${exam.title || examType}`,
+    html: render({
+      programme: 'staff',
+      preheader: `${exam.title || examType} has been released to your students. Get ready to mark the submissions.`,
+      heading: 'An exam in your subject was released',
+      intro: `Hi ${esc(firstName(tutorName) || 'there')},`,
+      body: `
+        <p style="margin:0 0 14px;">${fa('fa-file-pen', BRAND.teal)}The Studio Desk has released a <strong>${esc(examType)}</strong> in a subject you teach. Please get ready to mark it once your students hand it in.</p>
+        ${detailList([
+          ['fa-book', 'Class', classLabel || exam.subjectName || exam.subjectId || '—'],
+          ['fa-file-lines', 'Exam', exam.title || '—'],
+          ['fa-tag', 'Type', examType],
+          ['fa-calendar-day', 'Exam date', fmtDateShort(examDate)],
+          exam.submissionDeadline
+            ? ['fa-hourglass-half', 'Submissions by', fmtDateShort(exam.submissionDeadline.toDate ? exam.submissionDeadline.toDate() : exam.submissionDeadline)]
+            : null
+        ])}
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">You can see in the Classroom when each student submits, and mark the papers there. The paper itself is in the Classroom too.</p>
+      `,
+      cta: { label: 'Open the Tutor Portal', url: PORTALS.tutor }
     })
   };
 }
@@ -1120,6 +1150,7 @@ module.exports = {
     workPosted,
     examPostedParent,
     examPostedStudent,
+    examPostedTutor,
     examResultsReleased,
     attendanceNotice
   }

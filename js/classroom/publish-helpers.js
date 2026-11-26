@@ -489,11 +489,18 @@
         '<div class="cr-note" style="margin-top:.4rem">If not overridden, submissions open automatically at the exam date.</div>' +
       '</div>';
 
+    /* Saving never sends the exam to anyone. Posting does, from the Publish dialog, where the desk
+       chooses the students (everyone or picked) and the tutors (all, picked or none), and where
+       developer mode's freeze applies. An already posted exam just saves its changes. */
+    var posted = !!(ex && ex.status === 'Published' && ex.audiences && typeof ex.audiences === 'object' &&
+      (ex.audiences.online || ex.audiences.remote || ex.audiences.tuition || ex.audiences.tutors || (ex.releasedTo || []).length));
     m.foot.innerHTML =
       '<span class="cr-err" id="xErr"></span>' +
       '<button type="button" class="cr-btn" data-a="cancel">Cancel</button>' +
-      '<button type="button" class="cr-btn" data-s="Draft"><i class="fas fa-floppy-disk"></i> Save draft</button>' +
-      '<button type="button" class="cr-btn primary" data-s="Published"><i class="fas fa-paper-plane"></i> ' + (ex ? 'Save &amp; publish' : 'Publish') + '</button>';
+      (posted
+        ? '<button type="button" class="cr-btn primary" data-s="Published"><i class="fas fa-floppy-disk"></i> Save changes</button>'
+        : '<button type="button" class="cr-btn" data-s="Draft"><i class="fas fa-floppy-disk"></i> Save draft</button>' +
+          '<button type="button" class="cr-btn primary" data-s="Draft" data-post="1"><i class="fas fa-paper-plane"></i> Save and choose who gets it</button>');
 
     var errEl = m.foot.querySelector('#xErr');
 
@@ -563,10 +570,19 @@
           data.createdBy = user.uid;
           data.createdAt = FV().serverTimestamp();
           data.notificationsSentAt = null;
-        } else if (status === 'Published' && ex.status !== 'Published') {
-          data.notificationsSentAt = null;
-        } else if (f.examTs.toDate().getTime() !== (ex.examDate ? U.toDate(ex.examDate).getTime() : 0)) {
-          data.parentNoticeSent = false;
+          /* Posted to nobody until the desk posts it (an exam without audiences used to count as posted to everyone). */
+          data.audiences = { online: false, remote: false, tuition: false, tutors: false };
+          data.audience = 'class'; data.recipients = [];
+        } else {
+          if (!ex.audiences || typeof ex.audiences !== 'object') {
+            /* An older exam with no audiences keeps what it had: live to online students and tutors if it was published. */
+            var wasLive = ex.status === 'Published';
+            data.audiences = { online: wasLive, remote: false, tuition: false, tutors: wasLive };
+            if (wasLive) data.notificationsSent = { online: true, tutors: true };
+          }
+          if (!ex.audience) { data.audience = 'class'; data.recipients = []; }
+          if (ex.status === 'Published') data.status = 'Published';
+          if (f.examTs.toDate().getTime() !== (ex.examDate ? U.toDate(ex.examDate).getTime() : 0)) data.parentNoticeSent = false;
         }
 
         btn.disabled = true;
@@ -574,6 +590,9 @@
           await flatExamRef(cls.id, eid).set(data, { merge: true });
           m.close(true);
           if (o.afterSave) await o.afterSave();
+          if (btn.dataset.post && global.PublishUI && global.PublishUI.openForClassroom) {
+            global.PublishUI.openForClassroom(cls, user, o.afterSave, { preselect: ['classrooms/' + cls.id + '/exams/' + eid] });
+          }
         } catch (e) {
           console.error('save flat exam:', e);
           errEl.textContent = 'Could not save: ' + (e.code === 'permission-denied' ? 'you do not have permission to post in this subject.' : (e.message || e));

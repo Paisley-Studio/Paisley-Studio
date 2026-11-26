@@ -33,6 +33,7 @@ const admin = require("firebase-admin");
 const { templates } = require("./email-templates");
 const W = require("./work-shared");
 const { rebuildParentAccess } = require("./parent-access");
+const freeze = require("./dev-freeze");
 
 /* ---------------------------------------------------------
    Content types + the explicit audience matrix.
@@ -78,8 +79,16 @@ function legacyAudiences(type, d) {
    Pure Firestore-interface logic so it can be unit-tested with an
    in-memory fake. Returns a plain result object.
 --------------------------------------------------------- */
-async function publishOne(db, ctx, ref, parsed, audiences) {
+/* plan (optional): who exactly gets it, from the Studio Desk's choice and developer mode's freeze.
+     release:    [studentUid] | null   specific students: delivered like a tutor release (releasedTo,
+                                       their parents in releasedParents), never to the whole class
+     parents:    [parentUid]           the parents of `release`
+     dropStudents / dropTutors: bool   leave those audiences out
+     tutorNotify:[tutorUid] | null     only these tutors are told (null = every tutor of the subject)
+     frozen:     { area } | null       the freeze narrowed this post (shown in the admin, logged) */
+async function publishOne(db, ctx, ref, parsed, audiences, plan) {
   const { uid, name, requestId, ts } = ctx;
+  plan = plan || {};
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) return { path: parsed.path, type: parsed.type, status: "missing", reason: "Item no longer exists." };
@@ -91,8 +100,16 @@ async function publishOne(db, ctx, ref, parsed, audiences) {
     if ((parsed.type === "exam" || parsed.type === "flatExam") && d.status === "Closed") return { path: parsed.path, type: parsed.type, title, status: "skipped", reason: "Closed exams cannot be posted." };
 
     const current = d.audiences && typeof d.audiences === "object" ? d.audiences : legacyAudiences(parsed.type, d);
-    const want = audiences.filter((a) => current[a] !== true);
-    if (!want.length) return { path: parsed.path, type: parsed.type, title, status: "already", audiences: [] };
+    const STUDENT_AUDS = ["online", "remote", "tuition"];
+    const targeted = Array.isArray(plan.release);
+    const want = audiences.filter((a) => current[a] !== true &&
+      !(STUDENT_AUDS.indexOf(a) !== -1 && (targeted || plan.dropStudents)) && !(a === "tutors" && plan.dropTutors));
+    const had = Array.isArray(d.releasedTo) ? d.releasedTo : [];
+    const newRelease = targeted ? plan.release.filter((x) => had.indexOf(x) === -1) : [];
+    if (!want.length && !newRelease.length) {
+      if (plan.frozen) return { path: parsed.path, type: parsed.type, title, status: "held", reason: "Held by developer mode: nobody who may receive it during the freeze is in this class.", audiences: [] };
+      return { path: parsed.path, type: parsed.type, title, status: "already", audiences: [] };
+    }
 
     const next = { online: current.online === true, remote: current.remote === true, tuition: current.tuition === true, tutors: current.tutors === true };
     const publication = Object.assign({}, d.publication || {});
@@ -105,6 +122,15 @@ async function publishOne(db, ctx, ref, parsed, audiences) {
     });
 
     const patch = { audiences: next, publication, updatedAt: ts };
+    /* Work that predates the audience model may have no audience/recipients fields; students' queries need them. */
+    if (!d.audience) { patch.audience = "class"; if (!Array.isArray(d.recipients)) patch.recipients = []; }
+    if (newRelease.length) {
+      patch.releasedTo = admin.firestore.FieldValue.arrayUnion(...newRelease);
+      if ((plan.parents || []).length) patch.releasedParents = admin.firestore.FieldValue.arrayUnion(...plan.parents);
+      patch.releaseLog = admin.firestore.FieldValue.arrayUnion({ by: uid, byName: name || "Studio Desk", at: ts, count: newRelease.length, desk: true });
+    }
+    if (want.indexOf("tutors") !== -1) patch.tutorNotify = Array.isArray(plan.tutorNotify) ? plan.tutorNotify : admin.firestore.FieldValue.delete();
+    if (plan.frozen) patch.frozenPost = { at: ts, by: uid, area: plan.frozen.area, students: newRelease.length };
     let markedReady = false;
     if (parsed.type === "lesson" && d.status === "draft") { patch.status = "published"; patch.publishAt = null; patch.publishedAt = ts; markedReady = true; }
     if ((parsed.type === "exam" || parsed.type === "flatExam") && d.status !== "Published") { patch.status = "Published"; markedReady = true; }
@@ -117,22 +143,80 @@ async function publishOne(db, ctx, ref, parsed, audiences) {
         publishedBy: uid, publishedByName: name || "Studio Desk", publishedAt: ts, requestId: requestId || null, status: "active"
       });
     });
-    return { path: parsed.path, type: parsed.type, title, status: "published", audiences: want, markedReady, live };
+    return { path: parsed.path, type: parsed.type, title, status: "published", audiences: want, released: newRelease.length, frozen: !!plan.frozen, markedReady, live };
   });
 }
 
-async function publishItems(db, ctx, choice, paths) {
+/* ---------------------------------------------------------
+   Who exactly gets an item: the desk's picks, narrowed by developer mode's freeze.
+   targets: { students: [uid] (absent = the whole class), tutors: "all" | "none" | [uid] }
+--------------------------------------------------------- */
+const AREA_OF_TYPE = { lesson: "classes", assignment: "homework", exam: "exams", flatExam: "exams" };
+async function planFor(db, parsed, audiences, targets, fz) {
+  const t = targets && typeof targets === "object" ? targets : {};
+  const plan = {};
+  const studentAuds = audiences.filter((a) => a !== "tutors");
+  const area = AREA_OF_TYPE[parsed.type] || "classes";
+  const cfg = fz && fz.cfg, frozen = !!(fz && fz.on && cfg.areas && cfg.areas[area] === true);
+  const aud = (cfg && cfg.audiences) || {};
+  const allow = frozen ? (Array.isArray(cfg.allow) ? cfg.allow : []) : [];
+  const allowIds = (role) => allow.filter((a) => a && a.uid && (!role || String(a.role || "") === role || !a.role)).map((a) => String(a.uid));
+
+  let picked = Array.isArray(t.students) ? Array.from(new Set(t.students.map(String))).slice(0, 500) : null;
+  const holdStudents = frozen && aud.students === true;
+  if (studentAuds.length && (picked || holdStudents)) {
+    /* Only students of this class (subject, Year, board), on a portal the post is for, may be picked. */
+    const classroom = await W.classroomOf(parsed.cid);
+    const eligible = (await W.resolveStudents(classroom, null, null)).filter((s) => studentAuds.indexOf(W.studentAudience(s)) !== -1).map((s) => s.id);
+    let list = picked ? picked.filter((x) => eligible.indexOf(x) !== -1) : eligible.slice();
+    if (holdStudents) { const ok = allowIds(); list = list.filter((x) => ok.indexOf(x) !== -1); plan.frozen = { area }; }
+    if (!list.length) plan.dropStudents = true;
+    else {
+      plan.release = list;
+      const parents = new Set();
+      for (const sid of list) for (const p of await W.parentsOfStudent(sid)) parents.add(p.id);
+      plan.parents = Array.from(parents);
+    }
+  }
+  if (audiences.indexOf("tutors") !== -1) {
+    let tl = t.tutors === "none" ? [] : (Array.isArray(t.tutors) ? Array.from(new Set(t.tutors.map(String))).slice(0, 300) : null);
+    if (frozen && aud.tutors === true) {
+      const ok = allowIds("tutor");
+      tl = tl === null ? ok : tl.filter((x) => ok.indexOf(x) !== -1);
+      plan.frozen = plan.frozen || { area };
+    }
+    if (t.tutors === "none") plan.dropTutors = true;
+    else if (tl !== null) { plan.tutorNotify = tl; if (!tl.length && frozen) plan.dropTutors = true; }
+  }
+  return plan;
+}
+
+async function publishItems(db, ctx, choice, paths, targets) {
   if (CHOICES.indexOf(choice) === -1) throw new HttpsError("invalid-argument", "Unknown audience.");
   const list = Array.from(new Set((paths || []).map(String)));
   if (!list.length) throw new HttpsError("invalid-argument", "Select at least one item.");
   if (list.length > 150) throw new HttpsError("invalid-argument", "Please publish at most 150 items at a time.");
   const results = [];
+  /* Developer mode: while a freeze is on, posts reach only its test accounts. Read fresh, never cached. */
+  let fz = { on: false, cfg: null };
+  try { const cfg = await freeze.config(true); fz = { on: freeze.active(cfg), cfg }; } catch (e) { console.warn("publish: freeze check failed:", e.message); }
+  if (targets && Array.isArray(targets.students) && new Set(list.map((x) => (parsePath(x) || {}).cid)).size > 1) {
+    throw new HttpsError("invalid-argument", "Pick students for one class at a time.");
+  }
   for (const path of list) {
     const parsed = parsePath(path);
     if (!parsed) { results.push({ path, status: "skipped", reason: "Not a publishable item." }); continue; }
     const audiences = audiencesFor(choice, parsed.type);
     if (!audiences.length) { results.push({ path, type: parsed.type, status: "skipped", reason: "This content type cannot be posted to that audience." }); continue; }
-    try { results.push(await publishOne(db, ctx, db.doc(path), parsed, audiences)); }
+    try {
+      const plan = await planFor(db, parsed, audiences, targets, fz);
+      const r = await publishOne(db, ctx, db.doc(path), parsed, audiences, plan);
+      if (plan.frozen) {
+        await freeze.record("content", { area: plan.frozen.area, path, title: String(r.title || "").slice(0, 200),
+          message: r.status === "held" ? "Not posted to anyone: the freeze holds this audience." : `Posted only to test accounts (${(plan.release || []).length} student${(plan.release || []).length === 1 ? "" : "s"}).` });
+      }
+      results.push(r);
+    }
     catch (e) { console.error("publishOne failed", path, e); results.push({ path, type: parsed.type, status: "error", reason: e.message || "Could not publish." }); }
   }
   return results;
@@ -153,9 +237,9 @@ exports.publishClassroomContent = onCall(
     const d = request.data || {};
     const db = admin.firestore();
     const ctx = { db, uid: who.uid, name: who.name, requestId: String(d.requestId || "").slice(0, 80) || null, ts: admin.firestore.Timestamp.now() };
-    const results = await publishItems(db, ctx, String(d.audience || ""), d.paths);
+    const results = await publishItems(db, ctx, String(d.audience || ""), d.paths, d.targets);
     const count = (s) => results.filter((r) => r.status === s).length;
-    return { results, published: count("published"), already: count("already"), skipped: count("skipped") + count("missing"), failed: count("error") };
+    return { results, published: count("published"), already: count("already"), held: count("held"), frozen: results.some((r) => r.frozen || r.status === "held"), skipped: count("skipped") + count("missing"), failed: count("error") };
   }
 );
 
@@ -359,6 +443,7 @@ async function notifyStudentsOfWork({ kind, item, cid, entity, only, ids }) {
 async function notifyTutorsOfPost({ item, cid, entity, what }) {
   const classroom = await W.classroomOf(cid);
   if (!classroom) return;
+  const only = Array.isArray(item.tutorNotify) ? item.tutorNotify : null;   /* the desk picked tutors */
   const snap = await W.db().collection("tutorAccounts").get();
   const key = W.stableId(entity, "tutors");
   const board = W.boardLabel(classroom);
@@ -368,6 +453,7 @@ async function notifyTutorsOfPost({ item, cid, entity, what }) {
     if ((t.subjects || []).indexOf(classroom.subjectId) === -1) continue;
     if ((t.keyStages || []).length && t.keyStages.indexOf(classroom.keyStage) === -1) continue;
     if (!W.tutorTeachesBoard(t, classroom)) continue;
+    if (only && only.indexOf(d.id) === -1) continue;
     await W.notifyOnce(`work_${key}_${d.id}`, d.id, "tutor", {
       type: "material_posted", title: `New ${board ? board + " " : ""}material from the Studio Desk`,
       message: `${item.title || what} (${W.classTag(item.subjectName || classroom.subjectName || "", classroom)}) is ready for you in the Classroom.`,
@@ -498,4 +584,4 @@ exports.backfillAudiences = onCall(
   }
 );
 
-exports._internals = { parsePath, audiencesFor, legacyAudiences, publishOne, publishItems, releaseWork, tutorTeaches, becameVisible, notifyTutorsOfPost, TYPES };
+exports._internals = { parsePath, audiencesFor, legacyAudiences, publishOne, publishItems, planFor, releaseWork, tutorTeaches, becameVisible, notifyTutorsOfPost, TYPES };

@@ -285,6 +285,7 @@
           edges: [['ev', 'fn', ''], ['fn', 'chk', ''], ['chk', 'send', 'not frozen'], ['chk', 'hold', 'frozen', { warm: true }], ['ok', 'send', '', { dash: true }]]
         }) +
         table(['Tool', 'What it does'], [
+          ['Freeze and posting', 'While a freeze holds an area for students, anything posted there is released only to the test students of that class (and their parents), never to the whole class; tutors get it only if a tutor test account is picked. The Publish review says so before you confirm.'],
           ['Maintenance banner', 'A small floating pill on every page that opens into the full card when pressed: planned maintenance with a countdown, then under maintenance with time left. People can drag it anywhere, shrink it back or close it. It never blocks anyone. Stored in ' + code('siteStatus/maintenance') + '.'],
           ['Freeze', 'Holds bells and emails for the areas you tick (Tech Studio, classes, homework, exams, live classes, attendance, tuition, messages, accounts, newsletter) and the people you freeze (students, parents, tutors, coaches), except your test accounts. Ends by itself if you set an end. Stored in ' + code('devMode/freeze') + '; held items in ' + code('devHeld') + '.']
         ]) +

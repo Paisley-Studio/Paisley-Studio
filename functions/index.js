@@ -516,7 +516,7 @@ exports.onStudentActivated = onDocumentUpdated(
     if (student.studentType === "tech") return;
     if (!student.email) return;
     try {
-      await admin.firestore().collection("personalNotifications").add({
+      await notifications.addPersonalNotification({
         recipientId: event.params.studentId,
         recipientType: "student",
         type: "account_approved",
@@ -629,7 +629,7 @@ exports.onTicketReplied = onDocumentUpdated(
         console.log("onTicketReplied → student:", email, "→", sendResult);
       }
       try {
-        await db.collection("personalNotifications").add({
+        await notifications.addPersonalNotification({
           recipientId: ticket.studentId,
           recipientType: "student",
           type: "ticket_reply",
@@ -668,7 +668,7 @@ exports.onTicketReplied = onDocumentUpdated(
       // student.
       try {
         const subjectBit = ticket.subjectName ? ` (${ticket.subjectName})` : "";
-        await db.collection("personalNotifications").add({
+        await notifications.addPersonalNotification({
           recipientId: tutorUid,
           recipientType: "tutor",
           type: "ticket_reply",
@@ -691,17 +691,23 @@ exports.onTicketReplied = onDocumentUpdated(
    Flat subject-scoped exams live at:
      classrooms/{cid}/exams/{eid}
 
-   Fires when the doc is created OR when its status flips to
-   "Published" for the first time.
+   Fires when the exam is POSTED (Classroom > Publish: it becomes
+   visible to an audience, or is released to students by name).
+   An exam without an `audiences` map was never posted and sends
+   nothing (it used to count as posted to every online student).
 
-   Behaviour per student in the exam's subject + year:
-     • Student receives a "heads-up" email with no attachment.
-     • Every linked parent receives the same email, WITH the
-       exam paper attached as a PDF.
-     • Every subject tutor who teaches the exam's Key Stage
-       receives a bell + email ("New exam posted") so they
-       know to expect hand-ins and can grade them once the
-       window opens.
+   Behaviour per student in scope (subject + Year + board, or the
+   students the desk picked / the freeze's test accounts):
+     • Student: bell + "Exam released, check with your parent"
+       email. No paper.
+     • Each linked parent: bell + email WITH the paper attached,
+       asking them to give it to the child when the exam opens.
+     • Tutors who teach it (or only those the desk picked,
+       `tutorNotify`): bell + their own email (examPostedTutor):
+       get ready to mark, submissions show in the Classroom.
+       Never the paper, never student wording.
+   Every bell goes through notifyOnce and every email through
+   sendEmail, so developer mode's freeze holds them.
 
    Idempotency: `notificationsSentAt` is stamped inside a
    transaction before sending. A second trigger pass is a no-op.
@@ -712,190 +718,149 @@ exports.onFlatExamPosted = onDocumentWritten(
     const before = event.data.before.exists ? event.data.before.data() : null;
     const after  = event.data.after.exists  ? event.data.after.data()  : null;
     if (!after) return;
-
-    // Audience-aware: act only on the audiences this exam has JUST become
-    // visible to (online students / remote students / tutors). Each audience
-    // is claimed once, so a retry or a later post to another audience never
-    // re-notifies people who were already told.
     const WS = require("./work-shared");
+
+    /* Only posting (Classroom > Publish, publishClassroomContent) sends an exam to anyone. An exam
+       without an `audiences` map was never posted: it must not reach the whole class by default. */
+    if (!after.audiences || typeof after.audiences !== "object") return;
+
+    // Audiences the exam has JUST become visible to, plus students the desk (or the freeze's test
+    // list) released it to by name. Each is claimed once, so retries never notify twice.
     const becameVisible = (aud) => WS.isVisibleTo(after, aud, "Published") && !WS.isVisibleTo(before, aud, "Published");
     const wanted = ["online", "remote", "tuition", "tutors"].filter(becameVisible);
-    if (!wanted.length) return;
+    const livePublished = String(after.status || "") === "Published";
+    const hadRel = (before && Array.isArray(before.releasedTo)) ? before.releasedTo : [];
+    const wasLive = before && String(before.status || "") === "Published";
+    const newlyReleased = livePublished ? (Array.isArray(after.releasedTo) ? after.releasedTo : []).filter((x) => !wasLive || hadRel.indexOf(x) === -1) : [];
+    if (!wanted.length && !newlyReleased.length) return;
 
-    const claimedAuds = await admin.firestore().runTransaction(async (tx) => {
+    const claimed = await admin.firestore().runTransaction(async (tx) => {
       const snap = await tx.get(event.data.after.ref);
-      if (!snap.exists) return [];
+      if (!snap.exists) return { auds: [], ids: [] };
       const d = snap.data() || {};
       const sent = d.notificationsSent || {};
-      const todo = wanted.filter((a) => sent[a] !== true);
-      if (!todo.length) return [];
+      const auds = wanted.filter((a) => sent[a] !== true);
+      const told = Array.isArray(d.notifiedStudents) ? d.notifiedStudents : [];
+      const ids = newlyReleased.filter((x) => told.indexOf(x) === -1);
+      if (!auds.length && !ids.length) return { auds: [], ids: [] };
       const patch = { notificationsSentAt: admin.firestore.FieldValue.serverTimestamp() };
-      todo.forEach((a) => { patch["notificationsSent." + a] = true; });
+      auds.forEach((a) => { patch["notificationsSent." + a] = true; });
+      if (ids.length) patch.notifiedStudents = admin.firestore.FieldValue.arrayUnion(...ids);
       tx.update(event.data.after.ref, patch);
-      return todo;
+      return { auds, ids };
     });
-    if (!claimedAuds.length) return;
+    if (!claimed.auds.length && !claimed.ids.length) return;
 
     const { cid, eid } = event.params;
     const exam = after;
     const db = admin.firestore();
-
     if (!exam.subjectId || !exam.keyStage) {
-      console.warn(`onFlatExamPosted: exam ${eid} missing subjectId or keyStage — skipping.`);
+      console.warn(`onFlatExamPosted: exam ${eid} missing subjectId or keyStage, skipping.`);
       return;
     }
-
-    const examDate = exam.examDate && exam.examDate.toDate
-      ? exam.examDate.toDate()
-      : (exam.examDate ? new Date(exam.examDate) : null);
-
-    let paperAttachment = null;
-    try {
-      if (exam.examPdfUrl || exam.examPdfPath) {
-        let buf = null;
-        if (exam.examPdfPath) {
-          const bucket = admin.storage().bucket();
-          const [data] = await bucket.file(exam.examPdfPath).download();
-          buf = data;
-        } else if (exam.examPdfUrl) {
-          const resp = await fetch(exam.examPdfUrl);
-          if (resp.ok) buf = Buffer.from(await resp.arrayBuffer());
-        }
-        if (buf) {
-          paperAttachment = [{
-            filename: exam.examPdfName || "exam.pdf",
-            content: buf,
-            contentType: "application/pdf"
-          }];
-        }
-      }
-    } catch (e) {
-      console.warn("onFlatExamPosted: could not download paper for attachment:", e.message || e);
-    }
-
-    const wantYear = exam.year != null ? Number(exam.year) : null;
+    const examDate = exam.examDate && exam.examDate.toDate ? exam.examDate.toDate() : (exam.examDate ? new Date(exam.examDate) : null);
     const examClassroom = await WS.classroomOf(cid);
-    const studentsSnap = await db.collection("students")
-      .where("keyStage", "==", exam.keyStage)
-      .get();
+    const entityId = `${cid}/flat/${eid}`;
+    const key = WS.stableId(entityId, "flatExamPosted");
 
-    for (const stuDoc of studentsSnap.docs) {
-      const student = stuDoc.data() || {};
-      const subjects = Array.isArray(student.subjects) ? student.subjects : [];
-      if (!subjects.includes(exam.subjectId)) continue;
-      if (wantYear != null && student.year != null && Number(student.year) !== wantYear) continue;
-      if (String(student.status || "").toLowerCase() === "suspended") continue;
-      if (claimedAuds.indexOf(WS.studentAudience(student)) === -1) continue;
-      if (examClassroom && WS.studentBoard(student, exam.subjectId) !== WS.boardOf(examClassroom)) continue;
+    /* ---- Who: students of the subject + Year + board on a posted portal, or those released by name ---- */
+    const recipients = new Map();
+    if (claimed.auds.some((a) => a !== "tutors")) {
+      const wantYear = exam.year != null ? Number(exam.year) : null;
+      const studentsSnap = await db.collection("students").where("keyStage", "==", exam.keyStage).get();
+      for (const stuDoc of studentsSnap.docs) {
+        const student = stuDoc.data() || {};
+        const subjects = Array.isArray(student.subjects) ? student.subjects : [];
+        if (!subjects.includes(exam.subjectId)) continue;
+        if (wantYear != null && student.year != null && Number(student.year) !== wantYear) continue;
+        if (["suspended", "pending"].indexOf(String(student.status || "").toLowerCase()) !== -1) continue;
+        if (claimed.auds.indexOf(WS.studentAudience(student)) === -1) continue;
+        if (examClassroom && WS.studentBoard(student, exam.subjectId) !== WS.boardOf(examClassroom)) continue;
+        if (exam.audience === "students" && (exam.recipients || []).indexOf(stuDoc.id) === -1) continue;
+        recipients.set(stuDoc.id, { id: stuDoc.id, ...student });
+      }
+    }
+    for (const sid of claimed.ids) {
+      if (recipients.has(sid)) continue;
+      const sd = await db.collection("students").doc(sid).get();
+      if (sd.exists && String((sd.data() || {}).status || "").toLowerCase() !== "suspended") recipients.set(sid, { id: sid, ...sd.data() });
+    }
 
-      const studentId = stuDoc.id;
-
+    /* The paper goes to parents only (never to students or tutors), and is fetched only if a parent needs it. */
+    let paperAttachment, paperTried = false;
+    async function paper() {
+      if (paperTried) return paperAttachment;
+      paperTried = true;
       try {
-        await db.collection("personalNotifications").add({
-          recipientId: studentId,
-          recipientType: "student",
-          type: "exam_posted",
-          title: "New exam posted",
-          message: `${exam.title || "An exam"} (${exam.subjectName || ""}) has been posted. Ask your parent to print the paper.`,
-          relatedEntity: "exam",
-          relatedEntityId: `${cid}/flat/${eid}`,
-          read: false, emailSent: false,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        let buf = null;
+        if (exam.examPdfPath) { const [data] = await admin.storage().bucket().file(exam.examPdfPath).download(); buf = data; }
+        else if (exam.examPdfUrl) { const resp = await fetch(exam.examPdfUrl); if (resp.ok) buf = Buffer.from(await resp.arrayBuffer()); }
+        if (buf) paperAttachment = [{ filename: exam.examPdfName || "exam.pdf", content: buf, contentType: "application/pdf" }];
+      } catch (e) { console.warn("onFlatExamPosted: could not download the paper for the parents' email:", e.message || e); }
+      return paperAttachment;
+    }
+
+    let studentsTold = 0, parentsTold = 0, tutorsTold = 0;
+    for (const student of recipients.values()) {
+      const studentId = student.id;
+      try {
+        /* Bells go through the freeze check (notifyOnce); a held bell means no email either. */
+        const told = await WS.notifyOnce(`flatexam_${key}_${studentId}`, studentId, "student", {
+          type: "exam_posted", title: "Exam released",
+          message: `${exam.title || "An exam"} (${exam.subjectName || ""}) has been released. Check with your parent; you will be told when to hand it in.`,
+          relatedEntity: "exam", relatedEntityId: entityId, emailSent: !!student.email
         });
-      } catch (e) { /* ignore */ }
-
-      if (student.email) {
-        try {
+        if (told && student.email) {
           const t = templates.examPostedStudent({ student, exam, examDate });
-          await sendEmail(student.email, t.subject, t.html);
-        } catch (e) { console.warn("onFlatExamPosted: student email failed", student.email, e.message || e); }
-      }
+          const r = await sendEmail(student.email, t.subject, t.html, undefined, undefined, { area: "exams" });
+          if (r && r.sent) studentsTold++;
+        }
+      } catch (e) { console.warn("onFlatExamPosted: student notice failed", studentId, e.message || e); }
 
       try {
-        const links = await db.collection("parentStudentLinks")
-          .where("studentUid", "==", studentId).get();
-        for (const link of links.docs) {
-          const parentUid = link.data().parentUid;
-          if (!parentUid) continue;
-          const parentSnap = await db.collection("parentAccounts").doc(parentUid).get();
-          if (!parentSnap.exists) continue;
-          const parent = parentSnap.data() || {};
-          if (!parent.email) continue;
-          try {
-            const t = templates.examPostedParent({ parentName: parent.name, student, exam, examDate });
-            await sendEmail(parent.email, t.subject, t.html, paperAttachment || undefined);
-          } catch (e) { console.warn("onFlatExamPosted: parent email failed", parent.email, e.message || e); }
-          try {
-            await db.collection("personalNotifications").add({
-              recipientId: parentUid,
-              recipientType: "parent",
-              type: "exam_posted",
-              title: `New exam for ${student.name || "your child"}`,
-              message: `${exam.title || "An exam"} (${exam.subjectName || ""})${examDate ? " on " + examDate.toLocaleDateString("en-GB") : ""}.`,
-              relatedEntity: "exam",
-              relatedEntityId: `${cid}/flat/${eid}`,
-              read: false, emailSent: !!parent.email,
-              extra: { studentId }
-            });
-          } catch (e) { /* ignore */ }
-        }
-      } catch (e) { console.warn("onFlatExamPosted: parent link read failed", e.message || e); }
-    }
-
-    /* ---------------------------------------------------------
-       Tutors — bell + email for every subject tutor who
-       teaches the exam's Key Stage. They need to know the exam
-       exists so they can mark the hand-ins once the window opens.
-    --------------------------------------------------------- */
-    try {
-      const tutorsSnap = claimedAuds.indexOf("tutors") === -1 ? { docs: [] } : await db.collection("tutorAccounts").get();
-      for (const tutDoc of tutorsSnap.docs) {
-        const tutor = tutDoc.data() || {};
-        if (String(tutor.status || "").toLowerCase() === "suspended") continue;
-        const tutorSubjects = Array.isArray(tutor.subjects) ? tutor.subjects : [];
-        if (tutorSubjects.indexOf(exam.subjectId) === -1) continue;
-        const tutorKs = Array.isArray(tutor.keyStages) ? tutor.keyStages : [];
-        if (tutorKs.length && tutorKs.indexOf(exam.keyStage) === -1) continue;
-        if (examClassroom && !WS.tutorTeachesBoard(tutor, examClassroom)) continue;
-
-        const tutorId = tutDoc.id;
-
-        // Bell
-        try {
-          await db.collection("personalNotifications").add({
-            recipientId: tutorId,
-            recipientType: "tutor",
-            type: "exam_posted",
-            title: `New ${WS.boardLabel(examClassroom) ? WS.boardLabel(examClassroom) + " " : ""}exam posted`,
-            message: `${exam.title || "An exam"} (${WS.classTag(exam.subjectName || "", examClassroom)})${examDate ? " on " + examDate.toLocaleDateString("en-GB") : ""} — you will be able to grade hand-ins once the submission window opens.`,
-            relatedEntity: "exam",
-            relatedEntityId: `${cid}/flat/${eid}`,
-            ...WS.boardExtra(examClassroom),
-            read: false, emailSent: !!tutor.email,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        for (const parent of await WS.parentsOfStudent(studentId)) {
+          const told = await WS.notifyOnce(`flatexam_${key}_${parent.id}_${studentId}`, parent.id, "parent", {
+            type: "exam_posted", title: `New exam for ${student.name || "your child"}`,
+            message: `${exam.title || "An exam"} (${exam.subjectName || ""})${examDate ? " on " + examDate.toLocaleDateString("en-GB") : ""}. The paper is in your email and in the Exams section.`,
+            relatedEntity: "exam", relatedEntityId: entityId, emailSent: !!parent.email, extra: { studentId }
           });
-        } catch (e) { /* ignore */ }
-
-        // Email — reuse the student heads-up template. It is written
-        // audience-neutral ("A new exam has just been posted for you"),
-        // and the tutor just needs to know a paper is up and to expect
-        // hand-ins. If you'd prefer a distinct tutor wording, add an
-        // `examPostedTutor` template in email-templates.js and swap
-        // the call below.
-        if (tutor.email) {
-          try {
-            const t = templates.examPostedStudent({
-              student: { name: tutor.name || "Tutor" },
-              exam: { ...exam, subjectName: WS.classTag(exam.subjectName || "", examClassroom) },
-              examDate
-            });
-            await sendEmail(tutor.email, t.subject, t.html, paperAttachment || undefined);
-          } catch (e) { console.warn("onFlatExamPosted: tutor email failed", tutor.email, e.message || e); }
+          if (!told || !parent.email) continue;
+          const t = templates.examPostedParent({ parentName: parent.name, student, exam, examDate });
+          const r = await sendEmail(parent.email, t.subject, t.html, (await paper()) || undefined, undefined, { area: "exams" });
+          if (r && r.sent) parentsTold++;
         }
-      }
-    } catch (e) {
-      console.warn("onFlatExamPosted: tutor notification pass failed", e.message || e);
+      } catch (e) { console.warn("onFlatExamPosted: parent notice failed", studentId, e.message || e); }
     }
+
+    /* ---- Tutors who teach this subject, Key Stage and board (or only those the desk picked):
+       a bell and their own email. Never the paper, never the student wording. ---- */
+    if (claimed.auds.indexOf("tutors") !== -1) {
+      try {
+        const only = Array.isArray(exam.tutorNotify) ? exam.tutorNotify : null;
+        const classLabel = WS.classTag(exam.subjectName || "", examClassroom);
+        const tutorsSnap = await db.collection("tutorAccounts").get();
+        for (const tutDoc of tutorsSnap.docs) {
+          const tutor = tutDoc.data() || {};
+          if (String(tutor.status || "").toLowerCase() === "suspended") continue;
+          if ((Array.isArray(tutor.subjects) ? tutor.subjects : []).indexOf(exam.subjectId) === -1) continue;
+          const tutorKs = Array.isArray(tutor.keyStages) ? tutor.keyStages : [];
+          if (tutorKs.length && tutorKs.indexOf(exam.keyStage) === -1) continue;
+          if (examClassroom && !WS.tutorTeachesBoard(tutor, examClassroom)) continue;
+          if (only && only.indexOf(tutDoc.id) === -1) continue;
+          const told = await WS.notifyOnce(`flatexam_${key}_${tutDoc.id}`, tutDoc.id, "tutor", {
+            type: "exam_posted",
+            title: `Exam released in ${classLabel || "your subject"}`,
+            message: `${exam.title || "An exam"} (${classLabel})${examDate ? " on " + examDate.toLocaleDateString("en-GB") : ""} was released to your students. Get ready to mark it: you will see each submission arrive in the Classroom.`,
+            relatedEntity: "exam", relatedEntityId: entityId, emailSent: !!tutor.email, extra: WS.boardExtra(examClassroom)
+          });
+          if (!told || !tutor.email) continue;
+          const t = templates.examPostedTutor({ tutorName: tutor.name, exam, examDate, classLabel });
+          const r = await sendEmail(tutor.email, t.subject, t.html, undefined, undefined, { area: "exams" });
+          if (r && r.sent) tutorsTold++;
+        }
+      } catch (e) { console.warn("onFlatExamPosted: tutor notification pass failed", e.message || e); }
+    }
+    console.log(`onFlatExamPosted ${eid}: ${recipients.size} student(s) in scope; emailed ${studentsTold} student(s), ${parentsTold} parent(s), ${tutorsTold} tutor(s).`);
   }
 );
 

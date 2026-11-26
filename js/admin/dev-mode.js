@@ -134,6 +134,19 @@
       '.dv-empty{text-align:center;padding:1.6rem 1rem;color:var(--muted,#5A6E6A);font-size:.84rem;font-weight:600}',
       '.dv-empty i{display:block;font-size:1.4rem;color:var(--brand-soft,#7BCBC2);margin-bottom:.5rem}',
       '.dv-summary{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1rem}',
+      '.dv-tabs{display:inline-flex;gap:.3rem;padding:.25rem;border-radius:12px;background:var(--paper,#F1F9F7);margin:.2rem 0 .7rem}',
+      '.dv-tab{font:inherit;font-size:.78rem;font-weight:800;border:none;background:none;padding:.45rem .85rem;border-radius:9px;cursor:pointer;color:var(--muted,#5A6E6A)}',
+      '.dv-tab.on{background:#fff;color:var(--brand-deep,#245F5A);box-shadow:0 2px 8px rgba(36,95,90,.1)}',
+      '.dv-filters{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem;margin-bottom:.6rem}',
+      '.dv-filters select,.dv-filters input{width:100%;padding:.55rem .65rem;border:1.5px solid var(--line,rgba(38,51,49,.12));border-radius:10px;font:inherit;font-size:.82rem;background:#fff;color:var(--ink,#263331)}',
+      '.dv-filters select:focus,.dv-filters input:focus{outline:none;border-color:var(--brand,#55BFB3)}',
+      '.dv-blist{border:1px solid var(--line,rgba(38,51,49,.1));border-radius:12px;max-height:300px;overflow:auto;background:#fff}',
+      '.dv-brow{display:flex;align-items:center;gap:.65rem;padding:.5rem .75rem;border-bottom:1px solid var(--line-soft,rgba(38,51,49,.06));cursor:pointer;font-size:.83rem}',
+      '.dv-brow:hover{background:var(--paper,#F1F9F7)}.dv-brow input{width:16px;height:16px;accent-color:#245F5A;flex:none}',
+      '.dv-brow .n{flex:1;min-width:0}.dv-brow .n b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dv-brow .n span{font-size:.72rem;color:var(--muted,#5A6E6A);font-weight:600}',
+      '.dv-brow .r{font-size:.64rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--brand-deep,#245F5A);background:var(--sage,#E5F2EF);padding:.15rem .5rem;border-radius:10px;white-space:nowrap}',
+      '.dv-brow.in{opacity:.55}',
+      '.dv-bbar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.6rem 0 0}.dv-bbar .cnt{font-size:.78rem;font-weight:800;color:var(--brand-deep,#245F5A)}.dv-bbar .grow{flex:1}',
       '.dv-summary span{font-size:.74rem;font-weight:700;padding:.3rem .65rem;border-radius:20px;background:#FDF1DF;color:#9A5B00}',
       '@keyframes dvUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}',
       '@keyframes dvSlide{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}',
@@ -238,7 +251,7 @@
       if (!frz) areas = { classes: true, homework: true, exams: true, tech: true, live: true };
       var nAreas = AREAS.filter(function (a) { return areas[a[0]]; }).length;
       fEl.innerHTML = '<div class="dv-hd"><span class="dv-ic warm' + (live ? ' on' : '') + '"><i class="fas fa-snowflake"></i></span><div class="grow"><h3>Freeze notifications and emails</h3>' +
-        '<p>For testing on live accounts. While it is on, the areas you tick send no bell notifications and no emails to the people you freeze. Your test accounts below still get everything, and admins always do. Every held message is listed underneath, so you can see exactly what would have gone out.</p></div>' +
+        '<p>For testing on live accounts. While it is on, in the areas you tick, anything you post (lessons, homework, exams) reaches only your test accounts, and the people you freeze get no bells, notices or emails. Your test accounts below still get everything, and admins always do. Every held message is listed underneath, so you can see exactly what would have gone out.</p></div>' +
         (live ? '<span class="dv-state warm"><i></i>Frozen' + (ms(d.until) ? ' · ' + esc(left(ms(d.until))) + ' left' : '') + '</span>' : '<span class="dv-state"><i></i>Off</span>') + '</div>' +
         (live ? '<div class="dv-summary">' + AREAS.filter(function (a) { return areas[a[0]]; }).map(function (a) { return '<span><i class="fas ' + a[1] + '"></i> ' + esc(a[2]) + '</span>'; }).join('') + '</div>' : '') +
         '<label class="dv-sw warm"><input type="checkbox" id="dvFOn"' + (live ? ' checked' : '') + '><span class="tr"></span><span><b>Freeze</b><span class="s">Takes effect within about 20 seconds. Nothing held is sent later.</span></span></label>' +
@@ -250,13 +263,100 @@
           AUD.map(function (a) { return '<label class="dv-tile"><input type="checkbox" data-aud="' + a[0] + '"' + (aud[a[0]] ? ' checked' : '') + '><span class="ti"><i class="fas ' + a[1] + '"></i></span><span><b>' + esc(a[2]) + '</b></span><span class="ck"><i class="fas fa-check"></i></span></label>'; }).join('') +
         '</div><p class="dv-note"><i class="fas fa-shield-halved"></i>Admins (the Studio Desk) always receive.</p></div>' +
         '<div class="dv-sec"><div class="dv-lb"><i class="fas fa-user-check"></i> Test accounts that still receive</div>' +
-          '<input type="search" class="dv-search" id="dvFFind" placeholder="Search students, builders, parents, tutors, coaches by name or email" autocomplete="off" aria-label="Find an account">' +
+          '<p class="dv-note" style="margin:0 0 .5rem">While frozen, anything you post (lessons, homework, exams) reaches only these accounts, and only they get alerts and emails. Everyone else frozen sees and hears nothing.</p>' +
+          '<div class="dv-tabs" role="tablist"><button type="button" class="dv-tab' + (pickTab === 'class' ? ' on' : '') + '" data-ptab="class"><i class="fas fa-filter"></i> Choose by class</button><button type="button" class="dv-tab' + (pickTab === 'name' ? ' on' : '') + '" data-ptab="name"><i class="fas fa-magnifying-glass"></i> Search by name</button></div>' +
+          '<div id="dvFBrowse"' + (pickTab === 'class' ? '' : ' hidden') + '></div>' +
+          '<div' + (pickTab === 'name' ? '' : ' hidden') + ' id="dvFByName"><input type="search" class="dv-search" id="dvFFind" placeholder="Search students, builders, parents, tutors, coaches by name or email" autocomplete="off" aria-label="Find an account">' +
+          '<div class="dv-results" id="dvFRes" role="listbox"></div></div>' +
           '<label class="dv-note" style="display:flex;gap:.45rem;align-items:center;cursor:pointer"><input type="checkbox" id="dvFFam" checked> When I pick a student or builder, let their parents and guardians through too</label>' +
-          '<div class="dv-results" id="dvFRes" role="listbox"></div><div class="dv-people" id="dvFPeople"></div></div>' +
+          '<div class="dv-lb" style="margin-top:.8rem"><i class="fas fa-users"></i> Picked <span class="x"><button type="button" class="dv-mini" data-clearpicked="1">Clear all</button></span></div>' +
+          '<div class="dv-people" id="dvFPeople"></div></div>' +
         '<div class="dv-sec dv-f"><label for="dvFNote">Note for the desk (optional)</label><input type="text" id="dvFNote" maxlength="200" placeholder="Testing the Year 9 Physics class with a test account" value="' + esc(d.note || '') + '"></div>' +
         '<div class="dv-foot"><span class="dv-msg" id="dvFMsg" role="status"></span><span class="grow"></span><button type="button" class="dv-btn warm" id="dvFSave"><i class="fas fa-snowflake"></i> Save freeze</button></div>';
       paintPeople();
+      paintBrowse();
       if (!nAreas && live) fEl.querySelector('#dvFMsg').textContent = 'No area is ticked, so nothing is held.';
+    }
+
+    /* ---- Choose by class: filter by who, portal, Key Stage, Year, subject and board, then tick ---- */
+    var pickTab = 'class', bf = { who: 'student', portal: '', ks: '', year: '', subject: '', board: '', q: '' }, bTicks = {};
+    var WHO = [['student', 'Students'], ['parent', 'Parents of students'], ['tutor', 'Tutors'], ['builder', 'Tech builders'], ['coach', 'Tech coaches']];
+    var PORTAL = [['', 'Any portal'], ['online', 'Online'], ['remote', 'Remote'], ['tuition', 'Tuition (CBC)']];
+    function subjName(id) { var l = g.LMZ_SUBJECTS || []; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].name; return id; }
+    function boardName(id) { var l = g.LMZ_BOARDS || []; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].label; return id; }
+    function portalOf(x) { return x.portal === 'remote' ? 'remote' : (x.portal === 'tuition' ? 'tuition' : (x.portal === 'tech' ? 'tech' : 'online')); }
+    function boardFor(x, subj) { return (subj && x.subjectBoards && x.subjectBoards[subj]) || x.board || 'cambridge'; }
+    function studentMatch(x) {
+      if (x.role !== 'student' || /pending|suspended/i.test(x.status)) return false;
+      if (bf.portal && portalOf(x) !== bf.portal) return false;
+      if (bf.ks && x.ks !== bf.ks) return false;
+      if (bf.year && x.year !== bf.year) return false;
+      if (bf.subject && x.subjects.indexOf(bf.subject) === -1) return false;
+      if (bf.board && boardFor(x, bf.subject) !== bf.board) return false;
+      return true;
+    }
+    var parentKids = null;   /* parentUid -> [studentUid], from parentStudentLinks */
+    function loadLinks() {
+      if (parentKids) return Promise.resolve(parentKids);
+      return db().collection('parentStudentLinks').get().then(function (s) {
+        parentKids = {}; s.docs.forEach(function (d) { var x = d.data() || {}; if (x.parentUid && x.studentUid) (parentKids[x.parentUid] = parentKids[x.parentUid] || []).push(x.studentUid); });
+        return parentKids;
+      }, function () { parentKids = {}; return parentKids; });
+    }
+    function browseRows(all) {
+      var q = bf.q.trim().toLowerCase();
+      var byQ = function (x) { return !q || x.name.toLowerCase().indexOf(q) > -1 || x.email.indexOf(q) > -1; };
+      if (bf.who === 'student') return all.filter(function (x) { return studentMatch(x) && byQ(x); });
+      if (bf.who === 'parent') {
+        var kids = {}; all.forEach(function (x) { if (studentMatch(x)) kids[x.uid] = x; });
+        return all.filter(function (x) {
+          if (x.role !== 'parent' || !byQ(x)) return false;
+          var mine = (parentKids || {})[x.uid] || [];
+          var hit = mine.filter(function (k) { return kids[k]; });
+          if (!hit.length) return false;
+          x._of = hit.map(function (k) { return kids[k].name; }).join(', ');
+          return true;
+        });
+      }
+      if (bf.who === 'tutor') return all.filter(function (x) {
+        if (x.role !== 'tutor' || /suspended/i.test(x.status) || !byQ(x)) return false;
+        if (bf.subject && x.subjects.indexOf(bf.subject) === -1) return false;
+        if (bf.ks && x.keyStages.length && x.keyStages.indexOf(bf.ks) === -1) return false;
+        return true;
+      });
+      return all.filter(function (x) { return x.role === bf.who && byQ(x) && (bf.who !== 'builder' || !bf.year || true); });
+    }
+    function opts(list, cur, all) { return '<option value="">' + esc(all) + '</option>' + list.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(cur) === String(o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join(''); }
+    function paintBrowse() {
+      var el = fEl.querySelector('#dvFBrowse'); if (!el || pickTab !== 'class') return;
+      if (!people) { el.innerHTML = '<div class="dv-empty"><i class="fas fa-spinner fa-spin"></i>Loading accounts…</div>'; Promise.all([loadPeople(), loadLinks()]).then(function () { if (!dead) paintBrowse(); }); return; }
+      if (bf.who === 'parent' && !parentKids) { loadLinks().then(function () { if (!dead) paintBrowse(); }); }
+      var studs = people.filter(function (x) { return x.role === 'student'; });
+      var uniq = function (f) { var o = {}; studs.forEach(function (x) { [].concat(f(x)).forEach(function (v) { if (v) o[v] = 1; }); }); return Object.keys(o); };
+      var kss = uniq(function (x) { return x.ks; }).sort(), years = uniq(function (x) { return x.year; }).sort(function (a, b) { return Number(a) - Number(b); });
+      var subs = uniq(function (x) { return x.subjects; }).sort(function (a, b) { return subjName(a).localeCompare(subjName(b)); });
+      var boards = (g.LMZ_BOARDS || []).map(function (b) { return b.id; });
+      if (!boards.length) boards = uniq(function (x) { return x.board; });
+      var classy = bf.who === 'student' || bf.who === 'parent' || bf.who === 'tutor';
+      var rows = browseRows(people), inList = function (x) { return picked.some(function (p) { return p.uid === x.uid && p.role === x.role; }); };
+      var nT = Object.keys(bTicks).length;
+      el.innerHTML = '<div class="dv-filters">' +
+          '<select data-bf="who" aria-label="Who">' + WHO.map(function (o) { return '<option value="' + o[0] + '"' + (bf.who === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>' +
+          (bf.who === 'student' || bf.who === 'parent' ? '<select data-bf="portal" aria-label="Portal">' + PORTAL.map(function (o) { return '<option value="' + o[0] + '"' + (bf.portal === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>' : '') +
+          (classy ? '<select data-bf="ks" aria-label="Key Stage">' + opts(kss.map(function (k) { return [k, k]; }), bf.ks, 'Any Key Stage') + '</select>' : '') +
+          (bf.who === 'student' || bf.who === 'parent' ? '<select data-bf="year" aria-label="Year">' + opts(years.map(function (y) { return [y, 'Year / Grade ' + y]; }), bf.year, 'Any Year') + '</select>' : '') +
+          (classy ? '<select data-bf="subject" aria-label="Subject">' + opts(subs.map(function (x) { return [x, subjName(x)]; }), bf.subject, 'Any subject') + '</select>' : '') +
+          (bf.who === 'student' || bf.who === 'parent' ? '<select data-bf="board" aria-label="Board">' + opts(boards.map(function (b) { return [b, boardName(b)]; }), bf.board, 'Any board') + '</select>' : '') +
+          '<input type="search" data-bf="q" placeholder="Narrow by name or email" value="' + esc(bf.q) + '" aria-label="Narrow by name">' +
+        '</div>' +
+        '<div class="dv-blist">' + (rows.length ? rows.slice(0, 400).map(function (x) {
+          var on = inList(x), detail = x.role === 'student' ? [x.ks, x.year ? 'Year ' + x.year : '', ({ remote: 'Remote', tuition: 'Tuition' })[portalOf(x)] || 'Online', boardName(boardFor(x, bf.subject))].filter(Boolean).join(' · ')
+            : x.role === 'parent' ? 'Parent of ' + (x._of || '') : x.role === 'tutor' ? (x.subjects || []).map(subjName).slice(0, 4).join(', ') : (x.email || '');
+          return '<label class="dv-brow' + (on ? ' in' : '') + '"><input type="checkbox" data-bt="' + esc(x.role + '|' + x.uid) + '"' + (on || bTicks[x.role + '|' + x.uid] ? ' checked' : '') + (on ? ' disabled' : '') + '><span class="n"><b>' + esc(x.name) + '</b><span>' + esc(detail) + '</span></span><span class="r">' + (on ? 'Picked' : esc(ROLE_WORD[x.role] || x.role)) + '</span></label>';
+        }).join('') + (rows.length > 400 ? '<div class="dv-empty">Showing 400 of ' + rows.length + '. Narrow the filters.</div>' : '') : '<div class="dv-empty"><i class="fas fa-user-slash"></i>Nobody matches these filters.</div>') + '</div>' +
+        '<div class="dv-bbar"><span class="cnt">' + rows.length + ' match' + (rows.length === 1 ? '' : 'es') + ' · ' + nT + ' ticked</span><span class="grow"></span>' +
+          '<button type="button" class="dv-mini" data-btall="1">Tick all shown</button><button type="button" class="dv-mini" data-btnone="1">Untick</button>' +
+          '<button type="button" class="dv-btn pri" data-btadd="1"' + (nT ? '' : ' disabled') + '><i class="fas fa-user-plus"></i> Add ' + (nT || '') + ' as test account' + (nT === 1 ? '' : 's') + '</button></div>';
     }
     function paintPeople() {
       var el = fEl.querySelector('#dvFPeople'); if (!el) return;
@@ -269,7 +369,13 @@
       if (peopleLoading) return peopleLoading;
       peopleLoading = Promise.all(PEOPLE.map(function (p) {
         return db().collection(p[0]).get().then(function (s) {
-          return s.docs.map(function (d) { var x = d.data() || {}; return { uid: d.id, email: String(x.email || '').trim().toLowerCase(), name: nameOf(x), role: p[1] }; });
+          return s.docs.map(function (d) {
+            var x = d.data() || {};
+            return { uid: d.id, email: String(x.email || '').trim().toLowerCase(), name: nameOf(x), role: p[1],
+              ks: x.keyStage || '', year: x.year != null ? String(x.year) : '', subjects: Array.isArray(x.subjects) ? x.subjects : [],
+              board: x.board || '', subjectBoards: x.subjectBoards || {}, portal: x.studentType || '', status: String(x.status || ''),
+              keyStages: Array.isArray(x.keyStages) ? x.keyStages : [], level: x.skillLevel || '' };
+          });
         }, function () { return []; });
       })).then(function (lists) { people = [].concat.apply([], lists); return people; });
       return peopleLoading;
@@ -308,13 +414,40 @@
       picked.push(p);
     }
     var findTimer = null;
-    fEl.addEventListener('change', function (e) { if (e.target.id !== 'dvFFind' && e.target.id !== 'dvFFam') fDirty = true; });
+    fEl.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t.dataset.bf) { bf[t.dataset.bf] = t.value; if (t.dataset.bf === 'who') bTicks = {}; paintBrowse(); return; }
+      if (t.dataset.bt) { if (t.checked) bTicks[t.dataset.bt] = 1; else delete bTicks[t.dataset.bt]; var c = fEl.querySelector('.dv-bbar .cnt'), a = fEl.querySelector('[data-btadd]'), n = Object.keys(bTicks).length;
+        if (c) c.textContent = c.textContent.replace(/\d+ ticked/, n + ' ticked'); if (a) { a.disabled = !n; a.innerHTML = '<i class="fas fa-user-plus"></i> Add ' + (n || '') + ' as test account' + (n === 1 ? '' : 's'); } return; }
+      if (t.id !== 'dvFFind' && t.id !== 'dvFFam') fDirty = true;
+    });
     fEl.addEventListener('input', function (e) {
       if (e.target.id === 'dvFNote') fDirty = true;
       if (e.target.id === 'dvFFind') { clearTimeout(findTimer); var v = e.target.value; findTimer = setTimeout(function () { find(v); }, 180); }
+      if (e.target.dataset.bf === 'q') { bf.q = e.target.value; var pos = e.target.selectionStart; paintBrowse(); var qi = fEl.querySelector('[data-bf="q"]'); if (qi) { qi.focus(); qi.setSelectionRange(pos, pos); } }
     });
     fEl.addEventListener('click', function (e) {
-      if (e.target.closest('.dv-chip,[data-all],[data-pick],[data-rm]')) fDirty = true;
+      if (e.target.closest('.dv-chip,[data-all],[data-pick],[data-rm],[data-btadd],[data-clearpicked]')) fDirty = true;
+      var tb = e.target.closest('[data-ptab]');
+      if (tb) {
+        pickTab = tb.dataset.ptab;
+        [].forEach.call(fEl.querySelectorAll('[data-ptab]'), function (x) { x.classList.toggle('on', x === tb); });
+        fEl.querySelector('#dvFBrowse').hidden = pickTab !== 'class'; fEl.querySelector('#dvFByName').hidden = pickTab !== 'name';
+        paintBrowse(); return;
+      }
+      if (e.target.closest('[data-btall]')) { [].forEach.call(fEl.querySelectorAll('[data-bt]:not([disabled])'), function (x) { bTicks[x.dataset.bt] = 1; }); paintBrowse(); return; }
+      if (e.target.closest('[data-btnone]')) { bTicks = {}; paintBrowse(); return; }
+      if (e.target.closest('[data-clearpicked]')) { picked = []; paintPeople(); paintBrowse(); return; }
+      if (e.target.closest('[data-btadd]')) {
+        var fam2 = fEl.querySelector('#dvFFam') && fEl.querySelector('#dvFFam').checked, added = [];
+        Object.keys(bTicks).forEach(function (k) {
+          var ps = k.split('|'), x = (people || []).filter(function (y) { return y.role === ps[0] && y.uid === ps[1]; })[0];
+          if (x) { addPicked({ uid: x.uid, email: x.email, name: x.name, role: x.role }); added.push(x); }
+        });
+        bTicks = {}; paintPeople(); paintBrowse();
+        if (fam2) Promise.all(added.map(familyOf)).then(function (ls) { if (dead) return; ls.forEach(function (l) { l.forEach(addPicked); }); paintPeople(); paintBrowse(); });
+        return;
+      }
       var c = e.target.closest('.dv-chip');
       if (c && c.dataset.e) { fEnd = c.dataset.e; [].forEach.call(fEl.querySelectorAll('#dvFEnd .dv-chip'), function (x) { x.classList.toggle('on', x === c); }); return; }
       var all = e.target.closest('[data-all]');
@@ -371,8 +504,8 @@
         (held.length ? '<div class="dv-chips" style="margin-bottom:.8rem"><button type="button" class="dv-chip' + (hFilter === 'all' ? ' on' : '') + '" data-hf="all">All · ' + held.length + '</button>' +
           Object.keys(areas).map(function (a) { return '<button type="button" class="dv-chip' + (hFilter === a ? ' on' : '') + '" data-hf="' + esc(a) + '">' + esc(AREA_NAME[a] || a) + ' · ' + areas[a] + '</button>'; }).join('') + '</div>' : '') +
         (rows.length ? '<div class="dv-held">' + rows.map(function (h, i) {
-          return '<div class="dv-hrow" style="animation-delay:' + Math.min(i, 12) * 0.03 + 's"><span class="hi"><i class="fas ' + (h.kind === 'email' ? 'fa-envelope' : 'fa-bell') + '"></i></span><div><b><span class="tag">' + esc(AREA_NAME[h.area] || h.area || 'Other') + '</span>' + esc(h.kind === 'email' ? (h.subject || 'Email') : (h.title || h.type || 'Notification')) + '</b>' +
-            '<span>' + (h.kind === 'email' ? 'Email to ' : 'Bell for ') + esc(who(h)) + (h.message ? ' · ' + esc(String(h.message).slice(0, 140)) : '') + '</span></div><time>' + esc(ago(ms(h.at))) + '</time></div>';
+          return '<div class="dv-hrow" style="animation-delay:' + Math.min(i, 12) * 0.03 + 's"><span class="hi"><i class="fas ' + (h.kind === 'email' ? 'fa-envelope' : (h.kind === 'content' ? 'fa-file-circle-xmark' : 'fa-bell')) + '"></i></span><div><b><span class="tag">' + esc(AREA_NAME[h.area] || h.area || 'Other') + '</span>' + esc(h.kind === 'email' ? (h.subject || 'Email') : (h.title || h.type || 'Notification')) + '</b>' +
+            '<span>' + (h.kind === 'content' ? 'Post narrowed' : (h.kind === 'email' ? 'Email to ' : 'Bell for ') + esc(who(h))) + (h.message ? ' · ' + esc(String(h.message).slice(0, 140)) : '') + '</span></div><time>' + esc(ago(ms(h.at))) + '</time></div>';
         }).join('') + '</div>' : '<div class="dv-empty"><i class="fas fa-circle-check"></i>Nothing held' + (hFilter === 'all' ? '' : ' in this area') + '.</div>');
     }
     hEl.addEventListener('click', function (e) {

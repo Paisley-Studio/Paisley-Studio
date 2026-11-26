@@ -123,11 +123,21 @@ const ParentHelpers = (function () {
     // exam's submission lookup) run at the same time instead of one after another.
     await Promise.all(classrooms.map(async cls => {
       try {
-        const examsSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
-          .where('audiences.' + (child.studentType === 'remote' ? 'remote' : (child.studentType === 'tuition' ? 'tuition' : 'online')), '==', true)
-          .where('status', '==', 'Published').get();
-        await Promise.all(examsSnap.docs.map(async examDoc => {
+        const col = db.collection('classrooms').doc(cls.id).collection('exams');
+        /* Posted to the child's whole class, or released to them by name (then this parent is in releasedParents). */
+        const me = (firebase.auth().currentUser || {}).uid || '';
+        const parts = await Promise.all([
+          col.where('audiences.' + (child.studentType === 'remote' ? 'remote' : (child.studentType === 'tuition' ? 'tuition' : 'online')), '==', true)
+            .where('status', '==', 'Published').get().then(s => s.docs).catch(() => []),
+          me ? col.where('releasedParents', 'array-contains', me).where('status', '==', 'Published').get().then(s => s.docs).catch(() => []) : Promise.resolve([])
+        ]);
+        const seenE = {};
+        const examDocs = parts[0].concat(parts[1]).filter(d => (seenE[d.id] ? false : (seenE[d.id] = true, true)));
+        await Promise.all(examDocs.map(async examDoc => {
           const exam = Object.assign({ id: examDoc.id, cid: cls.id }, examDoc.data());
+          /* An exam released to particular students is shown only for those children. */
+          const toWholeClass = (exam.audience || 'class') === 'class' && exam.audiences && exam.audiences[child.studentType === 'remote' ? 'remote' : (child.studentType === 'tuition' ? 'tuition' : 'online')] === true;
+          if (!toWholeClass && !(Array.isArray(exam.releasedTo) && exam.releasedTo.indexOf(child.id) !== -1)) return;
           // Parents see Published exams. Drafts/Closed aren't visible.
           if (String(exam.status || '') !== 'Published') return;
           let submission = null;

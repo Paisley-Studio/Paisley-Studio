@@ -72,6 +72,8 @@ async function notify(recipientId, recipientType, fields) {
 /* A notice that shows on the Notices panel of a student / parent. */
 async function addStudentNotice(recipientId, recipientType, fields) {
   if (!recipientId) return null;
+  /* Developer mode's freeze holds Notices-panel items like bells. */
+  if (await freeze.holdNotification("studentNotices", recipientId, recipientType, fields)) return null;
   return db().collection("studentNotices").add({
     recipientId,
     recipientType,

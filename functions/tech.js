@@ -1085,7 +1085,8 @@ function gradeTechQuiz(questions, key, answers) {
   return { score, total, percent: total ? Math.round((score / total) * 100) : null, openCount, review };
 }
 
-exports.submitTechQuiz = onCall({ region: LOCATION }, async (req) => {
+/* secrets: it emails the builder and their guardians when a lesson is passed (without them every send was skipped). */
+exports.submitTechQuiz = onCall({ region: LOCATION, secrets: SMTP_SECRETS }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Please sign in.");
   const db = admin.firestore(), uid = req.auth.uid;
   const { lessonId, answers, attemptKey } = req.data || {};
