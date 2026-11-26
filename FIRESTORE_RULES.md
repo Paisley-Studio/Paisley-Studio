@@ -94,6 +94,7 @@ user and denied access.
 | `codeRunUsage` | Cloud Functions only (`runCode` rate limits) | nobody | Cloud Functions only |
 | `lmsSettings` | Cloud Functions only (`renameSubject`) | get: anyone (subject names); list: signed in | Cloud Functions only |
 | `siteStatus` | admin, `maintenance` only, keys `on` (bool), `title` (<= 80), `message` (<= 400), `startsAt`, `endsAt`, `tone`, `updatedAt`, `updatedBy` | get: anyone, signed out too (the maintenance banner, `js/ui/site-status.js`); list: admin | admin |
+| `techIdeGrants` | admin, or the builder's own coach (`isTechCoachOf`): keys `studentId`, `grantedBy` (= caller), `grantedByName`, `grantedByRole`, `at` (= request.time); never updated | get: admin, the builder, their coach; list: admin | admin, the builder's coach |
 | `devMode` | admin, `freeze` only (developer mode's freeze) | admin | admin |
 | `devHeld` | Cloud Functions only (what the freeze held) | admin | admin may delete; nobody updates |
 | `subjectRenames` | Cloud Functions only | admin | nobody |

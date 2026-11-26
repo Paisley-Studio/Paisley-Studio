@@ -96,7 +96,7 @@ const $=id=>document.getElementById(id);
 T.injectStyle();
 
 const S={uid:null,me:null,v:'home',students:[],builds:[],chats:[],gchats:[],content:[],allContent:[],classes:[],help:[],progress:{},
-  builder:null,live:null,back:null,rf:'all',wf:'all',unsubs:[]};
+  builder:null,live:null,back:null,rf:'all',wf:'all',unsubs:[],ideCfg:null,ideGrants:{}};
 const TITLES={home:'Overview',builders:'Builders',reviews:'Reviews',work:'Student work',classes:'Classes',results:'Results',groups:'Groups',content:'Resources & AI tools',live:'Timetable',timetable:'Timetable',homework:'Homework',activity:'Activity',practice:'Practice',messages:'Builder messages',families:'Families',profile:'Profile'};
 const KINDS=[['resource','Resource'],['aiTool','AI tool']];
 
@@ -153,6 +153,7 @@ function boot(){
     if(n.studentId&&stu(n.studentId)){ openBuilder(n.studentId); return true; }
     return true;
   }});
+  S.unsubs.push(db.collection('techSettings').doc('advancedIde').onSnapshot(s=>{ S.ideCfg=s.exists?s.data():{}; refresh(); },()=>{ S.ideCfg={}; }));
   listen(db.collection('techStudents').where('coachId','==',S.uid),'students',()=>{
     S.students.sort((a,b)=>String(a.name).localeCompare(String(b.name)));
     if(S.live&&S.live.setStudents) S.live.setStudents(S.students);
@@ -313,6 +314,28 @@ profile(){
 }
 };
 
+/* The Advanced Paisley IDE for one builder. Beginners never get it by level: the coach grants it here
+   when they graduate (techIdeGrants/{uid}). It still needs the Studio Desk's switch in Controls. */
+function loadIdeGrant(sid){
+  return db.collection('techIdeGrants').doc(sid).get().then(d=>{ S.ideGrants[sid]=d.exists?d.data():false; refresh(); },()=>{ S.ideGrants[sid]=false; });
+}
+function ideGrantPanel(s){
+  if(s.status!=='Active') return '';
+  if(S.ideGrants[s.id]===undefined){ S.ideGrants[s.id]=null; loadIdeGrant(s.id); }
+  if(S.ideGrants[s.id]===null||!S.ideCfg) return '<section class="panel"><div class="panel-head"><h2><i class="fas fa-terminal" style="color:var(--brand-deep)"></i> Advanced Paisley IDE</h2></div><p class="muted" style="margin:0">Checking…</p></section>';
+  const g=S.ideGrants[s.id], cfg=S.ideCfg||{}, lv=T.trackOf(s.skillLevel), on=cfg.enabled===true;
+  const byDesk=(cfg.students||[]).includes(s.id), byLevel=lv!=='beginner'&&(cfg.levels||[]).includes(lv);
+  const state=g?'You gave '+esc(T.firstName(s.name))+' the Advanced IDE'+(g.grantedByName&&g.grantedBy!==S.uid?' (given by '+esc(g.grantedByName)+')':'')+'.'
+    :byDesk?'The Studio Desk gave '+esc(T.firstName(s.name))+' the Advanced IDE.'
+    :byLevel?esc(T.firstName(s.name))+' has it through their level ('+esc(T.SKILL_LABEL[lv]||lv)+').'
+    :lv==='beginner'?esc(T.firstName(s.name))+' is a beginner and uses Paisley VS Code. Give them the Advanced IDE when they graduate.'
+    :esc(T.firstName(s.name))+' does not have the Advanced IDE yet.';
+  return '<section class="panel"><div class="panel-head"><h2><i class="fas fa-terminal" style="color:var(--brand-deep)"></i> Advanced Paisley IDE</h2>'+(g||byDesk||byLevel?'<span class="pill ok">'+(on?'Has it':'Given (switched off)')+'</span>':'')+'</div>'+
+    '<p class="muted" style="margin:0 0 .8rem">'+state+(on?'':' The Studio Desk has the Advanced IDE switched off for everyone right now.')+'</p>'+
+    (g?'<button class="btn light" type="button" data-idegrant="off" data-sid="'+esc(s.id)+'"><i class="fas fa-lock"></i> Take the Advanced IDE away</button>'
+      :byDesk||byLevel?'':'<button class="btn" type="button" data-idegrant="on" data-sid="'+esc(s.id)+'"><i class="fas fa-graduation-cap"></i> Give '+esc(T.firstName(s.name))+' the Advanced IDE</button>')+
+  '</section>';
+}
 function builderDetail(s){
   const bs=S.builds.filter(b=>b.studentId===s.id), L=levelOf(s.id), p=S.progress[s.id];
   const fam=(s.guardianAccounts||[]);
@@ -326,6 +349,7 @@ function builderDetail(s){
         fam.map(g=>'<button class="btn light" type="button" data-chatg="'+esc(g.parentUid)+'|'+esc(s.id)+'"><i class="fas fa-user-shield"></i> Message '+esc(g.name||'guardian')+'</button>').join('')+'</div>'+
       (fam.length?'':'<p class="muted" style="margin-top:.8rem;font-size:.85rem">No parent or guardian linked yet.</p>')+'</section>'+
     (bs.length?panelList('Projects',bs.map(b=>buildRow(b,false)).join('')):emptyBox('No projects yet',esc(T.firstName(s.name))+' has not started a project.'))+
+    ideGrantPanel(s)+
     '<section class="panel flush"><div class="panel-head"><h2>Progress by discipline</h2></div>'+disc+'</section>'+
     '<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn light" type="button" data-actof="'+esc(s.id)+'"><i class="fas fa-wave-square"></i> Activity timeline</button><button class="btn light" type="button" data-pracof="'+esc(s.id)+'"><i class="fas fa-flask"></i> Practice work</button><button class="btn light" type="button" data-resof="'+esc(s.id)+'"><i class="fas fa-square-poll-vertical"></i> Quiz and test results</button></div>'+
   '</div>';
@@ -378,6 +402,15 @@ function openChatById(id){
   return false;
 }
 
+/* Give or take away the Advanced IDE (techIdeGrants/{uid}); the rules allow it only for the builder's own coach. */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-idegrant]'); if(!b||!S.me) return;
+  const sid=b.dataset.sid, ref=db.collection('techIdeGrants').doc(sid), on=b.dataset.idegrant==='on';
+  b.disabled=true;
+  (on?ref.set({studentId:sid,grantedBy:S.uid,grantedByName:S.me.name||'Coach',grantedByRole:'coach',at:firebase.firestore.FieldValue.serverTimestamp()}):ref.delete())
+    .then(()=>loadIdeGrant(sid))
+    .catch(er=>{ b.disabled=false; b.insertAdjacentHTML('afterend','<p class="muted" style="color:#b8362a;margin-top:.5rem">Could not save: '+esc(T.errMsg(er))+'</p>'); });
+});
 document.addEventListener('click',async e=>{
   const t=e.target.closest('[data-open],[data-builder],[data-chatb],[data-chatg],[data-chatid],[data-back],[data-go],[data-rf],[data-wf],[data-cc],[data-pub],[data-newm],[data-editm],[data-newlive],[data-editlive],[data-actof],[data-pracof],[data-resof],#pSave,#pPw'); if(!t||!S.me) return;
   if(t.closest('#liveHost')&&!t.matches('[data-back]')&&!t.matches('[data-editlive]')) return;   // workspaces and panels handle their own clicks
@@ -416,6 +449,6 @@ document.addEventListener('click',async e=>{
 })();
 </script>
 <script src="/js/ui/emoji-picker.js?v=1"></script>
-<script src="/js/ui/site-status.js?v=1" defer></script>
+<script src="/js/ui/site-status.js?v=2" defer></script>
 </body>
 </html>

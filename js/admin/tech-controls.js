@@ -3,7 +3,9 @@
    ---------------------------------------------------------
    Who can use the Advanced Paisley IDE. Saved as techSettings/advancedIde:
      { enabled, levels: ['beginner' | 'intermediate' | 'expert'], students: [uid], updatedAt, updatedBy, updatedByName }
-   A builder has it when it is enabled AND (their level is ticked OR they are picked by name).
+   A builder has it when it is enabled AND (their level is ticked OR they are picked by name OR their
+   coach granted it: techIdeGrants/{uid}). Beginners never get it by level: it is given to them by name
+   (here, or by their coach) when they graduate.
    A builder with no level counts as intermediate (TechUI.trackOf), like everywhere else.
    Coaches and admins can always open builders' projects to review them.
    The same test is applied in the builder portal, on /tech/ide, in firestore.rules
@@ -16,10 +18,12 @@
   var T = g.TechUI;
   var FV = function () { return firebase.firestore.FieldValue; };
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  var LEVELS = ['beginner', 'intermediate', 'expert'];
+  var LEVELS = ['beginner', 'intermediate', 'expert'], BY_LEVEL = ['intermediate', 'expert'];
   var LABEL = { beginner: 'Beginner', intermediate: 'Intermediate', expert: 'Expert' };
   function levelOf(s) { return LEVELS.indexOf(s.skillLevel) > -1 ? s.skillLevel : 'intermediate'; }
-  function hasAccess(cfg, s) { return !!cfg.enabled && (cfg.students.indexOf(s.id) > -1 || cfg.levels.indexOf(levelOf(s)) > -1); }
+  var GRANTS = {};
+  function byLevel(cfg, s) { var l = levelOf(s); return l !== 'beginner' && cfg.levels.indexOf(l) > -1; }
+  function hasAccess(cfg, s) { return !!cfg.enabled && (cfg.students.indexOf(s.id) > -1 || byLevel(cfg, s) || !!GRANTS[s.id]); }
 
   var CSS = '' +
     '.tcx{display:flex;flex-direction:column;gap:1rem}' +
@@ -68,6 +72,11 @@
       paint();
     }, function (e) { el.innerHTML = '<div class="cr-empty">Could not load the controls: ' + esc(T.errMsg(e)) + '</div>'; });
 
+    /* Grants coaches gave their own builders (Coach portal > Builders > a builder). */
+    var unsubGrants = db.collection('techIdeGrants').onSnapshot(function (s) {
+      GRANTS = {}; s.docs.forEach(function (d) { GRANTS[d.id] = d.data(); });
+      if (draft && !busy) paint();
+    }, function () { });
     function active() { return students.filter(function (s) { return s.status === 'Active'; }); }
     function dirty() {
       if (!saved || !draft) return false;
@@ -86,12 +95,13 @@
       }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
       if (!list.length) return '<div class="cr-empty" style="margin:.8rem">No builders match.</div>';
       return list.map(function (s) {
-        var picked = draft.students.indexOf(s.id) > -1, byLevel = draft.levels.indexOf(levelOf(s)) > -1;
+        var picked = draft.students.indexOf(s.id) > -1, lvl = byLevel(draft, s), gr = GRANTS[s.id];
         return '<label class="tcx-row"><input type="checkbox" data-pick="' + esc(s.id) + '"' + (picked ? ' checked' : '') + ' aria-label="Give ' + esc(s.name) + ' the Advanced IDE">' +
           '<span class="n"><b>' + esc(s.name || 'Builder') + '</b><span>' + esc(s.email || '') + '</span></span>' +
           '<span class="tcx-tag">' + esc(s.skillLevel ? LABEL[s.skillLevel] : 'No level (Intermediate)') + '</span>' +
           (s.admittedFrom ? '<span class="tcx-tag pz" title="Admitted from the Paisley school portals">Admitted from Paisley</span>' : '<span class="tcx-tag">Applied</span>') +
-          (draft.enabled && (picked || byLevel) ? '<span class="tcx-tag ok"><i class="fas fa-check"></i> ' + (picked ? 'Picked' : 'By level') + '</span>' : '') +
+          (gr ? '<span class="tcx-tag ok" title="Granted by their coach"><i class="fas fa-graduation-cap"></i> Granted by ' + esc(gr.grantedByName || 'coach') + '</span>' : '') +
+          (draft.enabled && (picked || lvl) ? '<span class="tcx-tag ok"><i class="fas fa-check"></i> ' + (picked ? 'Picked' : 'By level') + '</span>' : '') +
           '</label>';
       }).join('');
     }
@@ -107,10 +117,12 @@
           '<label class="tcx-switch"><input type="checkbox" id="tcxPub"' + (pubOn ? ' checked' : '') + (pubOn === null ? ' disabled' : '') + ' aria-label="Let builders ask to publish practice projects"> <span>' + (pubOn ? 'On' : 'Off') + '</span></label></div>' +
         '<div class="tcx-card tcx-head"><span class="ic"><i class="fas fa-terminal"></i></span><div class="t"><b>Advanced Paisley IDE</b><span>Python, Java, C, C++, PHP and the web, with real code runs. Builders find it in Practice, on Home and in Code Lab practice.</span></div>' +
           '<label class="tcx-switch"><input type="checkbox" id="tcxOn"' + (draft.enabled ? ' checked' : '') + ' aria-label="Switch the Advanced IDE on"> <span>' + (draft.enabled ? 'On' : 'Off') + '</span></label></div>' +
-        '<div class="tcx-card"><h4><i class="fas fa-layer-group"></i> By level</h4><p>Every active builder on a ticked level gets it, including builders who join that level later. Builders with no level count as Intermediate.</p>' +
-          '<div class="tcx-levels">' + LEVELS.map(function (l) {
+        '<div class="tcx-card"><h4><i class="fas fa-layer-group"></i> By level</h4><p>Every active builder on a ticked level gets it, including builders who join that level later. Builders with no level count as Intermediate. Beginners never get it by level: when one graduates, their coach grants it (Coach portal, Builders) or you pick them below.</p>' +
+          '<div class="tcx-levels">' + BY_LEVEL.map(function (l) {
             return '<label class="tcx-level"><input type="checkbox" data-level="' + l + '"' + (draft.levels.indexOf(l) > -1 ? ' checked' : '') + '><span>' + LABEL[l] + '<small>' + per[l] + ' builder' + (per[l] === 1 ? '' : 's') + '</small></span></label>';
-          }).join('') + '</div></div>' +
+          }).join('') +
+          '<div class="tcx-level" style="cursor:default;opacity:.75"><i class="fas fa-lock" style="color:#5A6E6A"></i><span>Beginner<small>' + per.beginner + ' builder' + (per.beginner === 1 ? '' : 's') + ' · by name only</small></span></div>' +
+          '</div></div>' +
         '<div class="tcx-card"><h4><i class="fas fa-user-check"></i> Particular builders</h4><p>Pick builders by name to give them the IDE whatever their level, such as the ' + admitted + ' Paisley student' + (admitted === 1 ? '' : 's') + ' admitted to Tech Studio.</p>' +
           '<div class="tcx-tools"><input type="search" id="tcxQ" placeholder="Search by name or email" value="' + esc(q) + '" aria-label="Search builders">' +
             [['all', 'All'], ['admitted', 'Admitted from Paisley'], ['applied', 'Applied'], ['picked', 'Picked'], ['access', 'Has access']].map(function (f) { return '<button type="button" class="tcx-chip' + (filter === f[0] ? ' on' : '') + '" data-filter="' + f[0] + '">' + f[1] + '</button>'; }).join('') +
@@ -151,7 +163,7 @@
       else if (a === 'save') {
         busy = true; paint();
         var known = {}; students.forEach(function (s) { known[s.id] = 1; });
-        ref.set({ enabled: draft.enabled, levels: draft.levels.slice(), students: draft.students.filter(function (id) { return known[id]; }).slice(0, 2000),
+        ref.set({ enabled: draft.enabled, levels: draft.levels.filter(function (l) { return BY_LEVEL.indexOf(l) > -1; }), students: draft.students.filter(function (id) { return known[id]; }).slice(0, 2000),
           updatedAt: FV().serverTimestamp(), updatedBy: o.me.uid, updatedByName: o.me.name || 'Studio Desk' })
           .then(function () { busy = false; flash('Saved. Builders see the change straight away.'); }, function (er) { busy = false; paint(); flash('Could not save: ' + T.errMsg(er), true); });
       }
@@ -164,7 +176,7 @@
     el.innerHTML = '<div class="cr-empty">Loading controls…</div>';
     return {
       setStudents: function (list) { students = list || []; if (!busy) paint(); },
-      destroy: function () { dead = true; unsub(); unsubPortal(); el.removeEventListener('change', onChange); el.removeEventListener('input', onInput); el.removeEventListener('click', onClick); }
+      destroy: function () { dead = true; unsub(); unsubPortal(); unsubGrants(); el.removeEventListener('change', onChange); el.removeEventListener('input', onInput); el.removeEventListener('click', onClick); }
     };
   }
 

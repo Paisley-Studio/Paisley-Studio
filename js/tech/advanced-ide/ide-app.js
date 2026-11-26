@@ -213,11 +213,13 @@
     };
   }
   /* Admin > Tech Studio > Controls (techSettings/advancedIde). Same test as advancedIdeAllowed() in firestore.rules. */
-  function ideAllowed(cfg, uid, student) {
+  /* Beginners never by level: their coach or an admin grants it when they graduate (techIdeGrants/{uid}). */
+  function ideAllowed(cfg, uid, student, granted) {
     if (!cfg || cfg.enabled !== true) return false;
     var lvl = ['beginner', 'intermediate', 'expert'].indexOf(student.skillLevel) > -1 ? student.skillLevel : 'intermediate';
-    return (cfg.students || []).indexOf(uid) > -1 || (cfg.levels || []).indexOf(lvl) > -1;
+    return (cfg.students || []).indexOf(uid) > -1 || (lvl !== 'beginner' && (cfg.levels || []).indexOf(lvl) > -1) || granted === true;
   }
+  function grantOf(uid) { return db.collection('techIdeGrants').doc(uid).get().then(function (g2) { return g2.exists; }, function () { return false; }); }
   function whoAmI(user) {
     var uid = user.uid;
     return db.collection('techStudents').doc(uid).get().then(function (s) {
@@ -225,9 +227,10 @@
         var st = s.data();
         return Promise.all([
           db.collection('techSettings').doc('advancedIde').get().then(function (c) { return c.exists ? c.data() : null; }, function () { return null; }),
-          db.collection('techSettings').doc('portal').get().then(function (c) { return c.exists ? c.data() : {}; }, function () { return {}; })
+          db.collection('techSettings').doc('portal').get().then(function (c) { return c.exists ? c.data() : {}; }, function () { return {}; }),
+          grantOf(uid)
         ]).then(function (r) {
-          return { uid: uid, role: 'student', name: st.name || '', coachId: st.coachId || '', skillLevel: st.skillLevel || '', ideAccess: ideAllowed(r[0], uid, st), practicePublish: r[1].practicePublish === true };
+          return { uid: uid, role: 'student', name: st.name || '', coachId: st.coachId || '', skillLevel: st.skillLevel || '', ideAccess: ideAllowed(r[0], uid, st, r[2]), practicePublish: r[1].practicePublish === true };
         });
       }
       if (s.exists) return { uid: uid, role: 'pending', name: s.data().name || '', coachId: s.data().coachId || '' };
@@ -279,8 +282,8 @@
           /* If the Studio Desk switches the IDE off for this builder while they work, it locks (the rules refuse saves too). */
           if (me.role === 'student' && !opts.user) {
             db.collection('techSettings').doc('advancedIde').onSnapshot(function (c) {
-              db.collection('techStudents').doc(me.uid).get().then(function (s) {
-                var ok = ideAllowed(c.exists ? c.data() : null, me.uid, s.exists ? s.data() : {});
+              Promise.all([db.collection('techStudents').doc(me.uid).get(), grantOf(me.uid)]).then(function (r2) {
+                var s = r2[0], ok = ideAllowed(c.exists ? c.data() : null, me.uid, s.exists ? s.data() : {}, r2[1]);
                 if (!ok) ws.revoke(); else ws.restore();
               });
             }, function () { });

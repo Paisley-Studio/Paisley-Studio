@@ -5,8 +5,10 @@
    siteStatus/maintenance { on, title, message, startsAt, endsAt, tone }.
    Every page loads this file; it reads that one document over Firestore's
    REST API (no Firebase SDK needed, works signed out) and shows a small
-   floating card. It never blocks the page: people keep working, the card
-   only tells them. It can be shrunk to a dot and opened again.
+   floating pill. It never blocks the page: people keep working.
+   The pill opens into the full card when pressed; the card shrinks back to
+   the pill or is closed (for this update; a new save brings it back). Both
+   can be dragged anywhere on the screen; the spot is remembered.
 
    Before startsAt: "Maintenance planned" with a countdown to the start.
    Between startsAt and endsAt: "Under maintenance", time left, progress.
@@ -77,12 +79,17 @@
   var ICON = {
     wrench: '<svg viewBox="0 0 512 512" aria-hidden="true"><path fill="currentColor" d="M352 320c88.4 0 160-71.6 160-160 0-15.3-2.2-30.1-6.2-44.2-3.1-10.8-16.4-13.2-24.3-5.3l-76.8 76.8c-3 3-7.1 4.7-11.3 4.7H336c-8.8 0-16-7.2-16-16v-57.4c0-4.2 1.7-8.3 4.7-11.3l76.8-76.8c7.9-7.9 5.4-21.2-5.3-24.3C382.1 2.2 367.3 0 352 0 263.6 0 192 71.6 192 160c0 19.1 3.4 37.5 9.5 54.5L19.9 396.1C7.2 408.8 0 426.1 0 444.1 0 481.6 30.4 512 67.9 512c18 0 35.3-7.2 48-19.9l181.6-181.6c17 6.2 35.4 9.5 54.5 9.5zM80 408a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></svg>',
     clock: '<svg viewBox="0 0 512 512" aria-hidden="true"><path fill="currentColor" d="M256 0a256 256 0 1 1 0 512 256 256 0 1 1 0-512zm-24 120v136c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></svg>',
+    xmark: '<svg viewBox="0 0 384 512" aria-hidden="true"><path fill="currentColor" d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></svg>',
+    grip: '<svg viewBox="0 0 320 512" aria-hidden="true"><path fill="currentColor" d="M40 352a40 40 0 1 1 0 80 40 40 0 1 1 0-80zm240 0a40 40 0 1 1 0 80 40 40 0 1 1 0-80zM40 216a40 40 0 1 1 0 80 40 40 0 1 1 0-80zm240 0a40 40 0 1 1 0 80 40 40 0 1 1 0-80zM40 80a40 40 0 1 1 0 80 40 40 0 1 1 0-80zm240 0a40 40 0 1 1 0 80 40 40 0 1 1 0-80z"/></svg>',
     minus: '<svg viewBox="0 0 448 512" aria-hidden="true"><path fill="currentColor" d="M432 256c0 17.7-14.3 32-32 32H48c-17.7 0-32-14.3-32-32s14.3-32 32-32h352c17.7 0 32 14.3 32 32z"/></svg>'
   };
   var CSS = [
     ':host{all:initial}',
-    '.wrap{position:fixed;right:18px;bottom:18px;z-index:2147483000;font-family:"Quicksand",system-ui,-apple-system,"Segoe UI",sans-serif;color:#263331;pointer-events:none}',
-    '.card{pointer-events:auto;width:min(360px,calc(100vw - 36px));background:#fff;border:1px solid rgba(38,51,49,.12);border-left:4px solid #55BFB3;border-radius:16px;box-shadow:0 14px 40px rgba(15,26,20,.18);padding:.9rem 1rem .85rem;position:relative;overflow:hidden;animation:pzIn .55s cubic-bezier(.2,.9,.25,1.2) both}',
+    '.wrap{position:fixed;right:18px;bottom:18px;z-index:2147483000;font-family:"Quicksand",system-ui,-apple-system,"Segoe UI",sans-serif;color:#263331;pointer-events:none;touch-action:none}',
+    '.wrap.placed{right:auto;bottom:auto}',
+    '.wrap.dragging .card,.wrap.dragging .pill{cursor:grabbing;box-shadow:0 20px 50px rgba(15,26,20,.26);transition:none}',
+    '[data-drag]{cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}',
+    '.card{pointer-events:auto;width:min(360px,calc(100vw - 24px));background:#fff;border:1px solid rgba(38,51,49,.12);border-left:4px solid #55BFB3;border-radius:16px;box-shadow:0 14px 40px rgba(15,26,20,.18);padding:.9rem 1rem .85rem;position:relative;overflow:hidden;animation:pzIn .55s cubic-bezier(.2,.9,.25,1.2) both}',
     '.card.warn{border-left-color:#F39C12}',
     '.top{display:flex;align-items:flex-start;gap:.7rem}',
     '.badge{position:relative;flex:0 0 auto;width:38px;height:38px;border-radius:12px;background:#E5F2EF;color:#245F5A;display:grid;place-items:center}',
@@ -103,10 +110,14 @@
     '.bar i{display:block;height:100%;width:0;background:#55BFB3;border-radius:4px;transition:width .8s ease}',
     '.warn .bar i{background:#F39C12}',
     '.bar.run i{width:35%;animation:pzSlide 1.8s ease-in-out infinite}',
+    '.acts{display:flex;flex-direction:column;gap:.15rem;flex:0 0 auto}',
+    '.grip{display:flex;justify-content:center;color:#B7C4C1;margin:-.35rem 0 .35rem}.grip svg{width:14px;height:10px;transform:rotate(90deg)}',
     '.min{flex:0 0 auto;width:28px;height:28px;border:none;border-radius:8px;background:transparent;color:#5A6E6A;cursor:pointer;display:grid;place-items:center}',
     '.min:hover,.min:focus-visible{background:#E5F2EF;color:#245F5A;outline:none}',
     '.min svg{width:12px;height:12px}',
-    '.pill{pointer-events:auto;display:flex;align-items:center;gap:.45rem;border:1px solid rgba(38,51,49,.12);background:#fff;color:#245F5A;border-radius:999px;padding:.5rem .85rem .5rem .55rem;box-shadow:0 10px 28px rgba(15,26,20,.16);font:inherit;font-size:.78rem;font-weight:800;cursor:pointer;animation:pzIn .45s cubic-bezier(.2,.9,.25,1.2) both}',
+    '.pill{pointer-events:auto;display:flex;align-items:center;gap:.45rem;border:1px solid rgba(38,51,49,.12);border-left:3px solid #55BFB3;background:#fff;color:#245F5A;border-radius:999px;padding:.45rem .9rem .45rem .5rem;box-shadow:0 10px 28px rgba(15,26,20,.16);font:inherit;font-size:.78rem;font-weight:800;cursor:grab;animation:pzIn .45s cubic-bezier(.2,.9,.25,1.2) both,pzBob 4s ease-in-out 1s infinite;transition:transform .2s}',
+    '.pill:hover{transform:translateY(-2px)}.pill.warn{border-left-color:#F39C12}',
+    '.pill .pt{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}.pill .pt small{font-size:.66rem;font-weight:700;color:#5A6E6A}',
     '.pill .badge{width:26px;height:26px;border-radius:50%}',
     '.pill .badge svg{width:13px;height:13px}',
     '.pill .badge::after{border-radius:50%}',
@@ -115,16 +126,71 @@
     '@keyframes pzIn{from{opacity:0;transform:translateY(24px) scale(.96)}to{opacity:1;transform:none}}',
     '@keyframes pzTurn{0%,60%,100%{transform:rotate(0)}70%{transform:rotate(-22deg)}80%{transform:rotate(16deg)}90%{transform:rotate(-8deg)}}',
     '@keyframes pzRing{0%{opacity:.7;transform:scale(.85)}100%{opacity:0;transform:scale(1.35)}}',
+    '@keyframes pzBob{0%,100%{translate:0 0}50%{translate:0 -3px}}',
     '@keyframes pzBlink{0%,100%{opacity:1}50%{opacity:.25}}',
     '@keyframes pzSlide{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}',
-    '@media (max-width:560px){.wrap{left:12px;right:12px;bottom:12px;display:flex;justify-content:center}.card{width:100%}}',
+    '@media (max-width:560px){.wrap{right:12px;bottom:12px}}',
     '@media (prefers-reduced-motion:reduce){.card,.pill,.badge svg,.badge::after,.dot,.bar.run i{animation:none!important}.bar i{transition:none}}',
     '@media print{.wrap{display:none}}'
   ].join('');
 
-  function minKey(d) { return 'pz-site-status-min-' + (d.updatedAt || 0); }
-  function isMin(d) { try { return !previewing && sessionStorage.getItem(minKey(d)) === '1'; } catch (e) { return false; } }
-  function setMin(d, v) { try { if (v) sessionStorage.setItem(minKey(d), '1'); else sessionStorage.removeItem(minKey(d)); } catch (e) { } }
+  /* How it shows, per update: 'pill' (the default), 'open' (the card) or 'closed'. Kept in
+     localStorage so it stays the same from page to page; a new save (new updatedAt) starts again. */
+  var VIEW_KEY = 'pz-site-status-view', POS_KEY = 'pz-site-status-pos', previewView = 'pill';
+  function viewOf(d) {
+    if (previewing) return previewView;
+    try { var v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && v.u === (d.updatedAt || 0)) return v.v; } catch (e) { }
+    return 'pill';
+  }
+  function setView(d, v) {
+    if (previewing) { previewView = v; return; }
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify({ u: d.updatedAt || 0, v: v })); } catch (e) { }
+  }
+
+  /* ---- Dragging (pointer events: mouse, touch and pen) ---- */
+  var drag = null, justDragged = false;
+  function savedPos() { try { var p = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); if (p && isFinite(p.x) && isFinite(p.y)) return p; } catch (e) { } return null; }
+  function place(w, x, y) {
+    var r = w.getBoundingClientRect(), vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, m = 8;
+    x = Math.min(Math.max(m, x), Math.max(m, vw - r.width - m));
+    y = Math.min(Math.max(m, y), Math.max(m, vh - r.height - m));
+    w.classList.add('placed'); w.style.left = x + 'px'; w.style.top = y + 'px';
+    return { x: x, y: y };
+  }
+  /* Keep it on screen: the pill's spot is remembered; a card opening there is moved in if it would spill over. */
+  function fit() {
+    var w = root && root.querySelector('.wrap'); if (!w || !w.firstChild) return;
+    var p = savedPos();
+    if (!p) { w.classList.remove('placed'); w.style.left = w.style.top = ''; return; }
+    place(w, p.x * ((document.documentElement.clientWidth || innerWidth)), p.y * innerHeight);
+  }
+  function onDown(e) {
+    justDragged = false;
+    var h = e.target.closest && e.target.closest('[data-drag]'); if (!h || e.button > 0) return;
+    if (e.target.closest('[data-act]') && !e.target.closest('.pill')) return;
+    var w = root.querySelector('.wrap'), r = w.getBoundingClientRect();
+    drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false, el: h };
+    try { h.setPointerCapture(e.pointerId); } catch (er) { }
+  }
+  function onMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+    drag.moved = true; e.preventDefault();
+    var w = root.querySelector('.wrap'); w.classList.add('dragging');
+    place(w, drag.ox + dx, drag.oy + dy);
+  }
+  function onUp(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var w = root.querySelector('.wrap'), moved = drag.moved;
+    try { drag.el.releasePointerCapture(e.pointerId); } catch (er) { }
+    drag = null; w.classList.remove('dragging');
+    if (moved) {
+      var r = w.getBoundingClientRect();
+      try { localStorage.setItem(POS_KEY, JSON.stringify({ x: r.left / (document.documentElement.clientWidth || innerWidth), y: r.top / innerHeight })); } catch (er) { }
+      justDragged = true;
+    }
+  }
 
   function ensureRoot() {
     if (root) return root;
@@ -136,11 +202,18 @@
     root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
     root.innerHTML = '<style>' + CSS + '</style><div class="wrap" role="region" aria-label="Site status"></div>';
     root.addEventListener('click', function (e) {
+      if (justDragged) { justDragged = false; return; }
       var b = e.target.closest && e.target.closest('[data-act]'); if (!b || !data) return;
-      setMin(data, b.getAttribute('data-act') === 'min');
+      var act = b.getAttribute('data-act');
+      setView(data, act === 'max' ? 'open' : act === 'close' ? 'closed' : 'pill');
       paint();
-      var f = root.querySelector(b.getAttribute('data-act') === 'min' ? '.pill' : '.min'); if (f) f.focus();
+      var f = root.querySelector(act === 'max' ? '.min' : '.pill'); if (f) f.focus();
     });
+    root.addEventListener('pointerdown', onDown);
+    root.addEventListener('pointermove', onMove);
+    root.addEventListener('pointerup', onUp);
+    root.addEventListener('pointercancel', onUp);
+    window.addEventListener('resize', function () { if (!drag) fit(); });
     return root;
   }
   function clear() {
@@ -160,16 +233,22 @@
       when = 'Back to normal in about ' + span(d.endsAt - now) + ' · until ' + clock(d.endsAt);
       if (d.startsAt && d.endsAt > d.startsAt) pct = Math.min(100, Math.max(2, (now - d.startsAt) / (d.endsAt - d.startsAt) * 100));
     } else when = 'You can keep working. Some things may be slow for a little while.';
-    if (isMin(d)) {
-      w.innerHTML = '<button type="button" class="pill' + warn + '" data-act="max" aria-label="' + esc(k) + ': show details"><span class="badge">' + ICON.wrench + '</span>' + esc(k) + '</button>';
+    if (drag) return; /* never repaint under a finger */
+    var view = viewOf(d);
+    if (view === 'closed') { w.innerHTML = ''; return; }
+    if (view !== 'open') {
+      var short = ph === 'soon' ? 'In ' + span(d.startsAt - now) : (d.endsAt ? span(d.endsAt - now) + ' left' : 'Tap for details');
+      w.innerHTML = '<button type="button" class="pill' + warn + '" data-act="max" data-drag aria-label="' + esc(k) + ': show details. Drag to move." title="Show details (drag to move)"><span class="badge">' + ICON.wrench + '</span><span class="pt">' + esc(k) + '<small>' + esc(short) + '</small></span></button>';
     } else {
-      w.innerHTML = '<div class="card' + warn + '" role="status" aria-live="polite"><div class="top"><span class="badge">' + ICON.wrench + '</span><div class="txt">' +
+      w.innerHTML = '<div class="card' + warn + '" role="status" aria-live="polite" data-drag><div class="grip" title="Drag to move">' + ICON.grip + '</div><div class="top"><span class="badge">' + ICON.wrench + '</span><div class="txt">' +
         '<div class="k"><span class="dot"></span>' + esc(k) + '</div><div class="t">' + esc(title) + '</div>' +
         (d.message ? '<div class="m">' + esc(d.message) + '</div>' : '') +
         '<div class="when">' + ICON.clock + '<span>' + esc(when) + '</span></div>' +
         '<div class="bar' + (pct < 0 ? ' run' : '') + '"><i' + (pct >= 0 ? ' style="width:' + pct.toFixed(1) + '%"' : '') + '></i></div>' +
-        '</div><button type="button" class="min" data-act="min" aria-label="Make this smaller" title="Make this smaller">' + ICON.minus + '</button></div></div>';
+        '</div><div class="acts"><button type="button" class="min" data-act="min" aria-label="Make this smaller" title="Make this smaller">' + ICON.minus + '</button>' +
+        '<button type="button" class="min" data-act="close" aria-label="Close" title="Close">' + ICON.xmark + '</button></div></div></div>';
     }
+    fit();
     if (!tick) tick = setInterval(function () { if (data) paint(); }, 30 * 1000);
   }
   function refresh(force) {
@@ -185,7 +264,7 @@
   g.PaisleySiteStatus = {
     refresh: function () { return refresh(true); },
     preview: function (d) {
-      if (d) { previewing = true; data = Object.assign({ on: true, tone: 'info', updatedAt: 0 }, d); paint(); }
+      if (d) { if (!previewing) previewView = 'pill'; previewing = true; data = Object.assign({ on: true, tone: 'info', updatedAt: 0 }, d); paint(); }
       else { previewing = false; data = null; clear(); refresh(true); }
     },
     _phase: phase, _parse: parse

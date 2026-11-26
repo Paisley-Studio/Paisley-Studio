@@ -1,7 +1,7 @@
 // Paisley Studio Service Worker
 // Caches the site shell so the app opens fast. Never caches Firebase calls.
 
-const CACHE_NAME = 'paisley-studio-v15-dev1'; // bumped: every page shows the maintenance banner (js/ui/site-status.js)
+const CACHE_NAME = 'paisley-studio-v15-dev2'; // bumped: banner opens from a pill; published projects show the product, never the code
 const CACHE_URLS = ['./', './index.html'];
 
 // Hosts that must NEVER be intercepted by the service worker.

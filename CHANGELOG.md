@@ -1,3 +1,13 @@
+# Banner pill, family-facing published projects, Advanced IDE by graduation (2026-11-26)
+
+- **Maintenance banner** (`js/ui/site-status.js` v2, on all 47 pages): now a small floating pill by default (wrench, "Under maintenance", time left). Press it to open the full card; the card has Make smaller and Close. Close hides it for that update (a new save brings it back). Pill and card can be dragged anywhere with mouse or touch; the spot is remembered and kept on screen.
+- **Published projects** (`/tech/p/{id}`, every one already published too): families see the product, never the code. A website runs live in a browser frame whose address bar shows the share link, with Start again and Full screen. A program (Python, Java, C, C++, PHP) gets one big Run button, the output, and an answer box when it asks something. The Paisley banner (maker's first name, project name) and footer stay; a new "Your child can build this too" line links to paisleystudio.online/tech.
+- **Advanced IDE**: never given to beginners by level (the Beginner tile in Controls is locked, "by name only"). When a beginner graduates, their coach gives it in Coach portal > Builders > the builder (`techIdeGrants/{uid}`), or the desk picks them by name. It still needs the master switch. Controls shows "Granted by <coach>". Checks in step: builder portal `ideOn`, `ide-app.js`, `code-runner.js`, rules `advancedIdeAllowed()`. Coaches can now read `techSettings`.
+- **Practice lab** shows one IDE (Paisley VS Code). The separate Advanced IDE tile is gone there; the Home card stays for builders who have it, and its title is now white.
+- Tests: rules tech + dev-mode 37/37 (new: beginners and coach grants); functions 98 pass, the 5 known failures; `verify-project.js` at its 8 known failures.
+- Versions: `site-status.js` 2, `ide-app.js` 6, `tech-controls.js` 3, `studio-docs.js` 2, `dev-mode.js` 2; `sw.js` cache `paisley-studio-v15-dev2`.
+- Deploy: rules + hosting (no function changes needed for this round beyond the earlier ones).
+
 # Developer mode (maintenance banner, freeze), the Studio handbook, Share in Paisley VS Code (2026-11-25)
 
 - **Share button inside Paisley VS Code.** Class work (the Practise pop-up of every level's lessons) and Practice lab projects now have **Share** in the IDE's title bar, beside Run. It opens a sheet inside the IDE (it keeps full screen): Ask to publish, the request's state, the coach's note, then the link to copy and open, and Take it down (two presses, no confirm). It shows Asked / Shared on the button. Publishing is still on review and still needs the switch (lesson or class for class work, Controls for practice); without it the sheet says so. `CodeLab.mount(..., { share(body, close) })`, `setShare(state)`, `shareBody()`.

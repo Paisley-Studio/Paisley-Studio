@@ -104,10 +104,12 @@ async function config(db) {
 /* ---------- who may run ---------- */
 /* Admin > Tech Studio > Controls (techSettings/advancedIde). Same test as advancedIdeAllowed() in firestore.rules. */
 const IDE_LEVELS = ["beginner", "intermediate", "expert"];
-function ideAllowed(cfg, uid, student) {
+/* Beginners never by level: their coach or an admin grants it when they graduate (techIdeGrants/{uid}). */
+function ideAllowed(cfg, uid, student, granted) {
   if (!cfg || cfg.enabled !== true) return false;
   const lvl = IDE_LEVELS.includes(student.skillLevel) ? student.skillLevel : "intermediate";
-  return (Array.isArray(cfg.students) && cfg.students.includes(uid)) || (Array.isArray(cfg.levels) && cfg.levels.includes(lvl));
+  return (Array.isArray(cfg.students) && cfg.students.includes(uid)) ||
+    (lvl !== "beginner" && Array.isArray(cfg.levels) && cfg.levels.includes(lvl)) || granted === true;
 }
 /* "" when allowed, else why not. Coaches and admins can always run (they review builders' work).
    Every active builder may run Java too: Paisley VS Code (the beginners' IDE, open to all) runs

@@ -209,7 +209,7 @@
           var f = mForm();
           if (!g.PaisleySiteStatus) { out.className = 'dv-msg err'; out.textContent = 'The banner script is not on this page.'; return; }
           g.PaisleySiteStatus.preview({ on: true, title: f.title, message: f.message, tone: f.tone, startsAt: f.startsAt, endsAt: f.endsAt, updatedAt: Date.now() });
-          out.className = 'dv-msg ok'; out.textContent = 'Preview at the bottom right. It goes when you save or leave Settings.';
+          out.className = 'dv-msg ok'; out.textContent = 'Preview at the bottom right: a pill that opens into the card when pressed. It goes when you save or leave Settings.';
         } catch (er) { out.className = 'dv-msg err'; out.textContent = er.message; }
         return;
       }

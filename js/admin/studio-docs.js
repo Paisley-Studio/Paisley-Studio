@@ -222,7 +222,7 @@
           'Coaches and admins prepare lessons as drafts and send them with Publish the class: one bell and one email per builder for the lot.'
         ]);
       } },
-    { id: 'ide', icon: 'fa-code', title: 'The IDEs and publishing on review', lead: 'Paisley VS Code for everyone, the Advanced IDE for those it is switched on for.',
+    { id: 'ide', icon: 'fa-code', title: 'The IDEs and publishing on review', lead: 'Paisley VS Code for everyone, the Advanced IDE for those who graduated to it.',
       body: function () {
         return diagram({ label: 'Publishing on review', w: 900, h: 210, caption: 'A builder never publishes alone: a coach or the desk looks first.',
           nodes: [
@@ -240,6 +240,8 @@
           'Unsaved work is kept in the browser until the save lands, and offered back if it never did.',
           'Uploads are checked by their real contents: a script named like a picture is refused in the browser and deleted on the server.',
           'Class work can be shared once a coach or admin switches publishing on for the lesson or its class. Practice projects can be shared once the desk switches it on in Tech Studio > Controls.',
+          'The <b>Advanced IDE</b> is behind the switch in Tech Studio > Controls. Intermediate and expert builders can get it by level; beginners never do: when one graduates, their coach gives it in the Coach portal (Builders, then the builder) or the desk picks them by name. The Practice lab shows only Paisley VS Code; builders who have the Advanced IDE open it from Home or from its button inside Paisley VS Code.',
+          'The public page (' + code('/tech/p/…') + ') shows what was made, never the code: a website appears live in a browser frame whose address is the share link, and a program gets one Run button and its output. The Paisley banner with the maker’s first name and the “Learn this at Paisley” line stay on every page.',
           'Published work stays live: saves refresh the public copy. Take it down and the link stops.'
         ]);
       } },
@@ -283,7 +285,7 @@
           edges: [['ev', 'fn', ''], ['fn', 'chk', ''], ['chk', 'send', 'not frozen'], ['chk', 'hold', 'frozen', { warm: true }], ['ok', 'send', '', { dash: true }]]
         }) +
         table(['Tool', 'What it does'], [
-          ['Maintenance banner', 'A floating card on every page: planned maintenance with a countdown, then under maintenance with time left. It never blocks anyone. Stored in ' + code('siteStatus/maintenance') + '.'],
+          ['Maintenance banner', 'A small floating pill on every page that opens into the full card when pressed: planned maintenance with a countdown, then under maintenance with time left. People can drag it anywhere, shrink it back or close it. It never blocks anyone. Stored in ' + code('siteStatus/maintenance') + '.'],
           ['Freeze', 'Holds bells and emails for the areas you tick (Tech Studio, classes, homework, exams, live classes, attendance, tuition, messages, accounts, newsletter) and the people you freeze (students, parents, tutors, coaches), except your test accounts. Ends by itself if you set an end. Stored in ' + code('devMode/freeze') + '; held items in ' + code('devHeld') + '.']
         ]) +
         note('The freeze stops messages, not content: a class you post is still visible in portals to everyone it is posted to. To test content privately, post it to a test account or keep it as a draft.', 'fa-circle-info');

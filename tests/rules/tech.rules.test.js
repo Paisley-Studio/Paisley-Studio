@@ -247,6 +247,29 @@ test("Advanced IDE access: off until the Studio Desk switches it on, then by lev
   await assertSucceeds(as("admin1").doc("techSettings/advancedIde").set({ enabled: true, levels: [], students: ["kid1"] }));
 });
 
+test("Advanced IDE: never by level for beginners; their coach grants it when they graduate", async () => {
+  const setCfg = (cfg) => env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc("techSettings/advancedIde").set(cfg));
+  const proj = (id) => ({ studentId: id, type: "advanced", title: "P", codeFiles: [], ide: { v: 1, lang: "py" } });
+  await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc("techStudents/kid1").update({ skillLevel: "beginner" }));
+  await setCfg({ enabled: true, levels: ["beginner", "intermediate", "expert"], students: [] });
+  await assertFails(as("kid1").doc("techPractice/gr1").set(proj("kid1")), "a ticked beginner level gives nothing");
+  // Grants: only the builder's own coach (or an admin), stamped with who and when.
+  const grant = (by) => ({ studentId: "kid1", grantedBy: by, grantedByName: "Coach", grantedByRole: "coach", at: serverTimestamp() });
+  await assertFails(as("coach2").doc("techIdeGrants/kid1").set(grant("coach2")));
+  await assertFails(as("kid1").doc("techIdeGrants/kid1").set(grant("kid1")));
+  await assertFails(as("coach1").doc("techIdeGrants/kid1").set(grant("someoneElse")));
+  await assertSucceeds(as("coach1").doc("techIdeGrants/kid1").set(grant("coach1")));
+  await assertSucceeds(as("kid1").doc("techIdeGrants/kid1").get());
+  await assertFails(as("coach1").collection("techIdeGrants").get());
+  await assertSucceeds(as("kid1").doc("techPractice/gr1").set(proj("kid1")));
+  // Still behind the master switch.
+  await setCfg({ enabled: false, levels: [], students: [] });
+  await assertFails(as("kid1").doc("techPractice/gr1").update({ title: "x" }));
+  await assertFails(as("coach2").doc("techIdeGrants/kid1").delete());
+  await assertSucceeds(as("coach1").doc("techIdeGrants/kid1").delete());
+  await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc("techStudents/kid1").update({ skillLevel: require("firebase/firestore").deleteField() }));
+});
+
 test("Advanced IDE projects: practice docs the builder owns; staff read only; guardians cannot open them", async () => {
   await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc("techSettings/advancedIde").set({ enabled: true, levels: ["intermediate"], students: [] }));
   const proj = { studentId: "kid1", studentName: "Kid One", coachId: "coach1", type: "advanced", title: "Guess", done: false, helpRequested: false,

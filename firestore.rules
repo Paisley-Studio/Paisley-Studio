@@ -1012,8 +1012,11 @@ service cloud.firestore {
       let cfg = get(/databases/$(database)/documents/techSettings/advancedIde).data;
       let me = get(/databases/$(database)/documents/techStudents/$(request.auth.uid)).data;
       let lvl = me.get('skillLevel', '') in ['beginner', 'intermediate', 'expert'] ? me.get('skillLevel', '') : 'intermediate';
+      // Beginners never get it by level: their coach or an admin grants it when they graduate
+      // (techIdeGrants/{uid}, or picked by name in Controls).
       return cfg.get('enabled', false) == true &&
-        (request.auth.uid in cfg.get('students', []) || lvl in cfg.get('levels', []));
+        (request.auth.uid in cfg.get('students', []) || (lvl != 'beginner' && lvl in cfg.get('levels', [])) ||
+          exists(/databases/$(database)/documents/techIdeGrants/$(request.auth.uid)));
     }
     function isTechCoach() {
       return isSignedIn() && exists(/databases/$(database)/documents/techCoaches/$(request.auth.uid)) &&
@@ -1131,8 +1134,21 @@ service cloud.firestore {
 
     // Studio-wide settings (the navigation video). Only the Studio Desk changes them.
     match /techSettings/{id} {
-      allow read: if isAdmin() || techStudentActive();
+      allow read: if isAdmin() || techStudentActive() || isTechCoach();
       allow write: if isAdmin();
+    }
+
+    // The Advanced IDE given to one builder by their coach or an admin (a beginner who graduated).
+    // Still needs the master switch in Controls (techSettings/advancedIde.enabled).
+    match /techIdeGrants/{sid} {
+      allow get: if isAdmin() || (isSignedIn() && request.auth.uid == sid) || isTechCoachOf(sid);
+      allow list: if isAdmin();
+      allow create: if (isAdmin() || isTechCoachOf(sid)) &&
+        request.resource.data.keys().hasOnly(['studentId', 'grantedBy', 'grantedByName', 'grantedByRole', 'at']) &&
+        request.resource.data.studentId == sid && request.resource.data.grantedBy == request.auth.uid &&
+        request.resource.data.at == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() || isTechCoachOf(sid);
     }
 
     match /techContent/{id} {
