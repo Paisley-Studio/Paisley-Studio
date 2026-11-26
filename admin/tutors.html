@@ -489,7 +489,7 @@ function initFirestore(){
 
   // Tech Studio coaches live in their own collection (techCoaches), not tutorAccounts.
   db.collection('techCoaches').onSnapshot(snap=>{
-    DB.techCoaches = snap.docs.map(d=>({ id:d.id, ...d.data(), date: toDate(d.data().createdAt) }));
+    DB.techCoaches = snap.docs.map(d=>({ id:d.id, ...d.data(), date: toDate(d.data().createdAt) })).filter(c=>c.status !== 'Moved');
     renderCoaches();
   }, coachErr);
   db.collection('techStudents').onSnapshot(snap=>{
@@ -1068,7 +1068,14 @@ async function createCoach(){
     return;
   }
 
+  // An existing Paisley login: the server makes the coach record on that login right now
+  // (createTechCoach), instead of waiting for the coach's first sign-in to claim the invite.
+  const viaServer = async () => {
+    try{ await firebase.functions().httpsCallable('createTechCoach')({ name, email, phone, disciplines, slug }); return true; }
+    catch(e){ console.warn('createTechCoach failed; the invite will be claimed on first sign-in:', e); return false; }
+  };
   if(!password){
+    await viaServer();
     closeModal();
     PaisleyUI.alert('TECH STUDIO COACH ADDED\n\nName:     ' + name + '\nEmail:    ' + email + '\nSign-in:  ' + url + '\n\nSend them this link. They sign in with the password of their existing Paisley login, and become a Tech Studio coach on that first sign-in.', { type:'success', title:'Tech Studio coach added', sticky:true });
     return;
@@ -1081,6 +1088,7 @@ async function createCoach(){
     uid = cred.user.uid;
   }catch(err){
     if(err && err.code === 'auth/email-already-in-use'){
+      await viaServer();
       closeModal();
       PaisleyUI.alert('TECH STUDIO COACH ADDED\n\n' + email + ' already has a Paisley sign-in (for example a tutor, admin or parent login).\n\nThey sign in at ' + url + ' with the password they already use, and become a Tech Studio coach on that first sign-in. The password you typed here is not used.', { type:'success', title:'Tech Studio coach added', sticky:true });
       return;
@@ -1176,12 +1184,29 @@ window.editCoach = (id) => {
   });
 };
 
+/* Goes through the server (sendTechCoachAccess): it repairs a coach whose login and coach
+   record do not match (the "Not a coach account" screen), creates a missing login, and sends the
+   set-password email from the Studio's own mail server. Firebase's own reset email is silently
+   skipped for an email with no login, so it could look sent and never arrive. */
+function coachAccessReport(r){
+  const lines = [];
+  if(r.created) lines.push('There was no login for ' + r.email + ', so one was created.');
+  if(r.moved) lines.push('The coach record was saved under an old login. It now belongs to the login for ' + r.email + (r.builders ? ' (' + r.builders + ' builder' + (r.builders===1?'':'s') + ' moved with it)' : '') + '.');
+  if(r.status && r.status !== 'Active') lines.push('Note: this coach is ' + r.status + '. Reactivate them to let them in.');
+  if(r.sent) lines.push('Set-password email sent to ' + r.email + ' from the Studio mail server. Ask them to check Inbox, Promotions and Spam.');
+  else lines.push('The email did not go (' + (r.held ? 'held by Developer mode freeze' : (r.reason || 'unknown reason')) + ').' + NL + NL + 'Send them this set-password link another way (it works once, for about an hour):' + NL + r.link);
+  lines.push('Then they sign in at ' + r.coachUrl + ' with ' + r.email + '.');
+  return lines.join(NL + NL);
+}
+const NL = String.fromCharCode(10);
 window.resetCoachPassword = async (id) => {
   const c = DB.techCoaches.find(x=>x.id===id); if(!c || !c.email) return;
-  if(!await PaisleyUI.confirm('Send a password reset email to ' + c.email + '?')) return;
-  auth.sendPasswordResetEmail(c.email, { url: coachLink(c.slug) })
-    .then(()=>alert('Password reset email sent to ' + c.email + '.'))
-    .catch(err=>alert('Could not send the reset email: ' + err.message));
+  if(!await PaisleyUI.confirm('Send ' + (c.name||'this coach') + ' a set-password email at ' + c.email + '?' + NL + NL + 'This also fixes their sign-in if the coach portal says "Not a coach account".')) return;
+  try{
+    const r = (await firebase.functions().httpsCallable('sendTechCoachAccess')({ coachId: id, email: c.email })).data;
+    PaisleyUI.alert(coachAccessReport(r), { type: r.sent ? 'success' : 'warning', title: r.sent ? 'Coach sign-in email sent' : 'Email not sent', sticky: true });
+    if(!r.sent && r.link){ try{ navigator.clipboard && navigator.clipboard.writeText(r.link).catch(()=>{}); }catch(e){} }
+  }catch(err){ alert('Could not send the coach sign-in email: ' + (err.message || err)); }
 };
 
 window.setCoachStatus = async (id, status) => {

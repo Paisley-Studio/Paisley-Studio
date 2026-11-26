@@ -150,6 +150,7 @@ exports.onTechGroupTaskWritten        = tech.onTechGroupTaskWritten;
 exports.onTechLiveClassWritten        = tech.onTechLiveClassWritten;
 exports.onTechFamilyDeskMessage       = tech.onTechFamilyDeskMessage;
 exports.createTechCoach               = tech.createTechCoach;
+exports.sendTechCoachAccess           = tech.sendTechCoachAccess;
 exports.onTechCoachApplied            = tech.onTechCoachApplied;
 exports.techLinkGuardians             = tech.techLinkGuardians;
 exports.nudgeTechChat                 = tech.nudgeTechChat;

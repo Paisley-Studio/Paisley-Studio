@@ -125,7 +125,7 @@
     listen(db.collection('techContent'), 'content', function () { S.content.sort(function (a, b) { return ts(b.createdAt) - ts(a.createdAt); }); });
     listen(db.collection('techChats'), 'chats', function () { S.chats.sort(function (a, b) { return ts(b.lastAt) - ts(a.lastAt); }); });
     listen(db.collection('techGuardianChats'), 'gchats', function () { S.gchats.sort(function (a, b) { return ts(b.lastAt) - ts(a.lastAt); }); });
-    listen(db.collection('techCoaches'), 'coaches', function () { S.coaches.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }); });
+    listen(db.collection('techCoaches'), 'coaches', function () { S.coaches = S.coaches.filter(function (c) { return c.status !== 'Moved'; }); S.coaches.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }); });
     listen(db.collection('techLiveClasses'), 'classes', function () { S.classes = T.sortLive(S.classes); });
     listen(db.collection('parentConversations').where('programme', '==', 'tech'), 'desk', function () { S.desk.sort(function (a, b) { return ts(b.lastMessageAt) - ts(a.lastMessageAt); }); });
     /* Legacy Tech Studio builders still stored as students/{uid} studentType "tech" (before migrateTechArchitecture). */

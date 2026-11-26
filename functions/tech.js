@@ -1987,6 +1987,90 @@ exports.createTechCoach = onCall(
   }
 );
 
+/* The desk's "Send sign-in email" for a coach, and the repair for a coach who is told
+   "Not a coach account" or never gets a reset email. data: { coachId?, email? }.
+   1. Finds the login with the coach's email (creates it if there is none: Firebase's own reset
+      email is silently skipped for an email with no login).
+   2. Makes techCoaches/{that login's uid} the coach record. A record saved under another uid
+      (an old or deleted login) or only as an invite is copied there, its builders move with it
+      (onTechEnrolmentUpdated moves their builds and chats) and the old record is marked Moved.
+   3. Emails a set-password link through the Studio's own mail server and returns what happened,
+      with the link itself when the email could not go, so the desk can send it another way. */
+exports.sendTechCoachAccess = onCall(
+  { cors: true, region: LOCATION, secrets: SMTP_SECRETS },
+  async (request) => {
+    await requireAdmin(request);
+    const d = request.data || {};
+    const db = admin.firestore();
+    const coaches = db.collection("techCoaches");
+    let recId = String(d.coachId || "").slice(0, 128), rec = null;
+    if (recId) { const s = await coaches.doc(recId).get(); if (s.exists) rec = s.data(); else recId = ""; }
+    const raw = String(d.email || (rec && rec.email) || "").trim();
+    const mail = raw.toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(mail)) throw new HttpsError("invalid-argument", "This coach has no valid email.");
+    if (!rec) {
+      for (const v of new Set([raw, mail])) {
+        const q = await coaches.where("email", "==", v).limit(1).get();
+        if (!q.empty) { recId = q.docs[0].id; rec = q.docs[0].data(); break; }
+      }
+    }
+    const invRef = db.collection("techCoachInvites").doc(mail);
+    const inv = await invRef.get();
+    if (!rec && inv.exists && !inv.data().revoked) rec = Object.assign({ status: "Active" }, inv.data());
+    if (!rec) throw new HttpsError("not-found", "No Tech Studio coach is registered with " + mail + ".");
+
+    let user, created = false;
+    try { user = await admin.auth().getUserByEmail(mail); } catch (e) {
+      if (!e || e.code !== "auth/user-not-found") throw e;
+      user = await admin.auth().createUser({ email: mail, password: crypto.randomBytes(18).toString("base64url"), displayName: rec.name || "" });
+      created = true;
+    }
+    if (user.disabled) throw new HttpsError("failed-precondition", "The login for " + mail + " is disabled in Firebase Authentication. Enable it there first.");
+    const uid = user.uid;
+    const asBuilder = await db.collection("techStudents").doc(uid).get();
+    if (asBuilder.exists && asBuilder.data().ageGroup === "under18") throw new HttpsError("failed-precondition", "That email belongs to an under-18 Tech Studio builder, who cannot be a coach.");
+
+    const ref = coaches.doc(uid);
+    const cur = await ref.get();
+    let moved = "", builders = 0;
+    if (!cur.exists) {
+      await ref.set({
+        name: rec.name || user.displayName || "", email: mail, phone: rec.phone || "",
+        disciplines: Array.isArray(rec.disciplines) ? rec.disciplines : [], bio: rec.bio || "", slug: rec.slug || "",
+        status: rec.status === "Inactive" ? "Inactive" : "Active",
+        createdAt: rec.createdAt || FV().serverTimestamp(), createdBy: rec.createdBy || request.auth.uid,
+        updatedAt: FV().serverTimestamp(), repairedAt: FV().serverTimestamp(), repairedBy: request.auth.uid
+      });
+      if (recId && recId !== uid) {
+        moved = recId;
+        const kids = await db.collection("techStudents").where("coachId", "==", recId).get();
+        for (const k of kids.docs) { await k.ref.update({ coachId: uid, updatedAt: FV().serverTimestamp() }); builders++; }
+        await coaches.doc(recId).update({ status: "Moved", movedTo: uid, updatedAt: FV().serverTimestamp() });
+      }
+    }
+    const now = (await ref.get()).data() || {};
+    if (now.slug) await db.collection("techCoachSlugs").doc(now.slug).set({ slug: now.slug, coachId: uid, name: now.name || "", email: mail, status: now.status || "Active", updatedAt: FV().serverTimestamp() }, { merge: true });
+    if (inv.exists) await invRef.set({ uid, claimedAt: FV().serverTimestamp() }, { merge: true });
+
+    const coachUrl = now.slug ? APP + "/tech/coach/" + now.slug : PORTALS.techCoach;
+    let link = "";
+    try { link = await admin.auth().generatePasswordResetLink(mail, { url: coachUrl, handleCodeInApp: false }); }
+    catch (e) {
+      console.warn("coach reset link with coach url failed, using the portal url:", e.message);
+      link = await admin.auth().generatePasswordResetLink(mail, notifications.actionSettings("techCoach"));
+    }
+    const html = render({
+      programme: "tech", preheader: "Set your password to open the coach portal.", heading: "Your coach sign-in",
+      intro: `Hi ${esc(first(now.name))}, here is your Paisley Tech Studio coach sign-in.`,
+      body: `<p style="margin:0 0 10px;">Press the button to choose a password. Then sign in at <a href="${esc(coachUrl)}">${esc(coachUrl.replace(/^https?:\/\//, ""))}</a> with <b>${esc(mail)}</b> and that password.</p><p style="margin:0;color:#667085;">The button works once and expires after an hour. If it has expired, ask the Studio Desk to send a new one.</p>`,
+      cta: { label: "Set my password", url: link }
+    });
+    const r = (await notifications.sendEmail(mail, "Your Paisley Tech Studio coach sign-in", html, null, null, { area: "accounts" })) || {};
+    console.log("sendTechCoachAccess", JSON.stringify({ uid, created, moved, builders, sent: !!r.sent, reason: r.reason || "" }));
+    return { uid, email: mail, created, moved, builders, status: now.status || "", sent: !!r.sent, held: !!r.held, reason: r.reason || "", link: r.sent ? "" : link, coachUrl };
+  }
+);
+
 /* Someone applied to coach: tell the Studio Desk. */
 exports.onTechCoachApplied = onDocumentCreated(
   { document: "techCoaches/{uid}", region: LOCATION, secrets: SMTP_SECRETS },
