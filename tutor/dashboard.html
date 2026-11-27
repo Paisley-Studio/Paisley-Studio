@@ -219,6 +219,12 @@
         </div>
       </section>
       <section class="view" id="view-students">
+        <!-- Exam performance of each of my students (exams only): js/results/exam-analytics.js -->
+        <div class="panel" id="perfPanel">
+          <div class="panel-head"><div><h3><i class="fas fa-chart-line" style="color:var(--brand);margin-right:.35rem"></i>Exam performance</h3><div class="sub">Each student's released exams in the subjects you teach them: average, latest and whether they are rising or falling. Open a student for the full charts.</div></div>
+            <button class="btn btn-ghost btn-sm" type="button" id="perfRefresh"><i class="fas fa-rotate"></i> Refresh</button></div>
+          <div id="perfBody"><div style="padding:1.2rem;text-align:center;color:var(--muted)">Open this tab to load exam performance.</div></div>
+        </div>
         <div class="panel">
           <div class="panel-head"><div><h3>My students</h3><div class="sub">Students assigned to you by the Studio Desk</div></div></div>
           <div class="table-wrap">
@@ -344,10 +350,10 @@
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
+<script src="../js/classroom/classroom-helpers.js?v=cards2"></script>
 <script src="../js/classroom/paper-handins.js?v=hand1"></script>
 <script src="../js/classroom/resources-folder.js?v=boards3"></script>
-<script src="../js/classroom/work-helpers.js?v=examcards1"></script>
+<script src="../js/classroom/work-helpers.js?v=cards2"></script>
 <script src="../js/classroom/ink-grader.js?v=conv1"></script>
 <script src="../js/classroom/work-tools.js?v=tools3"></script>
 <script src="../js/classroom/tutor-chat.js?v=tools1"></script>
@@ -659,6 +665,8 @@ function detachAll(key){
   (listeners[key] || []).forEach(u => { try { u(); } catch(e){} });
   listeners[key] = [];
 }
+/* Hand-ins are kept by their full path: every submission doc is named after the student, so keying
+   by id let a student's homework hand-in overwrite their exam hand-in (no exam bubble, nothing to mark). */
 function rebuild(key){ DB[key] = Object.values(acc[key]); }
 
 function initFirestore(){
@@ -890,7 +898,7 @@ async function subscribeHomeworkSubmissions(gen){
           .collection('submissions')
           .onSnapshot(snap => {
             snap.docs.forEach(d => {
-              acc.submissions[d.id] = Object.assign(
+              acc.submissions[d.ref.path] = Object.assign(
                 {
                   id: d.id,
                   kind: 'homework',
@@ -928,7 +936,7 @@ async function subscribeHomeworkSubmissions(gen){
           .collection('submissions')
           .onSnapshot(snap => {
             snap.docs.forEach(d => {
-              acc.submissions[d.id] = Object.assign(
+              acc.submissions[d.ref.path] = Object.assign(
                 {
                   id: d.id,
                   kind: 'classwork',
@@ -972,7 +980,7 @@ async function subscribeFlatExamSubmissions(gen){
         .collection('submissions')
         .onSnapshot(snap => {
           snap.docs.forEach(d => {
-            acc.submissions[d.id] = Object.assign(
+            acc.submissions[d.ref.path] = Object.assign(
               {
                 id: d.id,
                 kind: 'exam',
@@ -1558,7 +1566,7 @@ window.saveTicketReply = (id) => {
 })();
 </script>
 <script src="/js/ui/emoji-picker.js?v=1"></script>
-<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=2"></script>
 <script>
 /* Exam timetables sent to this person (js/timetable/exam-timetable.js). */
 firebase.auth().onAuthStateChanged(function (u) {
@@ -1566,6 +1574,80 @@ firebase.auth().onAuthStateChanged(function (u) {
   var h = document.getElementById('examTtHost'); if (!h) return;
   window.__examTtViewer = ExamTimetable.mountViewer(h, { role: 'tutor', uid: u.uid });
 });
+</script>
+<script src="/js/results/exam-analytics.js?v=1"></script>
+<script>
+/* My students > Exam performance. Exams only. Each student's exams are loaded once
+   (PaisleyExamResults.load), a few at a time, and summarised for the subjects this tutor
+   teaches them (students.subjectTutors[subject].tutorId); View analysis shows everything. */
+(function(){
+  const cache = {};
+  let busy = false, loadedFor = '';
+  function mySubjectIds(st){ const m = st.subjectTutors || {}; return Object.keys(m).filter(k => (m[k] || {}).tutorId === tutor.id); }
+  function esc(x){ return escapeHtml(x); }
+  async function loadAll(force){
+    if(busy || !window.PaisleyExamResults || !tutor) return;
+    const list = (DB.students || []).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    const key = list.map(s=>s.id).join(',');
+    if(!force && key === loadedFor) { paint(list); return; }
+    busy = true; loadedFor = key;
+    const body = document.getElementById('perfBody');
+    if(!list.length){ body.innerHTML = '<div style="padding:1.2rem;text-align:center;color:var(--muted)">No students assigned to you yet.</div>'; busy = false; return; }
+    body.innerHTML = '<div style="padding:1.2rem;text-align:center;color:var(--muted)"><i class="fas fa-spinner fa-spin"></i> Loading exam results for ' + list.length + ' student' + (list.length===1?'':'s') + '…</div>';
+    const queue = list.filter(s => force || !cache[s.id]);
+    for(let i = 0; i < queue.length; i += 5){
+      await Promise.all(queue.slice(i, i + 5).map(st => PaisleyExamResults.load(st.id).then(r => { cache[st.id] = r; }).catch(e => { cache[st.id] = { items: [], error: e }; })));
+    }
+    busy = false;
+    paint(list);
+  }
+  function paint(list){
+    const body = document.getElementById('perfBody');
+    const rows = list.map(st => {
+      const all = (cache[st.id] || {}).items || [];
+      const mine = mySubjectIds(st);
+      const items = mine.length ? all.filter(x => mine.indexOf(x.subjectId) !== -1) : all;
+      const sum = PaisleyExamResults.summary(items);
+      const subs = PaisleyExamResults._a.bySubject(items.filter(x => x.date));
+      return { st, sum, subs, mine };
+    }).sort((a,b) => (a.sum.count ? 0 : 1) - (b.sum.count ? 0 : 1) || (a.sum.avg == null ? 999 : a.sum.avg) - (b.sum.avg == null ? 999 : b.sum.avg));
+    const falling = rows.filter(r => r.sum.trend === 'down').length, low = rows.filter(r => r.sum.avg != null && r.sum.avg < 50).length;
+    body.innerHTML =
+      (falling || low ? '<div class="footer-note" style="margin:0 0 .8rem;"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><div>' +
+        [falling ? falling + ' student' + (falling===1?' is':'s are') + ' falling' : '', low ? low + ' average' + (low===1?'s':'') + ' below 50%' : ''].filter(Boolean).join(' · ') + '. They are listed first.</div></div>' : '') +
+      '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Your subjects</th><th>Exams</th><th>Average</th><th>Latest</th><th>Trend</th><th></th></tr></thead><tbody>' +
+      rows.map(r => {
+        const subjCells = r.subs.length ? r.subs.map(s => '<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.12rem 0"><b style="font-size:.82rem">' + esc(s.name) + '</b><span style="font-size:.8rem">' + Math.round(s.avg) + '%</span>' + PaisleyExamResults.trendPill(s.trend, s.delta) + '</div>').join('')
+          : '<span class="cell-sub">' + (r.mine.length ? esc(r.mine.map(lmzSubjectLabel).join(', ')) + ': no released exams yet' : 'No released exams yet') + '</span>';
+        return '<tr><td><div class="cell-name">' + esc(r.st.name || '—') + '</div><div class="cell-sub">' + esc(shortKS(r.st.keyStage)) + (r.st.year ? ' · Year ' + esc(r.st.year) : '') + '</div></td>' +
+          '<td>' + subjCells + '</td><td>' + r.sum.count + '</td>' +
+          '<td>' + (r.sum.avg == null ? '—' : '<b>' + r.sum.avg + '%</b><div>' + PaisleyExamResults.bandPill(r.sum.avg) + '</div>') + '</td>' +
+          '<td>' + (r.sum.latest ? Math.round(r.sum.latest.pct) + '%<div class="cell-sub">' + esc(r.sum.latest.subject) + '</div>' : '—') + '</td>' +
+          '<td>' + (r.sum.count ? PaisleyExamResults.trendPill(r.sum.trend, r.sum.delta) : '—') + '</td>' +
+          '<td class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-perf="' + esc(r.st.id) + '"' + (r.sum.count || ((cache[r.st.id]||{}).items||[]).length ? '' : ' disabled') + '><i class="fas fa-chart-column"></i> View analysis</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function openStudent(id){
+    const st = (DB.students || []).find(s => s.id === id); if(!st) return;
+    const U = window.ClassroomUI && window.ClassroomUI.util;
+    const items = (cache[id] || {}).items || [];
+    const mine = mySubjectIds(st);
+    if(U && U.openModal){
+      const m = U.openModal({ title: (st.name || 'Student') + ': exam results', wide: true });
+      m.body.innerHTML = '<div id="perfModalHost"></div>';
+      PaisleyExamResults.mount(m.body.querySelector('#perfModalHost'), { items, title: st.name || 'Student', who: st.name || 'Student',
+        sub: 'Exams only. ' + (mine.length ? 'You teach: ' + mine.map(lmzSubjectLabel).join(', ') + '. Choose a subject to focus on it.' : 'Every released exam.'),
+        subject: mine.length === 1 && items.some(x => x.subjectId === mine[0]) ? mine[0] : '' });
+      if(m.foot){ m.foot.innerHTML = '<button type="button" class="cr-btn" data-x>Close</button>'; m.foot.querySelector('[data-x]').onclick = () => m.close(); }
+    }
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-perf]'); if(b && !b.disabled) openStudent(b.dataset.perf);
+  });
+  const nav = document.querySelector('.nav-item[data-view="students"]');
+  if(nav) nav.addEventListener('click', () => loadAll(false));
+  const rf = document.getElementById('perfRefresh'); if(rf) rf.addEventListener('click', () => loadAll(true));
+})();
 </script>
 <script src="/js/ui/site-status.js?v=2" defer></script>
 </body>

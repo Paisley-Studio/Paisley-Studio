@@ -1014,23 +1014,33 @@
             topicActions + '</div>';
           if (open) {
             if (!rows.length) h += '<div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience ? 'No assignments in this topic yet. Use \u201cPrepare assignment\u201d above.' : 'No assignments posted to this audience yet.') + '</div>';
-            rows.forEach(function (it) {
-              var cnt = counts(it), due = dueOf(it, 'assignment');
+            /* Card per item, like Exam Management: main actions up front, the rarer ones in More. */
+            var X = global.PaisleyExamCards; X.style();
+            h += '<div class="wx-list wx-compact">' + rows.map(function (it) {
+              var cnt = counts(it), due = dueOf(it, 'assignment'), id = it.id;
               var isLesson = it.isClasswork === true;
-              var icon = isLesson ? 'fa-book-open' : 'fa-clipboard-check';
-              var typeLabel = isLesson ? ' · Classwork' : '';
-              h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + icon + '"></i></span>' +
-                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : typeLabel) + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + (global.WorkTools && global.WorkTools.ideOf(it) ? ' \u00b7 <i class="fas fa-code"></i> Paisley VS Code' : '') + '</small></span>' +
-                '<span class="wk-chips" title="Posted to">' + audChips(it) + '</span>' +
-                '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
-                itemPill(it) +
-                '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
-                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it"><i class="fas fa-eye"></i> Preview</button>' : '') +
-                (!isAdmin && !isLesson ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(it.id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '') +
-                (!S.monitoringOnly && global.WorkUI.renewItem ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(it.id) + '" title="Open hand-ins again so students can hand in more work. Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
-                (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
-                delBtnHtml(it) + '</div></div>';
-            });
+              var subsH = S.subs[id] || {}, toMark = 0, resub = 0;
+              Object.keys(subsH).forEach(function (k) { var x = subsH[k]; if (x && x.status === 'Submitted') { toMark++; if ((Array.isArray(x.history) && x.history.length) || x.gradedAt) resub++; } });
+              var subBits = [isLesson ? 'Classwork' : 'Homework', it.tutorName || ''].filter(Boolean).map(function (x) { return esc(x); });
+              if (global.WorkTools && global.WorkTools.ideOf(it)) subBits.push('<i class="fas fa-code"></i> Paisley VS Code');
+              return X.card({
+                title: it.title, subHtml: subBits.join(' · '), state: itemPill(it), toMark: toMark, resub: resub,
+                lead: '<span class="wx-icon"><i class="fas ' + (isLesson ? 'fa-book-open' : 'fa-clipboard-check') + '"></i></span>',
+                meta: [['fa-calendar-day', 'Due', due ? U.fmtDateTime(due) : 'No deadline']], cnt: cnt,
+                aud: audChips(it),
+                main: [
+                  '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(id) + '"><i class="fas fa-inbox"></i> ' + (toMark ? 'Open and mark' : 'Open') + '</button>',
+                  global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '',
+                  !isAdmin && !isLesson ? '<button type="button" class="cr-btn sm" data-a="release" data-id="' + esc(id) + '"><i class="fas fa-share-from-square"></i> Release to my students</button>' : '',
+                  !S.monitoringOnly && global.WorkUI.renewItem ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(id) + '" title="Open hand-ins again so students can hand in more work (e.g. the next questions). Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : ''
+                ],
+                side: [canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(id) + '"><i class="fas fa-pen"></i> Edit</button>' : ''],
+                more: isAdmin ? [
+                  X.item('withdraw', id, 'fa-eye-slash', 'Withdraw', 'warn', 'Removes it from every tutor, student and parent portal. Keeps the item so you can post it again.'),
+                  !isLesson ? X.item('del', id, 'fa-trash', 'Delete for good', 'danger', 'Permanently deletes it, its files and the hand-ins') : ''
+                ] : []
+              });
+            }).join('') + '</div>';
           }
           h += '</div>';
         });

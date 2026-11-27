@@ -66,12 +66,12 @@
 <script src="../firestore-helpers.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
 <script src="../js/uploads/storage-helpers.js"></script>
-<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
+<script src="../js/classroom/classroom-helpers.js?v=cards2"></script>
 <script src="../js/classroom/paper-handins.js?v=hand1"></script>
 <script src="../js/classroom/resources-folder.js?v=boards3"></script>
-<script src="../js/classroom/work-helpers.js?v=examcards1"></script>
+<script src="../js/classroom/work-helpers.js?v=cards2"></script>
 <script src="../js/classroom/work-tools.js?v=tools3"></script>
-<script src="../js/classroom/publish-helpers.js?v=examcards1"></script>
+<script src="../js/classroom/publish-helpers.js?v=cards2"></script>
 <script src="../js/classroom/publish-ui.js?v=examcards1"></script>
 <script src="../js/classroom/ink-grader.js?v=conv1"></script>
 <script src="../js/admin/remote-students.js"></script>
@@ -749,6 +749,15 @@
         </div>
 
         <div class="subview" id="sub-results">
+          <!-- Exam analysis for any student (exams only): js/results/exam-analytics.js -->
+          <div class="panel" id="xaAdminPanel">
+            <div class="table-toolbar" style="align-items:flex-end;">
+              <div style="flex:1;min-width:220px;"><div style="font-weight:800;color:var(--brand-deep);"><i class="fas fa-chart-line" aria-hidden="true"></i> Exam analysis</div><div style="font-size:.8rem;color:var(--muted);">Pick a student to see their exam trends by subject and month, with CSV and PDF downloads.</div></div>
+              <input type="search" id="xaAdminSearch" placeholder="Search students" style="padding:.5rem .7rem;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:.85rem;min-width:180px;">
+              <select id="xaAdminPick" style="padding:.5rem .7rem;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:.85rem;min-width:220px;"><option value="">Choose a student…</option></select>
+            </div>
+            <div id="xaAdminHost"></div>
+          </div>
           <div class="panel">
             <div class="table-toolbar">
               <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
@@ -4885,7 +4894,32 @@ function refreshAllNow(){
   }
 })();
 </script>
-<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=2"></script>
+<script src="/js/results/exam-analytics.js?v=1"></script>
+<script>
+/* Admin > Students > Results & Grades > Exam analysis (exams only). */
+(function(){
+  const pick = document.getElementById('xaAdminPick'), search = document.getElementById('xaAdminSearch'), host = document.getElementById('xaAdminHost');
+  if(!pick || !host) return;
+  let filled = '';
+  function fill(){
+    const q = (search.value || '').toLowerCase();
+    const list = (DB.students || []).filter(s => s.studentType !== 'tuition').filter(s => !q || String(s.name || '').toLowerCase().indexOf(q) !== -1 || String(s.email || '').toLowerCase().indexOf(q) !== -1)
+      .sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')));
+    const key = q + '|' + list.length; if(key === filled) return; filled = key;
+    const cur = pick.value;
+    pick.innerHTML = '<option value="">Choose a student…</option>' + list.slice(0, 400).map(s => '<option value="' + escapeHtml(s.id) + '"' + (s.id === cur ? ' selected' : '') + '>' + escapeHtml((s.name || 'No name') + ' · ' + String(s.keyStage || '').replace(/\s*\(.*/, '') + (s.year ? ' Y' + s.year : '')) + '</option>').join('');
+  }
+  search.addEventListener('input', fill);
+  pick.addEventListener('focus', fill);
+  pick.addEventListener('change', () => {
+    const st = (DB.students || []).find(s => s.id === pick.value); if(!st || !window.PaisleyExamResults) { host.innerHTML = ''; return; }
+    const v = PaisleyExamResults.mount(host, { loading: true, title: st.name || 'Student', who: st.name || 'Student' });
+    PaisleyExamResults.load(st.id).then(r => { if(pick.value === st.id) v.update(r.items, { error: r.error, who: st.name || 'Student' }); });
+  });
+  const tab = document.querySelector('.subtab-btn[data-sub="results"]'); if(tab) tab.addEventListener('click', fill);
+})();
+</script>
 <script src="/js/ui/site-status.js?v=2" defer></script>
 </body>
 </html>

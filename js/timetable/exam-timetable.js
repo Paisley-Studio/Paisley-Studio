@@ -86,6 +86,7 @@
       '.et-title{min-width:0;flex:1 1 240px}.et-title b{display:block;font-size:1rem;color:var(--et-deep);overflow-wrap:anywhere}.et-title small{display:block;font-size:.76rem;color:var(--et-muted);margin-top:.1rem}',
       '.et-chips{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}',
       '.et-chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.7rem;font-weight:800;padding:.2rem .55rem;border-radius:99px;background:var(--et-sage);color:var(--et-deep)}',
+      '.et-chip.sched{background:rgba(74,144,217,.14);color:#2b6cad}',
       '.et-chip.draft{background:#FFF1D6;color:#8a5a00}.et-chip.pub{background:rgba(46,184,114,.14);color:#1d8b57}.et-chip.past{background:rgba(90,110,106,.12);color:var(--et-muted)}',
       '.et-meta{display:flex;flex-wrap:wrap;gap:.35rem 1rem;font-size:.8rem;color:var(--et-muted)}.et-meta i{color:var(--et-teal);margin-right:.3rem}.et-meta b{color:var(--et-ink)}',
       '.et-actions{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;border-top:1px solid rgba(38,51,49,.07);padding-top:.65rem}',
@@ -221,16 +222,24 @@
     function cardHtml(tt) {
       var list = sortSessions(tt.sessions), pub = tt.status === 'published', ls = tt.lastSend || {};
       var allDone = list.length && endMs(list[list.length - 1]) < Date.now();
-      var state = pub ? '<span class="et-chip ' + (allDone ? 'past' : 'pub') + '"><i class="fas fa-' + (allDone ? 'flag-checkered' : 'circle-check') + '"></i>' + (allDone ? 'Finished' : 'Published') + (tt.version > 1 ? ' · v' + tt.version : '') + '</span>' : '<span class="et-chip draft"><i class="fas fa-pen"></i>Draft</span>';
+      var sched = tt.status === 'scheduled', sending = tt.status === 'publishing';
+      var at = toDate(tt.publishAt);
+      var state = pub ? '<span class="et-chip ' + (allDone ? 'past' : 'pub') + '"><i class="fas fa-' + (allDone ? 'flag-checkered' : 'circle-check') + '"></i>' + (allDone ? 'Finished' : 'Published') + (tt.version > 1 ? ' · v' + tt.version : '') + '</span>'
+        : sched ? '<span class="et-chip sched"><i class="fas fa-clock"></i>Scheduled' + (at ? ' · ' + esc(at.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : '') + '</span>'
+        : sending ? '<span class="et-chip sched"><i class="fas fa-spinner fa-spin"></i>Sending…</span>'
+        : '<span class="et-chip draft"><i class="fas fa-pen"></i>Draft</span>';
       var who = tt.audience === 'students' ? (tt.pickedStudents || []).length + ' picked student' + ((tt.pickedStudents || []).length === 1 ? '' : 's') : 'Everyone who takes these subjects';
       var sentLine = pub ? '<span><i class="fas fa-paper-plane"></i>Sent to <b>' + (tt.studentIds || []).length + '</b> student' + ((tt.studentIds || []).length === 1 ? '' : 's') + ', <b>' + (tt.parentIds || []).length + '</b> parent' + ((tt.parentIds || []).length === 1 ? '' : 's') + ', <b>' + (tt.tutorIds || []).length + '</b> tutor' + ((tt.tutorIds || []).length === 1 ? '' : 's') + (tt.publishedAt ? ' · ' + esc(toDate(tt.publishedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })) : '') + '</span>' : '';
       return '<article class="et-card' + (pub && !allDone ? ' live' : '') + '">' +
         '<div class="et-head"><div class="et-title"><b>' + esc(tt.title || 'Exam timetable') + '</b><small>' + esc(tt.series || '') + '</small></div><div class="et-chips">' + state + scopeChips(tt) + '</div></div>' +
         '<div class="et-meta"><span><i class="fas fa-file-pen"></i><b>' + list.length + '</b> exam' + (list.length === 1 ? '' : 's') + '</span>' + (list.length ? '<span><i class="fas fa-calendar-days"></i>' + esc(spanText(list)) + '</span>' : '') +
           '<span><i class="fas fa-users"></i>' + esc(who) + (tt.tutorsMode === 'none' ? ', no tutors' : ', and their tutors') + '</span>' + sentLine + '</div>' +
+        (sched && tt.scheduleError ? '<div class="et-note" style="color:#9A5B00"><i class="fas fa-triangle-exclamation" style="color:#9A5B00"></i>The last try failed (' + esc(tt.scheduleError) + '). It will try again shortly, or press Publish now.</div>' : '') +
         '<div class="et-actions">' +
           '<button type="button" class="et-btn sm ' + (pub ? '' : 'pri') + '" data-a="edit" data-id="' + esc(tt.id) + '"><i class="fas fa-pen"></i> Edit</button>' +
-          '<button type="button" class="et-btn sm ' + (pub ? 'pri' : '') + '" data-a="publish" data-id="' + esc(tt.id) + '"' + (list.length ? '' : ' disabled title="Add exams first"') + '><i class="fas fa-paper-plane"></i> ' + (pub ? 'Send update' : 'Publish &amp; send') + '</button>' +
+          '<button type="button" class="et-btn sm ' + (pub || sched ? 'pri' : '') + '" data-a="publish" data-id="' + esc(tt.id) + '"' + (list.length ? '' : ' disabled title="Add exams first"') + '><i class="fas fa-paper-plane"></i> ' + (pub ? 'Send update' : (sched || sending ? 'Publish now' : 'Publish &amp; send')) + '</button>' +
+          (!pub && !sched && !sending && list.length ? '<button type="button" class="et-btn sm" data-a="later" data-id="' + esc(tt.id) + '"><i class="fas fa-clock"></i> Publish later</button>' : '') +
+          (sched ? '<button type="button" class="et-btn sm" data-a="later" data-id="' + esc(tt.id) + '"><i class="fas fa-clock"></i> Change time</button><button type="button" class="et-btn sm" data-a="unsched" data-id="' + esc(tt.id) + '"><i class="fas fa-ban"></i> Cancel schedule</button>' : '') +
           '<button type="button" class="et-btn sm" data-a="pdf" data-id="' + esc(tt.id) + '"' + (list.length ? '' : ' disabled') + '><i class="fas fa-file-pdf"></i> PDF</button>' +
           '<span class="grow"></span>' +
           '<button type="button" class="et-btn sm ghost" data-a="dup" data-id="' + esc(tt.id) + '" title="Make a copy to edit"><i class="fas fa-copy"></i> Copy</button>' +
@@ -247,6 +256,8 @@
       else if (a === 'edit' && tt) editor(tt);
       else if (a === 'publish' && tt) publish(tt);
       else if (a === 'pdf' && tt) pdf(tt, b);
+      else if (a === 'later' && tt) scheduleBox(tt.id, tt.publishAt);
+      else if (a === 'unsched' && tt) FS().collection('examTimetables').doc(tt.id).update({ status: 'draft', publishAt: null, scheduleError: null, updatedAt: FV().serverTimestamp() }).then(function () { toast('Schedule cancelled. It is a draft again.'); }).catch(function (e) { toast(errText(e), true); });
       else if (a === 'dup' && tt) {
         var copy = JSON.parse(JSON.stringify({ title: (tt.title || 'Exam timetable') + ' (copy)', series: tt.series || '', keyStage: tt.keyStage, year: tt.year || null, board: tt.board || '', instructions: tt.instructions || '', sessions: tt.sessions || [], audience: tt.audience || 'class', pickedStudents: tt.pickedStudents || [], tutorsMode: tt.tutorsMode || 'all' }));
         editor(copy, true);
@@ -266,6 +277,26 @@
       m.foot.querySelector('[data-c]').onclick = m.close;
       var ok = m.foot.querySelector('[data-ok]');
       ok.onclick = function () { ok.disabled = true; Promise.resolve(fn()).then(m.close).catch(function (e) { ok.disabled = false; m.foot.querySelector('.err').textContent = errText(e); }); };
+    }
+
+    /* Publish later: pick a date and time; publishScheduledExamTimetables sends it then (checked every 5 minutes). */
+    function scheduleBox(id, cur) {
+      var d0 = toDate(cur) || (function () { var x = new Date(Date.now() + 86400000); x.setHours(8, 0, 0, 0); return x; })();
+      var local = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+      var m = modal('Publish later', true);
+      m.body.innerHTML = '<div class="et-f"><label for="etWhen">Send it on</label><input type="datetime-local" id="etWhen" value="' + local(d0) + '"></div>' +
+        '<div class="et-note"><i class="fas fa-circle-info"></i>It stays a draft nobody can see until then. At that time students, parents and tutors get it in their portal, with a bell and an email with their PDF. You can change the time, cancel or publish now until it goes.</div>';
+      m.foot.innerHTML = '<span class="err"></span><span class="grow"></span><button type="button" class="et-btn" data-c>Cancel</button><button type="button" class="et-btn pri" data-ok><i class="fas fa-clock"></i> Schedule</button>';
+      m.foot.querySelector('[data-c]').onclick = m.close;
+      m.foot.querySelector('[data-ok]').onclick = function () {
+        var v = m.body.querySelector('#etWhen').value, when = v ? new Date(v) : null, err = m.foot.querySelector('.err');
+        if (!when || isNaN(when.getTime())) { err.textContent = 'Pick a date and time.'; return; }
+        if (when.getTime() < Date.now() + 60000) { err.textContent = 'Pick a time in the future, or use Publish now.'; return; }
+        var u = firebase.auth().currentUser || {};
+        FS().collection('examTimetables').doc(id).update({ status: 'scheduled', publishAt: firebase.firestore.Timestamp.fromDate(when), scheduledBy: opts.uid || u.uid || '', scheduledByName: opts.name || 'Studio Desk', scheduleError: null, updatedAt: FV().serverTimestamp() })
+          .then(function () { m.close(); toast('Scheduled for ' + when.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '.'); })
+          .catch(function (e) { err.textContent = errText(e); });
+      };
     }
 
     function pdf(tt, btn) {
@@ -339,14 +370,35 @@
           '<input type="text" data-k="room" maxlength="80" value="' + esc(s.room) + '" placeholder="Room or link (optional)" aria-label="Room or link">' +
           '<input type="text" data-k="notes" maxlength="300" value="' + esc(s.notes) + '" placeholder="Notes, e.g. calculator allowed (optional)" aria-label="Notes"></div></div>';
       }
+      function sessionSubjects() { var o = []; E.sessions.forEach(function (x) { if (x.subjectId && o.indexOf(x.subjectId) === -1) o.push(x.subjectId); }); return o; }
+      function keysOf(s) { var k = typeof global.lmzSubjectKeys === 'function' ? global.lmzSubjectKeys(s.subjects) : (s.subjects || []); return (k || []).map(String); }
+      function boardFor(s, subj) { return typeof global.lmzStudentBoard === 'function' ? global.lmzStudentBoard(s, subj) : ((s.subjectBoards && s.subjectBoards[subj]) || s.board || 'cambridge'); }
+      /* Takes the subject, and on the chosen board for it (when a board is chosen). */
+      function takesSubj(s, subj) { return keysOf(s).indexOf(subj) !== -1 && (!E.board || boardFor(s, subj) === E.board); }
+      /* Who can be picked: this Key Stage and Year, on the board, taking at least one of the exams' subjects. */
+      function matching() {
+        var subs = sessionSubjects();
+        return (E.students || []).filter(function (s) {
+          if (E.year && String(s.year) !== E.year) return false;
+          if (subs.length) return subs.some(function (x) { return takesSubj(s, x); });
+          if (!E.board) return true;
+          var bs = typeof global.lmzStudentBoards === 'function' ? global.lmzStudentBoards(s) : [s.board || 'cambridge'];
+          return (bs || []).indexOf(E.board) !== -1;
+        });
+      }
+      function pickedMatching() { if (!E.students) return Object.keys(E.picked); var ok = {}; matching().forEach(function (s) { ok[s.id] = 1; }); return Object.keys(E.picked).filter(function (id) { return ok[id]; }); }
       function studentsHtml() {
         if (E.audience !== 'students') return '';
         if (!E.students) return '<div class="et-empty"><i class="fas fa-spinner fa-spin"></i>Loading students…</div>';
-        var q = E.q.toLowerCase();
-        var rows = E.students.filter(function (s) { return (!E.year || String(s.year) === E.year) && (!q || (String(s.name || '') + ' ' + String(s.email || '')).toLowerCase().indexOf(q) !== -1); });
-        return '<div class="et-pick"><div class="et-pick-tools"><input type="search" data-q placeholder="Search by name or email" value="' + esc(E.q) + '"><button type="button" class="et-btn sm" data-all>Tick all shown</button><button type="button" class="et-btn sm" data-none>Clear</button><span class="cnt">' + Object.keys(E.picked).length + ' ticked</span></div>' +
+        var q = E.q.toLowerCase(), rows = matching().filter(function (s) { return !q || (String(s.name || '') + ' ' + String(s.email || '')).toLowerCase().indexOf(q) !== -1; });
+        var subs = sessionSubjects();
+        var names = subs.map(subjectName);
+        var scopeLine = 'Showing students in ' + esc(ksShort(E.keyStage)) + (E.year ? ' Year ' + esc(E.year) : '') + (E.board ? ' on <b>' + esc(boardLabel(E.board)) + '</b>' : '') +
+          (names.length ? ' who take ' + esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' or ' + names[names.length - 1] : names[0]) : '') + '.';
+        return '<div class="et-note" style="margin-bottom:.4rem"><i class="fas fa-filter"></i>' + scopeLine + (subs.length ? '' : ' Add the exams first to narrow it to the students who take those subjects.') + '</div><div class="et-pick"><div class="et-pick-tools"><input type="search" data-q placeholder="Search by name or email" value="' + esc(E.q) + '"><button type="button" class="et-btn sm" data-all>Tick all shown</button><button type="button" class="et-btn sm" data-none>Clear</button><span class="cnt">' + pickedMatching().length + ' ticked</span></div>' +
           '<div class="et-pick-list">' + (rows.length ? rows.map(function (s) {
-            return '<label><input type="checkbox" data-pick value="' + esc(s.id) + '"' + (E.picked[s.id] ? ' checked' : '') + '><span>' + esc(s.name || 'No name') + '</span><small>Year ' + esc(s.year || '?') + ' · ' + (s.studentType === 'remote' ? 'Remote' : 'Online') + '</small></label>';
+            var mine = subs.filter(function (x) { return takesSubj(s, x); }).map(subjectName);
+            return '<label><input type="checkbox" data-pick value="' + esc(s.id) + '"' + (E.picked[s.id] ? ' checked' : '') + '><span>' + esc(s.name || 'No name') + '</span><small>' + (mine.length ? esc(mine.join(', ')) + ' · ' : '') + 'Year ' + esc(s.year || '?') + ' · ' + (s.studentType === 'remote' ? 'Remote' : 'Online') + (E.board ? ' · ' + esc(boardLabel(E.board)) : '') + '</small></label>';
           }).join('') : '<div class="et-empty" style="border:0">No students in ' + esc(ksShort(E.keyStage)) + (E.year ? ' Year ' + esc(E.year) : '') + '.</div>') + '</div></div>';
       }
       function paint() {
@@ -368,10 +420,13 @@
             '<div class="et-lb" style="margin-top:.3rem">Tutors</div>' +
             '<div class="et-seg" role="radiogroup"><label><input type="radio" name="etTut" value="all"' + (E.tutorsMode !== 'none' ? ' checked' : '') + '> Tutors who teach these subjects</label><label><input type="radio" name="etTut" value="none"' + (E.tutorsMode === 'none' ? ' checked' : '') + '> No tutors</label></div></div>' +
           (E.status === 'published' ? '<div class="et-note"><i class="fas fa-circle-info"></i>This timetable is published. Saved changes show in the portals straight away; press <b>Send update</b> to tell everyone and email the new PDF.</div>' : '');
-        m.foot.innerHTML = '<span class="err"></span><span class="grow"></span><button type="button" class="et-btn" data-c>Cancel</button><button type="button" class="et-btn" data-save><i class="fas fa-floppy-disk"></i> Save' + (E.status === 'published' ? '' : ' draft') + '</button><button type="button" class="et-btn pri" data-savepub><i class="fas fa-paper-plane"></i> Save and ' + (E.status === 'published' ? 'send update' : 'publish') + '</button>';
+        m.foot.innerHTML = '<span class="err"></span><span class="grow"></span><button type="button" class="et-btn" data-c>Cancel</button><button type="button" class="et-btn" data-save><i class="fas fa-floppy-disk"></i> Save' + (E.status === 'published' ? '' : ' draft') + '</button>' +
+          (E.status !== 'published' ? '<button type="button" class="et-btn" data-later><i class="fas fa-clock"></i> Save and publish later</button>' : '') +
+          '<button type="button" class="et-btn pri" data-savepub><i class="fas fa-paper-plane"></i> Save and ' + (E.status === 'published' ? 'send update' : 'publish now') + '</button>';
         m.foot.querySelector('[data-c]').onclick = m.close;
         m.foot.querySelector('[data-save]').onclick = function () { save(false); };
         m.foot.querySelector('[data-savepub]').onclick = function () { save(true); };
+        var lb = m.foot.querySelector('[data-later]'); if (lb) lb.onclick = function () { save('later'); };
       }
       function loadStudents() {
         E.students = null; paint();
@@ -391,13 +446,13 @@
       });
       m.body.addEventListener('change', function (e) {
         var t = e.target, row = t.closest('.et-sess');
-        if (row && t.dataset.k) { var s = E.sessions[Number(row.dataset.i)]; s[t.dataset.k] = t.value; if (t.dataset.k === 'subjectId') s.subjectName = subjectName(t.value); return; }
+        if (row && t.dataset.k) { var s = E.sessions[Number(row.dataset.i)]; s[t.dataset.k] = t.value; if (t.dataset.k === 'subjectId') { s.subjectName = subjectName(t.value); if (E.audience === 'students') paint(); } return; }
         if (t.id === 'etKs') { E.keyStage = t.value; E.year = ''; E.picked = {}; if (E.audience === 'students') loadStudents(); else paint(); }
         else if (t.id === 'etYear') { E.year = t.value; paint(); }
         else if (t.id === 'etBoard') { E.board = t.value; paint(); }
         else if (t.name === 'etAud') { E.audience = t.value; if (t.value === 'students' && !E.students) loadStudents(); else paint(); }
         else if (t.name === 'etTut') { E.tutorsMode = t.value; }
-        else if (t.matches('[data-pick]')) { if (t.checked) E.picked[t.value] = 1; else delete E.picked[t.value]; var c = m.body.querySelector('.et-pick .cnt'); if (c) c.textContent = Object.keys(E.picked).length + ' ticked'; }
+        else if (t.matches('[data-pick]')) { if (t.checked) E.picked[t.value] = 1; else delete E.picked[t.value]; var c = m.body.querySelector('.et-pick .cnt'); if (c) c.textContent = pickedMatching().length + ' ticked'; }
       });
       m.body.addEventListener('click', function (e) {
         var b = e.target.closest('button'); if (!b) return;
@@ -415,12 +470,13 @@
         if (!sessions.length) { err.textContent = 'Add at least one exam.'; return; }
         if (bad.length) { err.textContent = 'Every exam needs a subject, a date and a start time.'; return; }
         if (sessions.some(function (s) { return s.end && mins(s.end) <= mins(s.start); })) { err.textContent = 'An exam ends before it starts. Check the times.'; return; }
-        if (E.audience === 'students' && !Object.keys(E.picked).length) { err.textContent = 'Tick at least one student, or choose Everyone who matches.'; return; }
+        var picks = pickedMatching();
+        if (E.audience === 'students' && !picks.length) { err.textContent = 'Tick at least one student (on the chosen board, taking these subjects), or choose Everyone who matches.'; return; }
         var data = {
           title: E.title.trim().slice(0, 120), series: E.series.trim().slice(0, 80), keyStage: E.keyStage,
           year: E.year ? Number(E.year) : null, board: E.board || '', instructions: E.instructions.trim().slice(0, 1500),
           sessions: sortSessions(sessions).map(function (s) { return { id: s.id || ('s' + uid6()), subjectId: s.subjectId, subjectName: s.subjectName || subjectName(s.subjectId), paper: (s.paper || '').trim(), date: s.date, start: s.start, end: s.end || '', mode: s.mode || '', room: (s.room || '').trim(), notes: (s.notes || '').trim() }; }),
-          audience: E.audience, pickedStudents: E.audience === 'students' ? Object.keys(E.picked) : [], tutorsMode: E.tutorsMode,
+          audience: E.audience, pickedStudents: E.audience === 'students' ? picks : [], tutorsMode: E.tutorsMode,
           updatedAt: FV().serverTimestamp()
         };
         var btns = m.foot.querySelectorAll('button'); [].forEach.call(btns, function (x) { x.disabled = true; });
@@ -428,8 +484,9 @@
           : FS().collection('examTimetables').add(Object.assign(data, { status: 'draft', createdAt: FV().serverTimestamp(), createdBy: opts.uid || (firebase.auth().currentUser || {}).uid || '' })).then(function (ref) { return ref.id; });
         p.then(function (id) {
           m.close();
-          if (andPublish) publish(Object.assign({ id: id, status: E.status }, data));
-          else toast('Saved.');
+          if (andPublish === 'later') scheduleBox(id, tt && tt.publishAt);
+          else if (andPublish) publish(Object.assign({ id: id, status: E.status }, data));
+          else toast(E.status === 'scheduled' ? 'Saved. It is still scheduled.' : (E.status === 'published' ? 'Saved.' : 'Saved as a draft. Nobody can see it until you publish.'));
         }).catch(function (e) { [].forEach.call(btns, function (x) { x.disabled = false; }); err.textContent = errText(e); });
       }
       if (E.audience === 'students') loadStudents(); else paint();

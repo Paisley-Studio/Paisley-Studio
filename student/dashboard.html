@@ -492,19 +492,19 @@
         <div class="grid-2">
           <div class="panel">
             <div class="panel-head">
-              <div><h3>Progress over time</h3><div class="sub">Every graded exam and homework, in order</div></div>
+              <div><h3>Exam progress over time</h3><div class="sub">Every released exam, in order</div></div>
               <select class="subject-filter" id="progressSubjectFilter"><option value="__all">All subjects</option></select>
             </div>
             <div class="chart-wrap"><canvas id="progressChart"></canvas></div>
           </div>
           <div class="panel">
-            <div class="panel-head"><div><h3>Average by subject</h3><div class="sub">Exams and homework combined</div></div></div>
+            <div class="panel-head"><div><h3>Exam average by subject</h3><div class="sub">Exams only. Full analysis in My Results</div></div></div>
             <div class="chart-wrap"><canvas id="subjectChart"></canvas></div>
           </div>
         </div>
 
         <div class="panel">
-          <div class="panel-head"><div><h3>Recent results</h3><div class="sub">Latest 5 graded items — exams and homework</div></div></div>
+          <div class="panel-head"><div><h3>Recent exam results</h3><div class="sub">Your latest 5 released exams</div></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Type</th><th>Subject</th><th>Exam</th><th>Score</th><th>Trend</th><th>Date</th></tr></thead>
             <tbody id="recentResultsBody"><tr><td colspan="6" class="empty-row">Loading…</td></tr></tbody>
@@ -519,17 +519,8 @@
 
       <!-- RESULTS -->
       <section class="view" id="view-results">
-        <div class="panel">
-          <div class="panel-head">
-            <div><h3>All results</h3><div class="sub">Exams and homework, most recent first</div></div>
-            <select class="subject-filter" id="resultsSubjectFilter"><option value="__all">All subjects</option></select>
-          </div>
-          <div id="resultsReleaseNotice"></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Type</th><th>Subject</th><th>Exam</th><th>Score</th><th>Percentage</th><th>Trend vs previous</th><th>Date</th></tr></thead>
-            <tbody id="allResultsBody"><tr><td colspan="7" class="empty-row">Loading…</td></tr></tbody>
-          </table></div>
-        </div>
+        <!-- Exam results analytics (exams only): js/results/exam-analytics.js -->
+        <div class="panel"><div id="examAnalyticsHost"></div></div>
       </section>
 
       <!-- HOMEWORK -->
@@ -650,6 +641,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/js/results/exam-analytics.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="../js/ui/paisley-ui.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -659,8 +651,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
-<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
-<script src="../js/classroom/work-helpers.js?v=examcards1"></script>
+<script src="../js/classroom/classroom-helpers.js?v=cards2"></script>
+<script src="../js/classroom/work-helpers.js?v=cards2"></script>
 <script src="../js/classroom/work-tools.js?v=tools3"></script>
 <script src="../js/classroom/tutor-chat.js?v=tools1"></script>
 <script src="../js/classroom/work-learner.js?v=boards2"></script>
@@ -1127,7 +1119,7 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     document.getElementById('view-'+btn.dataset.view).classList.add('active');
     const titles = {
       overview:['Overview','Your learning snapshot'],
-      results:['My Results','Every graded assessment — exams and homework'],
+      results:['My Results','Your exam results: trends, months and subjects'],
       classroom:['Classroom','Lessons and resources for your subjects'],
       homework:['Homework','Download, complete and submit'],
       exams:['Exams','Sit exams published for your Key Stage'],
@@ -1152,11 +1144,16 @@ document.getElementById('menuToggle').addEventListener('click', ()=>document.get
 function loadAllData(){
   showInlineLoader('Loading your results…');
 
+  if(!window.__examAnalytics && window.PaisleyExamResults){
+    window.__examAnalytics = PaisleyExamResults.mount(document.getElementById('examAnalyticsHost'), { loading: true, title: 'My exam results', who: profile && profile.name });
+  }
   Promise.all([
-    getResultsForStudent(currentUser.uid),
-    getSubmissionsForStudent(currentUser.uid)
-  ]).then(([resultsSnap, subSnap])=>{
-    allExamResults = resultsSnap.docs.map(d=>({ id:d.id, ...d.data(), kind:'exam' }));
+    window.PaisleyExamResults ? PaisleyExamResults.load(currentUser.uid) : Promise.resolve({ items: [] }),
+    getSubmissionsForStudent(currentUser.uid).catch(()=>({ docs: [] }))
+  ]).then(([examRes, subSnap])=>{
+    /* Results are exams only: papers marked in the Classroom and older examResults. */
+    allExamResults = (examRes.items || []).map(x=>({ id:x.id, kind:'exam', date:x.date, subject:x.subject, examTitle:x.title, score:Math.round(x.score*100)/100, maxScore:x.max }));
+    if(window.__examAnalytics) window.__examAnalytics.update(examRes.items || [], { error: examRes.error, who: profile && profile.name });
     allSubmissions = subSnap.docs.map(d=>({id:d.id, ...d.data()}));
     buildAllResults();
     populateSubjectFilters();
@@ -1206,9 +1203,10 @@ function buildAllResults(){
       status: sub.status
     }));
 
+  /* Exams only: homework and classwork marks are not results. */
+  void gradedHomeworkResults;
   allResults = allExamResults
-    .map(r => ({ ...r, kind: r.kind || 'exam', date: lmsToDate(r.date) || lmsToDate(r.createdAt) || null }))
-    .concat(gradedHomeworkResults)
+    .map(r => ({ ...r, kind: 'exam', date: lmsToDate(r.date) || lmsToDate(r.createdAt) || null }))
     .sort((a,b)=> (a.date||0) - (b.date||0));
 }
 
@@ -1293,7 +1291,7 @@ function renderResultsTable(bodyId, list){
   if(!body) return;
   const cols = bodyId === 'recentResultsBody' ? 6 : 7;
   if(!list.length){
-    body.innerHTML = `<tr><td colspan="${cols}" class="empty-row">No results yet — check back once your tutor has released an assessment.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="${cols}" class="empty-row">No exam results yet. They appear here once a marked exam is released.</td></tr>`;
     return;
   }
   body.innerHTML = list.map(r=>{
@@ -1974,7 +1972,7 @@ async function downloadIdCardPng(){
 </script>
 <script src="/js/ui/emoji-picker.js?v=1"></script>
 <script src="/js/ui/tech-entry.js?v=1"></script>
-<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=2"></script>
 <script>
 /* Exam timetables sent to this person (js/timetable/exam-timetable.js). */
 firebase.auth().onAuthStateChanged(function (u) {

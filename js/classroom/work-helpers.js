@@ -772,6 +772,16 @@
       '.wx-list{display:grid;gap:.75rem}',
       '.wx-card{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;padding:.9rem 1rem;display:grid;gap:.6rem;min-width:0}',
       '.wx-card.wx-due{border-left:4px solid #E74C3C}',
+      '.wx-list.wx-compact{gap:.55rem;padding:.6rem}',
+      '.wx-list:empty{display:none}',
+      '.cr-topic-head .wx-more .wx-menu{min-width:200px}',
+      '.wx-compact .wx-card{padding:.7rem .85rem;gap:.45rem;border-radius:12px}',
+      '.wx-compact .wx-actions{padding-top:.5rem}',
+      '.wx-card.wx-click{cursor:pointer}.wx-card.wx-click:hover{border-color:var(--brand-soft,#7BCBC2);box-shadow:0 6px 18px rgba(36,95,90,.08)}',
+      '.wx-num{flex:0 0 auto;min-width:2.1rem;height:2.1rem;border-radius:10px;background:var(--sage,#E5F2EF);color:var(--brand-deep,#245F5A);display:grid;place-items:center;font-weight:800;font-size:.8rem;padding:0 .4rem}',
+      '.wx-lead{display:flex;gap:.7rem;align-items:flex-start;min-width:0;flex:1 1 240px}',
+      '.wx-icon{flex:0 0 auto;width:2.1rem;height:2.1rem;border-radius:10px;background:rgba(85,191,179,.16);color:var(--brand-deep,#245F5A);display:grid;place-items:center;font-size:.85rem}',
+      '.wx-iconbtn{min-width:2.1rem;justify-content:center}',
       '.wx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;flex-wrap:wrap}',
       '.wx-title{min-width:0;flex:1 1 220px}',
       '.wx-title b{display:block;font-size:.98rem;color:var(--brand-deep,#245F5A);line-height:1.3;overflow-wrap:anywhere}',
@@ -819,29 +829,38 @@
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') [].forEach.call(document.querySelectorAll('.wx-more[open]'), function (d) { d.removeAttribute('open'); }); });
   }
-  /* o: { id, title, sub, state, toMark, resub, examDate, deadline, cnt: {total, submitted, graded}, aud, given, main: [html], side: [html], more: [html] } */
+  /* o: { title, sub, subHtml, state, toMark, resub, examDate, deadline, meta: [[icon, label, value]] (replaces the exam
+          dates; [] for none), cnt: {total, submitted, graded} (optional), aud, given, lead: html (a number or icon
+          before the title), click: 'data-a=".." data-id=".."' (the whole card opens it), compact,
+          main: [html], side: [html], more: [html] } */
   function examCardHtml(o) {
     var esc2 = U.esc;
     var mark = o.toMark ? '<span class="wx-tomark' + (o.resub ? ' resub' : '') + '" title="' + o.toMark + ' to mark' + (o.resub ? ' (' + o.resub + ' resubmitted)' : '') + '"><i class="fas fa-inbox"></i> ' + o.toMark + ' to mark</span>' : '';
     var more = (o.more || []).filter(Boolean);
-    return '<article class="wx-card' + (o.toMark ? ' wx-due' : '') + '">' +
-      '<div class="wx-head"><div class="wx-title"><b>' + esc2(o.title || 'Exam') + '</b>' + (o.sub ? '<small>' + esc2(o.sub) + '</small>' : '') + '</div>' +
+    var meta = Array.isArray(o.meta) ? o.meta : [['fa-calendar-day', 'Exam', o.examDate], ['fa-hourglass-half', 'Hand-ins close', o.deadline]];
+    var stats = o.cnt ? '<span class="wx-stats"><span class="wx-stat" title="Students given it"><i class="fas fa-users"></i>' + o.cnt.total + '</span><span class="wx-stat" title="Handed in"><i class="fas fa-inbox"></i>' + o.cnt.submitted + '</span><span class="wx-stat" title="Marked"><i class="fas fa-circle-check"></i>' + o.cnt.graded + '</span></span>' : '';
+    var titleHtml = '<div class="wx-title"><b>' + esc2(o.title || 'Exam') + '</b>' + (o.subHtml ? '<small>' + o.subHtml + '</small>' : (o.sub ? '<small>' + esc2(o.sub) + '</small>' : '')) + '</div>';
+    return '<article class="wx-card' + (o.toMark ? ' wx-due' : '') + (o.click ? ' wx-click' : '') + '"' + (o.click ? ' ' + o.click : '') + '>' +
+      '<div class="wx-head">' + (o.lead ? '<div class="wx-lead">' + o.lead + titleHtml + '</div>' : titleHtml) +
         '<div class="wx-state">' + mark + (o.state || '') + '</div></div>' +
-      '<div class="wx-meta"><span><i class="fas fa-calendar-day"></i>Exam <b>' + esc2(o.examDate) + '</b></span>' +
-        '<span><i class="fas fa-hourglass-half"></i>Hand-ins close <b>' + esc2(o.deadline) + '</b></span>' +
-        '<span class="wx-stats"><span class="wx-stat" title="Students given it"><i class="fas fa-users"></i>' + o.cnt.total + '</span><span class="wx-stat" title="Handed in"><i class="fas fa-inbox"></i>' + o.cnt.submitted + '</span><span class="wx-stat" title="Marked"><i class="fas fa-circle-check"></i>' + o.cnt.graded + '</span></span></div>' +
+      ((meta.length || stats) ? '<div class="wx-meta">' + meta.filter(Boolean).map(function (m) { return '<span><i class="fas ' + m[0] + '"></i>' + esc2(m[1]) + ' <b>' + esc2(m[2]) + '</b></span>'; }).join('') + stats + '</div>' : '') +
       ((o.aud || o.given) ? '<div class="wx-aud">' + (o.aud ? '<span class="wk-chips">' + o.aud + '</span>' : '') + (o.given || '') + '</div>' : '') +
       '<div class="wx-actions"><div class="wx-main">' + (o.main || []).filter(Boolean).join('') + '</div>' +
         ((o.side || []).filter(Boolean).length || more.length ? '<div class="wx-side">' + (o.side || []).filter(Boolean).join('') +
           (more.length ? '<details class="wx-more"><summary class="cr-btn sm" aria-label="More actions"><i class="fas fa-ellipsis"></i> More</summary><div class="wx-menu" role="menu">' + more.join('') + '</div></details>' : '') + '</div>' : '') +
       '</div></article>';
   }
-  /* A "More" menu item. tone: '' | 'warn' | 'danger' | 'hr' */
-  function examMenuItem(a, id, icon, label, tone, tip) {
+  /* A "More" menu item. tone: '' | 'warn' | 'danger' | 'hr'; disabled greys it out. */
+  function examMenuItem(a, id, icon, label, tone, tip, disabled) {
     if (tone === 'hr') return '<hr>';
-    return '<button type="button" role="menuitem" class="' + (tone || '') + '" data-a="' + a + '" data-id="' + U.esc(id) + '"' + (tip ? ' title="' + U.esc(tip) + '"' : '') + '><i class="fas ' + icon + '"></i> ' + U.esc(label) + '</button>';
+    return '<button type="button" role="menuitem" class="' + (tone || '') + '" data-a="' + a + '" data-id="' + U.esc(id) + '"' + (tip ? ' title="' + U.esc(tip) + '"' : '') + (disabled ? ' disabled style="opacity:.45;cursor:default"' : '') + '><i class="fas ' + icon + '"></i> ' + U.esc(label) + '</button>';
   }
-  global.PaisleyExamCards = { style: examCardStyle, card: examCardHtml, item: examMenuItem };
+  /* A "More" menu on its own (topic headers). */
+  function examMoreMenu(items, label) {
+    items = (items || []).filter(Boolean); if (!items.length) return '';
+    return '<details class="wx-more"><summary class="cr-btn sm" aria-label="' + U.esc(label || 'More actions') + '"><i class="fas fa-ellipsis"></i>' + (label ? ' ' + U.esc(label) : '') + '</summary><div class="wx-menu" role="menu">' + items.join('') + '</div></details>';
+  }
+  global.PaisleyExamCards = { style: examCardStyle, card: examCardHtml, item: examMenuItem, menu: examMoreMenu };
 
   async function tutorPendingCount(cid, what) {
     var d = await tutorPendingDetail(cid, what);
@@ -858,9 +877,8 @@
     var unreleased = 0, toMark = 0, resub = 0;
     items.forEach(function (it) {
       if (it.status === 'Draft' || it.status === 'draft') return;
-      /* An exam the desk sent to the class is already with the students: nothing for the tutor to release. */
-      var ea = effAudiences(it), withStudents = ea.online === true || ea.remote === true || ea.tuition === true;
-      if (!(what === 'exams' && withStudents) && (!it.releasedTo || !it.releasedTo.length)) unreleased++;
+      /* Exams are released by the Studio Desk only, so they never wait on a tutor's release. */
+      if (what !== 'exams' && (!it.releasedTo || !it.releasedTo.length)) unreleased++;
       var subs = res.subs[it.id] || {};
       Object.keys(subs).forEach(function (k) {
         if (subs[k] && subs[k].status === 'Submitted') { toMark++; if (subRound(subs[k]).resub) resub++; }
@@ -1171,8 +1189,8 @@
               aud: isAdmin ? audChips(it) : '', given: givenToHtml(it),
               main: [
                 '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(id) + '"><i class="fas fa-inbox"></i> ' + (cnt.toGrade ? 'Open and mark' : 'Open') + '</button>',
-                global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '',
-                !isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(id) + '"') : ''
+                global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : ''
+                /* No Release for tutors: only the Studio Desk releases an exam. Tutors open, preview and mark. */
               ],
               side: [canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(id) + '"><i class="fas fa-pen"></i> Edit</button>' : ''],
               more: isAdmin ? [
@@ -1204,23 +1222,32 @@
             topicActions + '</div>';
           if (open) {
             if (!rows.length) h += '<div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience ? 'No assignments in this topic yet. Use \u201cPrepare assignment\u201d above.' : 'No assignments posted to this audience yet.') + '</div>';
-            rows.forEach(function (it) {
-              var cnt = counts(it), due = dueOf(it, 'assignment');
+            /* Card per item, like Exam Management: main actions up front, the rarer ones in More. */
+            var X = global.PaisleyExamCards; X.style();
+            h += '<div class="wx-list wx-compact">' + rows.map(function (it) {
+              var cnt = counts(it), due = dueOf(it, 'assignment'), id = it.id;
               var isLesson = it.isClasswork === true;
-              var icon = isLesson ? 'fa-book-open' : 'fa-clipboard-check';
-              var typeLabel = isLesson ? ' · Classwork' : '';
-              h += '<div class="cr-lesson"><span class="wk-ic"><i class="fas ' + icon + '"></i></span>' +
-                '<span class="tt" data-a="detail" data-id="' + esc(it.id) + '" style="cursor:pointer">' + esc(it.title) + '<small>' + (due ? 'Due: ' + esc(U.fmtDateTime(due)) : typeLabel) + (it.tutorName ? ' \u00b7 ' + esc(it.tutorName) : '') + (global.WorkTools && global.WorkTools.ideOf(it) ? ' \u00b7 <i class="fas fa-code"></i> Paisley VS Code' : '') + '</small></span>' +
-                '<span class="wk-chips" title="Posted to">' + audChips(it) + '</span>' +
-                '<span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span>' +
-                itemPill(it) +
-                '<div class="cr-actions"><button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
-                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
-                (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(it.id) + '"') : '') +
-                (!S.monitoringOnly ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(it.id) + '" title="Open hand-ins again so students can hand in more work (e.g. the next questions). Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
-                (canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i></button>' : '') +
-                delBtnHtml(it) + '</div></div>';
-            });
+              var toMark = cnt.toGrade || 0, resub = cnt.resub || 0;
+              var subBits = [isLesson ? 'Classwork' : 'Homework', it.tutorName || ''].filter(Boolean).map(function (x) { return esc(x); });
+              if (global.WorkTools && global.WorkTools.ideOf(it)) subBits.push('<i class="fas fa-code"></i> Paisley VS Code');
+              return X.card({
+                title: it.title, subHtml: subBits.join(' · '), state: itemPill(it), toMark: toMark, resub: resub,
+                lead: '<span class="wx-icon"><i class="fas ' + (isLesson ? 'fa-book-open' : 'fa-clipboard-check') + '"></i></span>',
+                meta: [['fa-calendar-day', 'Due', due ? U.fmtDateTime(due) : 'No deadline']], cnt: cnt,
+                aud: audChips(it),
+                main: [
+                  '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(id) + '"><i class="fas fa-inbox"></i> ' + (toMark ? 'Open and mark' : 'Open') + '</button>',
+                  global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '',
+                  !isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(id) + '"') : '',
+                  !S.monitoringOnly ? '<button type="button" class="cr-btn sm" data-a="renew" data-id="' + esc(id) + '" title="Open hand-ins again so students can hand in more work (e.g. the next questions). Earlier work and marks are kept."><i class="fas fa-rotate-right"></i> Renew</button>' : ''
+                ],
+                side: [canEdit(it) && !isLesson ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(id) + '"><i class="fas fa-pen"></i> Edit</button>' : ''],
+                more: isAdmin ? [
+                  X.item('withdraw', id, 'fa-eye-slash', 'Withdraw', 'warn', 'Removes it from every tutor, student and parent portal. Keeps the item so you can post it again.'),
+                  !isLesson ? X.item('del', id, 'fa-trash', 'Delete for good', 'danger', 'Permanently deletes it, its files and the hand-ins') : ''
+                ] : []
+              });
+            }).join('') + '</div>';
           }
           h += '</div>';
         });
@@ -1235,7 +1262,7 @@
       m.foot.innerHTML = 
         (isAdmin ? '<button type="button" class="cr-btn" data-a="wd-here" style="margin-right:.4rem;border-color:#D98A00;color:#9A6200;background:#FFF8E6"><i class="fas fa-eye-slash"></i> Withdraw</button>' : '') +
         (isAdmin && (kind === 'exam' || !it.isClasswork) ? '<button type="button" class="cr-btn danger" data-a="del-here" style="margin-right:auto;border-color:#E74C3C;color:#E74C3C;background:#fff"><i class="fas fa-trash"></i> Delete</button>' : (isAdmin ? '<span style="margin-right:auto"></span>' : '')) +
-        (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release-here" style="margin-right:auto;"', U.releasedByMe(it, user.uid) ? ' ' : 'primary') : '') +
+        (!isAdmin && kind !== 'exam' ? U.releaseBtnHtml(it, user.uid, 'data-a="release-here" style="margin-right:auto;"', U.releasedByMe(it, user.uid) ? ' ' : 'primary') : (!isAdmin ? '<span style="margin-right:auto"></span>' : '')) +
         (kind !== 'exam' && !S.monitoringOnly ? '<button type="button" class="cr-btn" data-a="renew-here" title="Open hand-ins again so students can hand in more work"><i class="fas fa-rotate-right"></i> Renew</button>' : '') +
         (global.WorkTools ? '<button type="button" class="cr-btn" data-a="preview-here" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
         '<button type="button" class="cr-btn" data-a="close">Close</button>';
@@ -1776,7 +1803,7 @@
             openDetail(it2);
           }
         }
-        else if (a === 'release' && item) global.WorkUI.openRelease(item, user);
+        else if (a === 'release' && item && kind !== 'exam') global.WorkUI.openRelease(item, user);
         else if (a === 'renew' && item) renewItem(item, user, function (n) { refresh(); alert('Renewed: ' + n + ' student' + (n === 1 ? '' : 's') + ' can hand in again.'); });
         else if (a === 'add-assignment') {
           if (!isAdmin) { alert('Assignments are prepared by the Studio Desk.'); return; }

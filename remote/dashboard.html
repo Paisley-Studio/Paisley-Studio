@@ -435,7 +435,7 @@
     <div class="content">
       <section class="view active" id="view-classroom"><div id="classroomHost"></div></section>
       <section class="view" id="view-homework"><div id="workHwHost"></div></section>
-      <section class="view" id="view-exams"><div class="panel" style="margin-bottom:1rem"><div id="examTtHost"></div></div><div id="workExHost"></div></section>
+      <section class="view" id="view-exams"><div class="panel" style="margin-bottom:1rem"><div id="examTtHost"></div></div><div class="panel" style="margin-bottom:1rem"><div id="examAnalyticsHost"></div></div><div id="workExHost"></div></section>
 
       <section class="view" id="view-messages"><div id="messagesHost"></div></section>
       <section class="view" id="view-tickets">
@@ -483,8 +483,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
-<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
-<script src="../js/classroom/work-helpers.js?v=examcards1"></script>
+<script src="../js/classroom/classroom-helpers.js?v=cards2"></script>
+<script src="../js/classroom/work-helpers.js?v=cards2"></script>
 <script src="../js/classroom/work-tools.js?v=tools3"></script>
 <script src="../js/classroom/tutor-chat.js?v=tools1"></script>
 <script src="../js/classroom/work-learner.js?v=boards2"></script>
@@ -708,13 +708,23 @@ $('tkSend').addEventListener('click', async () => {
 </script>
 <script src="/js/ui/emoji-picker.js?v=1"></script>
 <script src="/js/ui/tech-entry.js?v=1"></script>
-<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=2"></script>
 <script>
 /* Exam timetables sent to this person (js/timetable/exam-timetable.js). */
 firebase.auth().onAuthStateChanged(function (u) {
   if (!u || window.__examTtViewer || !window.ExamTimetable) return;
   var h = document.getElementById('examTtHost'); if (!h) return;
   window.__examTtViewer = ExamTimetable.mountViewer(h, { role: 'student', uid: u.uid });
+});
+</script>
+<script src="/js/results/exam-analytics.js?v=1"></script>
+<script>
+/* My exam results (exams only), under the exam timetable in the Exams tab. */
+firebase.auth().onAuthStateChanged(function (u) {
+  if (!u || window.__examAnalytics || !window.PaisleyExamResults) return;
+  var h = document.getElementById('examAnalyticsHost'); if (!h) return;
+  window.__examAnalytics = PaisleyExamResults.mount(h, { loading: true, title: 'My exam results' });
+  PaisleyExamResults.load(u.uid).then(function (r) { window.__examAnalytics.update(r.items, { error: r.error }); });
 });
 </script>
 <script src="/js/ui/site-status.js?v=2" defer></script>

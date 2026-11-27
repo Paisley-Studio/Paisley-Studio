@@ -22,6 +22,7 @@
    examTimetablePdf: the caller's own PDF (admin: the whole timetable), base64.
 ========================================================= */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
@@ -331,13 +332,9 @@ async function requireAdmin(request) {
   return { uid: request.auth.uid, name: (snap.data() || {}).name || "Studio Desk" };
 }
 
-exports.publishExamTimetable = onCall(
-  { cors: true, region: W.LOCATION, secrets: W.SMTP_SECRETS, timeoutSeconds: 540, memory: "1GiB" },
-  async (request) => {
-    const who = await requireAdmin(request);
-    const id = str(request.data && request.data.id, 120);
-    const dryRun = !!(request.data && request.data.dryRun);
-    if (!id) throw new HttpsError("invalid-argument", "Which timetable?");
+/* Publish one timetable: open it to its audience, then tell people. Shared by the Publish
+   button and the schedule (publishScheduledExamTimetables). who: { uid, name }. */
+async function runPublish(id, who, dryRun) {
     const ref = db().collection("examTimetables").doc(id);
     const snap = await ref.get();
     if (!snap.exists) throw new HttpsError("not-found", "That exam timetable no longer exists.");
@@ -360,7 +357,7 @@ exports.publishExamTimetable = onCall(
 
     /* Open it in the portals first, then tell people. */
     await ref.set({
-      sessions, status: "published", version, contentHash: hash,
+      sessions, status: "published", version, contentHash: hash, publishAt: null,
       studentIds: Object.keys(studentSessions), parentIds: Array.from(aud.parents.keys()), tutorIds: Object.keys(tutorSessions),
       studentSessions, tutorSessions,
       publishedAt: admin.firestore.FieldValue.serverTimestamp(), publishedBy: who.uid, publishedByName: who.name,
@@ -439,6 +436,47 @@ exports.publishExamTimetable = onCall(
 
     await ref.set({ lastSend: { at: admin.firestore.FieldValue.serverTimestamp(), by: who.uid, ...out, updated } }, { merge: true });
     return out;
+}
+
+exports.publishExamTimetable = onCall(
+  { cors: true, region: W.LOCATION, secrets: W.SMTP_SECRETS, timeoutSeconds: 540, memory: "1GiB" },
+  async (request) => {
+    const who = await requireAdmin(request);
+    const id = str(request.data && request.data.id, 120);
+    if (!id) throw new HttpsError("invalid-argument", "Which timetable?");
+    return runPublish(id, who, !!(request.data && request.data.dryRun));
+  }
+);
+
+/* Publish later: the editor saves status 'scheduled' with publishAt. Every 5 minutes the due
+   ones are claimed (status 'publishing', in a transaction, so a timetable is sent once) and
+   published as the admin who scheduled them. A failure puts it back to 'scheduled' with the error. */
+exports.publishScheduledExamTimetables = onSchedule(
+  { schedule: "every 5 minutes", timeZone: W.TIME_ZONE, region: W.LOCATION, secrets: W.SMTP_SECRETS, timeoutSeconds: 540, memory: "1GiB" },
+  async () => {
+    const snap = await db().collection("examTimetables").where("status", "==", "scheduled").get();
+    const now = Date.now();
+    for (const d of snap.docs) {
+      const at = d.data().publishAt;
+      const ms = at && at.toMillis ? at.toMillis() : 0;
+      if (!ms || ms > now) continue;
+      const claimed = await db().runTransaction(async (tx) => {
+        const cur = await tx.get(d.ref);
+        if (!cur.exists || cur.data().status !== "scheduled") return false;
+        tx.update(d.ref, { status: "publishing", publishingAt: admin.firestore.FieldValue.serverTimestamp() });
+        return true;
+      });
+      if (!claimed) continue;
+      const x = d.data();
+      try {
+        const out = await runPublish(d.id, { uid: x.scheduledBy || "schedule", name: x.scheduledByName || "Studio Desk" }, false);
+        await d.ref.set({ scheduledSentAt: admin.firestore.FieldValue.serverTimestamp(), scheduleError: admin.firestore.FieldValue.delete() }, { merge: true });
+        console.log("examTimetable scheduled publish", d.id, JSON.stringify(out));
+      } catch (e) {
+        console.error("examTimetable scheduled publish failed", d.id, e);
+        await d.ref.set({ status: "scheduled", scheduleError: String((e && e.message) || e).slice(0, 300), publishAt: admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60000) }, { merge: true });
+      }
+    }
   }
 );
 

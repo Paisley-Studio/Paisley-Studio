@@ -346,8 +346,9 @@
       '.cr-btn.primary i,.cr-btn.primary .fas,.cr-btn.primary .far,.cr-btn.primary .fab,.cr-btn.primary .fa-solid,.cr-btn.primary .fa-regular{color:#fff !important}',
       '.cr-btn.primary:hover i,.cr-btn.primary:hover .fas,.cr-btn.primary:hover .far,.cr-btn.primary:hover .fab{color:#fff !important}',
       '.cr-btn.danger.primary i{color:#fff !important}',
-      '.cr-topic{border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;margin-bottom:.8rem;background:var(--surface,#fff);overflow:hidden}',
-      '.cr-topic-head{display:flex;align-items:center;gap:.6rem;padding:.8rem 1rem;background:var(--sage,#E5F2EF);flex-wrap:wrap}',
+      '.cr-topic{border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;margin-bottom:.8rem;background:var(--surface,#fff);overflow:visible}',
+      '.cr-topic-head{display:flex;align-items:center;gap:.6rem;padding:.8rem 1rem;background:var(--sage,#E5F2EF);flex-wrap:wrap;border-radius:13px 13px 0 0}',
+      '.cr-topic>.cr-topic-head:last-child{border-radius:13px}',
       '.cr-topic-head .t{flex:1;min-width:160px;font-weight:800;color:var(--brand-deep,#245F5A);font-size:.9rem;cursor:pointer}',
       '.cr-topic-head .t small{display:block;font-weight:500;color:var(--muted,#5A6E6A);font-size:.74rem}',
       '.cr-actions{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}',
@@ -1040,19 +1041,52 @@
       S.topics.forEach(function (t, ti) {
         var ls = S.lessons.filter(function (l) { return l.topicId === t.id; }).sort(byOrder);
         var open = !S.collapsed[t.id];
+        /* Cards like Exam Management (PaisleyExamCards, work-helpers.js): Add Lesson up front, the rest in More. */
+        var XC = global.PaisleyExamCards;
+        if (XC) XC.style();
         var topicActions = isAdmin
           ? '<button type="button" class="cr-btn sm primary" data-a="add-lesson" data-id="' + esc(t.id) + '"><i class="fas fa-plus"></i> Add Lesson</button>' +
+            (XC ? XC.menu([
+              XC.item('edit-topic', t.id, 'fa-pen', 'Rename topic'),
+              XC.item('topic-up', t.id, 'fa-arrow-up', 'Move topic up', '', '', ti === 0),
+              XC.item('topic-down', t.id, 'fa-arrow-down', 'Move topic down', '', '', ti === S.topics.length - 1),
+              XC.item('', '', '', '', 'hr'),
+              XC.item('del-topic', t.id, 'fa-trash', 'Delete topic', 'danger')
+            ], 'More') :
             '<button type="button" class="cr-btn sm" title="Move topic up" data-a="topic-up" data-id="' + esc(t.id) + '"' + (ti === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>' +
             '<button type="button" class="cr-btn sm" title="Move topic down" data-a="topic-down" data-id="' + esc(t.id) + '"' + (ti === S.topics.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>' +
             '<button type="button" class="cr-btn sm" data-a="edit-topic" data-id="' + esc(t.id) + '"><i class="fas fa-pen"></i></button>' +
-            '<button type="button" class="cr-btn sm danger" data-a="del-topic" data-id="' + esc(t.id) + '"><i class="fas fa-trash"></i></button>'
+            '<button type="button" class="cr-btn sm danger" data-a="del-topic" data-id="' + esc(t.id) + '"><i class="fas fa-trash"></i></button>')
           : '';
         h += '<div class="cr-topic"><div class="cr-topic-head"><span class="t" data-a="toggle" data-id="' + esc(t.id) + '"><i class="fas fa-chevron-' + (open ? 'down' : 'right') + '" style="font-size:.7rem;margin-right:.4rem"></i>' +
           esc(t.title) + (t.description ? '<small>' + esc(t.description) + '</small>' : '') + '</span>' +
           (topicActions ? '<div class="cr-actions">' + topicActions + '</div>' : '') + '</div>';
         if (open) {
           if (!ls.length) h += '<div class="cr-empty">' + (isAdmin ? 'No lessons have been added to this topic yet.' : 'No lessons in this topic yet.') + '</div>';
-          ls.forEach(function (l, li) {
+          if (XC && ls.length) {
+            h += '<div class="wx-list wx-compact">' + ls.map(function (l, li) {
+              var res = l.attachments && l.attachments.length ? l.attachments.length + ' resource' + (l.attachments.length === 1 ? '' : 's') : '';
+              return XC.card({
+                title: l.title, sub: [l.authorName || '', res].filter(Boolean).join(' · '),
+                lead: '<span class="wx-num">' + pad2(numOf[l.id]) + '</span>',
+                state: statusBadge(l) + audBadges(l), meta: [],
+                main: isAdmin
+                  ? ['<button type="button" class="cr-btn sm primary" data-a="edit-lesson" data-id="' + esc(l.id) + '"><i class="fas fa-pen"></i> Edit lesson</button>']
+                  : ['<button type="button" class="cr-btn sm primary" data-a="open-lesson" data-id="' + esc(l.id) + '"><i class="fas fa-book-open"></i> Open</button>',
+                     releaseBtnHtml(l, user.uid, 'data-a="release" data-id="' + esc(l.id) + '"', 'sm')],
+                side: isAdmin ? [
+                  '<button type="button" class="cr-btn sm wx-iconbtn" title="Move up" aria-label="Move up" data-a="lesson-up" data-id="' + esc(l.id) + '"' + (li === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>',
+                  '<button type="button" class="cr-btn sm wx-iconbtn" title="Move down" aria-label="Move down" data-a="lesson-down" data-id="' + esc(l.id) + '"' + (li === ls.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>'
+                ] : [],
+                more: isAdmin ? [
+                  XC.item('archive', l.id, l.status === 'archived' ? 'fa-box-open' : 'fa-box-archive', l.status === 'archived' ? 'Restore' : 'Archive'),
+                  XC.item('', '', '', '', 'hr'),
+                  XC.item('del-lesson', l.id, 'fa-trash', 'Delete lesson', 'danger')
+                ] : []
+              });
+            }).join('') + '</div>';
+          }
+          if (!XC) ls.forEach(function (l, li) {
             var lessonActions = isAdmin
               ? '<div class="cr-actions"><button type="button" class="cr-btn sm" title="Move up" data-a="lesson-up" data-id="' + esc(l.id) + '"' + (li === 0 ? ' disabled' : '') + '><i class="fas fa-arrow-up"></i></button>' +
                 '<button type="button" class="cr-btn sm" title="Move down" data-a="lesson-down" data-id="' + esc(l.id) + '"' + (li === ls.length - 1 ? ' disabled' : '') + '><i class="fas fa-arrow-down"></i></button>' +

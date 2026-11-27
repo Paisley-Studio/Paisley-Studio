@@ -108,6 +108,7 @@ exports.repairExamTutorAccess         = publishing.repairExamTutorAccess;
 const examTimetable = require("./exam-timetable");
 exports.publishExamTimetable          = examTimetable.publishExamTimetable;
 exports.examTimetablePdf              = examTimetable.examTimetablePdf;
+exports.publishScheduledExamTimetables = examTimetable.publishScheduledExamTimetables;
 exports.onResourcePosted              = publishing.onResourcePosted;
 exports.onResourceMessage             = publishing.onResourceMessage;
 exports.backfillAudiences             = publishing.backfillAudiences;

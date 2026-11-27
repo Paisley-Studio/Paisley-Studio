@@ -226,7 +226,7 @@
   <div class="sidebar">
     <div class="brand"><i class="fas fa-user-group"></i> Parent Portal</div>
     <button class="nav-item active" data-view="overview" type="button"><i class="fas fa-house"></i> Overview</button>
-    <button class="nav-item" data-view="progress" type="button"><i class="fas fa-chart-line"></i> Growth</button>
+    <button class="nav-item" data-view="progress" type="button"><i class="fas fa-chart-line"></i> Exam Results</button>
     <button class="nav-item" data-view="classes" type="button"><i class="fas fa-calendar-days"></i> Classes &amp; Timetable</button>
     <button class="nav-item" data-view="attendance" type="button"><i class="fas fa-user-check"></i> Attendance</button>
     <button class="nav-item" data-view="classroom" type="button"><i class="fas fa-chalkboard"></i> Classroom</button>
@@ -272,7 +272,11 @@
     </section>
 
     <section class="view" id="view-progress">
-      <h2>Growth dashboard <span class="ctx" id="ctxProgress"></span></h2>
+      <h2>Exam results <span class="ctx" id="ctxProgress"></span></h2>
+      <!-- Exam results analytics for the child chosen at the top (exams only): js/results/exam-analytics.js -->
+      <div class="panel"><div id="examAnalyticsHost"></div></div>
+      <!-- The older growth chart is kept in the page (renderProgress still fills it) but hidden. -->
+      <div hidden>
       <div class="rangebar" id="rangeBar">
         <button data-range="7d" type="button">Last 7 days</button>
         <button data-range="30d" type="button">Last 30 days</button>
@@ -284,6 +288,7 @@
       </div>
       <div class="panel"><div class="chart-wrap"><canvas id="progressChart"></canvas></div></div>
       <div class="statgrid" id="progressStats"></div>
+      </div>
     </section>
 
     <section class="view" id="view-classes">
@@ -382,12 +387,13 @@
 <script src="../js/ui/fast-video.js?v=4"></script>
 <script src="../js/parent/parent-ads.js?v=4"></script>
 <!-- CHANGED: Bumped version strings to force browser cache refresh for the fixed JS -->
-<script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
-<script src="../js/classroom/work-helpers.js?v=examcards1"></script>
+<script src="../js/classroom/classroom-helpers.js?v=cards2"></script>
+<script src="../js/classroom/work-helpers.js?v=cards2"></script>
 <script src="../js/classroom/work-learner.js?v=fix2"></script>
 <script src="../js/attendance/attendance.js?v=confirm2"></script>
 <script src="../js/attendance/face.js?v=face2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/js/results/exam-analytics.js?v=1"></script>
 
 <script>
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -523,9 +529,24 @@ function setChildHeader(child){
   if(sel) sel.value = child.id;
 }
 
+/* Exam results for the chosen child: papers marked in the Classroom and older examResults. */
+let __examAnalytics = null, __examAnalyticsFor = '';
+function loadChildExamAnalytics(child){
+  if(!window.PaisleyExamResults) return;
+  const host = document.getElementById('examAnalyticsHost'); if(!host) return;
+  const who = child.name || 'Your child';
+  if(!__examAnalytics) __examAnalytics = PaisleyExamResults.mount(host, { loading: true, title: 'Exam results: ' + who, sub: 'Exams only. Every released exam, how each subject is moving, and which months were strongest.', who });
+  else __examAnalytics.setLoading();
+  __examAnalyticsFor = child.id;
+  accessReady.then(() => PaisleyExamResults.load(child.id)).then(res => {
+    if(__examAnalyticsFor !== child.id) return;
+    __examAnalytics = PaisleyExamResults.mount(host, { items: res.items, error: res.error, title: 'Exam results: ' + who, sub: 'Exams only. Every released exam, how each subject is moving, and which months were strongest.', who });
+  }).catch(e => { console.warn('exam analytics:', e); if(__examAnalytics) __examAnalytics.update([], { error: e }); });
+}
 function selectChild(id){
   currentChild = children.find(c=>c.id===id);
   if(!currentChild) return;
+  loadChildExamAnalytics(currentChild);
   if(window.ExamTimetable) ExamTimetable.refreshAll();
   setChildHeader(currentChild);
   document.getElementById('gate').classList.remove('hidden');
@@ -993,7 +1014,7 @@ function renderChats(){
 </script>
 
 <script src="/js/ui/emoji-picker.js?v=1"></script>
-<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=2"></script>
 <script>
 /* Exam timetables sent to this person (js/timetable/exam-timetable.js). */
 firebase.auth().onAuthStateChanged(function (u) {
