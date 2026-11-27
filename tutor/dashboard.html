@@ -346,7 +346,7 @@
 <script src="../js/classroom/classroom-helpers.js?v=tools1"></script>
 <script src="../js/classroom/paper-handins.js?v=hand1"></script>
 <script src="../js/classroom/resources-folder.js?v=boards3"></script>
-<script src="../js/classroom/work-helpers.js?v=examtutor1"></script>
+<script src="../js/classroom/work-helpers.js?v=examcards1"></script>
 <script src="../js/classroom/ink-grader.js?v=conv1"></script>
 <script src="../js/classroom/work-tools.js?v=tools3"></script>
 <script src="../js/classroom/tutor-chat.js?v=tools1"></script>
@@ -951,16 +951,16 @@ async function subscribeHomeworkSubmissions(gen){
   }));
 }
 
-// CHANGED: removed `.where('audiences.tutors','==',true)` — same reasoning as above.
-// A flat exam the tutor can grade (activeGrant or classTutorSubject) must be enumerated
-// regardless of the parent's audiences flag.
+// Rules are not filters: tutors may read only exams posted to tutors, so the query must ask for
+// exactly those. Without the where-clause one draft in the class made the whole query fail and
+// no exam hand-in (and no exam bubble) ever showed.
 async function subscribeFlatExamSubmissions(gen){
   const classrooms = await tutorClassroomsInScope();
   await Promise.all(classrooms.map(async cls => {
     let exams = [];
     try {
       const eSnap = await db.collection('classrooms').doc(cls.id).collection('exams')
-        .get();
+        .where('audiences.tutors','==',true).get();
       exams = eSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     } catch (e) { return; }
     if(gen !== subGen) return;
@@ -1087,7 +1087,9 @@ function subRoundOf(s){
   return { resub, round: h.length ? h.length + 1 : (resub ? 2 : 1) };
 }
 function renderOverview(){
-  const allSubs = DB.submissions.filter(s=> isMyStudent(s.studentId) );
+  // Desk exams go to the whole class, so every exam hand-in in a class the tutor teaches counts;
+  // homework and classwork count the tutor's own students.
+  const allSubs = DB.submissions.filter(s=> s.kind === 'exam' || isMyStudent(s.studentId) );
   // Only work the tutor can act on right now. "Corrections" is with the student, so it is
   // NOT listed as something to mark; it is counted separately below.
   const toMark   = allSubs.filter(s=> s.status === 'Submitted');
@@ -1148,7 +1150,7 @@ function renderOverview(){
 function pendingForClass(cid, what){
   let toMark = 0, resub = 0;
   DB.submissions.forEach(s=>{
-    if(s.cid !== cid || s.status !== 'Submitted' || !isMyStudent(s.studentId)) return;
+    if(s.cid !== cid || s.status !== 'Submitted' || (s.kind !== 'exam' && !isMyStudent(s.studentId))) return;
     if(what === 'exams' ? s.kind !== 'exam' : s.kind === 'exam') return;
     toMark++; if(subRoundOf(s).resub) resub++;
   });

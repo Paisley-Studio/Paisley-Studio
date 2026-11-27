@@ -762,6 +762,87 @@
     };
   }
 
+  /* ---------- Exam cards (tutor and admin Exam Management share this look) ----------
+     One card per exam: title and state, dates and counts, who it was given to, then the
+     actions: the main ones as buttons, the rarer admin ones in a "More" menu. */
+  function examCardStyle() {
+    if (document.getElementById('wx-style')) return;
+    var st = document.createElement('style'); st.id = 'wx-style';
+    st.textContent = [
+      '.wx-list{display:grid;gap:.75rem}',
+      '.wx-card{background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:14px;padding:.9rem 1rem;display:grid;gap:.6rem;min-width:0}',
+      '.wx-card.wx-due{border-left:4px solid #E74C3C}',
+      '.wx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;flex-wrap:wrap}',
+      '.wx-title{min-width:0;flex:1 1 220px}',
+      '.wx-title b{display:block;font-size:.98rem;color:var(--brand-deep,#245F5A);line-height:1.3;overflow-wrap:anywhere}',
+      '.wx-title small{display:block;font-size:.74rem;color:var(--muted,#5A6E6A);margin-top:.15rem}',
+      '.wx-state{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;justify-content:flex-end}',
+      '.wx-tomark{display:inline-flex;align-items:center;gap:.3rem;background:#E74C3C;color:#fff;border-radius:99px;padding:.18rem .6rem;font-size:.72rem;font-weight:800}',
+      '.wx-tomark.resub{background:#4a6fd6}',
+      '.wx-meta{display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;font-size:.8rem;color:var(--muted,#5A6E6A);align-items:center}',
+      '.wx-meta i{color:var(--brand,#55BFB3);margin-right:.3rem}',
+      '.wx-meta b{color:var(--ink,#263331);font-weight:700}',
+      '.wx-stats{display:inline-flex;gap:.35rem;margin-left:auto}',
+      '.wx-stat{display:inline-flex;align-items:center;gap:.3rem;background:var(--paper,#F1F9F7);border:1px solid var(--line,rgba(38,51,49,.08));border-radius:8px;padding:.15rem .5rem;font-weight:700;color:var(--ink,#263331)}',
+      '.wx-stat i{margin:0}',
+      '.wx-aud{display:flex;flex-wrap:wrap;gap:.35rem .8rem;align-items:center}',
+      '.wx-aud details{flex:1 1 100%}',
+      '.wx-actions{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;border-top:1px solid var(--line-soft,rgba(38,51,49,.07));padding-top:.65rem}',
+      '.wx-main,.wx-side{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}',
+      '.wx-actions .cr-btn{white-space:nowrap}',
+      '.wx-more{position:relative}',
+      '.wx-more>summary{list-style:none;cursor:pointer}',
+      '.wx-more>summary::-webkit-details-marker{display:none}',
+      '.wx-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:220px;background:var(--surface,#fff);border:1px solid var(--line,rgba(38,51,49,.12));border-radius:12px;box-shadow:0 14px 34px rgba(36,95,90,.18);padding:.3rem;display:grid}',
+      '.wx-menu button{display:flex;align-items:center;gap:.55rem;width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:.55rem .65rem;font:inherit;font-size:.84rem;color:var(--ink,#263331);cursor:pointer}',
+      '.wx-menu button:hover,.wx-menu button:focus-visible{background:var(--sage,#E5F2EF);outline:none}',
+      '.wx-menu button i{width:1rem;text-align:center;color:var(--brand-deep,#245F5A)}',
+      '.wx-menu hr{border:0;border-top:1px solid var(--line-soft,rgba(38,51,49,.08));margin:.25rem 0}',
+      '.wx-menu .warn,.wx-menu .warn i{color:#9A6200}',
+      '.wx-menu .danger,.wx-menu .danger i{color:#C0392B}',
+      '@media (max-width:640px){',
+      '.wx-card{padding:.8rem}',
+      '.wx-state{justify-content:flex-start}',
+      '.wx-stats{margin-left:0}',
+      '.wx-actions{display:grid;grid-template-columns:1fr;gap:.45rem}',
+      '.wx-main,.wx-side{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}',
+      '.wx-actions .cr-btn,.wx-more>summary{width:100%;justify-content:center}',
+      '.wx-main .cr-btn.primary:first-child{grid-column:1/-1}',
+      '.wx-menu{left:0;right:auto;min-width:0;width:100%}',
+      '.wx-more{grid-column:auto}',
+      '}'
+    ].join('\n');
+    document.head.appendChild(st);
+    /* One open "More" menu at a time; a click elsewhere or Escape closes it. */
+    document.addEventListener('click', function (e) {
+      [].forEach.call(document.querySelectorAll('.wx-more[open]'), function (d) { if (!d.contains(e.target) || e.target.closest('.wx-menu button')) d.removeAttribute('open'); });
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') [].forEach.call(document.querySelectorAll('.wx-more[open]'), function (d) { d.removeAttribute('open'); }); });
+  }
+  /* o: { id, title, sub, state, toMark, resub, examDate, deadline, cnt: {total, submitted, graded}, aud, given, main: [html], side: [html], more: [html] } */
+  function examCardHtml(o) {
+    var esc2 = U.esc;
+    var mark = o.toMark ? '<span class="wx-tomark' + (o.resub ? ' resub' : '') + '" title="' + o.toMark + ' to mark' + (o.resub ? ' (' + o.resub + ' resubmitted)' : '') + '"><i class="fas fa-inbox"></i> ' + o.toMark + ' to mark</span>' : '';
+    var more = (o.more || []).filter(Boolean);
+    return '<article class="wx-card' + (o.toMark ? ' wx-due' : '') + '">' +
+      '<div class="wx-head"><div class="wx-title"><b>' + esc2(o.title || 'Exam') + '</b>' + (o.sub ? '<small>' + esc2(o.sub) + '</small>' : '') + '</div>' +
+        '<div class="wx-state">' + mark + (o.state || '') + '</div></div>' +
+      '<div class="wx-meta"><span><i class="fas fa-calendar-day"></i>Exam <b>' + esc2(o.examDate) + '</b></span>' +
+        '<span><i class="fas fa-hourglass-half"></i>Hand-ins close <b>' + esc2(o.deadline) + '</b></span>' +
+        '<span class="wx-stats"><span class="wx-stat" title="Students given it"><i class="fas fa-users"></i>' + o.cnt.total + '</span><span class="wx-stat" title="Handed in"><i class="fas fa-inbox"></i>' + o.cnt.submitted + '</span><span class="wx-stat" title="Marked"><i class="fas fa-circle-check"></i>' + o.cnt.graded + '</span></span></div>' +
+      ((o.aud || o.given) ? '<div class="wx-aud">' + (o.aud ? '<span class="wk-chips">' + o.aud + '</span>' : '') + (o.given || '') + '</div>' : '') +
+      '<div class="wx-actions"><div class="wx-main">' + (o.main || []).filter(Boolean).join('') + '</div>' +
+        ((o.side || []).filter(Boolean).length || more.length ? '<div class="wx-side">' + (o.side || []).filter(Boolean).join('') +
+          (more.length ? '<details class="wx-more"><summary class="cr-btn sm" aria-label="More actions"><i class="fas fa-ellipsis"></i> More</summary><div class="wx-menu" role="menu">' + more.join('') + '</div></details>' : '') + '</div>' : '') +
+      '</div></article>';
+  }
+  /* A "More" menu item. tone: '' | 'warn' | 'danger' | 'hr' */
+  function examMenuItem(a, id, icon, label, tone, tip) {
+    if (tone === 'hr') return '<hr>';
+    return '<button type="button" role="menuitem" class="' + (tone || '') + '" data-a="' + a + '" data-id="' + U.esc(id) + '"' + (tip ? ' title="' + U.esc(tip) + '"' : '') + '><i class="fas ' + icon + '"></i> ' + U.esc(label) + '</button>';
+  }
+  global.PaisleyExamCards = { style: examCardStyle, card: examCardHtml, item: examMenuItem };
+
   async function tutorPendingCount(cid, what) {
     var d = await tutorPendingDetail(cid, what);
     return d.unreleased + d.toMark;
@@ -777,7 +858,9 @@
     var unreleased = 0, toMark = 0, resub = 0;
     items.forEach(function (it) {
       if (it.status === 'Draft' || it.status === 'draft') return;
-      if (!it.releasedTo || !it.releasedTo.length) unreleased++;
+      /* An exam the desk sent to the class is already with the students: nothing for the tutor to release. */
+      var ea = effAudiences(it), withStudents = ea.online === true || ea.remote === true || ea.tuition === true;
+      if (!(what === 'exams' && withStudents) && (!it.releasedTo || !it.releasedTo.length)) unreleased++;
       var subs = res.subs[it.id] || {};
       Object.keys(subs).forEach(function (k) {
         if (subs[k] && subs[k].status === 'Submitted') { toMark++; if (subRound(subs[k]).resub) resub++; }
@@ -1077,40 +1160,30 @@
             ? 'No exams in this subject yet. Click \u201cNew exam\u201d to create a Midterm or End-of-Term paper.'
             : 'No exams posted for this subject yet. The Studio Desk sets exams — check back soon.') + '</div></div>';
         } else {
-          h += '<div class="cr-panel"><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Title</th><th>Type</th><th>Exam date</th><th>Submissions by</th><th>Students</th><th></th></tr></thead><tbody>';
-          ITEMS.forEach(function (it) {
-            var cnt = counts(it);
+          var X = global.PaisleyExamCards; X.style();
+          h += '<div class="wx-list">' + ITEMS.map(function (it) {
+            var cnt = counts(it), id = it.id;
             var examDate = it.examDate ? U.fmtDateTime(U.toDate(it.examDate)) : '—';
             var deadline = it.submissionDeadline ? U.fmtDateTime(U.toDate(it.submissionDeadline)) : '—';
-            var adminControls = isAdmin || canEdit(it)
-              ? (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i> Edit</button>' : '') +
-                (isAdmin
-                  ? (it.status === 'Published'
-                      ? '<button type="button" class="cr-btn sm" data-a="close-exam" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close</button>'
-                      : '<button type="button" class="cr-btn sm" data-a="publish-exam" data-id="' + esc(it.id) + '"><i class="fas fa-upload"></i> Mark ready</button>') +
-                    (it.submissionsOpen === true
-                      ? '<button type="button" class="cr-btn sm" data-a="close-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close submissions</button>'
-                      : '<button type="button" class="cr-btn sm" data-a="open-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock-open"></i> Open submissions</button>')
-                  : '') +
-                ''
-              : '';
-            h += '<tr>' +
-              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div>' + givenToHtml(it) + '</td>' +
-              '<td>' + pill('b-plain', it.examType || '—') + '</td>' +
-              '<td>' + esc(examDate) + '</td>' +
-              '<td>' + esc(deadline) + '</td>' +
-              '<td><span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span></td>' +
-              '<td><div class="cr-actions">' +
-                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
-                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '') +
-                adminControls +
-                delBtnHtml(it) +
-                (!isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(it.id) + '"') : '') +
-                '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
-              '</div></td>' +
-            '</tr>';
-          });
-          h += '</tbody></table></div></div>';
+            return X.card({
+              title: it.title || 'Exam', sub: it.tutorName || '', state: itemPill(it),
+              toMark: cnt.toGrade, resub: cnt.resub, examDate: examDate, deadline: deadline, cnt: cnt,
+              aud: isAdmin ? audChips(it) : '', given: givenToHtml(it),
+              main: [
+                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(id) + '"><i class="fas fa-inbox"></i> ' + (cnt.toGrade ? 'Open and mark' : 'Open') + '</button>',
+                global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(id) + '" title="See it as students see it. Read-only, with downloads."><i class="fas fa-eye"></i> Preview</button>' : '',
+                !isAdmin ? U.releaseBtnHtml(it, user.uid, 'data-a="release" data-id="' + esc(id) + '"') : ''
+              ],
+              side: [canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(id) + '"><i class="fas fa-pen"></i> Edit</button>' : ''],
+              more: isAdmin ? [
+                it.status === 'Published' ? X.item('close-exam', id, 'fa-lock', 'Close exam') : X.item('publish-exam', id, 'fa-upload', 'Mark ready'),
+                it.submissionsOpen === true ? X.item('close-window', id, 'fa-lock', 'Close hand-ins') : X.item('open-window', id, 'fa-lock-open', 'Open hand-ins now'),
+                X.item('', '', '', '', 'hr'),
+                X.item('withdraw', id, 'fa-eye-slash', 'Withdraw', 'warn', 'Removes it from every tutor, student and parent portal. Keeps the item so you can post it again.'),
+                X.item('del', id, 'fa-trash', 'Delete for good', 'danger', 'Permanently deletes it, its files and the hand-ins')
+              ] : []
+            });
+          }).join('') + '</div>';
         }
       } else {
         if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience

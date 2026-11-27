@@ -92,6 +92,14 @@
       '.dv-chips{display:flex;flex-wrap:wrap;gap:.4rem}',
       '.dv-chip{font:inherit;font-size:.76rem;font-weight:700;padding:.42rem .8rem;border-radius:20px;border:1.5px solid var(--line,rgba(38,51,49,.1));background:#fff;color:var(--ink,#263331);cursor:pointer;transition:all .2s}',
       '.dv-chip:hover{border-color:var(--brand,#55BFB3)}.dv-chip.on{background:var(--brand,#55BFB3);border-color:var(--brand,#55BFB3);color:#fff}',
+      /* Segmented switch (Starts: Now / Later, How long, Ends by itself): one slim track, the chosen option raised. */
+      '.dv-seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;width:max-content;max-width:100%;background:var(--paper,#F1F9F7);border:1px solid var(--line,rgba(38,51,49,.1));border-radius:10px}',
+      '.dv-seg .dv-chip{border:0;background:transparent;padding:.34rem .8rem;font-size:.76rem;font-weight:700;line-height:1.25;border-radius:7px;color:var(--muted,#5A6E6A);white-space:nowrap}',
+      '.dv-seg .dv-chip:hover{color:var(--brand-deep,#245F5A);background:rgba(255,255,255,.6)}',
+      '.dv-seg .dv-chip.on{background:#fff;color:var(--brand-deep,#245F5A);box-shadow:0 1px 4px rgba(36,95,90,.16)}',
+      '.dv-seg .dv-chip:focus-visible{outline:2px solid var(--brand,#55BFB3);outline-offset:1px}',
+      '.dv-when{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}',
+      '.dv-f .dv-when input[type=datetime-local]{width:auto;max-width:240px;padding:.42rem .6rem;font-size:.82rem}',
       '.dv-sec{margin-top:1.2rem}.dv-sec>.dv-lb{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem}.dv-sec>.dv-lb .x{margin-left:auto;display:flex;gap:.35rem}',
       '.dv-mini{font:inherit;font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border:none;background:none;color:var(--brand-deep,#245F5A);cursor:pointer;padding:.15rem .3rem;border-radius:6px}.dv-mini:hover{background:var(--sage,#E5F2EF)}',
       '.dv-areas{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.55rem}',
@@ -153,7 +161,8 @@
       '@keyframes dvPop{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:none}}',
       '@keyframes dvRing{0%{opacity:.7;transform:scale(.9)}100%{opacity:0;transform:scale(1.25)}}',
       '@keyframes dvBlink{0%,100%{opacity:1}50%{opacity:.3}}',
-      '@media (max-width:720px){.dv-grid{grid-template-columns:1fr}.dv-card{padding:1.1rem}}',
+      '@media (max-width:720px){.dv-grid{grid-template-columns:1fr}.dv-card{padding:1.1rem}.dv-hd{flex-wrap:wrap}}',
+      '@media (max-width:520px){.dv-seg{width:100%}.dv-seg .dv-chip{flex:1 1 auto;text-align:center;padding:.4rem .5rem}.dv-f .dv-when input[type=datetime-local]{max-width:none;width:100%}.dv-foot .dv-btn{flex:1 1 100%;justify-content:center}.dv-foot .grow{display:none}}',
       '@media (prefers-reduced-motion:reduce){.dv *,.dv{animation:none!important;transition:none!important}}'
     ].join('');
     document.head.appendChild(s);
@@ -189,10 +198,10 @@
           '<div class="dv-f"><label for="dvMTitle">Heading</label><input type="text" id="dvMTitle" maxlength="80" placeholder="We are improving Paisley Studio" value="' + esc(d.title || '') + '"></div>' +
           '<div class="dv-f"><label for="dvMTone">Look</label><select id="dvMTone"><option value="info"' + (d.tone !== 'warn' ? ' selected' : '') + '>Calm (teal)</option><option value="warn"' + (d.tone === 'warn' ? ' selected' : '') + '>Important (amber)</option></select></div>' +
           '<div class="dv-f full"><label for="dvMMsg">Message</label><textarea id="dvMMsg" maxlength="400" placeholder="Some pages may be slow or refresh while we work. Your work is saved.">' + esc(d.message || '') + '</textarea></div>' +
-          '<div class="dv-f"><span class="dv-lb">Starts</span><div class="dv-chips" id="dvMStart"><button type="button" class="dv-chip' + (startMode === 'now' ? ' on' : '') + '" data-s="now">Now</button><button type="button" class="dv-chip' + (startMode === 'later' ? ' on' : '') + '" data-s="later">Later</button></div>' +
-            '<input type="datetime-local" id="dvMStartAt" value="' + esc(localInput(ms(d.startsAt) > Date.now() ? ms(d.startsAt) : Date.now() + 3600000)) + '"' + (startMode === 'later' ? '' : ' hidden') + ' aria-label="Start time"></div>' +
-          '<div class="dv-f"><span class="dv-lb">How long</span><div class="dv-chips" id="dvMEnd">' + M_ENDS.map(function (e) { return '<button type="button" class="dv-chip' + (mEnd === e[0] ? ' on' : '') + '" data-e="' + e[0] + '">' + e[1] + '</button>'; }).join('') + '</div>' +
-            '<input type="datetime-local" id="dvMEndAt" value="' + esc(localInput(ms(d.endsAt) || Date.now() + 2 * 3600000)) + '"' + (mEnd === 'custom' ? '' : ' hidden') + ' aria-label="End time"></div>' +
+          '<div class="dv-f"><span class="dv-lb">Starts</span><div class="dv-when"><div class="dv-chips dv-seg" id="dvMStart" role="group" aria-label="Starts"><button type="button" class="dv-chip' + (startMode === 'now' ? ' on' : '') + '" data-s="now">Now</button><button type="button" class="dv-chip' + (startMode === 'later' ? ' on' : '') + '" data-s="later">Later</button></div>' +
+            '<input type="datetime-local" id="dvMStartAt" value="' + esc(localInput(ms(d.startsAt) > Date.now() ? ms(d.startsAt) : Date.now() + 3600000)) + '"' + (startMode === 'later' ? '' : ' hidden') + ' aria-label="Start time"></div></div>' +
+          '<div class="dv-f"><span class="dv-lb">How long</span><div class="dv-when"><div class="dv-chips dv-seg" id="dvMEnd" role="group" aria-label="How long">' + M_ENDS.map(function (e) { return '<button type="button" class="dv-chip' + (mEnd === e[0] ? ' on' : '') + '" data-e="' + e[0] + '">' + e[1] + '</button>'; }).join('') + '</div>' +
+            '<input type="datetime-local" id="dvMEndAt" value="' + esc(localInput(ms(d.endsAt) || Date.now() + 2 * 3600000)) + '"' + (mEnd === 'custom' ? '' : ' hidden') + ' aria-label="End time"></div></div>' +
         '</div>' +
         '<div class="dv-foot"><button type="button" class="dv-btn" id="dvMPrev"><i class="fas fa-eye"></i> Preview here</button><span class="dv-msg" id="dvMMsgOut" role="status"></span><span class="grow"></span>' +
           '<button type="button" class="dv-btn pri" id="dvMSave"><i class="fas fa-floppy-disk"></i> Save banner</button></div>';
@@ -255,7 +264,7 @@
         (live ? '<span class="dv-state warm"><i></i>Frozen' + (ms(d.until) ? ' · ' + esc(left(ms(d.until))) + ' left' : '') + '</span>' : '<span class="dv-state"><i></i>Off</span>') + '</div>' +
         (live ? '<div class="dv-summary">' + AREAS.filter(function (a) { return areas[a[0]]; }).map(function (a) { return '<span><i class="fas ' + a[1] + '"></i> ' + esc(a[2]) + '</span>'; }).join('') + '</div>' : '') +
         '<label class="dv-sw warm"><input type="checkbox" id="dvFOn"' + (live ? ' checked' : '') + '><span class="tr"></span><span><b>Freeze</b><span class="s">Takes effect within about 20 seconds. Nothing held is sent later.</span></span></label>' +
-        '<div class="dv-sec"><div class="dv-lb"><i class="fas fa-hourglass-half"></i> Ends by itself</div><div class="dv-chips" id="dvFEnd">' + F_ENDS.map(function (e) { return '<button type="button" class="dv-chip' + (fEnd === e[0] ? ' on' : '') + '" data-e="' + e[0] + '">' + e[1] + '</button>'; }).join('') + '</div></div>' +
+        '<div class="dv-sec"><div class="dv-lb"><i class="fas fa-hourglass-half"></i> Ends by itself</div><div class="dv-chips dv-seg" id="dvFEnd" role="group" aria-label="Ends by itself">' + F_ENDS.map(function (e) { return '<button type="button" class="dv-chip' + (fEnd === e[0] ? ' on' : '') + '" data-e="' + e[0] + '">' + e[1] + '</button>'; }).join('') + '</div></div>' +
         '<div class="dv-sec"><div class="dv-lb"><i class="fas fa-layer-group"></i> What to hold <span class="x"><button type="button" class="dv-mini" data-all="1">All</button><button type="button" class="dv-mini" data-all="0">None</button></span></div><div class="dv-areas" id="dvFAreas">' +
           AREAS.map(function (a) { return '<label class="dv-tile"><input type="checkbox" data-area="' + a[0] + '"' + (areas[a[0]] ? ' checked' : '') + '><span class="ti"><i class="fas ' + a[1] + '"></i></span><span><b>' + esc(a[2]) + '</b><small>' + esc(a[3]) + '</small></span><span class="ck"><i class="fas fa-check"></i></span></label>'; }).join('') +
         '</div></div>' +

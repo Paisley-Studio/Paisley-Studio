@@ -973,40 +973,32 @@
             ? 'No exams in this subject yet. Click \u201cNew exam\u201d to create a Midterm or End-of-Term paper.'
             : 'No exams posted for this subject yet. The Studio Desk sets exams — check back soon.') + '</div></div>';
         } else {
-          h += '<div class="cr-panel"><div class="cr-table-wrap"><table class="cr-table"><thead><tr><th>Title</th><th>Type</th><th>Exam date</th><th>Submissions by</th><th>Students</th><th></th></tr></thead><tbody>';
-          ITEMS.forEach(function (it) {
-            var cnt = counts(it);
+          var X = global.PaisleyExamCards; X.style();
+          h += '<div class="wx-list">' + ITEMS.map(function (it) {
+            var cnt = counts(it), id = it.id;
             var examDate = it.examDate ? U.fmtDateTime(U.toDate(it.examDate)) : '—';
             var deadline = it.submissionDeadline ? U.fmtDateTime(U.toDate(it.submissionDeadline)) : '—';
-            var adminControls = isAdmin || canEdit(it)
-              ? (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i> Edit</button>' : '') +
-                (isAdmin
-                  ? (it.status !== 'Closed' && global.PublishUI && global.PublishUI.sendExam ? '<button type="button" class="cr-btn sm primary" data-a="send-exam" data-id="' + esc(it.id) + '" title="Give this exam to students (more students any time) and tell its tutors"><i class="fas fa-paper-plane"></i> Send to students</button>' : '') +
-                    (it.status === 'Published'
-                      ? '<button type="button" class="cr-btn sm" data-a="close-exam" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close</button>'
-                      : '<button type="button" class="cr-btn sm" data-a="publish-exam" data-id="' + esc(it.id) + '"><i class="fas fa-upload"></i> Mark ready</button>') +
-                    (it.submissionsOpen === true
-                      ? '<button type="button" class="cr-btn sm" data-a="close-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close submissions</button>'
-                      : '<button type="button" class="cr-btn sm" data-a="open-window" data-id="' + esc(it.id) + '"><i class="fas fa-lock-open"></i> Open submissions</button>')
-                  : '') +
-                ''
-              : '';
-            h += '<tr>' +
-              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div>' + (kind === 'exam' ? givenToHtml(it) : '') + '</td>' +
-              '<td>' + pill('b-plain', it.examType || '—') + '</td>' +
-              '<td>' + esc(examDate) + '</td>' +
-              '<td>' + esc(deadline) + '</td>' +
-              '<td><span class="wk-chips"><span class="wk-chip"><i class="fas fa-users"></i> ' + cnt.total + '</span><span class="wk-chip"><i class="fas fa-inbox"></i> ' + cnt.submitted + '</span><span class="wk-chip"><i class="fas fa-circle-check"></i> ' + cnt.graded + '</span></span></td>' +
-              '<td><div class="cr-actions">' +
-                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(it.id) + '"><i class="fas fa-inbox"></i> Open</button>' +
-                (global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(it.id) + '" title="See it as students see it"><i class="fas fa-eye"></i> Preview</button>' : '') +
-                adminControls +
-                delBtnHtml(it) +
-                '<span style="align-self:center; margin-left:.4rem;">' + itemPill(it) + '</span>' +
-              '</div></td>' +
-            '</tr>';
-          });
-          h += '</tbody></table></div></div>';
+            var subs = S.subs[id] || {}, toMark = 0, resub = 0;
+            Object.keys(subs).forEach(function (k) { var x = subs[k]; if (x && x.status === 'Submitted') { toMark++; if ((Array.isArray(x.history) && x.history.length) || x.gradedAt) resub++; } });
+            return X.card({
+              title: it.title || 'Exam', sub: it.tutorName || '', state: itemPill(it),
+              toMark: toMark, resub: resub, examDate: examDate, deadline: deadline, cnt: cnt,
+              aud: audChips(it), given: givenToHtml(it),
+              main: [
+                '<button type="button" class="cr-btn sm primary" data-a="detail" data-id="' + esc(id) + '"><i class="fas fa-inbox"></i> Open</button>',
+                isAdmin && it.status !== 'Closed' && global.PublishUI && global.PublishUI.sendExam ? '<button type="button" class="cr-btn sm" data-a="send-exam" data-id="' + esc(id) + '" title="Give this exam to students (more students any time) and tell its tutors"><i class="fas fa-paper-plane"></i> Send to students</button>' : '',
+                global.WorkTools ? '<button type="button" class="cr-btn sm" data-a="preview" data-id="' + esc(id) + '" title="See it as students see it"><i class="fas fa-eye"></i> Preview</button>' : ''
+              ],
+              side: [canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(id) + '"><i class="fas fa-pen"></i> Edit</button>' : ''],
+              more: isAdmin ? [
+                it.status === 'Published' ? X.item('close-exam', id, 'fa-lock', 'Close exam') : X.item('publish-exam', id, 'fa-upload', 'Mark ready'),
+                it.submissionsOpen === true ? X.item('close-window', id, 'fa-lock', 'Close hand-ins') : X.item('open-window', id, 'fa-lock-open', 'Open hand-ins now'),
+                X.item('', '', '', '', 'hr'),
+                X.item('withdraw', id, 'fa-eye-slash', 'Withdraw', 'warn', 'Removes it from every tutor, student and parent portal. Keeps the item so you can post it again.'),
+                X.item('del', id, 'fa-trash', 'Delete for good', 'danger', 'Permanently deletes it, its files and the hand-ins')
+              ] : []
+            });
+          }).join('') + '</div>';
         }
       } else {
         if (!S.topics.length) h += '<div class="cr-panel"><div class="cr-empty">' + (isAdmin && !S.monitoringOnly && !opts.audience
