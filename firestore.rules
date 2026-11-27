@@ -595,6 +595,17 @@ service cloud.firestore {
     // =====================================================
     // TIMETABLE ENTRIES
     // =====================================================
+    // Exam timetables. Admins write the draft; publishExamTimetable (Admin SDK) fills
+    // studentIds / parentIds / tutorIds, and only the people listed may read it.
+    // Clients query with array-contains on their own list.
+    match /examTimetables/{id} {
+      allow read: if isAdmin() || (isSignedIn() && (
+        request.auth.uid in resource.data.get('studentIds', []) ||
+        request.auth.uid in resource.data.get('parentIds', []) ||
+        request.auth.uid in resource.data.get('tutorIds', [])));
+      allow create, update, delete: if isAdmin();
+    }
+
     match /timetableEntries/{id} {
       allow read: if isAdmin() ||
         tutorMaySeeEntry() ||

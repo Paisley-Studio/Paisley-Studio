@@ -292,6 +292,7 @@
         <h3 style="margin:0 0 .6rem; font-size:.95rem;">Upcoming / live classes</h3>
         <div id="classList"></div>
       </div>
+      <div class="panel"><div id="examTtHost"></div></div>
       <div class="panel">
         <h3 style="margin:0 0 .6rem; font-size:.95rem;">Weekly timetable</h3>
         <div id="ttGrid"></div>
@@ -525,6 +526,7 @@ function setChildHeader(child){
 function selectChild(id){
   currentChild = children.find(c=>c.id===id);
   if(!currentChild) return;
+  if(window.ExamTimetable) ExamTimetable.refreshAll();
   setChildHeader(currentChild);
   document.getElementById('gate').classList.remove('hidden');
   document.body.classList.remove('ready');
@@ -991,6 +993,15 @@ function renderChats(){
 </script>
 
 <script src="/js/ui/emoji-picker.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script>
+/* Exam timetables sent to this person (js/timetable/exam-timetable.js). */
+firebase.auth().onAuthStateChanged(function (u) {
+  if (!u || window.__examTtViewer || !window.ExamTimetable) return;
+  var h = document.getElementById('examTtHost'); if (!h) return;
+  window.__examTtViewer = ExamTimetable.mountViewer(h, { role: 'parent', uid: u.uid, childId: function () { return currentChild && currentChild.id; } });
+});
+</script>
 <script src="/js/ui/site-status.js?v=2" defer></script>
 </body>
 </html>

@@ -104,6 +104,10 @@ exports.publishClassroomContent       = publishing.publishClassroomContent;
 exports.tutorReleaseWork              = publishing.tutorReleaseWork;
 exports.repairReleasedAudiences        = publishing.repairReleasedAudiences;
 exports.repairExamTutorAccess         = publishing.repairExamTutorAccess;
+
+const examTimetable = require("./exam-timetable");
+exports.publishExamTimetable          = examTimetable.publishExamTimetable;
+exports.examTimetablePdf              = examTimetable.examTimetablePdf;
 exports.onResourcePosted              = publishing.onResourcePosted;
 exports.onResourceMessage             = publishing.onResourceMessage;
 exports.backfillAudiences             = publishing.backfillAudiences;

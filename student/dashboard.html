@@ -561,6 +561,7 @@
 
       <!-- TIMETABLE -->
       <section class="view" id="view-timetable">
+        <div class="panel"><div id="examTtHost"></div></div>
         <div class="panel">
           <div class="panel-head">
             <div><h3>Your weekly timetable</h3><div class="sub">Sessions for the subjects you take, grouped by day</div></div>
@@ -1973,6 +1974,15 @@ async function downloadIdCardPng(){
 </script>
 <script src="/js/ui/emoji-picker.js?v=1"></script>
 <script src="/js/ui/tech-entry.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script>
+/* Exam timetables sent to this person (js/timetable/exam-timetable.js). */
+firebase.auth().onAuthStateChanged(function (u) {
+  if (!u || window.__examTtViewer || !window.ExamTimetable) return;
+  var h = document.getElementById('examTtHost'); if (!h) return;
+  window.__examTtViewer = ExamTimetable.mountViewer(h, { role: 'student', uid: u.uid });
+});
+</script>
 <script src="/js/ui/site-status.js?v=2" defer></script>
 </body>
 </html>

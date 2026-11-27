@@ -68,6 +68,7 @@ user and denied access.
 | `exams` | admin, or authoring tutor | admin, tutor, or any signed-in user if `status == 'Published'` | admin, or authoring/granted tutor |
 | `examAttempts` | owner student | owner, admin, tutor, linked parent | owner student (autosave/submit), admin, or granted tutor |
 | `notes`, `notifications`, `timetables` | admin/tutor | any signed-in user | admin, or the posting tutor |
+| `examTimetables` | admin | admin, or a uid in `studentIds` / `parentIds` / `tutorIds` (filled by `publishExamTimetable`; query with array-contains) | admin |
 | `timetableEntries` (new) | admin, or assigned tutor | any signed-in user | admin, or assigned tutor |
 | `liveClasses` | admin, or hosting tutor | any signed-in user | admin, or hosting tutor |
 | `liveClassSessions`, `liveClassIntegrityEvents` (new) | owning student | owner, admin, hosting tutor | append-only — no client update/delete on events |

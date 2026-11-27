@@ -927,6 +927,7 @@
           <button class="subtab-btn" data-sub="notices" type="button"><i class="fas fa-bullhorn"></i> Notices</button>
           <button class="subtab-btn" data-sub="timetables" type="button"><i class="fas fa-calendar-days"></i> Timetables (legacy)</button>
           <button class="subtab-btn" data-sub="timetable-entries" type="button"><i class="fas fa-table-list"></i> Timetable</button>
+          <button class="subtab-btn" data-sub="exam-timetable" type="button"><i class="fas fa-calendar-check"></i> Exam timetable</button>
         </div>
 
         <div class="subview active" id="csub-notes">
@@ -1019,6 +1020,8 @@
             <div id="teDayGrid"></div>
           </div>
         </div>
+
+        <div class="subview" id="csub-exam-timetable"><div class="panel"><div id="examTtAdminHost"></div></div></div>
       </section>
 
       <section class="view" id="view-liveclasses">
@@ -4148,6 +4151,10 @@ document.querySelectorAll('#contentSubtabs .subtab-btn').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById('csub-'+btn.dataset.sub).classList.add('active');
     if(btn.dataset.sub === 'timetable-entries'){ renderTeGrid(); }
+    if(btn.dataset.sub === 'exam-timetable' && !window.__examTtAdmin && window.ExamTimetable){
+      const u = firebase.auth().currentUser;
+      window.__examTtAdmin = ExamTimetable.mountAdmin(document.getElementById('examTtAdminHost'), { uid: u ? u.uid : '', name: 'Studio Desk' });
+    }
   });
 });
 
@@ -4878,6 +4885,7 @@ function refreshAllNow(){
   }
 })();
 </script>
+<script src="/js/timetable/exam-timetable.js?v=1"></script>
 <script src="/js/ui/site-status.js?v=2" defer></script>
 </body>
 </html>

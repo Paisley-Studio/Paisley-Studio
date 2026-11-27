@@ -435,7 +435,7 @@
     <div class="content">
       <section class="view active" id="view-classroom"><div id="classroomHost"></div></section>
       <section class="view" id="view-homework"><div id="workHwHost"></div></section>
-      <section class="view" id="view-exams"><div id="workExHost"></div></section>
+      <section class="view" id="view-exams"><div class="panel" style="margin-bottom:1rem"><div id="examTtHost"></div></div><div id="workExHost"></div></section>
 
       <section class="view" id="view-messages"><div id="messagesHost"></div></section>
       <section class="view" id="view-tickets">
@@ -479,6 +479,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <script src="../firebase-config.js"></script>
 <script src="../lms-helpers.js?v=att1"></script>
@@ -707,6 +708,15 @@ $('tkSend').addEventListener('click', async () => {
 </script>
 <script src="/js/ui/emoji-picker.js?v=1"></script>
 <script src="/js/ui/tech-entry.js?v=1"></script>
+<script src="/js/timetable/exam-timetable.js?v=1"></script>
+<script>
+/* Exam timetables sent to this person (js/timetable/exam-timetable.js). */
+firebase.auth().onAuthStateChanged(function (u) {
+  if (!u || window.__examTtViewer || !window.ExamTimetable) return;
+  var h = document.getElementById('examTtHost'); if (!h) return;
+  window.__examTtViewer = ExamTimetable.mountViewer(h, { role: 'student', uid: u.uid });
+});
+</script>
 <script src="/js/ui/site-status.js?v=2" defer></script>
 </body>
 </html>

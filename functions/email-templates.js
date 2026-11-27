@@ -967,6 +967,88 @@ function examSubmittedTutor({ tutorName, exam, studentName, classLabel, resub })
   };
 }
 
+/* 20d. Exam timetable (student / parent / tutor). Its PDF is attached by the sender
+   (functions/exam-timetable.js). Plain style like the rest: a short note, the exams in a
+   light table, then how to prepare. */
+function examTimetableMail({ audience, name, student, kids, tt, sessions, updated, studentCount }) {
+  const t = tt || {};
+  const title = t.title || 'Exam timetable';
+  const ks = String(t.keyStage || '').replace(/\s*\(.*/, '');
+  const scope = [ks, t.year ? 'Year ' + t.year : ''].filter(Boolean).join(', ');
+  const day = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+  const cell = 'padding:8px 10px;border-bottom:1px solid #E3EEEB;vertical-align:top;';
+  const head = `padding:8px 10px;font-size:11px;letter-spacing:.06em;color:${BRAND.deep};`;
+  const table = (list) => {
+    const all = list || [];
+    const rows = all.slice(0, 40).map((s) =>
+      `<tr><td style="${cell}white-space:nowrap;"><strong>${esc(day(s.date))}</strong><br><span style="color:${BRAND.muted};font-size:12px;">${esc(s.start)}${s.end ? ' to ' + esc(s.end) : ''}</span></td>` +
+      `<td style="${cell}"><strong style="color:${BRAND.deep};">${esc(s.subjectName || s.subjectId)}</strong>${s.paper ? `<br><span style="color:${BRAND.muted};font-size:12px;">${esc(s.paper)}</span>` : ''}</td>` +
+      `<td style="${cell}font-size:12px;color:${BRAND.muted};">${esc([s.mode, s.room].filter(Boolean).join(', '))}</td></tr>`).join('');
+    const more = all.length > 40 ? `<p style="margin:6px 0 0;font-size:12px;color:${BRAND.muted};">and ${all.length - 40} more in the attached PDF.</p>` : '';
+    return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;border:1px solid #E3EEEB;margin:0 0 6px;font-size:14px;">` +
+      `<tr style="background:#F1F9F7;"><th align="left" style="${head}">WHEN</th><th align="left" style="${head}">EXAM</th><th align="left" style="${head}">WHERE</th></tr>${rows}</table>${more}`;
+  };
+  const instr = t.instructions ? `<p style="margin:0 0 6px;font-weight:800;color:${BRAND.deep};">From the Studio Desk</p><p style="margin:0 0 14px;white-space:pre-wrap;">${esc(t.instructions)}</p>` : '';
+  const verb = updated ? 'has been updated' : 'is out';
+  const series = t.series ? ` (${esc(t.series)})` : '';
+
+  if (audience === 'parent') {
+    const list = kids || [];
+    const names = list.map((k) => firstName(k.student.name) || 'your child').join(' and ');
+    return {
+      subject: `${updated ? 'Updated exam timetable' : 'Exam timetable'} for ${names}: ${title}`,
+      html: render({
+        programme: programmeOf(list[0] && list[0].student),
+        preheader: `${title} ${verb}. The timetable PDF is attached. Please help ${names} prepare.`,
+        heading: updated ? 'Exam timetable updated' : 'Exam timetable',
+        intro: `Hi ${esc(firstName(name) || 'there')},`,
+        body: `
+        <p style="margin:0 0 14px;">${fa('fa-calendar-days', BRAND.teal)}The <strong>${esc(title)}</strong>${series} ${verb}. The timetable for <strong>${esc(names)}</strong> is attached as a PDF and is in the Classes &amp; Timetable tab of the Parent Portal.</p>
+        ${list.map((k) => `<p style="margin:12px 0 6px;font-weight:800;color:${BRAND.deep};">${esc(k.student.name || 'Your child')}</p>${table(k.sessions)}`).join('')}
+        <p style="margin:14px 0 6px;font-weight:800;color:${BRAND.deep};">How you can help</p>
+        <p style="margin:0 0 14px;">Agree a revision plan together, keep exam days free, and make sure ${esc(names)} has a quiet place, the right equipment and is ready 15 minutes before each start time.</p>
+        ${instr}`,
+        cta: { label: 'Open the Parent Portal', url: PORTALS.parent }
+      })
+    };
+  }
+  if (audience === 'tutor') {
+    const n = (sessions || []).length;
+    return {
+      subject: `${updated ? 'Updated exam timetable' : 'Exam timetable published'}: ${title}${scope ? ' (' + scope + ')' : ''}`,
+      html: render({
+        programme: 'staff',
+        preheader: `${title} ${verb}: ${n} exam${n === 1 ? '' : 's'} in your subjects. Help your students prepare.`,
+        heading: updated ? 'Exam timetable updated' : 'Exam timetable published',
+        intro: `Hi ${esc(firstName(name) || 'there')},`,
+        body: `
+        <p style="margin:0 0 14px;">${fa('fa-calendar-days', BRAND.teal)}The Studio Desk ${updated ? 'has updated' : 'has published'} the <strong>${esc(title)}</strong>${scope ? ` for ${esc(scope)}` : ''}${studentCount ? `, sent to ${studentCount} student${studentCount === 1 ? '' : 's'}` : ''}. These are the exams in the subjects you teach; your copy is attached.</p>
+        ${table(sessions)}
+        <p style="margin:14px 0 6px;font-weight:800;color:${BRAND.deep};">Please</p>
+        <p style="margin:0 0 14px;">Use your lessons before each exam for revision and past-paper practice, remind your students of the dates, and be ready to mark the papers when they come in.</p>
+        ${instr}`,
+        cta: { label: 'Open the Tutor Portal', url: PORTALS.tutor }
+      })
+    };
+  }
+  return {
+    subject: `${updated ? 'Your exam timetable has changed' : 'Your exam timetable'}: ${title}`,
+    html: render({
+      programme: programmeOf(student),
+      preheader: `${title} ${verb}. Your timetable PDF is attached. Start preparing now.`,
+      heading: updated ? 'Your exam timetable has changed' : 'Your exam timetable',
+      intro: `Hi ${esc(firstName((student && student.name) || name) || 'there')},`,
+      body: `
+        <p style="margin:0 0 14px;">${fa('fa-calendar-days', BRAND.teal)}The <strong>${esc(title)}</strong>${series} ${verb}. Here are your exams; your own timetable is attached as a PDF and is in the Timetable tab of your portal.</p>
+        ${table(sessions)}
+        <p style="margin:14px 0 6px;font-weight:800;color:${BRAND.deep};">Getting ready</p>
+        <p style="margin:0 0 14px;">Plan revision for each subject now, be ready 15 minutes before every start time with your equipment, and hand in or upload each paper before it closes.</p>
+        ${instr}`,
+      cta: { label: portalCta(student), url: studentPortal(student) }
+    })
+  };
+}
+
 /* 21. Student + parent — results released (flat exam, ink-graded) */
 function examResultsReleased({ audience, student, parentName, exam, submission }) {
   const examType = exam.examType || 'Exam';
@@ -1185,6 +1267,7 @@ module.exports = {
     examPostedStudent,
     examPostedTutor,
     examSubmittedTutor,
+    examTimetableMail,
     examResultsReleased,
     attendanceNotice
   }
