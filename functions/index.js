@@ -103,6 +103,7 @@ const publishing = require("./publishing");
 exports.publishClassroomContent       = publishing.publishClassroomContent;
 exports.tutorReleaseWork              = publishing.tutorReleaseWork;
 exports.repairReleasedAudiences        = publishing.repairReleasedAudiences;
+exports.repairExamTutorAccess         = publishing.repairExamTutorAccess;
 exports.onResourcePosted              = publishing.onResourcePosted;
 exports.onResourceMessage             = publishing.onResourceMessage;
 exports.backfillAudiences             = publishing.backfillAudiences;
@@ -765,27 +766,33 @@ exports.onFlatExamPosted = onDocumentWritten(
     const key = WS.stableId(entityId, "flatExamPosted");
 
     /* ---- Who: students of the subject + Year + board on a posted portal, or those released by name ---- */
-    const recipients = new Map();
-    if (claimed.auds.some((a) => a !== "tutors")) {
-      const wantYear = exam.year != null ? Number(exam.year) : null;
-      const studentsSnap = await db.collection("students").where("keyStage", "==", exam.keyStage).get();
-      for (const stuDoc of studentsSnap.docs) {
-        const student = stuDoc.data() || {};
-        const subjects = Array.isArray(student.subjects) ? student.subjects : [];
-        if (!subjects.includes(exam.subjectId)) continue;
-        if (wantYear != null && student.year != null && Number(student.year) !== wantYear) continue;
-        if (["suspended", "pending"].indexOf(String(student.status || "").toLowerCase()) !== -1) continue;
-        if (claimed.auds.indexOf(WS.studentAudience(student)) === -1) continue;
-        if (examClassroom && WS.studentBoard(student, exam.subjectId) !== WS.boardOf(examClassroom)) continue;
-        if (exam.audience === "students" && (exam.recipients || []).indexOf(stuDoc.id) === -1) continue;
-        recipients.set(stuDoc.id, { id: stuDoc.id, ...student });
+    /* Students of the class on the given portals (auds), plus the ones named in ids. */
+    async function studentsWith(auds, ids) {
+      const out = new Map();
+      const studentAuds = auds.filter((a) => a !== "tutors");
+      if (studentAuds.length) {
+        const wantYear = exam.year != null ? Number(exam.year) : null;
+        const studentsSnap = await db.collection("students").where("keyStage", "==", exam.keyStage).get();
+        for (const stuDoc of studentsSnap.docs) {
+          const student = stuDoc.data() || {};
+          const subjects = Array.isArray(student.subjects) ? student.subjects : [];
+          if (!subjects.includes(exam.subjectId)) continue;
+          if (wantYear != null && student.year != null && Number(student.year) !== wantYear) continue;
+          if (["suspended", "pending"].indexOf(String(student.status || "").toLowerCase()) !== -1) continue;
+          if (studentAuds.indexOf(WS.studentAudience(student)) === -1) continue;
+          if (examClassroom && WS.studentBoard(student, exam.subjectId) !== WS.boardOf(examClassroom)) continue;
+          if (exam.audience === "students" && (exam.recipients || []).indexOf(stuDoc.id) === -1) continue;
+          out.set(stuDoc.id, { id: stuDoc.id, ...student });
+        }
       }
+      for (const sid of ids) {
+        if (out.has(sid)) continue;
+        const sd = await db.collection("students").doc(sid).get();
+        if (sd.exists && String((sd.data() || {}).status || "").toLowerCase() !== "suspended") out.set(sid, { id: sid, ...sd.data() });
+      }
+      return out;
     }
-    for (const sid of claimed.ids) {
-      if (recipients.has(sid)) continue;
-      const sd = await db.collection("students").doc(sid).get();
-      if (sd.exists && String((sd.data() || {}).status || "").toLowerCase() !== "suspended") recipients.set(sid, { id: sid, ...sd.data() });
-    }
+    const recipients = await studentsWith(claimed.auds, claimed.ids);
 
     /* The paper goes to parents only (never to students or tutors), and is fetched only if a parent needs it. */
     let paperAttachment, paperTried = false;
@@ -835,27 +842,27 @@ exports.onFlatExamPosted = onDocumentWritten(
 
     /* ---- Tutors who teach this subject, Key Stage and board (or only those the desk picked):
        a bell and their own email. Never the paper, never the student wording. ---- */
-    if (claimed.auds.indexOf("tutors") !== -1) {
+    /* First time tutors get it: who has it, when it opens and closes. Later, when the desk gives it
+       to more students by name, the same tutors hear who was added. */
+    const tutorsFirst = claimed.auds.indexOf("tutors") !== -1;
+    const tutorsMore = !tutorsFirst && WS.isVisibleTo(after, "tutors", "Published") && claimed.ids.length > 0;
+    if (tutorsFirst || tutorsMore) {
       try {
-        const only = Array.isArray(exam.tutorNotify) ? exam.tutorNotify : null;
         const classLabel = WS.classTag(exam.subjectName || "", examClassroom);
-        const tutorsSnap = await db.collection("tutorAccounts").get();
-        for (const tutDoc of tutorsSnap.docs) {
-          const tutor = tutDoc.data() || {};
-          if (String(tutor.status || "").toLowerCase() === "suspended") continue;
-          if ((Array.isArray(tutor.subjects) ? tutor.subjects : []).indexOf(exam.subjectId) === -1) continue;
-          const tutorKs = Array.isArray(tutor.keyStages) ? tutor.keyStages : [];
-          if (tutorKs.length && tutorKs.indexOf(exam.keyStage) === -1) continue;
-          if (examClassroom && !WS.tutorTeachesBoard(tutor, examClassroom)) continue;
-          if (only && only.indexOf(tutDoc.id) === -1) continue;
-          const told = await WS.notifyOnce(`flatexam_${key}_${tutDoc.id}`, tutDoc.id, "tutor", {
+        const openAuds = ["online", "remote", "tuition"].filter((a) => WS.isVisibleTo(after, a, "Published"));
+        const given = tutorsFirst ? await studentsWith(openAuds, Array.isArray(after.releasedTo) ? after.releasedTo : []) : recipients;
+        const names = Array.from(given.values()).map((s) => s.name || "A student").sort((a, b) => a.localeCompare(b));
+        const win = WS.examWindow(exam);
+        const moreKey = tutorsMore ? WS.stableId(entityId, "moreStudents", claimed.ids.slice().sort().join(",")) : "";
+        for (const tutor of await WS.examTutors(exam, examClassroom)) {
+          const told = await WS.notifyOnce(tutorsMore ? `flatexammore_${moreKey}_${tutor.id}` : `flatexam_${key}_${tutor.id}`, tutor.id, "tutor", {
             type: "exam_posted",
-            title: `Exam released in ${classLabel || "your subject"}`,
-            message: `${exam.title || "An exam"} (${classLabel})${examDate ? " on " + examDate.toLocaleDateString("en-GB") : ""} was released to your students. Get ready to mark it: you will see each submission arrive in the Classroom.`,
+            title: tutorsMore ? `${names.length} more student${names.length === 1 ? "" : "s"} given ${exam.title || "an exam"}` : `Exam released in ${classLabel || "your subject"}`,
+            message: `${exam.title || "An exam"} (${classLabel}) ${tutorsMore ? "was also given to" : "was released to"} ${names.length} student${names.length === 1 ? "" : "s"}. Opens: ${win.opens}. Closes: ${win.closes}. Get ready to mark: each submission arrives in the Classroom.`,
             relatedEntity: "exam", relatedEntityId: entityId, emailSent: !!tutor.email, extra: WS.boardExtra(examClassroom)
           });
           if (!told || !tutor.email) continue;
-          const t = templates.examPostedTutor({ tutorName: tutor.name, exam, examDate, classLabel });
+          const t = templates.examPostedTutor({ tutorName: tutor.name, exam, examDate, classLabel, students: names, more: tutorsMore, window: win });
           const r = await sendEmail(tutor.email, t.subject, t.html, undefined, undefined, { area: "exams" });
           if (r && r.sent) tutorsTold++;
         }
@@ -896,21 +903,32 @@ exports.onFlatExamSubmissionWritten = onDocumentWritten(
     const WS = require("./work-shared");
     const db = admin.firestore();
 
-    // Student re-handed-in after "Corrections" -> tell the exam's tutor.
-    if (before && before.status === "Corrections" && after.status === "Submitted") {
+    /* A student handed in (or re-handed in after corrections): tell the tutors who mark this exam
+       (those who teach the class, or only those the desk picked). Once per hand-in round. */
+    const wasIn = before && (before.status === "Submitted" || before.status === "Graded");
+    if (after.status === "Submitted" && !wasIn && after.handIn !== "physical") {
       try {
         const ex = await db.doc(`classrooms/${cid}/exams/${eid}`).get();
         const e = ex.exists ? ex.data() : {};
-        if (e.tutorId) {
-          const cls = await WS.classroomOf(cid);
-          const board = WS.boardLabel(cls);
-          await WS.notify(e.tutorId, "tutor", {
-            type: "exam_submitted", title: "Exam resubmitted",
-            message: `${after.studentName || "A student"} resubmitted corrected work for ${e.title || "an exam"}${board ? " (" + board + ")" : ""}.`,
-            relatedEntity: "exam", relatedEntityId: `${cid}/flat/${eid}`, extra: WS.boardExtra(cls)
+        const cls = await WS.classroomOf(cid);
+        const board = WS.boardLabel(cls);
+        const resub = !!(before && before.status === "Corrections");
+        const at = WS.toDate(after.submittedAt) || WS.toDate(after.updatedAt);
+        const round = WS.stableId(cid, eid, studentId, resub ? "resub" : "sub", String(at ? at.getTime() : (resub ? "r" : "0")));
+        const who = after.studentName || "A student";
+        const tutors = await WS.examTutors(e, cls);
+        if (e.tutorId && !tutors.some((t) => t.id === e.tutorId)) tutors.push({ id: e.tutorId });
+        for (const tutor of tutors) {
+          const told = await WS.notifyOnce(`flatexamsub_${round}_${tutor.id}`, tutor.id, "tutor", {
+            type: "exam_submitted", title: resub ? "Exam resubmitted" : "Exam submitted: ready to mark",
+            message: `${who} ${resub ? "resubmitted corrected work for" : "handed in"} ${e.title || "an exam"} (${WS.classTag(e.subjectName || "", cls) || e.subjectName || ""}${board && !WS.classTag(e.subjectName || "", cls) ? ", " + board : ""}). Open it in the Classroom to mark.`,
+            relatedEntity: "exam", relatedEntityId: `${cid}/flat/${eid}`, emailSent: !!tutor.email, extra: Object.assign({ studentId }, WS.boardExtra(cls))
           });
+          if (!told || !tutor.email) continue;
+          const t = templates.examSubmittedTutor({ tutorName: tutor.name, exam: e, studentName: who, classLabel: WS.classTag(e.subjectName || "", cls) || e.subjectName || "", resub });
+          await sendEmail(tutor.email, t.subject, t.html, undefined, undefined, { area: "exams" });
         }
-      } catch (err) { console.warn("onFlatExamSubmissionWritten: tutor resubmit notice failed", err.message || err); }
+      } catch (err) { console.warn("onFlatExamSubmissionWritten: tutor hand-in notice failed", err.message || err); }
       return;
     }
 

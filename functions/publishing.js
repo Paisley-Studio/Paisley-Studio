@@ -152,6 +152,7 @@ async function publishOne(db, ctx, ref, parsed, audiences, plan) {
    targets: { students: [uid] (absent = the whole class), tutors: "all" | "none" | [uid] }
 --------------------------------------------------------- */
 const AREA_OF_TYPE = { lesson: "classes", assignment: "homework", exam: "exams", flatExam: "exams" };
+const EXAM_TYPES = ["exam", "flatExam"];
 async function planFor(db, parsed, audiences, targets, fz) {
   const t = targets && typeof targets === "object" ? targets : {};
   const plan = {};
@@ -185,7 +186,9 @@ async function planFor(db, parsed, audiences, targets, fz) {
       tl = tl === null ? ok : tl.filter((x) => ok.indexOf(x) !== -1);
       plan.frozen = plan.frozen || { area };
     }
-    if (t.tutors === "none") plan.dropTutors = true;
+    /* Exams: tutors always see an exam their students sit (they mark it); "none" only means nobody is told.
+       Other work: "none" keeps it from tutors altogether. The freeze still drops tutors when it holds them all. */
+    if (t.tutors === "none") { if (EXAM_TYPES.indexOf(parsed.type) !== -1 && !(frozen && aud.tutors === true)) plan.tutorNotify = []; else plan.dropTutors = true; }
     else if (tl !== null) { plan.tutorNotify = tl; if (!tl.length && frozen) plan.dropTutors = true; }
   }
   return plan;
@@ -206,10 +209,17 @@ async function publishItems(db, ctx, choice, paths, targets) {
   for (const path of list) {
     const parsed = parsePath(path);
     if (!parsed) { results.push({ path, status: "skipped", reason: "Not a publishable item." }); continue; }
-    const audiences = audiencesFor(choice, parsed.type);
+    let audiences = audiencesFor(choice, parsed.type);
     if (!audiences.length) { results.push({ path, type: parsed.type, status: "skipped", reason: "This content type cannot be posted to that audience." }); continue; }
+    /* An exam posted to students is always posted to its tutors too, or nobody could see or mark the
+       hand-ins. Which tutors are TOLD still follows the desk's choice (default: all who teach it). */
+    let tg = targets;
+    if (EXAM_TYPES.indexOf(parsed.type) !== -1 && audiences.indexOf("tutors") === -1) {
+      audiences = audiences.concat("tutors");
+      if (!tg || tg.tutors === undefined) tg = Object.assign({}, tg || {}, { tutors: "all" });
+    }
     try {
-      const plan = await planFor(db, parsed, audiences, targets, fz);
+      const plan = await planFor(db, parsed, audiences, tg, fz);
       const r = await publishOne(db, ctx, db.doc(path), parsed, audiences, plan);
       if (plan.frozen) {
         await freeze.record("content", { area: plan.frozen.area, path, title: String(r.title || "").slice(0, 200),
@@ -584,4 +594,56 @@ exports.backfillAudiences = onCall(
   }
 );
 
-exports._internals = { parsePath, audiencesFor, legacyAudiences, publishOne, publishItems, planFor, releaseWork, tutorTeaches, becameVisible, notifyTutorsOfPost, TYPES };
+/* ---------------------------------------------------------
+   repairExamTutorAccess (admin): exams (classrooms/{cid}/exams) that reached students
+   but were never posted to tutors were invisible to every tutor, hand-ins included.
+   Posts each such exam to its tutors. An exam still open (or not yet open) then emails
+   its tutors through onFlatExamPosted; one whose hand-in window has closed is marked as
+   already told, so nobody gets a stale email. Idempotent; data: { dryRun }.
+--------------------------------------------------------- */
+async function repairExamTutors(db, ctx, dryRun) {
+  const out = { checked: 0, fixed: 0, toldTutors: 0, quiet: 0, items: [] };
+  const snap = await db.collectionGroup("exams").get();
+  const now = Date.now();
+  for (const doc of snap.docs) {
+    const parts = doc.ref.path.split("/");
+    if (parts.length !== 4 || parts[0] !== "classrooms") continue;   // flat exams only
+    const d = doc.data() || {};
+    const a = d.audiences;
+    if (!a || typeof a !== "object" || String(d.status || "") !== "Published") continue;
+    out.checked++;
+    const studentsHave = a.online === true || a.remote === true || a.tuition === true || (Array.isArray(d.releasedTo) && d.releasedTo.length > 0);
+    if (!studentsHave || a.tutors === true) continue;
+    const dl = W.toDate(d.submissionDeadline);
+    const finished = !!(dl && dl.getTime() < now && d.submissionsOpen !== true);
+    out.fixed++; if (finished) out.quiet++; else out.toldTutors++;
+    out.items.push({ path: doc.ref.path, title: d.title || "", emailTutors: !finished });
+    if (dryRun) continue;
+    const patch = {
+      "audiences.tutors": true,
+      "publication.tutors": { publishedAt: ctx.ts, publishedBy: ctx.uid, publishedByName: ctx.name || "Studio Desk", repair: "examTutorAccess", subjectId: d.subjectId || null, year: d.year != null ? d.year : null, keyStage: d.keyStage || null, topicId: null },
+      updatedAt: ctx.ts
+    };
+    if (finished) patch["notificationsSent.tutors"] = true;
+    await doc.ref.update(patch);
+    await db.doc("publications/" + W.stableId(doc.ref.path, "tutors")).set({
+      path: doc.ref.path, type: "flatExam", title: d.title || "", audience: "tutors", classroomId: parts[1], topicId: null,
+      keyStage: d.keyStage || null, year: d.year != null ? d.year : null, subjectId: d.subjectId || null,
+      publishedBy: ctx.uid, publishedByName: ctx.name || "Studio Desk", publishedAt: ctx.ts, requestId: "repairExamTutorAccess", status: "active"
+    }, { merge: true });
+  }
+  if (!dryRun) await db.doc("serverConfig/repairs").set({ examTutorAccessAt: ctx.ts, examTutorAccessFixed: out.fixed }, { merge: true });
+  return out;
+}
+exports.repairExamTutorAccess = onCall(
+  { cors: true, region: W.LOCATION, timeoutSeconds: 300 },
+  async (request) => {
+    const who = await requireAdmin(request);
+    const db = admin.firestore();
+    const r = await repairExamTutors(db, { uid: who.uid, name: who.name, ts: admin.firestore.Timestamp.now() }, request.data && request.data.dryRun === true);
+    r.items = r.items.slice(0, 200);
+    return r;
+  }
+);
+
+exports._internals = { repairExamTutors, parsePath, audiencesFor, legacyAudiences, publishOne, publishItems, planFor, releaseWork, tutorTeaches, becameVisible, notifyTutorsOfPost, TYPES };

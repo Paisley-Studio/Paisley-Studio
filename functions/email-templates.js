@@ -907,27 +907,60 @@ function examPostedStudent({ student, exam, examDate }) {
 
 /* 20b. Tutor: an exam in a subject they teach was released. No paper attached and no
    student wording: they get ready to mark and see hand-ins arrive in the Classroom. */
-function examPostedTutor({ tutorName, exam, examDate, classLabel }) {
+function examPostedTutor({ tutorName, exam, examDate, classLabel, students, more, window: win }) {
   const examType = exam.examType || 'Exam';
+  const names = Array.isArray(students) ? students : null;
+  const shown = names ? names.slice(0, 40) : [];
+  const who = names
+    ? `<p style="margin:0 0 6px;font-weight:800;color:${BRAND.deep};">${more ? 'Also given to' : 'Given to'} ${names.length} student${names.length === 1 ? '' : 's'}</p>` +
+      `<p style="margin:0 0 14px;">${shown.map(esc).join(', ')}${names.length > shown.length ? ` and ${names.length - shown.length} more` : ''}</p>`
+    : '';
   return {
-    subject: `Exam released in ${classLabel || exam.subjectName || 'your subject'}: ${exam.title || examType}`,
+    subject: more ? `More students given ${exam.title || examType} (${classLabel || exam.subjectName || 'your subject'})` : `Exam released in ${classLabel || exam.subjectName || 'your subject'}: ${exam.title || examType}`,
     html: render({
       programme: 'staff',
       preheader: `${exam.title || examType} has been released to your students. Get ready to mark the submissions.`,
-      heading: 'An exam in your subject was released',
+      heading: more ? 'More students were given an exam' : 'An exam in your subject was released',
       intro: `Hi ${esc(firstName(tutorName) || 'there')},`,
       body: `
-        <p style="margin:0 0 14px;">${fa('fa-file-pen', BRAND.teal)}The Studio Desk has released a <strong>${esc(examType)}</strong> in a subject you teach. Please get ready to mark it once your students hand it in.</p>
+        <p style="margin:0 0 14px;">${fa('fa-file-pen', BRAND.teal)}${more ? `The Studio Desk has given <strong>${esc(exam.title || examType)}</strong> to more of your students.` : `The Studio Desk has released a <strong>${esc(examType)}</strong> in a subject you teach.`} Please get ready to mark it once your students hand it in.</p>
         ${detailList([
           ['fa-book', 'Class', classLabel || exam.subjectName || exam.subjectId || '—'],
           ['fa-file-lines', 'Exam', exam.title || '—'],
           ['fa-tag', 'Type', examType],
           ['fa-calendar-day', 'Exam date', fmtDateShort(examDate)],
-          exam.submissionDeadline
+          win ? ['fa-lock-open', 'Hand-ins open', win.opens] : null,
+          win ? ['fa-lock', 'Hand-ins close', win.closes] : (exam.submissionDeadline
             ? ['fa-hourglass-half', 'Submissions by', fmtDateShort(exam.submissionDeadline.toDate ? exam.submissionDeadline.toDate() : exam.submissionDeadline)]
-            : null
+            : null)
         ])}
+        ${who}
         <p style="margin:0;font-size:13px;color:${BRAND.muted};">You can see in the Classroom when each student submits, and mark the papers there. The paper itself is in the Classroom too.</p>
+      `,
+      cta: { label: 'Open the Tutor Portal', url: PORTALS.tutor }
+    })
+  };
+}
+
+/* 20c. Tutor: a student handed in a desk exam (or resubmitted corrections). Ready to mark. */
+function examSubmittedTutor({ tutorName, exam, studentName, classLabel, resub }) {
+  const e = exam || {};
+  const examType = e.examType || 'Exam';
+  return {
+    subject: `${resub ? 'Resubmitted' : 'To mark'}: ${studentName || 'A student'}, ${e.title || examType}`,
+    html: render({
+      programme: 'staff',
+      preheader: `${studentName || 'A student'} ${resub ? 'resubmitted' : 'handed in'} ${e.title || examType}. It is ready to mark.`,
+      heading: resub ? 'Corrected exam handed in' : 'An exam is ready to mark',
+      intro: `Hi ${esc(firstName(tutorName) || 'there')},`,
+      body: `
+        <p style="margin:0 0 14px;">${fa('fa-inbox', BRAND.teal)}<strong>${esc(studentName || 'A student')}</strong> ${resub ? 'has handed in corrected work for' : 'has handed in'} <strong>${esc(e.title || examType)}</strong>.</p>
+        ${detailList([
+          ['fa-book', 'Class', classLabel || e.subjectName || e.subjectId || '—'],
+          ['fa-file-lines', 'Exam', e.title || '—'],
+          ['fa-user-graduate', 'Student', studentName || '—']
+        ])}
+        <p style="margin:0;font-size:13px;color:${BRAND.muted};">Open the exam in the Classroom to mark it.</p>
       `,
       cta: { label: 'Open the Tutor Portal', url: PORTALS.tutor }
     })
@@ -1151,6 +1184,7 @@ module.exports = {
     examPostedParent,
     examPostedStudent,
     examPostedTutor,
+    examSubmittedTutor,
     examResultsReleased,
     attendanceNotice
   }

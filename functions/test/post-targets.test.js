@@ -32,7 +32,12 @@ test("picked students: only them (of this class, on a posted portal), with their
 });
 
 test("tutors: none, picked, or all", async () => {
-  assert.equal((await P.planFor(null, FX, ALL, { tutors: "none" }, off)).dropTutors, true);
+  /* Exams: "none" tells nobody, but tutors still see it so they can mark the hand-ins. */
+  const none = await P.planFor(null, FX, ALL, { tutors: "none" }, off);
+  assert.ok(!none.dropTutors);
+  assert.deepEqual(none.tutorNotify, []);
+  const HW = { type: "assignment", path: "classrooms/maths_y8/topics/t1/assignments/a1", cid: "maths_y8", id: "a1" };
+  assert.equal((await P.planFor(null, HW, ALL, { tutors: "none" }, off)).dropTutors, true);
   assert.deepEqual((await P.planFor(null, FX, ALL, { tutors: ["t1"] }, off)).tutorNotify, ["t1"]);
   assert.equal((await P.planFor(null, FX, ALL, { tutors: "all" }, off)).tutorNotify, undefined);
 });

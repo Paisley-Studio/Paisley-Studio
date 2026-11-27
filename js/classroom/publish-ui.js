@@ -532,7 +532,12 @@
     m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); if (onChange) onChange(); };
     var W = { students: 'all', tutors: 'all', studentList: [], tutorList: [], pickS: {}, pickT: {}, q: '', qt: '' };
     var requestId = 'pub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    var fz = null;
+    var fz = null, X = {};   /* X: the exam as it is now (who already has it) */
+    function has(s) {
+      var a = X.audiences || {};
+      return (Array.isArray(X.releasedTo) && X.releasedTo.indexOf(s.id) !== -1) || (X.status === 'Published' && a[audOf(s)] === true);
+    }
+    function tutorsHave() { return X.status === 'Published' && (X.audiences || {}).tutors === true; }
 
     function listHtml(kind) {
       var all = kind === 's' ? W.studentList : W.tutorList, q = (kind === 's' ? W.q : W.qt).toLowerCase(), pick = kind === 's' ? W.pickS : W.pickT;
@@ -540,27 +545,31 @@
       return '<div class="pb-pick"><div class="pb-pick-tools"><input type="search" data-wq="' + kind + '" placeholder="Search by name or email" value="' + esc(kind === 's' ? W.q : W.qt) + '">' +
         '<button type="button" class="cr-btn sm" data-wall="' + kind + '">Tick all shown</button><button type="button" class="cr-btn sm" data-wnone="' + kind + '">Clear</button><span class="cnt">' + Object.keys(pick).length + ' ticked</span></div>' +
         '<div class="pb-pick-list">' + (rows.length ? rows.map(function (x) {
-          return '<label><input type="checkbox" data-wp="' + kind + '" value="' + esc(x.id) + '"' + (pick[x.id] ? ' checked' : '') + '><span>' + esc(x.name || 'No name') + '</span><small>' + esc(kind === 's' ? (audOf(x) === 'remote' ? 'Remote' : 'Online') : (x.email || '')) + '</small></label>';
+          var got = kind === 's' && has(x);
+          return '<label' + (got ? ' style="opacity:.65"' : '') + '><input type="checkbox" data-wp="' + kind + '" value="' + esc(x.id) + '"' + (pick[x.id] || got ? ' checked' : '') + (got ? ' disabled' : '') + '><span>' + esc(x.name || 'No name') + '</span><small>' + (got ? '<i class="fas fa-check"></i> Has it · ' : '') + esc(kind === 's' ? (audOf(x) === 'remote' ? 'Remote' : 'Online') : (x.email || '')) + '</small></label>';
         }).join('') : '<div class="cr-empty" style="padding:.8rem">Nobody matches.</div>') + '</div></div>';
     }
     function paint() {
+      var nHave = W.studentList.filter(has).length, nNew = W.studentList.length - nHave;
       var allowNames = fz ? (fz.allow || []).map(function (a) { return a.name || a.email || 'Test account'; }) : [];
       var h = '<div class="box"><h4>Exam</h4><b>' + esc(ex.title || 'Exam') + '</b><div class="cr-note">' + esc(CU.displayName(cls)) + ' · Year ' + esc(cls.year) + '</div></div>';
       if (fz) h += '<div class="pb-freeze"><i class="fas fa-snowflake"></i><div><b>Developer mode freeze is on.</b> ' +
         ((fz.audiences || {}).students ? 'Students get this only if they are one of your test accounts' + (allowNames.length ? ' (' + esc(allowNames.slice(0, 6).join(', ')) + (allowNames.length > 6 ? '…' : '') + ')' : ': you have none, so no student gets it') + '. ' : '') +
         ((fz.audiences || {}).tutors ? 'Only tutor test accounts are told. ' : '') + 'Alerts and emails to frozen people are held.</div></div>';
       h += '<div class="pb-who"><h4><i class="fas fa-user-graduate"></i> Students enrolled in ' + esc(CU.displayName(cls)) + ' Year ' + esc(cls.year) + '</h4><div class="pb-opts">' +
-        '<label class="pb-opt"><input type="radio" name="pxS" value="all"' + (W.students === 'all' ? ' checked' : '') + '> All enrolled students (' + W.studentList.length + ')</label>' +
+        (nHave ? '<div class="cr-note" style="margin:.1rem 0 .4rem"><i class="fas fa-circle-check" style="color:#1d8b57"></i> ' + nHave + ' of ' + W.studentList.length + ' already have it. You can give it to more students now.</div>' : '') +
+        '<label class="pb-opt"><input type="radio" name="pxS" value="all"' + (W.students === 'all' ? ' checked' : '') + '> All enrolled students (' + (nHave ? nNew + ' more' : W.studentList.length) + ')</label>' +
         '<label class="pb-opt"><input type="radio" name="pxS" value="pick"' + (W.students === 'pick' ? ' checked' : '') + '> Only students I pick</label>' +
         '<label class="pb-opt"><input type="radio" name="pxS" value="none"' + (W.students === 'none' ? ' checked' : '') + '> No students</label></div>' +
         (W.students === 'pick' ? listHtml('s') + '<div class="cr-note" style="margin-top:.4rem">Only the ticked students and their parents get it.</div>'
           : (W.students === 'all' ? '<div class="cr-note">Every student enrolled in this subject and Year, and their parents.</div>' : '')) + '</div>';
-      h += '<div class="pb-who"><h4><i class="fas fa-chalkboard-user"></i> Tutors</h4><div class="pb-opts">' +
+      if (tutorsHave()) h += '<div class="pb-who"><h4><i class="fas fa-chalkboard-user"></i> Tutors</h4><div class="cr-note">The tutors already have this exam. They are told which students you add, and see every hand-in.</div></div>';
+      else h += '<div class="pb-who"><h4><i class="fas fa-chalkboard-user"></i> Tutors</h4><div class="pb-opts">' +
         '<label class="pb-opt"><input type="radio" name="pxT" value="all"' + (W.tutors === 'all' ? ' checked' : '') + '> All tutors who teach it (' + W.tutorList.length + ')</label>' +
         '<label class="pb-opt"><input type="radio" name="pxT" value="pick"' + (W.tutors === 'pick' ? ' checked' : '') + '> Only tutors I pick</label>' +
         '<label class="pb-opt"><input type="radio" name="pxT" value="none"' + (W.tutors === 'none' ? ' checked' : '') + '> No tutors</label></div>' +
-        (W.tutors === 'pick' ? listHtml('t') : '') + '<div class="cr-note" style="margin-top:.4rem">Tutors get their own email (get ready to mark), never the paper.</div></div>' +
-        '<div class="cr-note">Students and parents are emailed as soon as you send it.</div>';
+        (W.tutors === 'pick' ? listHtml('t') : '') + '<div class="cr-note" style="margin-top:.4rem">Tutors who teach it always see the exam and its hand-ins so they can mark. This chooses who is told (get ready to mark, with the opening and closing dates); never the paper.</div></div>';
+      h += '<div class="cr-note">Students and parents are emailed as soon as you send it.</div>';
       m.body.innerHTML = h;
     }
     m.body.addEventListener('change', function (e) {
@@ -584,7 +593,7 @@
     });
 
     function request() {
-      if (W.students === 'none' && W.tutors === 'none') throw new Error('Choose students, tutors or both.');
+      if (W.students === 'none' && (W.tutors === 'none' || tutorsHave())) throw new Error('Choose students, tutors or both.');
       var t = {};
       if (W.students === 'pick') { var ss = Object.keys(W.pickS); if (!ss.length) throw new Error('Tick at least one student, or choose All enrolled students.'); t.students = ss; }
       if (W.tutors === 'pick') { var tt = Object.keys(W.pickT); if (!tt.length) throw new Error('Tick at least one tutor, or choose All tutors / No tutors.'); t.tutors = tt; }
@@ -595,6 +604,7 @@
 
     (async function () {
       fz = await freezeState(['flatExam']);
+      try { var xd = await db.doc(ex.path).get(); X = xd.exists ? xd.data() : {}; } catch (e) { X = {}; }
       try {
         W.studentList = (await WH.loadEnrolled(cls)).filter(function (s) { return String(s.status || '').toLowerCase() !== 'suspended' && (audOf(s) === 'online' || audOf(s) === 'remote'); })
           .sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });

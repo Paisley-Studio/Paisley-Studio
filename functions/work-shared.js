@@ -344,7 +344,40 @@ function cidTidFromRef(ref) {
   return { cid: parts[1], tid: parts[3], id: parts[5] };
 }
 
+/* The tutors who mark a desk exam: active tutors of its subject, Key Stage and board, or only the ones the
+   desk picked (`tutorNotify`; an empty list = nobody is told). Each is { id, ...tutorAccount }. */
+async function examTutors(exam, classroom) {
+  const e = exam || {};
+  const only = Array.isArray(e.tutorNotify) ? e.tutorNotify : null;
+  if (only && !only.length) return [];
+  const snap = await db().collection("tutorAccounts").where("subjects", "array-contains", e.subjectId || "").get();
+  const out = [];
+  for (const d of snap.docs) {
+    const t = d.data() || {};
+    if (["suspended", "pending"].indexOf(String(t.status || "").toLowerCase()) !== -1) continue;
+    const ks = Array.isArray(t.keyStages) ? t.keyStages : [];
+    if (ks.length && e.keyStage && ks.indexOf(e.keyStage) === -1) continue;
+    if (classroom && !tutorTeachesBoard(t, classroom)) continue;
+    if (only && only.indexOf(d.id) === -1) continue;
+    out.push({ id: d.id, ...t });
+  }
+  return out;
+}
+
+/* When an exam's hand-in window opens and closes, in words (Nairobi time). */
+function examWindow(exam) {
+  const e = exam || {};
+  const f = (d) => d ? d.toLocaleString("en-GB", { timeZone: TIME_ZONE, weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  const od = toDate(e.examDate), cd = toDate(e.submissionDeadline);
+  return {
+    opens: e.submissionsOpen === true ? "open now" : (od ? f(od) : "when the Studio Desk opens it"),
+    closes: cd ? f(cd) : "when the Studio Desk closes it",
+    openAt: od, closeAt: cd
+  };
+}
+
 module.exports = {
+  examTutors, examWindow,
   LOCATION, TIME_ZONE, SMTP_SECRETS, sendEmail,
   db, FV, toDate, subjectKey, notify, addStudentNotice, claimOnce,
   classroomOf, resolveStudents, parentsOfStudent,

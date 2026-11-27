@@ -972,7 +972,9 @@
         it.releasedTo.forEach(function(id){
           if (!seen[id]) { aud.push({ id: id, name: 'Student' }); seen[id] = true; }
         });
-        if (!isAdmin) aud = aud.filter(function (s) { return it.releasedTo.indexOf(s.id) !== -1; });
+        /* Tutors see only the students it was released to, unless it is open to the whole class on some portal. */
+        var ea = effAudiences(it), classWide = ea.online === true || ea.remote === true || ea.tuition === true;
+        if (!isAdmin && !classWide) aud = aud.filter(function (s) { return it.releasedTo.indexOf(s.id) !== -1; });
       }
       return aud;
     }
@@ -989,6 +991,18 @@
         if (x.status === 'Corrections') corr++;
       });
       return { total: aud.length, submitted: submitted, graded: graded, toGrade: toGrade, corr: corr, resub: resub, paper: paper };
+    }
+
+    /* Who the exam was given to, by name, so tutors know whose hand-ins to expect. */
+    function givenToHtml(it) {
+      if (it.status !== 'Published') return '';
+      var aud = expectedAudience(it), subs = S.subs[it.id] || {};
+      if (!aud.length) return '<div class="cr-note" style="margin-top:.3rem"><i class="fas fa-user-slash"></i> Not given to any student yet.</div>';
+      var names = aud.map(function (s) {
+        var x = subs[s.id], done = x && x.status !== 'In progress' && x.status !== 'Suspended';
+        return '<span class="wk-chip" title="' + (done ? 'Handed in' : 'Not handed in yet') + '" style="' + (done ? 'background:rgba(46,184,114,.14);color:#1d8b57' : '') + '">' + (done ? '<i class="fas fa-check"></i> ' : '') + esc(s.name || 'Student') + '</span>';
+      });
+      return '<details style="margin-top:.35rem"><summary class="cr-note" style="cursor:pointer"><i class="fas fa-users"></i> Given to ' + aud.length + ' student' + (aud.length === 1 ? '' : 's') + '</summary><div class="wk-chips" style="margin-top:.3rem;flex-wrap:wrap">' + names.join('') + '</div></details>';
     }
 
     function isPast(it) {
@@ -1081,7 +1095,7 @@
                 ''
               : '';
             h += '<tr>' +
-              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div></td>' +
+              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div>' + givenToHtml(it) + '</td>' +
               '<td>' + pill('b-plain', it.examType || '—') + '</td>' +
               '<td>' + esc(examDate) + '</td>' +
               '<td>' + esc(deadline) + '</td>' +

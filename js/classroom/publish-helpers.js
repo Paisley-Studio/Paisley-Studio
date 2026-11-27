@@ -603,6 +603,16 @@
     });
   }
 
+  /* Exams that reached students but never their tutors (so tutors could not see them or their hand-ins)
+     are posted to their tutors by repairExamTutorAccess. Idempotent; run once per admin session. */
+  function repairExamTutorsOnce() {
+    try { if (sessionStorage.getItem('pz-exam-tutor-repair')) return; sessionStorage.setItem('pz-exam-tutor-repair', '1'); } catch (e) { return; }
+    firebase.functions().httpsCallable('repairExamTutorAccess')({}).then(function (r) {
+      var d = r.data || {};
+      if (d.fixed) console.info('Exam tutor access repaired:', d.fixed, 'exam(s); tutors emailed about', d.toldTutors, 'still open.');
+    }).catch(function (e) { console.warn('repairExamTutorAccess:', e.message || e); try { sessionStorage.removeItem('pz-exam-tutor-repair'); } catch (x) {} });
+  }
+
   async function setFlatExamStatus(cid, eid, patch) {
     await flatExamRef(cid, eid).update(Object.assign({ updatedAt: FV().serverTimestamp() }, patch));
   }
@@ -855,6 +865,7 @@
     async function reload() {
       S.topics = await U.loadTopics(S.cls.id);
       var enrolledP = loadEnrolled(S.cls).catch(function () { return []; });
+      if (kind === 'exam' && isAdmin) repairExamTutorsOnce();
       if (kind === 'exam') {
         var res = await Promise.all([loadFlatExams(S.cls.id, !isAdmin), enrolledP]);
         S.items = res[0].items; S.subs = res[0].subs; S.enrolled = res[1];
@@ -879,6 +890,22 @@
         if (x.status === 'Graded') graded++;
       });
       return { total: aud.length, submitted: submitted, graded: graded, paper: paper };
+    }
+
+    /* Who the exam was given to, by name (whole-class portals plus students named in releasedTo). */
+    function givenTo(it) {
+      var aud = audienceOf(it, S.enrolled), seen = {};
+      aud.forEach(function (s) { seen[s.id] = 1; });
+      var byId = {}; S.enrolled.forEach(function (s) { byId[s.id] = s; });
+      (it.releasedTo || []).forEach(function (id) { if (!seen[id]) { seen[id] = 1; aud.push(byId[id] || { id: id, name: 'Student' }); } });
+      return aud;
+    }
+    function givenToHtml(it) {
+      if (it.status !== 'Published') return '';
+      var aud = givenTo(it), subs = S.subs[it.id] || {};
+      if (!aud.length) return '<div class="cr-note" style="margin-top:.3rem"><i class="fas fa-user-slash"></i> Not given to any student yet.</div>';
+      return '<details style="margin-top:.35rem"><summary class="cr-note" style="cursor:pointer"><i class="fas fa-users"></i> Given to ' + aud.length + ' student' + (aud.length === 1 ? '' : 's') + '</summary><div class="wk-chips" style="margin-top:.3rem;flex-wrap:wrap">' +
+        aud.map(function (s) { var x = subs[s.id], done = x && x.status !== 'In progress' && x.status !== 'Suspended'; return '<span class="wk-chip" title="' + (done ? 'Handed in' : 'Not handed in yet') + '" style="' + (done ? 'background:rgba(46,184,114,.14);color:#1d8b57' : '') + '">' + (done ? '<i class="fas fa-check"></i> ' : '') + esc(s.name || 'Student') + '</span>'; }).join('') + '</div></details>';
     }
 
     // Past Work = every recipient has handed in AND every piece is graded.
@@ -954,7 +981,8 @@
             var adminControls = isAdmin || canEdit(it)
               ? (canEdit(it) ? '<button type="button" class="cr-btn sm" data-a="edit" data-id="' + esc(it.id) + '"><i class="fas fa-pen"></i> Edit</button>' : '') +
                 (isAdmin
-                  ? (it.status === 'Published'
+                  ? (it.status !== 'Closed' && global.PublishUI && global.PublishUI.sendExam ? '<button type="button" class="cr-btn sm primary" data-a="send-exam" data-id="' + esc(it.id) + '" title="Give this exam to students (more students any time) and tell its tutors"><i class="fas fa-paper-plane"></i> Send to students</button>' : '') +
+                    (it.status === 'Published'
                       ? '<button type="button" class="cr-btn sm" data-a="close-exam" data-id="' + esc(it.id) + '"><i class="fas fa-lock"></i> Close</button>'
                       : '<button type="button" class="cr-btn sm" data-a="publish-exam" data-id="' + esc(it.id) + '"><i class="fas fa-upload"></i> Mark ready</button>') +
                     (it.submissionsOpen === true
@@ -964,7 +992,7 @@
                 ''
               : '';
             h += '<tr>' +
-              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div></td>' +
+              '<td><b>' + esc(it.title || 'Exam') + '</b>' + (it.tutorName ? '<div class="cr-note">' + esc(it.tutorName) + '</div>' : '') + '<div class="wk-chips" style="margin-top:.25rem">' + audChips(it) + '</div>' + (kind === 'exam' ? givenToHtml(it) : '') + '</td>' +
               '<td>' + pill('b-plain', it.examType || '—') + '</td>' +
               '<td>' + esc(examDate) + '</td>' +
               '<td>' + esc(deadline) + '</td>' +
@@ -1526,6 +1554,7 @@
         else if (a === 'del' && item) deleteItem(item);
         else if (a === 'withdraw' && item) withdrawItem(item);
         else if (a === 'withdraw-all') withdrawAll();
+        else if (a === 'send-exam' && item) { if (isAdmin && global.PublishUI && global.PublishUI.sendExam) global.PublishUI.sendExam(S.cls, user, { path: 'classrooms/' + item.cid + '/exams/' + item.id, title: item.title || 'Exam' }, refresh); }
         else if (a === 'publish-exam' && item) { if (isAdmin) { await setFlatExamStatus(item.cid, item.id, { status: 'Published' }); await refresh(); } }
         else if (a === 'close-exam' && item) { if (isAdmin) { await setFlatExamStatus(item.cid, item.id, { status: 'Closed' }); await refresh(); } }
         else if (a === 'open-window' && item) { if (isAdmin) { await setFlatExamStatus(item.cid, item.id, { submissionsOpen: true }); await refresh(); } }
