@@ -590,8 +590,9 @@
           await flatExamRef(cls.id, eid).set(data, { merge: true });
           m.close(true);
           if (o.afterSave) await o.afterSave();
-          if (btn.dataset.post && global.PublishUI && global.PublishUI.openForClassroom) {
-            global.PublishUI.openForClassroom(cls, user, o.afterSave, { preselect: ['classrooms/' + cls.id + '/exams/' + eid] });
+          /* Straight to who gets it: the class's enrolled students and its tutors (exams have no topics). */
+          if (btn.dataset.post && global.PublishUI && global.PublishUI.sendExam) {
+            global.PublishUI.sendExam(cls, user, { path: 'classrooms/' + cls.id + '/exams/' + eid, title: data.title || (ex && ex.title) || 'Exam' }, o.afterSave);
           }
         } catch (e) {
           console.error('save flat exam:', e);

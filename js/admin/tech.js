@@ -346,7 +346,7 @@
     }
     function openCoach(s) {
       var m = CU.openModal({ title: 'Coach — ' + s.name });
-      m.body.innerHTML = '<div class="cr-field"><label for="txCoach">Tech Studio coach</label><select id="txCoach">' + coachOpts(s.coachId || '') + '</select>' + noCoachNote() + '</div><div class="cr-note">The coach sees this builder, their projects and their family in the Tech Studio coach portal. Existing projects and family conversations move to the new coach automatically.</div>';
+      m.body.innerHTML = '<div class="cr-field"><label for="txCoach">Tech Studio coach</label><select id="txCoach">' + coachOpts(s.coachId || '') + '</select>' + noCoachNote() + '</div><div class="cr-note">The coach sees this builder, their projects and their family in the Tech Studio coach portal. Projects, class work, homework and every conversation (the builder’s and the family’s, with their history) move to the new coach automatically. The builder and family are not notified of the change; only the new coach is.</div>';
       m.foot.innerHTML = '<span class="cr-err" id="txErr"></span><button type="button" class="cr-btn" data-a="x">Cancel</button><button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-floppy-disk"></i> Save</button>';
       m.foot.querySelector('[data-a="x"]').onclick = m.close;
       m.foot.querySelector('[data-a="go"]').onclick = function () {

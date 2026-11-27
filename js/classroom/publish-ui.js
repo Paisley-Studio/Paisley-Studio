@@ -151,6 +151,18 @@
     return items;
   }
 
+  function audOf(s) { var t = s && s.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
+  async function freezeState(types) {
+    try {
+      var d = await db.collection('devMode').doc('freeze').get();
+      if (!d.exists) return null;
+      var c = d.data() || {}, until = c.until && c.until.toMillis ? c.until.toMillis() : 0;
+      if (c.on !== true || (until && until < Date.now())) return null;
+      var areas = types.map(function (t) { return t === 'lesson' ? 'classes' : (t === 'assignment' ? 'homework' : 'exams'); });
+      if (!areas.some(function (a) { return c.areas && c.areas[a] === true; })) return null;
+      return c;
+    } catch (e) { return null; }
+  }
   /* ---------------------------------------------------------
      Workspace
      opts: { user, classrooms?, lockClassroom?, scope?, onChange? }
@@ -293,18 +305,6 @@
        Students: the whole class, or the ones the desk ticks (delivered by name, like a tutor's release).
        Tutors: everyone who teaches it, only the ones ticked (only they are told), or none.
        Developer mode's freeze narrows it further, on the server. */
-    function audOf(s) { var t = s && s.studentType; return t === 'remote' ? 'remote' : (t === 'tuition' ? 'tuition' : 'online'); }
-    async function freezeState(types) {
-      try {
-        var d = await db.collection('devMode').doc('freeze').get();
-        if (!d.exists) return null;
-        var c = d.data() || {}, until = c.until && c.until.toMillis ? c.until.toMillis() : 0;
-        if (c.on !== true || (until && until < Date.now())) return null;
-        var areas = types.map(function (t) { return t === 'lesson' ? 'classes' : (t === 'assignment' ? 'homework' : 'exams'); });
-        if (!areas.some(function (a) { return c.areas && c.areas[a] === true; })) return null;
-        return c;
-      } catch (e) { return null; }
-    }
     async function whoBox(host, picked, choice) {
       var cids = Array.from(new Set(picked.map(function (i) { return i.cid; })));
       var cls = cids.length === 1 ? (S.classrooms || []).filter(function (c) { return c.id === cids[0]; })[0] : null;
@@ -516,6 +516,122 @@
     return { reload: loadItems };
   }
 
+  /* ---------------------------------------------------------
+     Send ONE exam (the exam editor's "Save and choose who gets it").
+     Exams are not in topics, so this never shows the topic list: it shows
+     the students enrolled in the class (subject + Year) and its tutors,
+     and posts through publishClassroomContent with those targets.
+     ex: { path, title }
+  --------------------------------------------------------- */
+  function sendExam(cls, user, ex, onChange) {
+    injectStyle(); CU.injectStyle();
+    var m = CU.openModal({ title: 'Who gets this exam? — ' + CU.displayName(cls) + ' Year ' + cls.year, wide: true });
+    m.body.classList.add('pb-review');
+    m.body.innerHTML = '<div class="cr-empty">Loading students and tutors…</div>';
+    m.foot.innerHTML = '<button type="button" class="cr-btn" data-a="x">Close</button>';
+    m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); if (onChange) onChange(); };
+    var W = { students: 'all', tutors: 'all', studentList: [], tutorList: [], pickS: {}, pickT: {}, q: '', qt: '' };
+    var requestId = 'pub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    var fz = null;
+
+    function listHtml(kind) {
+      var all = kind === 's' ? W.studentList : W.tutorList, q = (kind === 's' ? W.q : W.qt).toLowerCase(), pick = kind === 's' ? W.pickS : W.pickT;
+      var rows = all.filter(function (x) { return !q || (String(x.name || '') + ' ' + String(x.email || '')).toLowerCase().indexOf(q) !== -1; });
+      return '<div class="pb-pick"><div class="pb-pick-tools"><input type="search" data-wq="' + kind + '" placeholder="Search by name or email" value="' + esc(kind === 's' ? W.q : W.qt) + '">' +
+        '<button type="button" class="cr-btn sm" data-wall="' + kind + '">Tick all shown</button><button type="button" class="cr-btn sm" data-wnone="' + kind + '">Clear</button><span class="cnt">' + Object.keys(pick).length + ' ticked</span></div>' +
+        '<div class="pb-pick-list">' + (rows.length ? rows.map(function (x) {
+          return '<label><input type="checkbox" data-wp="' + kind + '" value="' + esc(x.id) + '"' + (pick[x.id] ? ' checked' : '') + '><span>' + esc(x.name || 'No name') + '</span><small>' + esc(kind === 's' ? (audOf(x) === 'remote' ? 'Remote' : 'Online') : (x.email || '')) + '</small></label>';
+        }).join('') : '<div class="cr-empty" style="padding:.8rem">Nobody matches.</div>') + '</div></div>';
+    }
+    function paint() {
+      var allowNames = fz ? (fz.allow || []).map(function (a) { return a.name || a.email || 'Test account'; }) : [];
+      var h = '<div class="box"><h4>Exam</h4><b>' + esc(ex.title || 'Exam') + '</b><div class="cr-note">' + esc(CU.displayName(cls)) + ' · Year ' + esc(cls.year) + '</div></div>';
+      if (fz) h += '<div class="pb-freeze"><i class="fas fa-snowflake"></i><div><b>Developer mode freeze is on.</b> ' +
+        ((fz.audiences || {}).students ? 'Students get this only if they are one of your test accounts' + (allowNames.length ? ' (' + esc(allowNames.slice(0, 6).join(', ')) + (allowNames.length > 6 ? '…' : '') + ')' : ': you have none, so no student gets it') + '. ' : '') +
+        ((fz.audiences || {}).tutors ? 'Only tutor test accounts are told. ' : '') + 'Alerts and emails to frozen people are held.</div></div>';
+      h += '<div class="pb-who"><h4><i class="fas fa-user-graduate"></i> Students enrolled in ' + esc(CU.displayName(cls)) + ' Year ' + esc(cls.year) + '</h4><div class="pb-opts">' +
+        '<label class="pb-opt"><input type="radio" name="pxS" value="all"' + (W.students === 'all' ? ' checked' : '') + '> All enrolled students (' + W.studentList.length + ')</label>' +
+        '<label class="pb-opt"><input type="radio" name="pxS" value="pick"' + (W.students === 'pick' ? ' checked' : '') + '> Only students I pick</label>' +
+        '<label class="pb-opt"><input type="radio" name="pxS" value="none"' + (W.students === 'none' ? ' checked' : '') + '> No students</label></div>' +
+        (W.students === 'pick' ? listHtml('s') + '<div class="cr-note" style="margin-top:.4rem">Only the ticked students and their parents get it.</div>'
+          : (W.students === 'all' ? '<div class="cr-note">Every student enrolled in this subject and Year, and their parents.</div>' : '')) + '</div>';
+      h += '<div class="pb-who"><h4><i class="fas fa-chalkboard-user"></i> Tutors</h4><div class="pb-opts">' +
+        '<label class="pb-opt"><input type="radio" name="pxT" value="all"' + (W.tutors === 'all' ? ' checked' : '') + '> All tutors who teach it (' + W.tutorList.length + ')</label>' +
+        '<label class="pb-opt"><input type="radio" name="pxT" value="pick"' + (W.tutors === 'pick' ? ' checked' : '') + '> Only tutors I pick</label>' +
+        '<label class="pb-opt"><input type="radio" name="pxT" value="none"' + (W.tutors === 'none' ? ' checked' : '') + '> No tutors</label></div>' +
+        (W.tutors === 'pick' ? listHtml('t') : '') + '<div class="cr-note" style="margin-top:.4rem">Tutors get their own email (get ready to mark), never the paper.</div></div>' +
+        '<div class="cr-note">Students and parents are emailed as soon as you send it.</div>';
+      m.body.innerHTML = h;
+    }
+    m.body.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t.name === 'pxS') { W.students = t.value; paint(); }
+      else if (t.name === 'pxT') { W.tutors = t.value; paint(); }
+      else if (t.dataset.wp) { var mp = t.dataset.wp === 's' ? W.pickS : W.pickT; if (t.checked) mp[t.value] = 1; else delete mp[t.value]; var c = t.closest('.pb-pick').querySelector('.cnt'); if (c) c.textContent = Object.keys(mp).length + ' ticked'; }
+    });
+    m.body.addEventListener('input', function (e) {
+      var k = e.target.dataset.wq; if (!k) return;
+      if (k === 's') W.q = e.target.value; else W.qt = e.target.value;
+      var pos = e.target.selectionStart; paint();
+      var i = m.body.querySelector('[data-wq="' + k + '"]'); if (i) { i.focus(); i.setSelectionRange(pos, pos); }
+    });
+    m.body.addEventListener('click', function (e) {
+      var a = e.target.closest('[data-wall],[data-wnone]'); if (!a) return;
+      var k = a.dataset.wall || a.dataset.wnone, mp = k === 's' ? W.pickS : W.pickT;
+      if (a.dataset.wnone) Object.keys(mp).forEach(function (x) { delete mp[x]; });
+      else [].forEach.call(m.body.querySelectorAll('[data-wp="' + k + '"]'), function (b) { mp[b.value] = 1; });
+      paint();
+    });
+
+    function request() {
+      if (W.students === 'none' && W.tutors === 'none') throw new Error('Choose students, tutors or both.');
+      var t = {};
+      if (W.students === 'pick') { var ss = Object.keys(W.pickS); if (!ss.length) throw new Error('Tick at least one student, or choose All enrolled students.'); t.students = ss; }
+      if (W.tutors === 'pick') { var tt = Object.keys(W.pickT); if (!tt.length) throw new Error('Tick at least one tutor, or choose All tutors / No tutors.'); t.tutors = tt; }
+      else t.tutors = W.tutors;
+      /* "all" = online + remote students + tutors; the targets narrow it. No students = tutors only. */
+      return { audience: W.students === 'none' ? 'tutors' : 'all', targets: t };
+    }
+
+    (async function () {
+      fz = await freezeState(['flatExam']);
+      try {
+        W.studentList = (await WH.loadEnrolled(cls)).filter(function (s) { return String(s.status || '').toLowerCase() !== 'suspended' && (audOf(s) === 'online' || audOf(s) === 'remote'); })
+          .sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+      } catch (e) { W.studentList = []; }
+      try {
+        var ts = await db.collection('tutorAccounts').where('subjects', 'array-contains', cls.subjectId).get();
+        W.tutorList = ts.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).filter(function (t) {
+          if (String(t.status || '').toLowerCase() === 'suspended') return false;
+          return !(t.keyStages || []).length || t.keyStages.indexOf(cls.keyStage) !== -1;
+        }).sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+      } catch (e) { W.tutorList = []; }
+      paint();
+      m.foot.innerHTML = '<span class="cr-err" id="pxErr"></span><button type="button" class="cr-btn" data-a="x">Not now (keep as draft)</button>' +
+        '<button type="button" class="cr-btn primary" data-a="go"><i class="fas fa-paper-plane"></i> Send exam</button>';
+      m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); if (onChange) onChange(); };
+      var go = m.foot.querySelector('[data-a="go"]'), err = m.foot.querySelector('#pxErr');
+      go.onclick = async function () {
+        var rq; try { rq = request(); } catch (er) { err.textContent = er.message; return; }
+        go.disabled = true; err.textContent = ''; go.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…';
+        try {
+          var res = await firebase.functions().httpsCallable('publishClassroomContent')({ audience: rq.audience, paths: [ex.path], requestId: requestId, targets: rq.targets });
+          var d = res.data || {}, r = (d.results || [])[0] || {};
+          m.body.innerHTML = '<div class="cr-panel" style="margin:0"><h4 style="margin:0 0 .4rem;color:var(--brand-deep)"><i class="fas fa-circle-check" style="color:#1d8b57"></i> ' +
+            (r.status === 'published' ? 'Exam sent' : r.status === 'already' ? 'Already sent to them' : 'Not sent') + '</h4>' +
+            (r.reason ? '<div class="cr-note">' + esc(r.reason) + '</div>' : '') +
+            (d.frozen ? '<div class="pb-freeze" style="margin:.6rem 0 0"><i class="fas fa-snowflake"></i><div>The developer mode freeze was on: only your test accounts got it.</div></div>' : '') + '</div>';
+          m.foot.innerHTML = '<button type="button" class="cr-btn primary" data-a="x">Close</button>';
+          m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); if (onChange) onChange(); };
+        } catch (e) {
+          console.error('send exam:', e);
+          err.textContent = (e && e.message) || 'Could not send. The exam is saved; try again.';
+          go.disabled = false; go.innerHTML = '<i class="fas fa-paper-plane"></i> Send exam';
+        }
+      };
+    })();
+  }
+
   /* Modal wrapper used by the per-classroom "Publish…" button. */
   function openForClassroom(cls, user, onChange, extra) {
     var m = CU.openModal({ title: 'Publish — ' + CU.displayName(cls) + ' Year ' + cls.year, wide: true });
@@ -525,5 +641,5 @@
     m.foot.querySelector('[data-a="x"]').onclick = function () { m.close(true); if (onChange) onChange(); };
   }
 
-  global.PublishUI = { mount: mount, openForClassroom: openForClassroom, CHOICES: ALL_CHOICES, _internal: { effAud: effAud, legacyAud: legacyAud } };
+  global.PublishUI = { mount: mount, openForClassroom: openForClassroom, sendExam: sendExam, CHOICES: ALL_CHOICES, _internal: { effAud: effAud, legacyAud: legacyAud } };
 })(window);

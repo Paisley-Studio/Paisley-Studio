@@ -362,6 +362,36 @@ exports.onTechEnrolmentCreated = onDocumentCreated(
   }
 );
 
+/* Moves every techChats conversation of this builder (with any earlier coach) into
+   techChats/{sid}_{coachId}. Messages keep their ids, so a retry overwrites instead of
+   doubling; each copy carries movedFrom, so onTechMessageCreated sends no bell or email.
+   The old chat is deleted last. Attachments keep their tokened download URLs. */
+async function moveBuilderChats(db, sid, coachId, coachName, studentName) {
+  const toId = `${sid}_${coachId}`, toRef = db.collection("techChats").doc(toId);
+  const old = (await db.collection("techChats").where("studentId", "==", sid).get()).docs.filter((d) => d.id !== toId);
+  if (!old.length) return 0;
+  const cur = await toRef.get(), c = cur.exists ? cur.data() : {};
+  const ms = (t) => (t && t.toMillis ? t.toMillis() : 0);
+  let last = cur.exists ? { lastMessage: c.lastMessage, lastAt: c.lastAt, lastSenderRole: c.lastSenderRole } : null;
+  let moved = 0;
+  for (const d of old) {
+    const x = d.data() || {};
+    if (x.lastAt && (!last || ms(x.lastAt) > ms(last.lastAt))) last = { lastMessage: x.lastMessage, lastAt: x.lastAt, lastSenderRole: x.lastSenderRole };
+    const msgs = await d.ref.collection("messages").get();
+    for (let i = 0; i < msgs.docs.length; i += 400) {
+      const batch = db.batch();
+      msgs.docs.slice(i, i + 400).forEach((m) => batch.set(toRef.collection("messages").doc(m.id), Object.assign({}, m.data(), { movedFrom: d.id })));
+      await batch.commit();
+    }
+    moved += msgs.size;
+  }
+  const head = { studentId: sid, studentName: studentName || c.studentName || "", coachId, coachName: coachName || "", movedAt: FV().serverTimestamp() };
+  if (last && last.lastAt) Object.assign(head, { lastMessage: last.lastMessage || "", lastAt: last.lastAt, lastSenderRole: last.lastSenderRole || "" });
+  await toRef.set(head, { merge: true });
+  for (const d of old) await db.recursiveDelete(d.ref);
+  return moved;
+}
+
 exports.onTechEnrolmentUpdated = onDocumentUpdated(
   { document: "techStudents/{studentId}", region: LOCATION, secrets: SMTP_SECRETS, timeoutSeconds: 120 },
   async (event) => {
@@ -424,6 +454,11 @@ exports.onTechEnrolmentUpdated = onDocumentUpdated(
       const hws = await db.collection("techHomeworkWork").where("studentId", "==", sid).get();
       hws.docs.forEach((d) => { if ((d.data().coachId || "") !== cid) batch.update(d.ref, { coachId: cid }); });
       await batch.commit();
+      /* Builder <-> coach chats are keyed studentId_coachId, so the history moves into the
+         new coach's chat (and the old coach loses it). */
+      if (cid) {
+        try { await moveBuilderChats(db, sid, cid, cname, a.name || ""); } catch (e) { console.error("moveBuilderChats failed:", e); }
+      }
     }
     if (coachChanged || approvedWithCoach) {
       if (a.coachId) {
@@ -434,8 +469,12 @@ exports.onTechEnrolmentUpdated = onDocumentUpdated(
           body: `<p style="margin:0;">Open your coach dashboard to see their projects and say hello.</p>`,
           cta: { label: "Open coach dashboard", url: APP + LINKS.coach }
         });
-        await techNotify(sid, "student", "tech_coach", "You have a coach", `${a.coachName || "Your coach"} will review your builds.`, { studentId: sid });
-        await notifyGuardians(sid, "tech_coach", "Coach assigned", `${a.coachName || "A coach"} is now coaching ${first(a.name, "your child")}. You can message them from the Coach tab.`);
+        /* Only a builder's first coach is announced to them and their family; a later
+           change of coach is silent for both (the new coach still hears, above). */
+        if (approvedWithCoach || !b.coachId) {
+          await techNotify(sid, "student", "tech_coach", "You have a coach", `${a.coachName || "Your coach"} will review your builds.`, { studentId: sid });
+          await notifyGuardians(sid, "tech_coach", "Coach assigned", `${a.coachName || "A coach"} is now coaching ${first(a.name, "your child")}. You can message them from the Coach tab.`);
+        }
       }
     }
   }
@@ -1775,6 +1814,8 @@ exports.onTechMessageCreated = onDocumentCreated(
   { document: "techChats/{chatId}/messages/{mid}", region: LOCATION, secrets: SMTP_SECRETS },
   async (event) => {
     const m = event.data.data() || {};
+    /* A message carried over from the builder's previous coach (moveBuilderChats) is history, not news. */
+    if (m.movedFrom) return;
     const chatRef = admin.firestore().collection("techChats").doc(event.params.chatId);
     const c = (await chatRef.get()).data() || {};
     const coachId = c.coachId || c.tutorId, coachName = c.coachName || c.tutorName;
