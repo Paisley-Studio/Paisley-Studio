@@ -60,6 +60,7 @@ const crypto = require("crypto");
 const { render, PORTALS, templates } = require("./email-templates");
 const notifications = require("./notifications");
 const freeze = require("./dev-freeze");
+const push = require("./push");
 const { SMTP_SECRETS } = require("./work-shared");
 
 const LOCATION = "us-central1";
@@ -1677,6 +1678,137 @@ exports.onTechGroupTaskWritten = onDocumentWritten(
 );
 
 /* =========================================================
+   Group chat — techGroups/{gid}/chat/{mid} (js/tech/tech-group-chat.js)
+   Teammates (and the group's coach, for builders' messages) who are not
+   in the chat right now get a push notification on their devices; nobody
+   gets a bell or an email for ordinary chat. A coach or the Studio Desk
+   can email a message to the builders and/or their families, as they send
+   it (emailTo) or later (emailTechGroupMessage); those people also get a
+   bell, which is pushed to their devices too.
+========================================================= */
+const ONLINE_MS = 90 * 1000;
+function groupChatPreview(m) {
+  if (!m) return "";
+  if (m.voice) return "Voice note";
+  if (m.text) return String(m.text).replace(/\s+/g, " ").slice(0, 160);
+  const a = m.attachments || [];
+  if (!a.length) return "";
+  const pics = a.filter((x) => /^image\//.test(x.type || "")).length;
+  return pics === a.length ? (pics === 1 ? "Photo" : `${pics} photos`) : (a.length === 1 ? (a[0].name || "File") : `${a.length} files`);
+}
+const millisOf = (t) => (t && typeof t.toMillis === "function" ? t.toMillis() : (t && t._seconds ? t._seconds * 1000 : 0));
+/* Who hears about a new chat message on their devices: [{ uid, role }]. Pure, for tests. */
+function chatPushTargets(grp, m, presence, now, coachIsCoach) {
+  const pres = presence || {}, at = now || Date.now();
+  const inChat = (uid) => { const p = pres[uid]; return !!p && p.online !== false && at - millisOf(p.seenAt) < ONLINE_MS; };
+  const out = [];
+  (grp.memberIds || []).forEach((uid) => { if (uid !== m.senderId && !inChat(uid)) out.push({ uid, role: "student" }); });
+  const coach = grp.coachId || "";
+  if (coach && coachIsCoach && m.senderRole === "student" && coach !== m.senderId && !inChat(coach)) out.push({ uid: coach, role: "coach" });
+  return out;
+}
+async function isTechStaff(uid) {
+  if (!uid) return null;
+  const db = admin.firestore();
+  if ((await db.collection("admins").doc(uid).get()).exists) return "admin";
+  const c = await db.collection("techCoaches").doc(uid).get();
+  return c.exists && (c.data() || {}).status === "Active" ? "coach" : null;
+}
+function chatEmailBody(m, note) {
+  const quote = m.text ? `<div style="margin:0 0 14px;padding:12px 14px;border-left:4px solid #55BFB3;background:#F1F9F7;border-radius:8px;white-space:pre-wrap;">${esc(m.text)}</div>` : "";
+  const files = (m.attachments || []).filter((a) => /^https:\/\//.test(a.url || "")).map((a) => `<li style="margin:0 0 4px;"><a href="${esc(a.url)}">${esc(a.name || "File")}</a></li>`).join("");
+  const voice = m.voice && /^https:\/\//.test(m.voice.url || "") ? `<p style="margin:0 0 12px;"><a href="${esc(m.voice.url)}">Listen to the voice note</a></p>` : "";
+  return (note ? `<p style="margin:0 0 12px;">${esc(note)}</p>` : "") + quote + voice +
+    (files ? `<p style="margin:0 0 6px;"><strong>Attached</strong></p><ul style="margin:0 0 12px;padding-left:18px;">${files}</ul>` : "");
+}
+/* Email (and bell) one chat message. Returns how many people were emailed. */
+async function mailGroupMessage(gid, mid, grp, m, o) {
+  const gname = grp.name || "your group", by = o.byName || "Your coach", round = (Number(m.mailCount) || 0) + 1;
+  const line = groupChatPreview(m) || "A message for the group";
+  const body = chatEmailBody(m, o.note);
+  let emailed = 0;
+  const seenParents = new Set();
+  for (const id of grp.memberIds || []) {
+    const s = await techStudent(id); if (!s) continue;
+    if (o.students) {
+      await techNotify(id, "student", "tech_group_message", `${by} in ${gname}`, line, { studentId: id, id: `gmsg_${gid}_${mid}_${round}`, section: "groups", link: LINKS.student + "#groups" });
+      if (await email(s.email, `${gname}: a message from ${by}`, {
+        preheader: line, heading: "A message for your group.",
+        intro: `Hi ${esc(first(s.name))}, ${esc(by)} sent this to your group ${esc(gname)}.`,
+        body, cta: { label: "Open the group chat", url: APP + LINKS.student + "#groups" }
+      })) emailed++;
+    }
+    if (o.parents) {
+      for (const gd of await guardiansOf(id)) {
+        if (seenParents.has(gd.parentUid)) continue;
+        seenParents.add(gd.parentUid);
+        await techNotify(gd.parentUid, "guardian", "tech_group_message", `${by} wrote to ${first(s.name)}'s group`, `${gname}: ${line}`, { studentId: id, id: `gmsg_${gid}_${mid}_${round}_p`, link: LINKS.guardian });
+        if (await email(gd.email, `${first(s.name)}'s group ${gname}: a message from ${by}`, {
+          preheader: line, heading: `A message for ${esc(first(s.name))}'s group.`,
+          intro: `Hi ${esc(first(gd.name, "there"))}, ${esc(by)} (Tech Studio) sent this to ${esc(first(s.name))}'s group ${esc(gname)}.`,
+          body, cta: { label: "Open the guardian portal", url: APP + LINKS.guardian }
+        })) emailed++;
+      }
+    }
+  }
+  await admin.firestore().collection("techGroups").doc(gid).collection("chat").doc(mid).update({
+    "mailed.students": !!(o.students || (m.mailed && m.mailed.students)), "mailed.parents": !!(o.parents || (m.mailed && m.mailed.parents)),
+    "mailed.count": FV().increment(1), "mailed.at": FV().serverTimestamp(), "mailed.byName": by, mailCount: FV().increment(1)
+  }).catch((e) => console.warn("chat mailed flag:", e.message));
+  return emailed;
+}
+
+exports.onTechGroupChatMessage = onDocumentCreated(
+  { document: "techGroups/{gid}/chat/{mid}", region: LOCATION, secrets: SMTP_SECRETS, timeoutSeconds: 120 },
+  async (event) => {
+    const m = event.data && event.data.data();
+    if (!m || m.deleted) return;
+    const { gid, mid } = event.params, db = admin.firestore();
+    const gs = await db.collection("techGroups").doc(gid).get();
+    if (!gs.exists) return;
+    const grp = gs.data() || {};
+    const emailTo = Array.isArray(m.emailTo) ? m.emailTo : [];
+    const staffRole = emailTo.length || m.senderRole !== "student" ? await isTechStaff(m.senderId) : null;
+    let mailedStudents = false;
+    if (emailTo.length && staffRole) {
+      mailedStudents = emailTo.indexOf("students") !== -1;
+      await mailGroupMessage(gid, mid, grp, m, { students: mailedStudents, parents: emailTo.indexOf("parents") !== -1, byName: m.senderName || (staffRole === "admin" ? "The Studio Desk" : "Your coach") });
+    }
+    const presence = {};
+    (await gs.ref.collection("chatPresence").get()).docs.forEach((d) => { presence[d.id] = d.data(); });
+    const coachOk = !!grp.coachId && (await db.collection("techCoaches").doc(grp.coachId).get()).exists;
+    let targets = chatPushTargets(grp, m, presence, Date.now(), coachOk);
+    if (mailedStudents) targets = targets.filter((t) => t.role !== "student");   /* their bell is pushed already */
+    const cfg = await freeze.config();
+    targets = targets.filter((t) => !freeze.decide(cfg, { uid: t.uid, role: t.role }, "tech"));
+    const body = `${first(m.senderName, "Someone")}: ${groupChatPreview(m)}`;
+    const tag = `tgchat_${gid}`;
+    const stu = targets.filter((t) => t.role === "student").map((t) => t.uid), co = targets.filter((t) => t.role === "coach").map((t) => t.uid);
+    if (stu.length) await push.sendToUsers(stu, { title: grp.name || "Your group", body, link: LINKS.student + "#groups", tag, ttl: 6 * 3600 });
+    if (co.length) await push.sendToUsers(co, { title: `${grp.name || "Group"} (group chat)`, body, link: LINKS.coach + "#groups", tag, ttl: 6 * 3600 });
+  }
+);
+
+exports.emailTechGroupMessage = onCall({ region: LOCATION, secrets: SMTP_SECRETS, timeoutSeconds: 120 }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in first.");
+  const role = await isTechStaff(req.auth.uid);
+  if (!role) throw new HttpsError("permission-denied", "Only coaches and the Studio Desk can email group messages.");
+  const d = req.data || {}, gid = String(d.groupId || ""), mid = String(d.messageId || "");
+  if (!gid || !mid) throw new HttpsError("invalid-argument", "Which message?");
+  if (!d.students && !d.parents) throw new HttpsError("invalid-argument", "Choose the builders, their parents, or both.");
+  const db = admin.firestore();
+  const gs = await db.collection("techGroups").doc(gid).get();
+  if (!gs.exists) throw new HttpsError("not-found", "That group no longer exists.");
+  const ms = await gs.ref.collection("chat").doc(mid).get();
+  if (!ms.exists || (ms.data() || {}).deleted) throw new HttpsError("not-found", "That message no longer exists.");
+  let byName = role === "admin" ? "The Studio Desk" : "Your coach";
+  const who = await db.collection(role === "admin" ? "admins" : "techCoaches").doc(req.auth.uid).get();
+  if (who.exists && (who.data() || {}).name) byName = who.data().name;
+  const emailed = await mailGroupMessage(gid, mid, gs.data() || {}, ms.data(), { students: !!d.students, parents: !!d.parents, note: String(d.note || "").slice(0, 600), byName });
+  return { emailed };
+});
+
+/* =========================================================
    Live classes (Google Meet) — techLiveClasses/{id}
    { topic, description, learn, coachId, coachName, startAt, durationMins,
      meetUrl, status: scheduled | cancelled | completed,
@@ -2362,4 +2494,4 @@ exports._mintShareToken = async function mintShareToken(buildId, createdBy) {
   return token;
 };
 
-exports._internals = { LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workCleared, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf, buildShowcaseContent, liveWork, changedAny, BUILD_CONTENT_KEYS, WORK_CONTENT_KEYS, practiceShowcase, practiceShowcaseContent, practiceShowcaseId, practiceLanguage, PRACTICE_CONTENT_KEYS };
+exports._internals = { chatPushTargets, groupChatPreview, LINKS, TECH_LEVELS, TECH_DISCIPLINES, normDisciplines, disciplineLabel, techNotify, CONTENT_SECTION, gradeTechQuiz, trackOf, tracksFor, workEvent, lessonTitle, lessonGate, gateMet, handedIn, workCleared, workSnapshotHtml, classPassed, byCourse, hasVideo, workShowcase, showcaseIdOf, buildShowcaseContent, liveWork, changedAny, BUILD_CONTENT_KEYS, WORK_CONTENT_KEYS, practiceShowcase, practiceShowcaseContent, practiceShowcaseId, practiceLanguage, PRACTICE_CONTENT_KEYS };

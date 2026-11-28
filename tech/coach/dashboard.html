@@ -20,32 +20,38 @@
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 <link rel="icon" href="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" sizes="32x32" />
-<link rel="stylesheet" href="/js/tech/tech-portal.css?v=tech8" />
+<link rel="stylesheet" href="/js/tech/tech-portal.css?v=coachx1" />
+<link rel="manifest" href="/tech/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
 </head>
-<body>
+<body class="coach-x">
 <div id="gate"><div class="spin" role="status" aria-label="Loading"></div><p>Opening the coach portal…</p></div>
 
 <div id="shell" hidden>
   <aside class="sidebar" id="sidebar" aria-label="Coach navigation">
     <div class="sidebar-brand">
       <img src="https://aws-filez.s3.eu-north-1.amazonaws.com/cropped-Paisely-logo-Resized.png" width="38" height="38" alt="" />
-      <div class="name">Paisley Tech Studio<span>Coach</span></div>
+      <div class="name">Paisley Tech Studio<span>Coach studio</span></div>
     </div>
     <nav class="sidebar-nav" id="nav">
       <button class="nav on" data-v="home" type="button"><i class="fas fa-house"></i> Overview</button>
-      <button class="nav" data-v="builders" type="button"><i class="fas fa-people-group"></i> Builders</button>
+      <div class="nav-sep">Needs you</div>
       <button class="nav" data-v="reviews" type="button"><i class="fas fa-clipboard-check"></i> Reviews <span class="badge" id="bReviews" hidden>0</span></button>
-      <button class="nav" data-v="work" type="button"><i class="fas fa-hammer"></i> Student work</button>
+      <button class="nav" data-v="messages" type="button"><i class="fas fa-comments"></i> Builder messages</button>
+      <button class="nav" data-v="families" type="button"><i class="fas fa-user-shield"></i> Families</button>
+      <div class="nav-sep">Teaching</div>
       <button class="nav" data-v="classes" type="button"><i class="fas fa-chalkboard"></i> Classes</button>
       <button class="nav" data-v="homework" type="button"><i class="fas fa-book-open-reader"></i> Homework</button>
       <button class="nav" data-v="results" type="button"><i class="fas fa-square-poll-vertical"></i> Results</button>
-      <button class="nav" data-v="groups" type="button"><i class="fas fa-users-rectangle"></i> Groups</button>
-      <button class="nav" data-v="content" type="button"><i class="fas fa-toolbox"></i> Resources &amp; AI tools</button>
+      <button class="nav" data-v="groups" type="button"><i class="fas fa-users-rectangle"></i> Groups &amp; chats</button>
       <button class="nav" data-v="timetable" type="button"><i class="fas fa-calendar-week"></i> Timetable</button>
-      <button class="nav" data-v="activity" type="button"><i class="fas fa-wave-square"></i> Activity</button>
+      <div class="nav-sep">Builders</div>
+      <button class="nav" data-v="builders" type="button"><i class="fas fa-people-group"></i> Builders</button>
+      <button class="nav" data-v="work" type="button"><i class="fas fa-hammer"></i> Student work</button>
       <button class="nav" data-v="practice" type="button"><i class="fas fa-flask"></i> Practice <span class="badge" id="bHelp" hidden>0</span></button>
-      <button class="nav" data-v="messages" type="button"><i class="fas fa-comments"></i> Builder messages</button>
-      <button class="nav" data-v="families" type="button"><i class="fas fa-user-shield"></i> Families</button>
+      <button class="nav" data-v="activity" type="button"><i class="fas fa-wave-square"></i> Activity</button>
+      <div class="nav-sep">Studio</div>
+      <button class="nav" data-v="content" type="button"><i class="fas fa-toolbox"></i> Resources &amp; AI tools</button>
       <button class="nav" data-v="profile" type="button"><i class="fas fa-user"></i> Profile</button>
     </nav>
     <div class="sidebar-foot">
@@ -59,6 +65,7 @@
     <header class="topbar">
       <button class="menu-toggle" id="menuBtn" type="button" aria-label="Open menu"><i class="fas fa-bars"></i></button>
       <div class="titles"><h1 id="pageTitle">Overview</h1><p id="pageSub"></p></div>
+      <div id="pushHost"></div>
       <div id="bellHost"></div>
     </header>
     <main class="content" id="view" aria-live="polite"></main>
@@ -69,6 +76,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 <script src="/firebase-config.js"></script>
 <script src="/js/ui/paisley-ui.js?v=1"></script>
 <script src="/js/tech/writing-studio.js?v=tech13"></script>
@@ -77,9 +85,11 @@
 <script src="/js/ui/fast-video.js?v=4"></script>
 <script src="/js/classroom/classroom-helpers.js?v=cards2"></script>
 <script src="/js/classroom/ink-grader.js?v=conv1"></script>
-<script src="/js/tech/tech-helpers.js?v=tech21"></script>
+<script src="/js/tech/tech-helpers.js?v=tech22"></script>
 <script src="/js/tech/tech-work.js?v=12"></script>
-<script src="/js/tech/tech-groups.js?v=3"></script>
+<script src="/js/tech/tech-group-chat.js?v=1"></script>
+<script src="/js/tech/tech-groups.js?v=4"></script>
+<script src="/js/ui/push.js?v=1"></script>
 <script src="/js/tech/tech-classes.js?v=16"></script>
 <script src="/js/tech/tech-timetable.js?v=1"></script>
 <script src="/js/tech/tech-homework.js?v=due2"></script>
@@ -95,9 +105,9 @@ const auth=firebase.auth(), T=TechUI, esc=T.esc, FV=()=>firebase.firestore.Field
 const $=id=>document.getElementById(id);
 T.injectStyle();
 
-const S={uid:null,me:null,v:'home',students:[],builds:[],chats:[],gchats:[],content:[],allContent:[],classes:[],help:[],progress:{},
+const S={uid:null,me:null,v:'home',students:[],builds:[],chats:[],gchats:[],content:[],allContent:[],classes:[],help:[],progress:{},groups:[],gUnread:{},openGroup:null,
   builder:null,live:null,back:null,rf:'all',wf:'all',unsubs:[],ideCfg:null,ideGrants:{}};
-const TITLES={home:'Overview',builders:'Builders',reviews:'Reviews',work:'Student work',classes:'Classes',results:'Results',groups:'Groups',content:'Resources & AI tools',live:'Timetable',timetable:'Timetable',homework:'Homework',activity:'Activity',practice:'Practice',messages:'Builder messages',families:'Families',profile:'Profile'};
+const TITLES={home:'Overview',builders:'Builders',reviews:'Reviews',work:'Student work',classes:'Classes',results:'Results',groups:'Groups & chats',content:'Resources & AI tools',live:'Timetable',timetable:'Timetable',homework:'Homework',activity:'Activity',practice:'Practice',messages:'Builder messages',families:'Families',profile:'Profile'};
 const KINDS=[['resource','Resource'],['aiTool','AI tool']];
 
 const ms=x=>{ const d=T.toDate(x); return d?d.getTime():0; };
@@ -123,7 +133,7 @@ function label(b){
   return [T.STATUS_LABEL[b.status]||b.status||'Idea',''];
 }
 function gate(title,body,btn){ $('shell').hidden=true; $('gate').hidden=false; $('gate').innerHTML='<div class="gate-card"><h1>'+title+'</h1><p>'+body+'</p>'+(btn||'')+'</div>'; }
-function leave(){ const to='/tech/coach/'+(S.me&&S.me.slug?encodeURIComponent(S.me.slug):'index.html'); auth.signOut().finally(()=>{ location.href=to; }); }
+function leave(){ const to='/tech/coach/'+(S.me&&S.me.slug?encodeURIComponent(S.me.slug):'index.html'); Promise.resolve(window.PaisleyPush&&PaisleyPush.forget()).catch(()=>{}).then(()=>auth.signOut()).finally(()=>{ location.href=to; }); }
 document.addEventListener('click',e=>{ if(e.target.closest('#gSign')) leave(); });
 
 auth.onAuthStateChanged(async user=>{
@@ -148,6 +158,7 @@ function boot(){
   T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
     if(n.section==='homework'){ go('homework'); return true; }
     if(n.classId){ go('timetable'); return true; }
+    if(n.section==='groups'){ go('groups'); return true; }
     if(n.chatId&&openChatById(n.chatId)) return true;
     if(n.buildId){ openBuild(n.buildId); return true; }
     if(n.studentId&&stu(n.studentId)){ openBuilder(n.studentId); return true; }
@@ -164,6 +175,25 @@ function boot(){
   listen(db.collection('techGuardianChats').where('coachId','==',S.uid),'gchats');
   listen(db.collection('techContent'),'allContent',()=>{ S.allContent.sort((a,b)=>ms(b.createdAt)-ms(a.createdAt)); S.content=S.allContent.filter(c=>c.createdBy===S.uid); });
   listen(db.collection('techLiveClasses').where('coachId','==',S.uid),'classes',()=>{ S.classes=T.sortLive(S.classes); });
+  /* My groups and their chats: unread counts on the Groups button and the overview. */
+  listen(db.collection('techGroups').where('coachId','==',S.uid),'groups',()=>{
+    S.groups.sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    const key=S.groups.map(g=>g.id).join(',');
+    if(key===S.gKey||!window.TechGroupChat) return;
+    S.gKey=key; if(S.gStop) S.gStop();
+    S.gStop=TechGroupChat.watchUnread(S.groups,S.uid,(map,total)=>{
+      S.gUnread=map;
+      const btn=document.querySelector('.nav[data-v="groups"]'); let el=btn.querySelector('.tgc-nav');
+      if(!total){ if(el) el.remove(); } else { if(!el){ el=document.createElement('span'); el.className='tgc-nav'; btn.appendChild(el); } el.innerHTML='<i class="fas fa-comment" aria-hidden="true"></i>'+(total>99?'99+':total); el.setAttribute('aria-label',total+' new group chat messages'); }
+      if(!S.live&&S.v==='home') render(true);
+    });
+  });
+  /* Push notifications on this device (laptop or phone). */
+  if(window.PaisleyPush){
+    PaisleyPush.init({uid:S.uid,role:'coach',app:'tech'}); PaisleyPush.mountButton($('pushHost'));
+    PaisleyPush.onChange(()=>{ if(!S.live&&S.v==='home') render(true); });
+    setTimeout(()=>PaisleyPush.prompt({text:'Hear about hand-ins, messages and group chats from your builders straight away, on your laptop and your phone, even when the coach portal is closed.'}),5000);
+  }
   const h=(location.hash||'').slice(1);
   go(TITLES[h]?h:'home');
 }
@@ -208,13 +238,14 @@ function subFor(v){
 
 /* ---------- pieces ---------- */
 function emptyBox(t,p,a){ return '<div class="empty"><h3>'+t+'</h3><p>'+p+'</p>'+(a||'')+'</div>'; }
-function panelList(title,rows,extra){ return '<section class="panel flush"><div class="panel-head"><h2>'+esc(title)+'</h2>'+(extra||'')+'</div>'+rows+'</section>'; }
+function panelList(title,rows,extra,icon,tone){ return '<section class="panel flush"><div class="panel-head"><h2>'+(icon?'<span class="hi '+(tone||'')+'"><i class="fas '+icon+'"></i></span>':'')+esc(title)+'</h2>'+(extra||'')+'</div>'+rows+'</section>'; }
 function buildRow(b,showWho){
   const l=label(b), d=dateShort(b.submittedAt&&b.reviewState==='requested'?b.submittedAt:b.updatedAt);
   return '<button class="row" type="button" data-open="'+esc(b.id)+'"><span class="ico"><i class="fas '+(T.isSelfLed(b)?'fa-lightbulb':'fa-bullseye')+'"></i></span><span class="t"><b>'+esc(b.title)+'</b><span>'+
     (showWho?esc(b.studentName||'')+' · ':'')+esc(T.isSelfLed(b)?'Self-led project':'Mission')+(d?' · '+esc(d):'')+'</span></span><span class="tags">'+T.originTag(b)+'<span class="pill '+l[1]+'">'+esc(l[0])+'</span>'+(b.gradeLabel?'<span class="pill gold">'+esc(b.gradeLabel)+'</span>':'')+'</span><i class="fas fa-chevron-right chev"></i></button>';
 }
-function kpi(i,cls,lab,val){ return '<div class="kpi-card"><div class="kpi-icon '+cls+'"><i class="fas '+i+'"></i></div><div><span class="kpi-label">'+lab+'</span><span class="kpi-value">'+val+'</span></div></div>'; }
+function kpi(i,cls,lab,val,foot,k,go){ return '<'+(go?'button type="button" data-go="'+go+'"':'div')+' class="kpi-card '+(k||'k-1')+'"><div class="kpi-top"><span class="kpi-label">'+lab+'</span><span class="kpi-icon '+cls+'"><i class="fas '+i+'"></i></span></div><span class="kpi-value">'+val+'</span>'+(foot?'<span class="kpi-foot">'+foot+'</span>':'')+'</'+(go?'button':'div')+'>'; }
+function heroBtn(v,icon,label,n,main){ return '<button type="button" class="hero-btn'+(main?' main':'')+'" data-go="'+v+'"><i class="fas '+icon+'"></i><span>'+label+'</span>'+(n?'<b>'+(n>99?'99+':n)+'</b>':'')+'</button>'; }
 function segs(L){ return '<ol class="segs" aria-label="Level '+L+' of 7">'+T.LEVELS.map((n,k)=>'<li class="'+((k+1)<L?'done':((k+1)===L?'now':''))+'"><span></span><b>'+esc(cap(n))+'</b></li>').join('')+'</ol>'; }
 function familyRows(){
   const rows=[];
@@ -233,18 +264,35 @@ const VIEWS={
 home(){
   const act=active(), rev=S.builds.filter(needs), mastered=S.builds.filter(b=>b.mastery==='approved').length;
   const unanswered=S.chats.filter(waiting).map(c=>({kind:'b',c})).concat(S.gchats.filter(waiting).map(c=>({kind:'g',c}))).sort((a,b)=>ms(b.c.lastAt)-ms(a.c.lastAt));
-  const recent=S.builds.filter(b=>!needs(b)).slice(0,5);
+  const recent=S.builds.filter(b=>!needs(b)).slice(0,6);
   if(!S.students.length) return emptyBox('No builders yet','The Studio Desk pairs builders with you. They will appear here, with their projects and families.');
   const up=S.classes.filter(c=>/live|upcoming/.test(T.liveState(c))).slice(0,3);
   const self=S.builds.filter(b=>T.isSelfLed(b)).length;
-  return '<div class="stack">'+(up.length?'<section class="stack" style="gap:.7rem">'+up.map(c=>T.liveCardHtml(c,{banner:true,manage:true})).join('')+'</section>':'')+
-    '<div class="kpi-grid">'+kpi('fa-people-group','ki-1','Builders',act.length)+kpi('fa-clipboard-check','ki-2','Waiting for you',rev.length)+kpi('fa-hammer','ki-1','Projects',S.builds.length)+kpi('fa-lightbulb','ki-2','Self-led',self)+kpi('fa-award','ki-4','Mastered',mastered)+'</div>'+
-    (rev.length?panelList('Waiting for your review',rev.slice(0,8).map(b=>buildRow(b,true)).join(''),rev.length>8?'<button class="link" type="button" data-go="reviews">All reviews</button>':''):'')+
-    (S.help.length?panelList('Asked for help with practice',S.help.map(p=>'<button class="row" type="button" data-go="practice"><span class="ico"><i class="fas fa-hand"></i></span><span class="t"><b>'+esc(p.title||'Practice')+'</b><span>'+esc(p.studentName||'')+' · '+esc(T.ago(p.updatedAt))+'</span></span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
-    (unanswered.length?panelList('Messages waiting for a reply',unanswered.slice(0,6).map(x=>x.kind==='b'
+  const gchats=S.groups.filter(g=>(S.gUnread||{})[g.id]).map(g=>({g,n:S.gUnread[g.id]}));
+  const gTotal=gchats.reduce((a,x)=>a+x.n,0);
+  const todo=rev.length+unanswered.length+S.help.length+(gTotal?1:0);
+  const h=new Date().getHours(), hello=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  const today=new Date().toLocaleDateString([],{weekday:'long',day:'numeric',month:'long'});
+  const bits=[rev.length?'<b>'+rev.length+'</b> to review':'',unanswered.length?'<b>'+unanswered.length+'</b> message'+(unanswered.length===1?'':'s')+' to answer':'',gTotal?'<b>'+gTotal+'</b> new in group chats':'',S.help.length?'<b>'+S.help.length+'</b> asking for help':''].filter(Boolean);
+  const hero='<section class="hero"><span class="hero-date"><i class="fas fa-calendar-day"></i> '+esc(today)+'</span><h2>'+hello+', '+esc(T.firstName(S.me.name))+'.</h2>'+
+    '<p>'+(bits.length?'Today you have '+bits.join(', ').replace(/, ([^,]*)$/,' and $1')+'.':'You are all caught up. Your '+act.length+' builder'+(act.length===1?' is':'s are')+' busy building.')+'</p>'+
+    '<div class="hero-acts">'+heroBtn('reviews','fa-clipboard-check','Review work',rev.length,true)+heroBtn('messages','fa-comments','Messages',unanswered.length)+heroBtn('groups','fa-users-rectangle','Group chats',gTotal)+heroBtn('classes','fa-chalkboard','Classes')+heroBtn('homework','fa-book-open-reader','Homework')+'</div></section>';
+  const kpis='<div class="kpi-grid">'+kpi('fa-people-group','ki-1','Builders',act.length,S.groups.length?S.groups.length+' group'+(S.groups.length===1?'':'s'):'Active now','k-1','builders')+
+    kpi('fa-clipboard-check','ki-2','Waiting for you',rev.length,rev.length?'Open Reviews':'Nothing waiting','k-2','reviews')+
+    kpi('fa-hammer','ki-3b','Projects',S.builds.length,self+' self-led','k-3','work')+
+    kpi('fa-award','ki-4','Mastered',mastered,'Approved mastery','k-4','work')+'</div>';
+  const P=window.PaisleyPush, pst=P?P.state():'unsupported';
+  const tip=P&&(pst==='off'||pst==='ios-install')?'<div class="push-tip"><i class="fas fa-bell"></i><div><b>Get notified on your devices</b><span>'+(pst==='ios-install'?'On iPhone or iPad, add Paisley to your Home Screen (Share, then Add to Home Screen), open it from there and turn on notifications.':'Turn on notifications (top right) on your laptop and your phone to hear about hand-ins, messages and group chats even when this portal is closed.')+'</span></div></div>':'';
+  const reviewsHtml=rev.length?panelList('Waiting for your review',rev.slice(0,8).map(b=>buildRow(b,true)).join(''),rev.length>8?'<button class="link" type="button" data-go="reviews">All '+rev.length+'</button>':'<span class="count">'+rev.length+'</span>','fa-clipboard-check','gold')
+    :'<section class="panel flush"><div class="allclear"><i class="fas fa-circle-check"></i><div><b>No work waiting for review</b><span>New submissions, resubmissions and publish requests show up here.</span></div></div></section>';
+  const msgHtml=unanswered.length?panelList('Messages waiting for a reply',unanswered.slice(0,6).map(x=>x.kind==='b'
       ?'<button class="row" type="button" data-chatid="'+esc(x.c.id)+'"><span class="ico av">'+esc(initials(x.c.studentName))+'</span><span class="t"><b>'+esc(x.c.studentName||'Builder')+'</b><span>'+esc(x.c.lastMessage||'')+'</span></span><span class="tags"><span class="pill">Builder</span></span><i class="fas fa-chevron-right chev"></i></button>'
-      :'<button class="row" type="button" data-chatid="'+esc(x.c.id)+'"><span class="ico"><i class="fas fa-user-shield"></i></span><span class="t"><b>'+esc(x.c.parentName||'Guardian')+'</b><span>'+esc(x.c.lastMessage||'')+'</span></span><span class="tags"><span class="pill gold">Family of '+esc(T.firstName(x.c.studentName))+'</span></span><i class="fas fa-chevron-right chev"></i></button>').join('')):'')+
-    (recent.length?panelList('Recently updated',recent.map(b=>buildRow(b,true)).join('')):'')+
+      :'<button class="row" type="button" data-chatid="'+esc(x.c.id)+'"><span class="ico"><i class="fas fa-user-shield"></i></span><span class="t"><b>'+esc(x.c.parentName||'Guardian')+'</b><span>'+esc(x.c.lastMessage||'')+'</span></span><span class="tags"><span class="pill gold">Family of '+esc(T.firstName(x.c.studentName))+'</span></span><i class="fas fa-chevron-right chev"></i></button>').join(''),'<span class="count">'+unanswered.length+'</span>','fa-comments','blue'):'';
+  const gHtml=gchats.length?panelList('New in group chats',gchats.map(x=>'<button class="row" type="button" data-gchat="'+esc(x.g.id)+'"><span class="ico chat"><i class="fas fa-people-group"></i></span><span class="t"><b>'+esc(x.g.name)+'</b><span>'+(x.g.memberIds||[]).length+' builders</span></span><span class="tags"><span class="pill blue">'+x.n+' new</span></span><i class="fas fa-chevron-right chev"></i></button>').join(''),'','fa-users-rectangle','blue'):'';
+  const helpHtml=S.help.length?panelList('Asked for help with practice',S.help.map(p=>'<button class="row" type="button" data-go="practice"><span class="ico"><i class="fas fa-hand"></i></span><span class="t"><b>'+esc(p.title||'Practice')+'</b><span>'+esc(p.studentName||'')+' · '+esc(T.ago(p.updatedAt))+'</span></span><i class="fas fa-chevron-right chev"></i></button>').join(''),'<span class="count">'+S.help.length+'</span>','fa-hand','red'):'';
+  const recentHtml=recent.length?panelList('Recently updated',recent.map(b=>buildRow(b,true)).join(''),'<button class="link" type="button" data-go="work">All work</button>','fa-clock-rotate-left'):'';
+  return '<div class="stack">'+hero+(up.length?'<section class="stack" style="gap:.7rem">'+up.map(c=>T.liveCardHtml(c,{banner:true,manage:true})).join('')+'</section>':'')+kpis+tip+
+    '<div class="home-cols"><div>'+reviewsHtml+recentHtml+'</div><div>'+msgHtml+gHtml+helpHtml+(!msgHtml&&!gHtml&&!helpHtml?'<section class="panel flush"><div class="allclear"><i class="fas fa-inbox"></i><div><b>Inbox clear</b><span>Builder and family messages, group chats and help requests land here.</span></div></div></section>':'')+'</div></div>'+
   '</div>';
 },
 builders(){
@@ -361,7 +409,7 @@ function render(silent){
   if(S.v==='homework'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechHomework.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
   if(S.v==='timetable'||S.v==='live'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechTimetable.mountView($('liveHost'),{coachId:S.uid}); return; }
   if(S.v==='classes'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechClasses.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
-  if(S.v==='groups'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.live=TechGroups.mountManager($('liveHost'),{me:mine(),students:S.students}); return; }
+  if(S.v==='groups'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; const oid=S.openGroup; S.openGroup=null; S.live=TechGroups.mountManager($('liveHost'),{me:mine(),students:S.students,openId:oid}); return; }
   if(S.v==='results'){ $('view').innerHTML='<div id="liveHost"></div>'; S.back={v:S.v}; S.resN=active().length; S.live=TechClasses.mountResults($('liveHost'),{me:mine(),students:S.students}); return; }
   if(S.v==='activity'||S.v==='practice'){
     const fn=S.v==='activity'?TechManage.mountActivity:TechManage.mountPractice;
@@ -412,13 +460,14 @@ document.addEventListener('click',e=>{
     .catch(er=>{ b.disabled=false; b.insertAdjacentHTML('afterend','<p class="muted" style="color:#b8362a;margin-top:.5rem">Could not save: '+esc(T.errMsg(er))+'</p>'); });
 });
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-open],[data-builder],[data-chatb],[data-chatg],[data-chatid],[data-back],[data-go],[data-rf],[data-wf],[data-cc],[data-pub],[data-newm],[data-editm],[data-newlive],[data-editlive],[data-actof],[data-pracof],[data-resof],#pSave,#pPw'); if(!t||!S.me) return;
+  const t=e.target.closest('[data-open],[data-builder],[data-chatb],[data-chatg],[data-chatid],[data-gchat],[data-back],[data-go],[data-rf],[data-wf],[data-cc],[data-pub],[data-newm],[data-editm],[data-newlive],[data-editlive],[data-actof],[data-pracof],[data-resof],#pSave,#pPw'); if(!t||!S.me) return;
   if(t.closest('#liveHost')&&!t.matches('[data-back]')&&!t.matches('[data-editlive]')) return;   // workspaces and panels handle their own clicks
   if(t.dataset.newm!==undefined||t.dataset.editm){ TechManage.editMission({me:mine(),item:t.dataset.editm?missionOf(t.dataset.editm):null,students:S.students,aiTools:S.allContent.filter(c=>c.kind==='aiTool'&&c.status==='published'),missions:S.allContent}); return; }
   if(t.dataset.newlive!==undefined||t.dataset.editlive){ TechManage.editLive({me:mine(),item:t.dataset.editlive?S.classes.find(c=>c.id===t.dataset.editlive):null,students:S.students}); return; }
   if(t.dataset.actof||t.dataset.pracof){ const sid=t.dataset.actof||t.dataset.pracof, s=stu(sid); head((t.dataset.actof?'Activity · ':'Practice · ')+((s&&s.name)||''),'Last seen '+T.ago(T.lastSeen(s))); mountLive('Back to builder',h=>(t.dataset.actof?TechManage.mountActivity:TechManage.mountPractice)(h,{me:mine(),students:S.students,studentId:sid})); return; }
   if(t.dataset.resof){ const sid=t.dataset.resof, s=stu(sid); head('Results · '+((s&&s.name)||''),'Quizzes and practice tests'); mountLive('Back to builder',h=>TechClasses.mountResults(h,{me:mine(),students:S.students,studentId:sid})); return; }
   if(t.dataset.wf){ S.wf=t.dataset.wf; render(true); return; }
+  if(t.dataset.gchat){ S.openGroup=t.dataset.gchat; go('groups'); return; }
   if(t.dataset.open) openBuild(t.dataset.open);
   else if(t.dataset.builder) openBuilder(t.dataset.builder);
   else if(t.dataset.chatb) openBuilderChat(t.dataset.chatb);

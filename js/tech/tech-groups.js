@@ -19,6 +19,9 @@
    A writing task is one shared document (writing.md) in the same IDE.
    Marking is the class-work ink marking (TechWork.openWorkView).
 
+   Every group also has a chatpad (js/tech/tech-group-chat.js, TechGroupChat):
+   members, their coach and the Studio Desk talk there, with files and voice notes.
+
      TechGroups.mountManager(host, { me, students })   admin and coach
      TechGroups.mountMine(host, { me, student })        a builder
 ========================================================= */
@@ -55,7 +58,13 @@
       '.tg-task:first-child{border-top:0}.tg-task .t{flex:1;min-width:180px}.tg-task .t b{display:block;font-weight:800;color:var(--ink,#263331)}.tg-task .t small{color:var(--muted,#5A6E6A);font-weight:600;font-size:.78rem}',
       '.tg-box{background:#fff;border:1px solid var(--line,rgba(38,51,49,.1));border-radius:16px;margin-bottom:1rem;overflow:hidden}',
       '.tg-box-head{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.9rem 1rem;background:var(--sage,#E5F2EF)}',
-      '.tg-box-head h3{margin:0;font-size:1.05rem;color:var(--brand-deep,#245F5A);flex:1}'
+      '.tg-box-head h3{margin:0;font-size:1.05rem;color:var(--brand-deep,#245F5A);flex:1}',
+      '.tg-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,440px);gap:1.2rem;align-items:start}',
+      '.tg-chatcol{position:sticky;top:88px}.tg-chatcol .tgc{height:calc(100vh - 120px)!important;min-height:460px}',
+      '@media (max-width:1180px){.tg-split{grid-template-columns:1fr}.tg-chatcol{position:static}.tg-chatcol .tgc{height:min(72vh,640px)!important}}',
+      '.tg-new{display:inline-flex;align-items:center;gap:.3rem;padding:.15rem .55rem;border-radius:99px;background:#1aa6e8;color:#fff;font-size:.7rem;font-weight:800;vertical-align:middle}',
+      '.tg-chatbtn b{min-width:20px;height:20px;border-radius:99px;background:#1aa6e8;color:#fff;font-size:.68rem;display:inline-grid;place-items:center;padding:0 6px;margin-left:.15rem}',
+      '.tg-chatwrap .tgc{height:calc(100vh - 190px)!important;min-height:440px}'
     ].join('\n');
     document.head.appendChild(s);
   }
@@ -76,12 +85,21 @@
     var students = (o.students || []).filter(function (s) { return s.status === 'Active'; });
     var mine = {}; students.forEach(function (s) { mine[s.id] = s; });
     var S = { groups: null, open: null, tasks: [], mineOnly: !isAdmin }, unsub = null, taskUnsub = null, dead = false;
+    var chat = null, layoutFor = null, unread = {}, unreadStop = null, unreadKey = '';
+    function killChat() { if (chat) chat.destroy(); chat = null; layoutFor = null; }
+    function watchCards(list) {
+      var key = list.map(function (x) { return x.id; }).join(',');
+      if (key === unreadKey || !g.TechGroupChat) return;
+      unreadKey = key; if (unreadStop) unreadStop();
+      unreadStop = g.TechGroupChat.watchUnread(list, me.uid, function (map) { unread = map; if (!S.open && !dead) paint(); });
+    }
     function note(t, bad) { var el = host.querySelector('#tgNote'); if (el) { el.textContent = t || ''; el.style.color = bad ? '#b8362a' : 'var(--brand-deep,#245F5A)'; } }
     function fail(e) { note(T.errMsg(e), true); }
     unsub = GROUPS().onSnapshot(function (s) {
       if (dead) return;
       S.groups = docs(s).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
       if (S.open) { S.open = S.groups.filter(function (x) { return x.id === S.open.id; })[0] || null; if (!S.open) closeGroup(); }
+      else if (o.openId) { var want = S.groups.filter(function (x) { return x.id === o.openId; })[0]; o.openId = null; if (want) { openGroup(want); return; } }
       paint();
     }, function (e) { host.innerHTML = '<div class="cr-empty">Could not load groups: ' + esc(T.errMsg(e)) + '</div>'; });
 
@@ -93,19 +111,22 @@
       }, fail);
       paint();
     }
-    function closeGroup() { if (taskUnsub) taskUnsub(); taskUnsub = null; S.open = null; S.tasks = []; }
+    function closeGroup() { if (taskUnsub) taskUnsub(); taskUnsub = null; S.open = null; S.tasks = []; killChat(); }
     function canChange(gr) { return isAdmin || gr.createdBy === me.uid; }
 
     function paint() {
       if (dead) return;
       if (S.groups === null) { host.innerHTML = '<div class="cr-empty">Loading groups…</div>'; return; }
       if (S.open) return paintGroup();
+      killChat();
       var list = S.groups.filter(visible);
-      host.innerHTML = '<div class="cr-bar"><div><h3>Groups</h3><div class="cr-sub">Put builders together, give the group a task, and they code it together in one live Paisley VS Code, each seeing where the others are typing. You mark it with ink like class work.</div></div>' +
+      watchCards(list);
+      host.innerHTML = '<div class="cr-bar"><div><h3>Groups</h3><div class="cr-sub">Put builders together, give the group a task, and they code it together in one live Paisley VS Code, each seeing where the others are typing. Each group has its own chat for agreeing who does what. You mark the work with ink like class work.</div></div>' +
         '<button type="button" class="cr-btn primary" data-g="new"><i class="fas fa-plus"></i> New group</button></div>' +
         (isAdmin ? '' : '<label class="cr-note" style="display:inline-flex;gap:.4rem;align-items:center;margin-bottom:.8rem;cursor:pointer"><input type="checkbox" data-g="mineonly"' + (S.mineOnly ? ' checked' : '') + '> Only groups with my builders</label>') +
         (list.length ? '<div class="tg-grid">' + list.map(function (gr) {
-          return '<button type="button" class="tg-card" data-g="open" data-id="' + esc(gr.id) + '"><b><i class="fas fa-people-group"></i> ' + esc(gr.name) + '</b>' +
+          var nu = unread[gr.id] || 0;
+          return '<button type="button" class="tg-card" data-g="open" data-id="' + esc(gr.id) + '"><b><i class="fas fa-people-group"></i> ' + esc(gr.name) + (nu ? ' <span class="tg-new"><i class="fas fa-comments"></i> ' + (nu > 99 ? '99+' : nu) + ' new</span>' : '') + '</b>' +
             '<span class="cr-note">' + (gr.memberIds || []).length + ' builder' + ((gr.memberIds || []).length === 1 ? '' : 's') + (gr.track ? ' · ' + esc(T.TRACK_LABEL[gr.track] || '') : '') + (gr.createdByName ? ' · by ' + esc(gr.createdByName) : '') + '</span>' + chips(gr.members) + '</button>';
         }).join('') + '</div>' : '<div class="cr-panel"><div class="cr-empty">No groups yet. Use “New group”, name it, and pick the builders.</div></div>') +
         '<div class="cr-note" id="tgNote" role="status" style="margin-top:.6rem"></div>';
@@ -113,7 +134,15 @@
     function paintGroup() {
       var gr = S.open, can = canChange(gr);
       var todo = S.tasks.filter(function (t) { return t.status === 'Submitted'; }).length;
-      host.innerHTML = '<div class="cr-crumb"><a data-g="back">Groups</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(gr.name) + '</span></div>' +
+      /* The chat lives beside the tasks and is mounted once per group, so new tasks or
+         marks never reload it. */
+      if (layoutFor !== gr.id || !host.querySelector('[data-tg-main]')) {
+        killChat();
+        host.innerHTML = '<div class="tg-split"><div data-tg-main></div><aside class="tg-chatcol" data-tg-chat aria-label="Group chat"></aside></div>';
+        layoutFor = gr.id;
+        if (g.TechGroupChat) chat = g.TechGroupChat.mount(host.querySelector('[data-tg-chat]'), { group: gr, me: { uid: me.uid, role: isAdmin ? 'admin' : 'coach', name: me.name || '' } });
+      } else if (chat) chat.setGroup(gr);
+      host.querySelector('[data-tg-main]').innerHTML = '<div class="cr-crumb"><a data-g="back">Groups</a><i class="fas fa-chevron-right" style="font-size:.6rem"></i><span>' + esc(gr.name) + '</span></div>' +
         '<div class="tg-box"><div class="tg-box-head"><h3><i class="fas fa-people-group"></i> ' + esc(gr.name) + '</h3>' +
           (can ? '<button type="button" class="cr-btn sm" data-g="edit"><i class="fas fa-user-pen"></i> Members and name</button><button type="button" class="cr-btn sm danger" data-g="del" aria-label="Delete group"><i class="fas fa-trash"></i></button>' : '') + '</div>' +
           '<div style="padding:.9rem 1rem">' + chips(gr.members) + '</div></div>' +
@@ -222,7 +251,7 @@
     });
     host.addEventListener('change', function (e) { if (e.target.dataset.g === 'mineonly') { S.mineOnly = e.target.checked; paint(); } });
     paint();
-    return { destroy: function () { dead = true; if (unsub) unsub(); closeGroup(); } };
+    return { destroy: function () { dead = true; if (unsub) unsub(); if (unreadStop) unreadStop(); closeGroup(); } };
   }
 
   /* ---------------------------------------------------------
@@ -230,7 +259,18 @@
      --------------------------------------------------------- */
   function mountMine(host, o) {
     T.injectStyle(); style(); if (g.TechWork) g.TechWork.style();
-    var me = o.me, student = o.student, S = { groups: null, tasks: {}, open: null }, unsubs = [], taskUnsubs = {}, dead = false, lab = null, taskUnsub = null;
+    var me = o.me, student = o.student, S = { groups: null, tasks: {}, open: null, chat: null }, unsubs = [], taskUnsubs = {}, dead = false, lab = null, taskUnsub = null;
+    var chat = null, fab = null, unread = {}, unreadStop = null, unreadKey = '';
+    var chatMe = function () { return { uid: me.uid, role: 'student', name: me.name || student.name || '' }; };
+    function watchMine() {
+      var key = (S.groups || []).map(function (x) { return x.id; }).join(',');
+      if (key === unreadKey || !g.TechGroupChat) return;
+      unreadKey = key; if (unreadStop) unreadStop();
+      unreadStop = g.TechGroupChat.watchUnread(S.groups || [], me.uid, function (map) {
+        unread = map;
+        if (!S.open && !S.chat && !dead) paint();
+      });
+    }
     unsubs.push(GROUPS().where('memberIds', 'array-contains', me.uid).onSnapshot(function (s) {
       if (dead) return;
       S.groups = docs(s).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
@@ -238,19 +278,23 @@
         if (taskUnsubs[gr.id]) return;
         taskUnsubs[gr.id] = gr.ref.collection('tasks').onSnapshot(function (ts) {
           S.tasks[gr.id] = docs(ts).sort(function (a, b) { return (T.toDate(b.createdAt) || 0) - (T.toDate(a.createdAt) || 0); });
-          if (!S.open) paint();
+          if (!S.open && !S.chat) paint();
         }, function (e) { console.warn('group tasks:', e); });
       });
-      if (!S.open) paint();
+      watchMine();
+      if (S.chat) { var fresh = S.groups.filter(function (x) { return x.id === S.chat.id; })[0]; if (fresh && chat) { S.chat = fresh; chat.setGroup(fresh); } }
+      if (!S.open && !S.chat) paint();
     }, function (e) { host.innerHTML = '<div class="tc-empty">Could not load your groups: ' + esc(T.errMsg(e)) + '</div>'; }));
 
     function paint() {
-      if (dead || S.open) return;
+      if (dead || S.open || S.chat) return;
       if (S.groups === null) { host.innerHTML = '<div class="tc-empty">Loading your groups…</div>'; return; }
       if (!S.groups.length) { host.innerHTML = '<div class="tc-empty"><i class="fas fa-people-group" style="font-size:1.6rem;display:block;margin-bottom:.5rem"></i>You are not in a group yet. When your coach puts you in one, you will see your teammates and your group tasks here.</div>'; return; }
       host.innerHTML = S.groups.map(function (gr) {
         var tasks = S.tasks[gr.id] || [];
-        return '<div class="tg-box"><div class="tg-box-head"><h3><i class="fas fa-people-group"></i> ' + esc(gr.name) + '</h3><span class="tc-pill">' + (gr.memberIds || []).length + ' builders</span></div>' +
+        var nu = unread[gr.id] || 0;
+        return '<div class="tg-box"><div class="tg-box-head"><h3><i class="fas fa-people-group"></i> ' + esc(gr.name) + '</h3><span class="tc-pill">' + (gr.memberIds || []).length + ' builders</span>' +
+          (g.TechGroupChat ? '<button type="button" class="tc-btn sm tg-chatbtn" data-gm="chat" data-g="' + esc(gr.id) + '"><i class="fas fa-comments"></i> Group chat' + (nu ? '<b aria-label="' + nu + ' new messages">' + (nu > 99 ? '99+' : nu) + '</b>' : '') + '</button>' : '') + '</div>' +
           '<div style="padding:.9rem 1rem;border-bottom:1px solid var(--line,rgba(38,51,49,.08))"><div class="tw-note" style="margin-bottom:.4rem">You work with</div>' + chips(gr.members, me.uid) + '</div>' +
           (tasks.length ? tasks.map(function (t) {
             return '<div class="tg-task"><span class="t"><b>' + esc(t.title) + '</b><small>' + (t.kind === 'writing' ? 'Writing together' : 'Coding together') + (t.codeByName ? ' · last change by ' + esc(t.codeBy === me.uid ? 'you' : T.firstName(t.codeByName)) : '') + '</small></span>' +
@@ -290,10 +334,21 @@
         });
       }
       paintHead(t); mountLab(t);
+      if (g.TechGroupChat && !fab) fab = g.TechGroupChat.mountFab({ group: gr, me: chatMe() });
       taskUnsub = ref.onSnapshot(function (s) { if (dead || !s.exists || !S.open) return; var d = Object.assign({ id: s.id, ref: ref }, s.data()); S.open.task = d; paintHead(d); mountLab(d); }, function () { });
       window.scrollTo(0, 0);
     }
-    function closeTask() { if (lab) { lab.destroy(); lab = null; } if (taskUnsub) taskUnsub(); taskUnsub = null; S.open = null; paint(); }
+    function closeTask() { if (lab) { lab.destroy(); lab = null; } if (fab) { fab.destroy(); fab = null; } if (taskUnsub) taskUnsub(); taskUnsub = null; S.open = null; paint(); }
+    function openChat(gr) {
+      if (S.open) { if (lab) { lab.destroy(); lab = null; } if (fab) { fab.destroy(); fab = null; } if (taskUnsub) taskUnsub(); taskUnsub = null; S.open = null; }
+      if (chat) chat.destroy();
+      S.chat = gr;
+      host.innerHTML = '<div class="tc-crumb"><button type="button" data-gm="back">My group</button> <i class="fas fa-chevron-right" style="font-size:.6rem"></i> <span>' + esc(gr.name) + ' · chat</span></div><div class="tg-chatwrap" data-chat></div>';
+      chat = g.TechGroupChat.mount(host.querySelector('[data-chat]'), { group: gr, me: chatMe() });
+      chat.focus();
+      window.scrollTo(0, 0);
+    }
+    function closeChat() { if (chat) chat.destroy(); chat = null; S.chat = null; paint(); }
     async function submit(btn) {
       var t = S.open && S.open.task, msg = host.querySelector('#tgMsg'); if (!t) return;
       if (!confirm('Hand this in for the whole group? Nobody can change it until your coach has looked at it.')) return;
@@ -312,14 +367,16 @@
         var t = gr && (S.tasks[gr.id] || []).filter(function (x) { return x.id === b.dataset.id; })[0];
         if (gr && t) openTask(gr, t);
       }
-      else if (a === 'back') closeTask();
+      else if (a === 'chat') { var cg = (S.groups || []).filter(function (x) { return x.id === b.dataset.g; })[0]; if (cg) openChat(cg); }
+      else if (a === 'back') { if (S.chat) closeChat(); else closeTask(); }
       else if (a === 'submit') submit(b);
     });
     paint();
     return {
+      openChat: function (gid) { var gr = (S.groups || []).filter(function (x) { return x.id === gid; })[0]; if (gr && g.TechGroupChat) openChat(gr); return !!gr; },
       openTask: function (gid, tid) { var gr = (S.groups || []).filter(function (x) { return x.id === gid; })[0]; var t = gr && (S.tasks[gid] || []).filter(function (x) { return x.id === tid; })[0]; if (gr && t) openTask(gr, t); },
       count: function () { var n = 0; Object.keys(S.tasks).forEach(function (k) { n += S.tasks[k].filter(editable).length; }); return n; },
-      destroy: function () { dead = true; if (lab) lab.destroy(); if (taskUnsub) taskUnsub(); unsubs.forEach(function (u) { u(); }); Object.keys(taskUnsubs).forEach(function (k) { taskUnsubs[k](); }); }
+      destroy: function () { dead = true; if (lab) lab.destroy(); if (fab) fab.destroy(); if (chat) chat.destroy(); if (unreadStop) unreadStop(); if (taskUnsub) taskUnsub(); unsubs.forEach(function (u) { u(); }); Object.keys(taskUnsubs).forEach(function (k) { taskUnsubs[k](); }); }
     };
   }
 

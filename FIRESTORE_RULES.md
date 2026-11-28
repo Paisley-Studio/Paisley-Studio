@@ -206,6 +206,9 @@ TECH does not use `students`, `tutorAccounts` or `personalNotifications`. A TECH
 | `techGroups/{gid}` | admin, active coach (own `createdBy`), up to 30 members | admin, active coach, members | admin, or the coach who made it |
 | `techGroups/{gid}/tasks/{tid}` | admin, active coach, status Draft | admin, active coach, members | admin and active coaches (marking); members: shared work fields only (`techGroupWorkKeys()`), while Draft or Corrections, may hand in |
 | `techGroups/{gid}/tasks/{tid}/presence/{uid}` | the member themselves | admin, active coach, members | the member themselves |
+| `techGroups/{gid}/chat/{mid}` | the sender: active member (role `student`), active coach or admin; `createdAt == request.time`; `emailTo` staff only | admin, active coach, members | own reaction only (`reactions.<uid>`); the sender or an admin may delete for everyone (`deleted`); `mailed` is functions only |
+| `techGroups/{gid}/chatPresence/{uid}` | the person themselves (member, coach, admin) | admin, active coach, members | the person themselves |
+| `pushTokens/{id}` | functions only (`registerPushToken`) | nobody | functions only |
 | `techNotifications` | Cloud Functions only | recipient, admin | recipient may only flip `read` |
 | `techBuilds` (+ `feedback`) | active builder; `coachId` must equal their current coach | builder, their coach, linked guardians, admin | builder (cannot change coach / approve themselves / write grade or review fields, `techReviewKeys()`), coach (review, grading and publication fields only), admin |
 | `techBuilds/{id}/submissions` | the active builder, `status: 'submitted'`, no review fields | builder, their coach, linked guardians, admin | coach: review fields and `status` only; admin. Never the submitted work |

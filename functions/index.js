@@ -153,6 +153,13 @@ exports.onTechPracticeWritten         = tech.onTechPracticeWritten;
 exports.onTechLessonProgressWritten   = tech.onTechLessonProgressWritten;
 exports.onTechGroupWritten            = tech.onTechGroupWritten;
 exports.onTechGroupTaskWritten        = tech.onTechGroupTaskWritten;
+exports.onTechGroupChatMessage        = tech.onTechGroupChatMessage;
+exports.emailTechGroupMessage         = tech.emailTechGroupMessage;
+
+const pushNotes = require("./push");
+exports.registerPushToken             = pushNotes.registerPushToken;
+exports.sendTestPush                  = pushNotes.sendTestPush;
+exports.onTechNotificationPush        = pushNotes.onTechNotificationPush;
 exports.onTechLiveClassWritten        = tech.onTechLiveClassWritten;
 exports.onTechFamilyDeskMessage       = tech.onTechFamilyDeskMessage;
 exports.createTechCoach               = tech.createTechCoach;

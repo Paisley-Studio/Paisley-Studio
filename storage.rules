@@ -317,6 +317,26 @@ service firebase.storage {
       allow delete: if isSignedIn() &&
         (request.auth.uid in firestore.get(/databases/(default)/documents/techGroups/$(groupId)).data.get('memberIds', []) || isAdmin());
     }
+    // Group chatpad files and voice notes (js/tech/tech-group-chat.js). Builders upload under m/,
+    // coaches and the Studio Desk under staff/, so each request reads at most 2 Firestore docs.
+    function techChatUpload() {
+      return request.resource.size < 25 * 1024 * 1024 &&
+        !request.resource.contentType.matches('(text/html|application/xhtml.*|image/svg.*|.*javascript.*|text/xml|application/xml)');
+    }
+    match /techGroupChat/{groupId}/m/{uid}/{fileName} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid in firestore.get(/databases/(default)/documents/techGroups/$(groupId)).data.get('memberIds', []) || techActiveIn('techCoaches'));
+      allow create: if isSignedIn() && request.auth.uid == uid &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/techGroups/$(groupId)).data.get('memberIds', []) &&
+        techChatUpload();
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+    match /techGroupChat/{groupId}/staff/{uid}/{fileName} {
+      allow read: if isSignedIn() && (isAdmin() || techActiveIn('techCoaches') ||
+        request.auth.uid in firestore.get(/databases/(default)/documents/techGroups/$(groupId)).data.get('memberIds', []));
+      allow create: if isSignedIn() && request.auth.uid == uid && (isAdmin() || techActiveIn('techCoaches')) && techChatUpload();
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
     // Marked copies (PDF with the coach's ink) of class work and group tasks.
     match /techGraded/{folder}/{workId}/{fileName} {
       allow read: if isSignedIn() && (request.auth.uid == folder || isAdmin() || techActiveIn('techCoaches'));

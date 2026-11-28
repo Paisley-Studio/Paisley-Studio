@@ -172,6 +172,8 @@
   .back-link{display:inline-flex; align-items:center; gap:.4rem; border:0; background:none; padding:0; margin-bottom:.8rem; font-family:var(--font); font-weight:800; font-size:.84rem; color:var(--brand-deep); cursor:pointer;}
   .sub-note{color:var(--muted); font-size:.85rem; margin:-.2rem 0 1rem;}
 </style>
+<link rel="manifest" href="/tech/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
 </head>
 <body>
 
@@ -209,7 +211,8 @@
         <label for="childSel"><i class="fas fa-right-left"></i> Switch</label>
         <select id="childSel"></select>
       </div>
-      <div id="bellHost" style="margin-left:auto;"></div>
+      <div id="pushHost" style="margin-left:auto;"></div>
+      <div id="bellHost"></div>
     </div>
     <section class="view" id="view" aria-live="polite"></section>
   </div>
@@ -224,7 +227,9 @@
 <script src="/js/tech/code-lab.js?v=tech23"></script>
 <script src="/js/tech/upload-pad.js?v=tech7"></script>
 <script src="/js/ui/fast-video.js?v=4"></script>
-<script src="/js/tech/tech-helpers.js?v=tech21"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="/js/tech/tech-helpers.js?v=tech22"></script>
+<script src="/js/ui/push.js?v=1"></script>
 <script src="/js/tech/tech-work.js?v=12"></script>
 <script src="/js/tech/tech-classes.js?v=16"></script>
 <script src="/js/tech/tech-timetable.js?v=1"></script>
@@ -257,7 +262,7 @@ const levels=()=>T.levelsOf(S.progress);
 const originWord=b=>T.isSelfLed(b)?'Self-led project':(b.lessonId?'Class project':'Assigned mission');
 
 function gate(title,body,btn){ document.body.classList.remove('ready'); $('gate').innerHTML='<div class="gate-card"><h1>'+title+'</h1><p>'+body+'</p>'+(btn||'')+'</div>'; }
-function leave(){ auth.signOut().finally(()=>{ location.href='/tech/parent/index.html'; }); }
+function leave(){ Promise.resolve(window.PaisleyPush&&PaisleyPush.forget()).catch(()=>{}).then(()=>auth.signOut()).finally(()=>{ location.href='/tech/parent/index.html'; }); }
 document.addEventListener('click',e=>{ if(e.target.closest('#gSign')) leave(); });
 
 auth.onAuthStateChanged(async user=>{
@@ -278,6 +283,7 @@ function boot(){
   S.unsubs.push(db.collection('parentConversations').where('parentUid','==',S.uid).onSnapshot(s=>{ S.desk={}; s.docs.forEach(d=>{ S.desk[d.data().studentUid]=d.data(); }); const n=Object.values(S.desk).filter(c=>c.unreadForParent).length, b=$('bDesk'); b.hidden=!n; b.textContent=n; },()=>{}));
   setInterval(()=>{ if(!S.live) render(true); },60000);
   S.bubbles=T.mountBubbles({root:$('nav'),selector:'.nav-item[data-v]',uid:S.uid,role:'guardian',current:()=>S.v});
+  if(window.PaisleyPush){ PaisleyPush.init({uid:S.uid,role:'guardian',app:'tech'}); PaisleyPush.mountButton($('pushHost')); setTimeout(()=>PaisleyPush.prompt({text:'Hear from your child’s coach straight away: messages, marked work and class changes, on your laptop and your phone, even when this portal is closed.'}),4000); }
   T.mountBell($('bellHost'),{uid:S.uid,onOpen:n=>{
     if(n.studentId&&S.kids[n.studentId]&&n.studentId!==S.cid) selectChild(n.studentId);
     if(n.section==='results'||n.section==='projects'){ go(n.section); return true; }

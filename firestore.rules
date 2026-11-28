@@ -1390,6 +1390,39 @@ service cloud.firestore {
           allow write: if isOwner(uid) && techGroupMember(gid);
         }
       }
+
+      // The group chatpad (js/tech/tech-group-chat.js). Members, any active coach and the
+      // Studio Desk read and write it. A message is written once by its sender; afterwards a
+      // person may only set their own reaction, and the sender may delete it for everyone.
+      // emailTo (email this message too) is staff only; mailed is written by functions.
+      match /chat/{mid} {
+        allow read: if isAdmin() || isTechCoach() || techGroupMember(gid);
+        allow create: if (isAdmin() || isTechCoach() || (techGroupMember(gid) && techStudentActive())) &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.keys().hasOnly(['senderId', 'senderRole', 'senderName', 'text', 'attachments', 'voice', 'replyTo', 'createdAt', 'emailTo']) &&
+          request.resource.data.text is string && request.resource.data.text.size() <= 4000 &&
+          (request.resource.data.senderRole == 'student' || isAdmin() || isTechCoach()) &&
+          (!('emailTo' in request.resource.data) || isAdmin() || isTechCoach()) &&
+          (!('attachments' in request.resource.data) || (request.resource.data.attachments is list && request.resource.data.attachments.size() <= 8));
+        allow update: if (isAdmin() || isTechCoach() || techGroupMember(gid)) && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']) &&
+            request.resource.data.get('reactions', {}).diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid])) ||
+          ((resource.data.senderId == request.auth.uid || isAdmin()) && request.resource.data.deleted == true &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'deletedAt', 'text', 'attachments', 'voice', 'replyTo'])));
+        allow delete: if isAdmin();
+      }
+      // Who is in the chat, typing, recording a voice note, and how far each person has read.
+      match /chatPresence/{uid} {
+        allow read: if isAdmin() || isTechCoach() || techGroupMember(gid);
+        allow write: if isOwner(uid) && (isAdmin() || isTechCoach() || techGroupMember(gid));
+      }
+    }
+
+    // Push notification devices (js/ui/push.js). Only functions read or write them
+    // (registerPushToken files a device under the caller).
+    match /pushTokens/{id} {
+      allow read, write: if false;
     }
 
     match /techBuilds/{id} {

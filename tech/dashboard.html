@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Studio | Paisley Tech Studio</title>
 <meta name="robots" content="noindex" />
+<link rel="manifest" href="/tech/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
 <meta name="theme-color" content="#245F5A" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -437,6 +439,7 @@ body.no-create [data-newbuild]{display:none!important}
     <header class="topbar">
       <button class="menu-toggle" id="menuBtn" type="button" aria-label="Open menu"><i class="fas fa-bars"></i></button>
       <div class="titles"><h1 id="pageTitle">Home</h1><p id="pageSub"></p></div>
+      <div id="pushHost"></div>
       <div id="bellHost"></div>
       <button class="btn" type="button" data-newbuild aria-label="Create something"><i class="fas fa-plus"></i> <span>Create something</span></button>
     </header>
@@ -455,9 +458,11 @@ body.no-create [data-newbuild]{display:none!important}
 <script src="../js/tech/advanced-ide/ide-entry.js?v=1"></script>
 <script src="../js/tech/upload-pad.js?v=tech7"></script>
 <script src="../js/ui/fast-video.js?v=4"></script>
-<script src="../js/tech/tech-helpers.js?v=tech21"></script>
+<script src="../js/tech/tech-helpers.js?v=tech22"></script>
 <script src="../js/tech/tech-work.js?v=12"></script>
-<script src="../js/tech/tech-groups.js?v=3"></script>
+<script src="../js/tech/tech-group-chat.js?v=1"></script>
+<script src="../js/tech/tech-groups.js?v=4"></script>
+<script src="../js/ui/push.js?v=1"></script>
 <script src="../js/tech/tech-classes.js?v=16"></script>
 <script src="../js/tech/tech-timetable.js?v=1"></script>
 <script src="../js/tech/tech-homework.js?v=due2"></script>
@@ -510,7 +515,7 @@ const currentBuild=()=>S.builds.find(b=>st(b)==='revision')||S.builds.find(b=>['
 
 function showGate(html){ $('shell').hidden=true; $('gate').hidden=false; $('gate').innerHTML=html; }
 function gateCard(title,body,btn){ return '<div class="gate-card"><h1>'+title+'</h1><p>'+body+'</p>'+(btn||'')+'</div>'; }
-function leave(url){ auth.signOut().finally(()=>{ location.href=url||'/tech/index.html'; }); }
+function leave(url){ Promise.resolve(window.PaisleyPush&&PaisleyPush.forget()).catch(()=>{}).then(()=>auth.signOut()).finally(()=>{ location.href=url||'/tech/index.html'; }); }
 function emptyBox(title,text,action){ return '<div class="empty"><h3>'+title+'</h3><p>'+text+'</p>'+(action||'')+'</div>'; }
 
 /* ---------- sign-in gate (unchanged behaviour) ---------- */
@@ -554,6 +559,9 @@ function boot(){
     return true;
   }});
   S.bubbles=T.mountBubbles({root:$('nav'),selector:'.nav[data-v]',uid:S.uid,role:'student',current:()=>S.v});
+  /* Group chat: a blue count on My group; push notifications on this device (laptop or phone). */
+  if(window.TechGroupChat) S.unsubs.push(TechGroupChat.navBubble(document.querySelector('.nav[data-v="groups"]'),S.uid,db.collection('techGroups').where('memberIds','array-contains',S.uid)));
+  if(window.PaisleyPush){ PaisleyPush.init({uid:S.uid,role:'student',app:'tech'}); PaisleyPush.mountButton($('pushHost')); setTimeout(()=>PaisleyPush.prompt({text:'Know the moment your coach or your group messages you, on your laptop and your phone, even when Tech Studio is closed.'}),4000); }
   S.unsubs.push(db.collection('techIdeGrants').doc(S.uid).onSnapshot(s=>{ S.ideGrant=s.exists; softRender(); },()=>{ S.ideGrant=false; }));
   S.unsubs.push(db.collection('techSettings').doc('advancedIde').onSnapshot(s=>{ S.ideCfg=s.exists?s.data():null; softRender(); },e=>{ S.ideCfg=null; console.warn('advanced ide settings',e); }));
   S.unsubs.push(db.collection('techSettings').doc('portal').onSnapshot(s=>{ S.navVideo=s.exists?(s.data().navVideo||null):null; S.selfAll=s.exists&&s.data().selfProjects===true; S.practicePub=s.exists&&s.data().practicePublish===true; syncCreate(); if(S.navVideo&&S.navVideo.url) FastVideo.preconnect(S.navVideo.url); softRender(); },e=>console.warn('settings',e)));
